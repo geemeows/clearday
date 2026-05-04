@@ -14,6 +14,7 @@
     "lint": "biome lint --write .",
     "check": "biome check --write .",
     "deploy": "pnpm run build && wrangler deploy",
+    "deploy:auth-proxy": "wrangler deploy --config workers/auth-proxy/wrangler.jsonc",
     "db:push": "supabase db push",
     "db:diff": "supabase db diff",
     "typecheck": "tsc --noEmit",
