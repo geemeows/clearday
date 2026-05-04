@@ -15,9 +15,15 @@ const KIND_BY_FILTER: Record<string, SignalKind[]> = {
   prs: ["pr_review_requested", "pr_authored", "pr_assigned"],
   meetings: ["meeting"],
   mentions: ["dm", "mention", "thread_reply"],
+  tickets: [
+    "ticket_assigned",
+    "ticket_in_progress",
+    "ticket_in_review",
+    "ticket_blocked",
+  ],
 };
 
-const PROVIDERS: SignalProvider[] = ["github", "google", "slack"];
+const PROVIDERS: SignalProvider[] = ["github", "google", "slack", "linear"];
 
 export async function handleListSignals(
   url: URL,

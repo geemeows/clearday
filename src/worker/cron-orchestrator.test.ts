@@ -160,6 +160,60 @@ describe("runScheduledPoll", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
+  it("polls linear with the stored access_token and upserts ticket Signals", async () => {
+    const store = makeStore();
+    const fetchImpl = vi.fn(async (url: string) => {
+      expect(url).toBe("https://api.linear.app/graphql");
+      return new Response(
+        JSON.stringify({
+          data: {
+            viewer: {
+              id: "viewer-1",
+              assignedIssues: {
+                nodes: [
+                  {
+                    id: "uuid-1",
+                    identifier: "ENG-42",
+                    title: "Wire orchestrator for linear",
+                    url: "https://linear.app/acme/issue/ENG-42/x",
+                    priority: 2,
+                    priorityLabel: "High",
+                    createdAt: "2026-05-01T10:00:00Z",
+                    updatedAt: "2026-05-01T10:00:00Z",
+                    state: { id: "s1", name: "Todo", type: "unstarted" },
+                    team: { id: "t1", key: "ENG", name: "Engineering" },
+                    assignee: { id: "u1", name: "Alice" },
+                  },
+                ],
+              },
+            },
+          },
+        }),
+        { status: 200 },
+      );
+    });
+    const deps: OrchestratorDeps = {
+      loadAccounts: async () => [
+        {
+          provider: "linear",
+          access_token: "lin_oauth_abc",
+          refresh_token: null,
+          expires_at: null,
+        },
+      ],
+      store: store.client,
+      fetch: fetchImpl as unknown as typeof fetch,
+    };
+    const reports = await runScheduledPoll(deps);
+    expect(reports).toEqual([{ provider: "linear", upserted: 1 }]);
+    expect(store.upsert).toHaveBeenCalledTimes(1);
+    const call = fetchImpl.mock.calls[0] as unknown as [
+      string,
+      { headers: Record<string, string> },
+    ];
+    expect(call[1].headers.authorization).toBe("Bearer lin_oauth_abc");
+  });
+
   it("refreshes an expired google token, persists it, and then polls", async () => {
     const store = makeStore();
     const saveRefreshedToken = vi.fn(async () => {});

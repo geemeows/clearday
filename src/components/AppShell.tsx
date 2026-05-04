@@ -43,12 +43,13 @@ const SOURCES: Source[] = [
 ];
 
 // Maps the AppShell's Source ids onto the backend provider keys returned by
-// /api/sources. Linear and Jira aren't real providers in v1; they stay
-// neutral until those adapters land.
+// /api/sources. Jira isn't a real provider yet; it stays neutral until the
+// adapter lands.
 const SOURCE_PROVIDER: Record<string, string> = {
   github: "github",
   slack: "slack",
   "google-calendar": "google",
+  linear: "linear",
 };
 
 type SourceStatus = "ok" | "error" | "neutral";

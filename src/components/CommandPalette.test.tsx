@@ -113,9 +113,8 @@ describe("CommandPalette", () => {
       screen.getByRole("button", { name: "PRs", pressed: true }),
     ).toBeTruthy();
     fireEvent.keyDown(dialog, { key: "Tab" });
-    // Skips "Tickets" (disabled) and lands on "Mentions".
     expect(
-      screen.getByRole("button", { name: "Mentions", pressed: true }),
+      screen.getByRole("button", { name: "Tickets", pressed: true }),
     ).toBeTruthy();
   });
 

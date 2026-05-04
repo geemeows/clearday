@@ -4,7 +4,7 @@
 // the state, calls the matching provider exchange, and returns a normalized
 // token record for persistence.
 
-export type Provider = "github" | "google" | "slack";
+export type Provider = "github" | "google" | "slack" | "linear";
 
 export type ExchangeEnv = {
   GITHUB_CLIENT_ID: string;
@@ -13,6 +13,8 @@ export type ExchangeEnv = {
   GOOGLE_CLIENT_SECRET: string;
   SLACK_CLIENT_ID: string;
   SLACK_CLIENT_SECRET: string;
+  LINEAR_CLIENT_ID?: string;
+  LINEAR_CLIENT_SECRET?: string;
   AUTH_PROXY_URL: string;
 };
 
@@ -106,6 +108,8 @@ export async function exchangeCode(
       return exchangeGoogle(code, env, fetchImpl);
     case "slack":
       return exchangeSlack(code, env, fetchImpl);
+    case "linear":
+      return exchangeLinear(code, env, fetchImpl);
   }
 }
 
@@ -238,6 +242,51 @@ async function exchangeSlack(
       team: body.team ?? null,
       authed_user: body.authed_user ?? null,
     },
+  };
+}
+
+async function exchangeLinear(
+  code: string,
+  env: ExchangeEnv,
+  fetchImpl: FetchLike,
+): Promise<TokenRecord> {
+  if (!env.LINEAR_CLIENT_ID || !env.LINEAR_CLIENT_SECRET) {
+    throw new ExchangeError("linear", 500, "linear client credentials missing");
+  }
+  const res = await fetchImpl("https://api.linear.app/oauth/token", {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: env.LINEAR_CLIENT_ID,
+      client_secret: env.LINEAR_CLIENT_SECRET,
+      code,
+      redirect_uri: redirectUri(env, "linear"),
+      grant_type: "authorization_code",
+    }).toString(),
+  });
+  const body = (await res.json()) as {
+    access_token?: string;
+    refresh_token?: string;
+    expires_in?: number;
+    scope?: string;
+    error?: string;
+    error_description?: string;
+  };
+  if (!res.ok || !body.access_token) {
+    throw new ExchangeError(
+      "linear",
+      res.status,
+      body.error_description || body.error || "linear exchange failed",
+    );
+  }
+  return {
+    provider: "linear",
+    account_id: null,
+    access_token: body.access_token,
+    refresh_token: body.refresh_token ?? null,
+    expires_at: expiresAtFrom(body.expires_in),
+    scopes: parseScope(body.scope, ","),
+    metadata: {},
   };
 }
 

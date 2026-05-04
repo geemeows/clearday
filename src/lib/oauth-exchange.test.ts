@@ -169,3 +169,52 @@ describe("exchangeCode — slack", () => {
     );
   });
 });
+
+describe("exchangeCode — linear", () => {
+  const linearEnv: ExchangeEnv = {
+    ...env,
+    LINEAR_CLIENT_ID: "lin-id",
+    LINEAR_CLIENT_SECRET: "lin-secret",
+  };
+
+  it("posts code+secret to linear's token endpoint and normalizes the response", async () => {
+    const fetchImpl: FetchLike = async (url, init) => {
+      expect(url).toBe("https://api.linear.app/oauth/token");
+      const params = new URLSearchParams(init?.body ?? "");
+      expect(params.get("client_id")).toBe("lin-id");
+      expect(params.get("client_secret")).toBe("lin-secret");
+      expect(params.get("code")).toBe("c");
+      expect(params.get("grant_type")).toBe("authorization_code");
+      expect(params.get("redirect_uri")).toBe(
+        "https://auth.example.com/callback/linear",
+      );
+      return okJson({
+        access_token: "lin_oauth_abc",
+        refresh_token: "lin_rt",
+        expires_in: 3600,
+        scope: "read,write",
+      });
+    };
+    const record = await exchangeCode("linear", "c", linearEnv, fetchImpl);
+    expect(record.provider).toBe("linear");
+    expect(record.access_token).toBe("lin_oauth_abc");
+    expect(record.refresh_token).toBe("lin_rt");
+    expect(record.scopes).toEqual(["read", "write"]);
+    expect(record.expires_at).not.toBeNull();
+  });
+
+  it("throws when LINEAR_CLIENT_ID is not configured", async () => {
+    const fetchImpl: FetchLike = async () => okJson({});
+    await expect(
+      exchangeCode("linear", "c", env, fetchImpl),
+    ).rejects.toBeInstanceOf(ExchangeError);
+  });
+
+  it("throws when linear returns an error body", async () => {
+    const fetchImpl: FetchLike = async () =>
+      okJson({ error: "invalid_grant" }, 400);
+    await expect(
+      exchangeCode("linear", "c", linearEnv, fetchImpl),
+    ).rejects.toThrow(ExchangeError);
+  });
+});

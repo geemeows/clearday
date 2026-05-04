@@ -12,6 +12,7 @@ import {
   Github,
   Slack,
   Sparkles,
+  SquareKanban,
 } from "lucide-react";
 import {
   type KeyboardEvent as ReactKeyboardEvent,
@@ -33,7 +34,7 @@ type ScopeChip = { id: Scope; label: string; enabled: boolean };
 const SCOPES: ScopeChip[] = [
   { id: "all", label: "All", enabled: true },
   { id: "prs", label: "PRs", enabled: true },
-  { id: "tickets", label: "Tickets", enabled: false },
+  { id: "tickets", label: "Tickets", enabled: true },
   { id: "mentions", label: "Mentions", enabled: true },
   { id: "meetings", label: "Meetings", enabled: true },
 ];
@@ -420,7 +421,13 @@ function AnswerPanel({
 
 function ProviderBadge({ provider }: { provider: SignalProvider }) {
   const Icon =
-    provider === "github" ? Github : provider === "slack" ? Slack : CalIcon;
+    provider === "github"
+      ? Github
+      : provider === "slack"
+        ? Slack
+        : provider === "linear"
+          ? SquareKanban
+          : CalIcon;
   return (
     <span
       role="img"
@@ -448,6 +455,14 @@ function kindLabel(kind: string): string {
       return "Mention";
     case "thread_reply":
       return "Thread reply";
+    case "ticket_assigned":
+      return "Todo";
+    case "ticket_in_progress":
+      return "In progress";
+    case "ticket_in_review":
+      return "In review";
+    case "ticket_blocked":
+      return "Blocked";
     default:
       return kind;
   }

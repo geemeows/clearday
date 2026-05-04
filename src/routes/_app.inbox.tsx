@@ -4,6 +4,7 @@ import {
   ExternalLink,
   Github,
   Slack,
+  SquareKanban,
   Video,
   X,
 } from "lucide-react";
@@ -23,7 +24,7 @@ type Filter = "all" | "prs" | "tickets" | "mentions" | "meetings";
 const FILTERS: Array<{ id: Filter; label: string; enabled: boolean }> = [
   { id: "all", label: "All", enabled: true },
   { id: "prs", label: "PRs", enabled: true },
-  { id: "tickets", label: "Tickets", enabled: false },
+  { id: "tickets", label: "Tickets", enabled: true },
   { id: "mentions", label: "Mentions", enabled: true },
   { id: "meetings", label: "Meetings", enabled: true },
 ];
@@ -260,7 +261,43 @@ function DetailBody({ signal }: { signal: StoredSignal }) {
   const group = kindGroup(signal.kind);
   if (group === "pr") return <PrBody signal={signal} />;
   if (group === "slack") return <SlackBody signal={signal} />;
+  if (group === "ticket") return <TicketBody signal={signal} />;
   return <MeetingBody signal={signal} />;
+}
+
+function TicketBody({ signal }: { signal: StoredSignal }) {
+  const identifier = signal.payload?.identifier as string | undefined;
+  const stateName = signal.payload?.state_name as string | undefined;
+  const priority = signal.payload?.priority_label as string | undefined;
+  const teamKey = signal.payload?.team_key as string | undefined;
+  return (
+    <dl className="mt-3 grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1.5 text-sm">
+      {identifier && (
+        <>
+          <dt className="text-zinc-500">Ticket</dt>
+          <dd className="font-mono text-zinc-900">{identifier}</dd>
+        </>
+      )}
+      {teamKey && (
+        <>
+          <dt className="text-zinc-500">Team</dt>
+          <dd className="text-zinc-900">{teamKey}</dd>
+        </>
+      )}
+      {stateName && (
+        <>
+          <dt className="text-zinc-500">Status</dt>
+          <dd className="text-zinc-900">{stateName}</dd>
+        </>
+      )}
+      {priority && (
+        <>
+          <dt className="text-zinc-500">Priority</dt>
+          <dd className="text-zinc-900">{priority}</dd>
+        </>
+      )}
+    </dl>
+  );
 }
 
 function PrBody({ signal }: { signal: StoredSignal }) {
@@ -418,22 +455,36 @@ function formatMeetingTime(startsAt: string, endsAt?: string): string {
   return `${start} – ${end}`;
 }
 
-function kindGroup(kind: SignalKind): "pr" | "slack" | "meeting" {
+function kindGroup(kind: SignalKind): "pr" | "slack" | "meeting" | "ticket" {
   if (kind === "meeting") return "meeting";
   if (kind === "dm" || kind === "mention" || kind === "thread_reply")
     return "slack";
+  if (
+    kind === "ticket_assigned" ||
+    kind === "ticket_in_progress" ||
+    kind === "ticket_in_review" ||
+    kind === "ticket_blocked"
+  )
+    return "ticket";
   return "pr";
 }
 
 function openLabel(provider: SignalProvider): string {
   if (provider === "github") return "Open in GitHub";
   if (provider === "slack") return "Open in Slack";
+  if (provider === "linear") return "Open in Linear";
   return "Open in Calendar";
 }
 
 function ProviderBadge({ provider }: { provider: SignalProvider }) {
   const Icon =
-    provider === "github" ? Github : provider === "slack" ? Slack : CalIcon;
+    provider === "github"
+      ? Github
+      : provider === "slack"
+        ? Slack
+        : provider === "linear"
+          ? SquareKanban
+          : CalIcon;
   return (
     <span
       role="img"
@@ -461,6 +512,14 @@ function kindLabel(kind: string): string {
       return "Mention";
     case "thread_reply":
       return "Thread reply";
+    case "ticket_assigned":
+      return "Todo";
+    case "ticket_in_progress":
+      return "In progress";
+    case "ticket_in_review":
+      return "In review";
+    case "ticket_blocked":
+      return "Blocked";
     default:
       return kind;
   }
@@ -484,6 +543,12 @@ function secondaryLabel(s: StoredSignal): string {
       hour: "numeric",
       minute: "2-digit",
     });
+  }
+  if (s.provider === "linear") {
+    const identifier =
+      (s.payload?.identifier as string | undefined) ?? s.source_id;
+    const stateName = (s.payload?.state_name as string | undefined) ?? "";
+    return [identifier, stateName].filter(Boolean).join(" · ");
   }
   const repo = (s.payload?.repo as string | undefined) ?? "";
   const author = (s.payload?.author as string | undefined) ?? "";

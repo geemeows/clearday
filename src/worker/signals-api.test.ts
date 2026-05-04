@@ -50,6 +50,20 @@ describe("handleListSignals", () => {
     ]);
   });
 
+  it("translates filter=tickets into the four ticket kinds", async () => {
+    const { client, spies } = listClient();
+    await handleListSignals(
+      new URL("https://x/api/signals?filter=tickets"),
+      client,
+    );
+    expect(spies.in).toHaveBeenCalledWith("kind", [
+      "ticket_assigned",
+      "ticket_in_progress",
+      "ticket_in_review",
+      "ticket_blocked",
+    ]);
+  });
+
   it("filter=all skips kind filtering", async () => {
     const { client, spies } = listClient();
     await handleListSignals(
@@ -114,12 +128,13 @@ describe("handleSources", () => {
     const body = (await res.json()) as {
       sources: Array<{ provider: string; status: string }>;
     };
-    expect(body.sources).toHaveLength(3);
+    expect(body.sources).toHaveLength(4);
     const map = Object.fromEntries(
       body.sources.map((s) => [s.provider, s.status]),
     );
     expect(map.github).toBe("connected");
     expect(map.google).toBe("disconnected");
     expect(map.slack).toBe("disconnected");
+    expect(map.linear).toBe("disconnected");
   });
 });
