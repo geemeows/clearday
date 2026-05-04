@@ -18,6 +18,7 @@ const env: WorkerEnv = {
   GOOGLE_CLIENT_SECRET: "",
   SLACK_CLIENT_ID: "",
   SLACK_CLIENT_SECRET: "",
+  SLACK_SIGNING_SECRET: "",
 };
 
 const reqWith = (auth?: string) =>

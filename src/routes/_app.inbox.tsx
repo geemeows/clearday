@@ -17,7 +17,7 @@ const FILTERS: Array<{ id: Filter; label: string; enabled: boolean }> = [
   { id: "all", label: "All", enabled: true },
   { id: "prs", label: "PRs", enabled: true },
   { id: "tickets", label: "Tickets", enabled: false },
-  { id: "mentions", label: "Mentions", enabled: false },
+  { id: "mentions", label: "Mentions", enabled: true },
   { id: "meetings", label: "Meetings", enabled: true },
 ];
 
@@ -184,12 +184,25 @@ function kindLabel(kind: string): string {
       return "Assigned PR";
     case "meeting":
       return "Meeting";
+    case "dm":
+      return "Direct message";
+    case "mention":
+      return "Mention";
+    case "thread_reply":
+      return "Thread reply";
     default:
       return kind;
   }
 }
 
 function secondaryLabel(s: StoredSignal): string {
+  if (s.provider === "slack") {
+    const channelType = s.payload?.channel_type as string | undefined;
+    const channel = s.payload?.channel as string | undefined;
+    const author = s.payload?.author as string | undefined;
+    const where = channelType === "im" ? "DM" : channel ? `#${channel}` : "";
+    return [where, author && `from <@${author}>`].filter(Boolean).join(" · ");
+  }
   if (s.kind === "meeting") {
     const startsAt = s.payload?.starts_at as string | undefined;
     if (!startsAt) return "";

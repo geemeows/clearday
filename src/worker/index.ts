@@ -1,6 +1,7 @@
 /// <reference types="@cloudflare/workers-types" />
 import { createClient } from "@supabase/supabase-js";
 import { handleOAuthExchange } from "#/lib/oauth-exchange-handler";
+import { handleSlackWebhook } from "#/lib/slack-webhook";
 import { runScheduledPoll } from "#/worker/cron-orchestrator";
 import {
   defaultGetUser,
@@ -22,6 +23,44 @@ export default {
     _ctx: ExecutionContext,
   ): Promise<Response> {
     const url = new URL(request.url);
+
+    if (url.pathname === "/webhooks/slack" && request.method === "POST") {
+      // Public endpoint by design — Slack signs the request and we verify
+      // before doing anything. No Clearday session is involved.
+      const service = serviceClient(env);
+      const outcome = await handleSlackWebhook(request, {
+        signingSecret: env.SLACK_SIGNING_SECRET,
+        store: service,
+        loadAllowlist: async () => {
+          const { data, error } = await service
+            .from("slack_channel_allowlist")
+            .select("channel_id");
+          if (error) throw new Error(error.message);
+          return ((data ?? []) as Array<{ channel_id: string }>).map(
+            (r) => r.channel_id,
+          );
+        },
+        loadSelfUserId: async () => {
+          const { data, error } = await service
+            .from("provider_accounts")
+            .select("account_id")
+            .eq("provider", "slack")
+            .maybeSingle();
+          if (error) throw new Error(error.message);
+          return (data?.account_id as string | null) ?? null;
+        },
+      });
+      if (outcome.kind === "challenge") {
+        return new Response(outcome.challenge, {
+          status: 200,
+          headers: { "content-type": "text/plain" },
+        });
+      }
+      if (outcome.kind === "rejected") {
+        return new Response(outcome.reason, { status: outcome.status });
+      }
+      return new Response(null, { status: 204 });
+    }
 
     if (url.pathname === "/oauth/exchange") {
       // Unauthenticated by design: the browser arrives here mid-redirect from
