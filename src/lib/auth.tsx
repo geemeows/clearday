@@ -6,11 +6,17 @@ import {
   useEffect,
   useState,
 } from "react";
+import { env } from "#/env";
+import { isAllowedEmail } from "#/lib/auth-gate";
 import { supabase } from "#/lib/supabase";
 
 export type AuthState = {
   session: Session | null;
   loading: boolean;
+  /** True only when a session exists AND its email matches VITE_ALLOWED_EMAIL. */
+  allowed: boolean;
+  /** True when a session exists but its email is NOT allowed. */
+  rejected: boolean;
 };
 
 const AuthContext = createContext<AuthState | undefined>(undefined);
@@ -34,8 +40,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  const allowed = isAllowedEmail(session?.user?.email, env.VITE_ALLOWED_EMAIL);
+  const rejected = !!session && !allowed;
+
   return (
-    <AuthContext.Provider value={{ session, loading }}>
+    <AuthContext.Provider value={{ session, loading, allowed, rejected }}>
       {children}
     </AuthContext.Provider>
   );
