@@ -10,10 +10,11 @@ function listClient() {
   const order = vi.fn(() => chain);
   const inFn = vi.fn(() => chain);
   const is = vi.fn(() => chain);
-  const chain = { is, in: inFn, order, limit };
+  const ilike = vi.fn(() => chain);
+  const chain = { is, in: inFn, ilike, order, limit };
   const select = vi.fn(() => chain);
   return {
-    spies: { is, in: inFn, order, limit, select },
+    spies: { is, in: inFn, ilike, order, limit, select },
     client: {
       from: () => ({
         select,
@@ -55,6 +56,24 @@ describe("handleListSignals", () => {
       client,
     );
     expect(spies.in).not.toHaveBeenCalled();
+  });
+
+  it("forwards q= as an ilike filter on title", async () => {
+    const { client, spies } = listClient();
+    await handleListSignals(
+      new URL("https://x/api/signals?filter=all&q=focus"),
+      client,
+    );
+    expect(spies.ilike).toHaveBeenCalledWith("title", "%focus%");
+  });
+
+  it("clamps user-supplied limit to 200", async () => {
+    const { client, spies } = listClient();
+    await handleListSignals(
+      new URL("https://x/api/signals?filter=all&limit=9999"),
+      client,
+    );
+    expect(spies.limit).toHaveBeenCalledWith(200);
   });
 });
 

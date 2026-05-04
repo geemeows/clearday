@@ -27,6 +27,7 @@ type SupabaseLike = {
 type SelectChain = {
   is: (col: string, val: null) => SelectChain;
   in: (col: string, vals: string[]) => SelectChain;
+  ilike: (col: string, pattern: string) => SelectChain;
   order: (col: string, opts: { ascending: boolean }) => SelectChain;
   limit: (n: number) => Promise<{
     data: StoredSignal[] | null;
@@ -67,6 +68,8 @@ export type ListSignalsArgs = {
   kinds?: SignalKind[];
   providers?: SignalProvider[];
   includeDismissed?: boolean;
+  /** Case-insensitive substring match against `title`. */
+  query?: string;
   limit?: number;
 };
 
@@ -79,10 +82,17 @@ export async function listSignals(
   if (args.kinds && args.kinds.length > 0) q = q.in("kind", args.kinds);
   if (args.providers && args.providers.length > 0)
     q = q.in("provider", args.providers);
+  if (args.query && args.query.trim().length > 0) {
+    q = q.ilike("title", `%${escapeLikePattern(args.query.trim())}%`);
+  }
   q = q.order("source_created_at", { ascending: false });
   const { data, error } = await q.limit(args.limit ?? 200);
   if (error) throw new Error(`signal list failed: ${error.message}`);
   return data ?? [];
+}
+
+function escapeLikePattern(s: string): string {
+  return s.replace(/[\\%_]/g, (m) => `\\${m}`);
 }
 
 export async function dismissSignal(

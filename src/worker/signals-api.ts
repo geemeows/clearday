@@ -28,7 +28,13 @@ export async function handleListSignals(
   if (filter !== "all" && !kinds) {
     return json({ error: `unknown filter: ${filter}` }, 400);
   }
-  const signals = await listSignals(client, { kinds });
+  const query = url.searchParams.get("q") ?? undefined;
+  const limitParam = url.searchParams.get("limit");
+  const limit =
+    limitParam && /^\d+$/.test(limitParam)
+      ? Math.min(Number(limitParam), 200)
+      : undefined;
+  const signals = await listSignals(client, { kinds, query, limit });
   return json({ signals });
 }
 

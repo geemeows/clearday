@@ -19,6 +19,7 @@ function makeClient(overrides: {
     select: ReturnType<typeof vi.fn>;
     is: ReturnType<typeof vi.fn>;
     in: ReturnType<typeof vi.fn>;
+    ilike: ReturnType<typeof vi.fn>;
     order: ReturnType<typeof vi.fn>;
     limit: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
@@ -32,7 +33,8 @@ function makeClient(overrides: {
   const order = vi.fn(() => chain);
   const inFn = vi.fn(() => chain);
   const is = vi.fn(() => chain);
-  const chain = { is, in: inFn, order, limit };
+  const ilike = vi.fn(() => chain);
+  const chain = { is, in: inFn, ilike, order, limit };
   const select = vi.fn(() => chain);
   const upsert = vi.fn(async () => overrides.upsertResult ?? { error: null });
   const eq = vi.fn(async () => overrides.updateResult ?? { error: null });
@@ -42,7 +44,17 @@ function makeClient(overrides: {
   };
   return {
     client,
-    spies: { upsert, select, is, in: inFn, order, limit, update, eq },
+    spies: {
+      upsert,
+      select,
+      is,
+      in: inFn,
+      ilike,
+      order,
+      limit,
+      update,
+      eq,
+    },
   };
 }
 
@@ -115,6 +127,24 @@ describe("listSignals", () => {
     const { client, spies } = makeClient({ listData: [] });
     await listSignals(client, { includeDismissed: true });
     expect(spies.is).not.toHaveBeenCalled();
+  });
+
+  it("applies ilike on title when query is provided", async () => {
+    const { client, spies } = makeClient({ listData: [] });
+    await listSignals(client, { query: "focus" });
+    expect(spies.ilike).toHaveBeenCalledWith("title", "%focus%");
+  });
+
+  it("escapes LIKE metacharacters in the query", async () => {
+    const { client, spies } = makeClient({ listData: [] });
+    await listSignals(client, { query: "50%_off" });
+    expect(spies.ilike).toHaveBeenCalledWith("title", "%50\\%\\_off%");
+  });
+
+  it("skips ilike when query is whitespace-only", async () => {
+    const { client, spies } = makeClient({ listData: [] });
+    await listSignals(client, { query: "  " });
+    expect(spies.ilike).not.toHaveBeenCalled();
   });
 });
 

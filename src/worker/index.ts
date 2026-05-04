@@ -11,6 +11,7 @@ import {
 import { sendSlackDm } from "#/lib/alert-channel/slack-dm";
 import type { AlertChannel } from "#/lib/alert-dispatcher";
 import { runAlertQueueDrain } from "#/lib/alert-queue-drain";
+import { type AskAiDeps, handleAskAi } from "#/lib/ask-ai-api";
 import { type BriefingDeps, handleBriefingGenerate } from "#/lib/briefing-api";
 import { startFocusSession } from "#/lib/focus-session";
 import { runMeetingAlertTick } from "#/lib/meeting-alert-tick";
@@ -181,6 +182,17 @@ export default {
     if (url.pathname === "/api/ai/test" && request.method === "POST") {
       const out = await testAiConnection(aiDeps(service, env));
       return json(out, out.ok ? 200 : 502);
+    }
+
+    if (url.pathname === "/api/ai/ask" && request.method === "POST") {
+      let body: { q?: unknown; signal_ids?: unknown };
+      try {
+        body = (await request.json()) as { q?: unknown; signal_ids?: unknown };
+      } catch {
+        return json({ ok: false, reason: "error", error: "invalid json" }, 400);
+      }
+      const out = await handleAskAi(body, askAiDeps(service, env));
+      return json(out, out.ok ? 200 : out.reason === "error" ? 400 : 200);
     }
 
     if (
@@ -581,6 +593,26 @@ function briefingDeps(service: SupabaseService, env: WorkerEnv): BriefingDeps {
       if (error) throw new Error(error.message);
       return (data ?? []) as Array<
         Awaited<ReturnType<BriefingDeps["loadSignals"]>>[number]
+      >;
+    },
+  };
+}
+
+function askAiDeps(service: SupabaseService, env: WorkerEnv): AskAiDeps {
+  return {
+    aiStore: aiSettingsStore(service),
+    usageStore: service,
+    keySecret: env.AI_KEY_SECRET,
+    fetch: (i, init) => fetch(i, init),
+    loadSignals: async (signalIds) => {
+      let q = service.from("signals").select("*").is("dismissed_at", null);
+      if (signalIds && signalIds.length > 0) q = q.in("id", signalIds);
+      const { data, error } = await q
+        .order("source_created_at", { ascending: false })
+        .limit(50);
+      if (error) throw new Error(error.message);
+      return (data ?? []) as Array<
+        Awaited<ReturnType<AskAiDeps["loadSignals"]>>[number]
       >;
     },
   };

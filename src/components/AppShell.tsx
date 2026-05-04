@@ -10,6 +10,7 @@ import {
   Trello,
 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { CommandPalette } from "#/components/CommandPalette";
 import { FocusButton } from "#/components/FocusButton";
 import { apiFetch } from "#/lib/api-client";
 import { cn } from "#/lib/cn";
@@ -138,6 +139,7 @@ export function AppShell() {
         </header>
         <Outlet />
       </main>
+      <CommandPalette />
     </div>
   );
 }
