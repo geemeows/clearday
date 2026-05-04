@@ -7,6 +7,7 @@ import type {
   RuleEffect,
   RulePredicate,
 } from "#/lib/inbox-rules-engine";
+import { PROFILE_UPDATED_EVENT, type ProfileView } from "#/lib/profile-api";
 
 export const Route = createFileRoute("/_app/settings")({
   component: SettingsPage,
@@ -36,6 +37,7 @@ function SettingsPage() {
         </Link>
       </div>
 
+      <ProfilePanel />
       <NotificationsPanel />
       <WebPushDevicesPanel />
       <EmailDigestPanel />
@@ -2265,6 +2267,172 @@ export function EmailDigestPanel({
               Last digest sent on {view.last_sent_date}.
             </p>
           )}
+        </div>
+      )}
+    </section>
+  );
+}
+
+type ProfileSaveResult =
+  | { ok: true; profile: ProfileView }
+  | { ok: false; error: string };
+
+const EMPTY_PROFILE: ProfileView = {
+  display_name: null,
+  timezone: null,
+  locale: null,
+  avatar_url: null,
+};
+
+export function ProfilePanel({
+  loader,
+  saver,
+}: {
+  loader?: () => Promise<ProfileView>;
+  saver?: (patch: ProfileView) => Promise<ProfileSaveResult>;
+} = {}) {
+  const [view, setView] = useState<ProfileView | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const load = useMemo(
+    () => loader ?? (() => apiFetch("/api/profile") as Promise<ProfileView>),
+    [loader],
+  );
+  const save = useMemo(
+    () =>
+      saver ??
+      ((patch: ProfileView) =>
+        apiFetch("/api/profile", {
+          method: "PUT",
+          body: patch,
+        }) as Promise<ProfileSaveResult>),
+    [saver],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    load()
+      .then((p) => {
+        if (!cancelled) setView(p);
+      })
+      .catch((e) => {
+        if (!cancelled) setError(e instanceof Error ? e.message : String(e));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [load]);
+
+  const set = (patch: Partial<ProfileView>) => {
+    setView((v) => ({ ...(v ?? EMPTY_PROFILE), ...patch }));
+    setStatus(null);
+    setError(null);
+  };
+
+  const onSave = async () => {
+    if (!view) return;
+    setBusy(true);
+    setError(null);
+    setStatus(null);
+    try {
+      const out = await save(view);
+      if (!out.ok) {
+        setError(out.error);
+        return;
+      }
+      setView(out.profile);
+      setStatus("Saved.");
+      window.dispatchEvent(
+        new CustomEvent(PROFILE_UPDATED_EVENT, { detail: out.profile }),
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className="mt-8">
+      <h2 className="text-lg font-semibold">Profile</h2>
+      <p className="mt-1 text-sm text-zinc-500">
+        Display name, timezone, and locale used in the app shell and in
+        AI-generated copy.
+      </p>
+      {view === null ? (
+        <p className="mt-3 text-sm text-zinc-500">Loading…</p>
+      ) : (
+        <div className="mt-3 grid max-w-xl gap-3">
+          <label className="block text-sm">
+            <span className="text-zinc-700">Display name</span>
+            <input
+              type="text"
+              className="mt-1 block w-full rounded border border-zinc-300 px-2 py-1.5 text-sm"
+              value={view.display_name ?? ""}
+              onChange={(e) =>
+                set({
+                  display_name: e.target.value === "" ? null : e.target.value,
+                })
+              }
+            />
+          </label>
+          <label className="block text-sm">
+            <span className="text-zinc-700">Timezone</span>
+            <input
+              type="text"
+              placeholder="e.g. Europe/Paris"
+              className="mt-1 block w-full rounded border border-zinc-300 px-2 py-1.5 text-sm"
+              value={view.timezone ?? ""}
+              onChange={(e) =>
+                set({ timezone: e.target.value === "" ? null : e.target.value })
+              }
+            />
+          </label>
+          <label className="block text-sm">
+            <span className="text-zinc-700">Locale</span>
+            <input
+              type="text"
+              placeholder="e.g. en-US"
+              className="mt-1 block w-full rounded border border-zinc-300 px-2 py-1.5 text-sm"
+              value={view.locale ?? ""}
+              onChange={(e) =>
+                set({ locale: e.target.value === "" ? null : e.target.value })
+              }
+            />
+          </label>
+          <label className="block text-sm">
+            <span className="text-zinc-700">Avatar URL</span>
+            <input
+              type="text"
+              className="mt-1 block w-full rounded border border-zinc-300 px-2 py-1.5 text-sm"
+              value={view.avatar_url ?? ""}
+              onChange={(e) =>
+                set({
+                  avatar_url: e.target.value === "" ? null : e.target.value,
+                })
+              }
+            />
+          </label>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={onSave}
+              disabled={busy}
+              className="rounded border px-3 py-1.5 text-sm hover:bg-zinc-50 disabled:opacity-50"
+            >
+              {busy ? "Saving…" : "Save"}
+            </button>
+            {status && (
+              <output className="text-sm text-emerald-700">{status}</output>
+            )}
+            {error && (
+              <p role="alert" className="text-sm text-red-700">
+                {error}
+              </p>
+            )}
+          </div>
         </div>
       )}
     </section>

@@ -14,6 +14,7 @@ import { CommandPalette } from "#/components/CommandPalette";
 import { FocusButton } from "#/components/FocusButton";
 import { apiFetch } from "#/lib/api-client";
 import { cn } from "#/lib/cn";
+import { PROFILE_UPDATED_EVENT, type ProfileView } from "#/lib/profile-api";
 
 type NavItem = {
   to: string;
@@ -135,13 +136,58 @@ export function AppShell() {
       </aside>
 
       <main className="flex-1">
-        <header className="flex items-center justify-end border-b border-zinc-200 bg-white px-6 py-3">
+        <header className="flex items-center justify-end gap-3 border-b border-zinc-200 bg-white px-6 py-3">
           <FocusButton />
+          <UserMenu />
         </header>
         <Outlet />
       </main>
       <CommandPalette />
     </div>
+  );
+}
+
+export function UserMenu({
+  loader,
+}: {
+  loader?: () => Promise<ProfileView>;
+} = {}) {
+  const [profile, setProfile] = useState<ProfileView | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load =
+      loader ?? (() => apiFetch("/api/profile") as Promise<ProfileView>);
+    const refresh = () =>
+      load()
+        .then((p) => {
+          if (!cancelled) setProfile(p);
+        })
+        .catch(() => {
+          // Leave profile null; menu shows the generic fallback.
+        });
+    refresh();
+    const onUpdate = (e: Event) => {
+      const detail = (e as CustomEvent<ProfileView>).detail;
+      if (detail) setProfile(detail);
+      else refresh();
+    };
+    window.addEventListener(PROFILE_UPDATED_EVENT, onUpdate);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(PROFILE_UPDATED_EVENT, onUpdate);
+    };
+  }, [loader]);
+
+  const display = profile?.display_name?.trim() || "Account";
+  return (
+    <output
+      aria-label="User menu"
+      data-display-name={profile?.display_name ?? ""}
+      className="rounded border border-zinc-200 px-3 py-1.5 text-sm text-zinc-700"
+    >
+      {display}
+    </output>
   );
 }
 

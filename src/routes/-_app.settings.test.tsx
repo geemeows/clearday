@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import { PROFILE_UPDATED_EVENT } from "#/lib/profile-api";
 import {
   AiProviderPanel,
   AiSafeguardsPanel,
@@ -7,6 +8,7 @@ import {
   FocusBlockPanel,
   NotificationMatrixPanel,
   NotificationsPanel,
+  ProfilePanel,
   QuietHoursPanel,
   WebPushDevicesPanel,
 } from "#/routes/_app.settings";
@@ -673,6 +675,70 @@ describe("EmailDigestPanel", () => {
     );
     await waitFor(() =>
       expect(screen.getByText(/401 invalid key/i)).toBeTruthy(),
+    );
+  });
+});
+
+describe("ProfilePanel", () => {
+  const view = {
+    display_name: "Devy",
+    timezone: "Europe/Paris",
+    locale: "en-US",
+    avatar_url: null,
+  };
+
+  it("loads the profile and prefills the inputs", async () => {
+    const loader = vi.fn(async () => view);
+    render(<ProfilePanel loader={loader} />);
+    const nameInput = (await screen.findByLabelText(
+      /display name/i,
+    )) as HTMLInputElement;
+    expect(nameInput.value).toBe("Devy");
+    expect(loader).toHaveBeenCalledTimes(1);
+  });
+
+  it("saves edits and dispatches the profile-updated event", async () => {
+    const loader = vi.fn(async () => view);
+    const saver = vi.fn(async (patch: { display_name?: string | null }) => ({
+      ok: true as const,
+      profile: { ...view, display_name: patch.display_name ?? null },
+    }));
+    const onUpdate = vi.fn();
+    window.addEventListener(PROFILE_UPDATED_EVENT, onUpdate);
+    try {
+      render(<ProfilePanel loader={loader} saver={saver} />);
+      const nameInput = (await screen.findByLabelText(
+        /display name/i,
+      )) as HTMLInputElement;
+      fireEvent.change(nameInput, { target: { value: "New Name" } });
+      fireEvent.click(screen.getByRole("button", { name: /save/i }));
+      await waitFor(() => expect(saver).toHaveBeenCalled());
+      expect(saver).toHaveBeenCalledWith({
+        display_name: "New Name",
+        timezone: "Europe/Paris",
+        locale: "en-US",
+        avatar_url: null,
+      });
+      await waitFor(() =>
+        expect(screen.getByRole("status").textContent).toMatch(/saved/i),
+      );
+      expect(onUpdate).toHaveBeenCalled();
+    } finally {
+      window.removeEventListener(PROFILE_UPDATED_EVENT, onUpdate);
+    }
+  });
+
+  it("surfaces a validation error from the saver", async () => {
+    const loader = vi.fn(async () => view);
+    const saver = vi.fn(async () => ({
+      ok: false as const,
+      error: "display_name must be at most 200 characters",
+    }));
+    render(<ProfilePanel loader={loader} saver={saver} />);
+    await screen.findByLabelText(/display name/i);
+    fireEvent.click(screen.getByRole("button", { name: /save/i }));
+    await waitFor(() =>
+      expect(screen.getByText(/at most 200 characters/i)).toBeTruthy(),
     );
   });
 });

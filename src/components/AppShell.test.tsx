@@ -5,9 +5,10 @@ import {
   createRouter,
   RouterProvider,
 } from "@tanstack/react-router";
-import { render, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
-import { AppShell } from "#/components/AppShell";
+import { act, render, screen, within } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import { AppShell, UserMenu } from "#/components/AppShell";
+import { PROFILE_UPDATED_EVENT } from "#/lib/profile-api";
 
 async function renderShell(initial = "/today") {
   const rootRoute = createRootRoute({ component: AppShell });
@@ -61,5 +62,47 @@ describe("AppShell sidebar", () => {
   it("includes a Settings link", async () => {
     await renderShell();
     expect(await screen.findByRole("link", { name: /settings/i })).toBeTruthy();
+  });
+});
+
+describe("UserMenu", () => {
+  const profile = {
+    display_name: "Devy",
+    timezone: null,
+    locale: null,
+    avatar_url: null,
+  };
+
+  it("renders the display name from the loader", async () => {
+    const loader = vi.fn(async () => profile);
+    render(<UserMenu loader={loader} />);
+    const menu = await screen.findByRole("status", { name: /user menu/i });
+    expect(menu.textContent).toBe("Devy");
+  });
+
+  it("falls back to 'Account' when no display name is set", async () => {
+    const loader = vi.fn(async () => ({
+      display_name: null,
+      timezone: null,
+      locale: null,
+      avatar_url: null,
+    }));
+    render(<UserMenu loader={loader} />);
+    const menu = await screen.findByRole("status", { name: /user menu/i });
+    expect(menu.textContent).toBe("Account");
+  });
+
+  it("updates immediately when a profile-updated event fires", async () => {
+    const loader = vi.fn(async () => profile);
+    render(<UserMenu loader={loader} />);
+    await screen.findByText("Devy");
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent(PROFILE_UPDATED_EVENT, {
+          detail: { ...profile, display_name: "Renamed" },
+        }),
+      );
+    });
+    expect(screen.getByRole("status").textContent).toBe("Renamed");
   });
 });

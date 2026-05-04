@@ -37,6 +37,13 @@ import {
   completeOnboarding,
   getOnboardingStatus,
 } from "#/lib/onboarding-api";
+import {
+  getProfile,
+  type ProfilePutBody,
+  type ProfileStore,
+  type ProfileView,
+  putProfile,
+} from "#/lib/profile-api";
 import type { StoredSignal } from "#/lib/signal";
 import { runDueRollups } from "#/lib/signal-rollup";
 import { handleSlackWebhook } from "#/lib/slack-webhook";
@@ -353,6 +360,24 @@ export default {
       const out = buildConnectUrl(connectMatch[1], env.AUTH_PROXY_URL ?? null);
       if (!out.ok) return json({ ok: false, error: out.error }, 400);
       return json({ ok: true, url: out.url });
+    }
+
+    if (url.pathname === "/api/profile") {
+      const store = profileStore(service);
+      if (request.method === "GET") {
+        return json(await getProfile(store));
+      }
+      if (request.method === "PUT") {
+        let body: ProfilePutBody;
+        try {
+          body = (await request.json()) as ProfilePutBody;
+        } catch {
+          return json({ ok: false, error: "invalid json" }, 400);
+        }
+        const out = await putProfile(body, store);
+        if (!out.ok) return json({ ok: false, error: out.error }, 400);
+        return json({ ok: true, profile: out.profile });
+      }
     }
 
     if (url.pathname === "/api/slack/allowlist") {
@@ -707,6 +732,48 @@ async function loadFocusTokens(
   const find = (p: string) =>
     rows.find((r) => r.provider === p)?.access_token ?? null;
   return { google: find("google"), slack: find("slack") };
+}
+
+const PROFILE_COLUMNS = "display_name, timezone, locale, avatar_url";
+
+function profileStore(service: SupabaseService): ProfileStore {
+  return {
+    load: async () => {
+      const { data, error } = await service
+        .from("user_preferences")
+        .select(PROFILE_COLUMNS)
+        .eq("id", true)
+        .maybeSingle();
+      if (error) throw new Error(error.message);
+      const row = (data ?? {}) as Partial<ProfileView>;
+      return {
+        display_name: row.display_name ?? null,
+        timezone: row.timezone ?? null,
+        locale: row.locale ?? null,
+        avatar_url: row.avatar_url ?? null,
+      };
+    },
+    save: async (patch) => {
+      const { error } = await service
+        .from("user_preferences")
+        .update({ ...patch, updated_at: new Date().toISOString() })
+        .eq("id", true);
+      if (error) throw new Error(error.message);
+      const { data, error: readErr } = await service
+        .from("user_preferences")
+        .select(PROFILE_COLUMNS)
+        .eq("id", true)
+        .maybeSingle();
+      if (readErr) throw new Error(readErr.message);
+      const row = (data ?? {}) as Partial<ProfileView>;
+      return {
+        display_name: row.display_name ?? null,
+        timezone: row.timezone ?? null,
+        locale: row.locale ?? null,
+        avatar_url: row.avatar_url ?? null,
+      };
+    },
+  };
 }
 
 async function loadOnboardedAt(
