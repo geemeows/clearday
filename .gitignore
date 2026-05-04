@@ -13,3 +13,4 @@ supabase/.branches
 .vinxi
 __unconfig*
 todos.json
+.pnpm-store
