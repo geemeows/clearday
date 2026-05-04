@@ -70,6 +70,7 @@ import {
 } from "#/lib/self-host-api";
 import type { StoredSignal } from "#/lib/signal";
 import { runDueRollups } from "#/lib/signal-rollup";
+import { postSlackReply } from "#/lib/slack-reply";
 import { handleSlackWebhook } from "#/lib/slack-webhook";
 import {
   DEFAULT_THEME,
@@ -234,6 +235,10 @@ export default {
 
     if (url.pathname === "/api/pr/review" && request.method === "POST") {
       return handleSubmitPrReview(request, service);
+    }
+
+    if (url.pathname === "/api/slack/reply" && request.method === "POST") {
+      return handlePostSlackReply(request, service);
     }
 
     if (url.pathname === "/api/ai/settings") {
@@ -876,6 +881,39 @@ async function handleSubmitPrReview(
 
   const out = await submitPrReview(
     { repo, number, event, body: message },
+    { token, fetch: (i, init) => fetch(i, init) },
+  );
+  return json(out, out.ok ? 200 : 400);
+}
+
+async function handlePostSlackReply(
+  request: Request,
+  service: SupabaseService,
+): Promise<Response> {
+  let body: { channel?: unknown; text?: unknown; thread_ts?: unknown };
+  try {
+    body = (await request.json()) as typeof body;
+  } catch {
+    return json({ ok: false, error: "invalid json" }, 400);
+  }
+  const channel = typeof body.channel === "string" ? body.channel : "";
+  const text = typeof body.text === "string" ? body.text : "";
+  const thread_ts =
+    typeof body.thread_ts === "string" && body.thread_ts.length > 0
+      ? body.thread_ts
+      : undefined;
+
+  const { data, error } = await service
+    .from("provider_accounts")
+    .select("access_token")
+    .eq("provider", "slack")
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  const token =
+    (data as { access_token: string | null } | null)?.access_token ?? null;
+
+  const out = await postSlackReply(
+    { channel, text, thread_ts },
     { token, fetch: (i, init) => fetch(i, init) },
   );
   return json(out, out.ok ? 200 : 400);

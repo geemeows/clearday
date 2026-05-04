@@ -467,10 +467,12 @@ function SlackBody({ signal }: { signal: StoredSignal }) {
   const channelType = signal.payload?.channel_type as string | undefined;
   const author = signal.payload?.author as string | undefined;
   const text = signal.payload?.text as string | undefined;
+  const ts = signal.payload?.ts as string | undefined;
+  const threadTs = signal.payload?.thread_ts as string | undefined;
   const where =
     channelType === "im" ? "Direct message" : channel ? `#${channel}` : null;
   return (
-    <div className="mt-3 space-y-2 text-sm">
+    <div className="mt-3 space-y-4 text-sm">
       <dl className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1.5">
         {where && (
           <>
@@ -486,11 +488,114 @@ function SlackBody({ signal }: { signal: StoredSignal }) {
         )}
       </dl>
       {text && (
-        <blockquote className="mt-2 whitespace-pre-line border-l-2 border-zinc-200 pl-3 text-zinc-700">
+        <blockquote className="whitespace-pre-line border-l-2 border-zinc-200 pl-3 text-zinc-700">
           {text}
         </blockquote>
       )}
+      {channel && (
+        <SlackReplyComposer channel={channel} thread_ts={threadTs ?? ts} />
+      )}
     </div>
+  );
+}
+
+type SlackReplySubmit = (params: {
+  channel: string;
+  text: string;
+  thread_ts?: string;
+}) => Promise<{ ok: boolean; error?: string; needs_reauth?: boolean }>;
+
+const defaultSlackReplySubmit: SlackReplySubmit = async (params) =>
+  (await apiFetch("/api/slack/reply", {
+    method: "POST",
+    body: params,
+  })) as { ok: boolean; error?: string; needs_reauth?: boolean };
+
+export function SlackReplyComposer({
+  channel,
+  thread_ts,
+  submit = defaultSlackReplySubmit,
+}: {
+  channel: string;
+  thread_ts?: string;
+  submit?: SlackReplySubmit;
+}) {
+  const [text, setText] = useState("");
+  const [pending, setPending] = useState(false);
+  const [status, setStatus] = useState<
+    | { kind: "ok" }
+    | { kind: "error"; message: string; needs_reauth?: boolean }
+    | null
+  >(null);
+
+  const send = async () => {
+    setPending(true);
+    setStatus(null);
+    try {
+      const out = await submit({ channel, text: text.trim(), thread_ts });
+      if (out.ok) {
+        setStatus({ kind: "ok" });
+        setText("");
+      } else {
+        setStatus({
+          kind: "error",
+          message: out.error ?? "reply failed",
+          needs_reauth: out.needs_reauth,
+        });
+      }
+    } catch (e) {
+      setStatus({
+        kind: "error",
+        message: e instanceof Error ? e.message : "reply failed",
+      });
+    } finally {
+      setPending(false);
+    }
+  };
+
+  return (
+    <section
+      aria-label="Slack reply composer"
+      className="space-y-2 rounded border border-zinc-200 bg-zinc-50 p-3"
+    >
+      <textarea
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        placeholder={
+          thread_ts ? "Reply in thread…" : `Send a message to #${channel}`
+        }
+        aria-label="Slack reply"
+        rows={3}
+        className="w-full resize-y rounded border border-zinc-200 bg-white px-2 py-1.5 text-sm text-zinc-900 outline-none focus:border-zinc-400"
+      />
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={send}
+          disabled={pending || text.trim().length === 0}
+          className="rounded bg-zinc-900 px-3 py-1.5 text-sm text-white hover:bg-zinc-800 disabled:opacity-60"
+        >
+          {pending ? "Sending…" : "Send"}
+        </button>
+      </div>
+      {status?.kind === "ok" && (
+        <output className="block text-xs text-emerald-700">Reply sent.</output>
+      )}
+      {status?.kind === "error" && (
+        <p role="alert" className="text-xs text-rose-700">
+          {status.message}
+          {status.needs_reauth && (
+            <>
+              {" "}
+              <a href="/settings" className="underline">
+                Reauthorize Slack
+              </a>
+              .
+            </>
+          )}
+        </p>
+      )}
+    </section>
   );
 }
 

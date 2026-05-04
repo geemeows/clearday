@@ -11,6 +11,7 @@ import {
   InboxDetailPane,
   InboxView,
   PrReviewActions,
+  SlackReplyComposer,
 } from "#/routes/_app.inbox";
 
 const sample = (
@@ -312,6 +313,61 @@ describe("PrReviewActions", () => {
     fireEvent.click(screen.getByRole("button", { name: /approve/i }));
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toMatch(/scope missing/);
+    const reauth = within(alert).getByRole("link", { name: /reauthorize/i });
+    expect(reauth.getAttribute("href")).toBe("/settings");
+  });
+});
+
+describe("SlackReplyComposer", () => {
+  it("disables Send until text is typed", () => {
+    render(
+      <SlackReplyComposer channel="C123" submit={async () => ({ ok: true })} />,
+    );
+    const send = screen.getByRole("button", { name: /^send$/i });
+    expect(send.hasAttribute("disabled")).toBe(true);
+    fireEvent.change(screen.getByLabelText("Slack reply"), {
+      target: { value: "looking now" },
+    });
+    expect(send.hasAttribute("disabled")).toBe(false);
+  });
+
+  it("forwards channel + thread_ts and clears the textarea on success", async () => {
+    const submit = vi.fn(async () => ({ ok: true }));
+    render(
+      <SlackReplyComposer
+        channel="C123"
+        thread_ts="1700000000.000100"
+        submit={submit}
+      />,
+    );
+    const textarea = screen.getByLabelText(
+      "Slack reply",
+    ) as HTMLTextAreaElement;
+    fireEvent.change(textarea, { target: { value: "  on it  " } });
+    fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
+    await waitFor(() => expect(submit).toHaveBeenCalled());
+    expect(submit).toHaveBeenCalledWith({
+      channel: "C123",
+      text: "on it",
+      thread_ts: "1700000000.000100",
+    });
+    await waitFor(() => expect(textarea.value).toBe(""));
+    expect(screen.getByRole("status").textContent).toMatch(/reply sent/i);
+  });
+
+  it("surfaces a Reauthorize hint on needs_reauth", async () => {
+    const submit = vi.fn(async () => ({
+      ok: false,
+      error: "missing_scope",
+      needs_reauth: true,
+    }));
+    render(<SlackReplyComposer channel="C1" submit={submit} />);
+    fireEvent.change(screen.getByLabelText("Slack reply"), {
+      target: { value: "hi" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toMatch(/missing_scope/);
     const reauth = within(alert).getByRole("link", { name: /reauthorize/i });
     expect(reauth.getAttribute("href")).toBe("/settings");
   });
