@@ -333,7 +333,7 @@ function PrBody({ signal }: { signal: StoredSignal }) {
         </dd>
       </dl>
       {repo && typeof number === "number" && !draft && (
-        <PrReviewActions repo={repo} number={number} />
+        <PrReviewActions repo={repo} number={number} signalId={signal.id} />
       )}
     </div>
   );
@@ -354,22 +354,74 @@ const defaultPrReviewSubmit: PrReviewSubmit = async (params) =>
     body: params,
   })) as { ok: boolean; error?: string; needs_reauth?: boolean };
 
+type DraftReplyResultUi =
+  | { ok: true; draft: string }
+  | { ok: false; reason: string; error?: string };
+
+type DraftRequest = (params: {
+  signal_id: string;
+  instruction?: string;
+}) => Promise<DraftReplyResultUi>;
+
+const defaultDraftRequest: DraftRequest = async (params) =>
+  (await apiFetch("/api/ai/draft", {
+    method: "POST",
+    body: params,
+  })) as DraftReplyResultUi;
+
+function draftRefusedMessage(reason: string): string {
+  if (reason === "no_provider") return "No AI provider configured.";
+  if (reason === "budget_reached")
+    return "AI disabled — monthly budget reached.";
+  if (reason === "disabled") return "AI is disabled for this account.";
+  return "AI draft failed.";
+}
+
 export function PrReviewActions({
   repo,
   number,
+  signalId,
   submit = defaultPrReviewSubmit,
+  requestDraft = defaultDraftRequest,
 }: {
   repo: string;
   number: number;
+  signalId?: string;
   submit?: PrReviewSubmit;
+  requestDraft?: DraftRequest;
 }) {
   const [body, setBody] = useState("");
   const [pending, setPending] = useState<PrReviewEvent | null>(null);
+  const [drafting, setDrafting] = useState(false);
   const [status, setStatus] = useState<
     | { kind: "ok"; event: PrReviewEvent }
     | { kind: "error"; message: string; needs_reauth?: boolean }
     | null
   >(null);
+
+  const draft = async () => {
+    if (!signalId) return;
+    setDrafting(true);
+    setStatus(null);
+    try {
+      const out = await requestDraft({ signal_id: signalId });
+      if (out.ok) {
+        setBody(out.draft);
+      } else {
+        setStatus({
+          kind: "error",
+          message: out.error ?? draftRefusedMessage(out.reason),
+        });
+      }
+    } catch (e) {
+      setStatus({
+        kind: "error",
+        message: e instanceof Error ? e.message : "draft failed",
+      });
+    } finally {
+      setDrafting(false);
+    }
+  };
 
   const run = async (event: PrReviewEvent) => {
     setPending(event);
@@ -434,6 +486,16 @@ export function PrReviewActions({
         >
           {pending === "COMMENT" ? "Sending…" : "Comment"}
         </button>
+        {signalId && (
+          <button
+            type="button"
+            onClick={draft}
+            disabled={drafting || pending !== null}
+            className="ml-auto rounded border border-zinc-300 bg-white px-3 py-1.5 text-sm text-zinc-700 hover:bg-zinc-100 disabled:opacity-60"
+          >
+            {drafting ? "Drafting…" : "Draft with AI"}
+          </button>
+        )}
       </div>
       {status?.kind === "ok" && (
         <output className="block text-xs text-emerald-700">
@@ -493,7 +555,11 @@ function SlackBody({ signal }: { signal: StoredSignal }) {
         </blockquote>
       )}
       {channel && (
-        <SlackReplyComposer channel={channel} thread_ts={threadTs ?? ts} />
+        <SlackReplyComposer
+          channel={channel}
+          thread_ts={threadTs ?? ts}
+          signalId={signal.id}
+        />
       )}
     </div>
   );
@@ -514,19 +580,48 @@ const defaultSlackReplySubmit: SlackReplySubmit = async (params) =>
 export function SlackReplyComposer({
   channel,
   thread_ts,
+  signalId,
   submit = defaultSlackReplySubmit,
+  requestDraft = defaultDraftRequest,
 }: {
   channel: string;
   thread_ts?: string;
+  signalId?: string;
   submit?: SlackReplySubmit;
+  requestDraft?: DraftRequest;
 }) {
   const [text, setText] = useState("");
   const [pending, setPending] = useState(false);
+  const [drafting, setDrafting] = useState(false);
   const [status, setStatus] = useState<
     | { kind: "ok" }
     | { kind: "error"; message: string; needs_reauth?: boolean }
     | null
   >(null);
+
+  const draft = async () => {
+    if (!signalId) return;
+    setDrafting(true);
+    setStatus(null);
+    try {
+      const out = await requestDraft({ signal_id: signalId });
+      if (out.ok) {
+        setText(out.draft);
+      } else {
+        setStatus({
+          kind: "error",
+          message: out.error ?? draftRefusedMessage(out.reason),
+        });
+      }
+    } catch (e) {
+      setStatus({
+        kind: "error",
+        message: e instanceof Error ? e.message : "draft failed",
+      });
+    } finally {
+      setDrafting(false);
+    }
+  };
 
   const send = async () => {
     setPending(true);
@@ -577,6 +672,16 @@ export function SlackReplyComposer({
         >
           {pending ? "Sending…" : "Send"}
         </button>
+        {signalId && (
+          <button
+            type="button"
+            onClick={draft}
+            disabled={drafting || pending}
+            className="ml-auto rounded border border-zinc-300 bg-white px-3 py-1.5 text-sm text-zinc-700 hover:bg-zinc-100 disabled:opacity-60"
+          >
+            {drafting ? "Drafting…" : "Draft with AI"}
+          </button>
+        )}
       </div>
       {status?.kind === "ok" && (
         <output className="block text-xs text-emerald-700">Reply sent.</output>

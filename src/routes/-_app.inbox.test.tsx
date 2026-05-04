@@ -372,3 +372,85 @@ describe("SlackReplyComposer", () => {
     expect(reauth.getAttribute("href")).toBe("/settings");
   });
 });
+
+describe("Draft with AI", () => {
+  it("seeds a PR review comment from the AI draft", async () => {
+    const requestDraft = vi.fn(async () => ({
+      ok: true as const,
+      draft: "Approving — small nit on naming.",
+    }));
+    render(
+      <PrReviewActions
+        repo="o/r"
+        number={5}
+        signalId="sig-1"
+        submit={async () => ({ ok: true })}
+        requestDraft={requestDraft}
+      />,
+    );
+    const textarea = screen.getByLabelText(
+      /review comment/i,
+    ) as HTMLTextAreaElement;
+    expect(textarea.value).toBe("");
+    fireEvent.click(screen.getByRole("button", { name: /draft with ai/i }));
+    await waitFor(() =>
+      expect(textarea.value).toBe("Approving — small nit on naming."),
+    );
+    expect(requestDraft).toHaveBeenCalledWith({ signal_id: "sig-1" });
+  });
+
+  it("seeds a Slack reply from the AI draft", async () => {
+    const requestDraft = vi.fn(async () => ({
+      ok: true as const,
+      draft: "Looking now.",
+    }));
+    render(
+      <SlackReplyComposer
+        channel="C1"
+        signalId="sig-2"
+        submit={async () => ({ ok: true })}
+        requestDraft={requestDraft}
+      />,
+    );
+    const textarea = screen.getByLabelText(
+      "Slack reply",
+    ) as HTMLTextAreaElement;
+    fireEvent.click(screen.getByRole("button", { name: /draft with ai/i }));
+    await waitFor(() => expect(textarea.value).toBe("Looking now."));
+    expect(requestDraft).toHaveBeenCalledWith({ signal_id: "sig-2" });
+  });
+
+  it("surfaces a no_provider message without seeding the textarea", async () => {
+    const requestDraft = vi.fn(async () => ({
+      ok: false as const,
+      reason: "no_provider",
+    }));
+    render(
+      <PrReviewActions
+        repo="o/r"
+        number={1}
+        signalId="sig-3"
+        submit={async () => ({ ok: true })}
+        requestDraft={requestDraft}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /draft with ai/i }));
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toMatch(/no ai provider/i);
+    const textarea = screen.getByLabelText(
+      /review comment/i,
+    ) as HTMLTextAreaElement;
+    expect(textarea.value).toBe("");
+  });
+
+  it("hides the Draft button when no signalId is provided", () => {
+    render(
+      <PrReviewActions
+        repo="o/r"
+        number={1}
+        submit={async () => ({ ok: true })}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: /draft with ai/i })).toBeNull();
+  });
+});

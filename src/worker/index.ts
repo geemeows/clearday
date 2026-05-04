@@ -25,6 +25,7 @@ import {
   type RetentionStore,
   type RetentionView,
 } from "#/lib/data-privacy-api";
+import { type DraftReplyDeps, handleDraftReply } from "#/lib/draft-reply-api";
 import {
   type EmailDigestDeps,
   type EmailDigestPutBody,
@@ -273,6 +274,20 @@ export default {
         return json({ ok: false, reason: "error", error: "invalid json" }, 400);
       }
       const out = await handleAskAi(body, askAiDeps(service, env));
+      return json(out, out.ok ? 200 : out.reason === "error" ? 400 : 200);
+    }
+
+    if (url.pathname === "/api/ai/draft" && request.method === "POST") {
+      let body: { signal_id?: unknown; instruction?: unknown };
+      try {
+        body = (await request.json()) as {
+          signal_id?: unknown;
+          instruction?: unknown;
+        };
+      } catch {
+        return json({ ok: false, reason: "error", error: "invalid json" }, 400);
+      }
+      const out = await handleDraftReply(body, draftReplyDeps(service, env));
       return json(out, out.ok ? 200 : out.reason === "error" ? 400 : 200);
     }
 
@@ -1286,6 +1301,29 @@ function askAiDeps(service: SupabaseService, env: WorkerEnv): AskAiDeps {
       if (error) throw new Error(error.message);
       return (data ?? []) as Array<
         Awaited<ReturnType<AskAiDeps["loadSignals"]>>[number]
+      >;
+    },
+  };
+}
+
+function draftReplyDeps(
+  service: SupabaseService,
+  env: WorkerEnv,
+): DraftReplyDeps {
+  return {
+    aiStore: aiSettingsStore(service),
+    usageStore: service,
+    keySecret: env.AI_KEY_SECRET,
+    fetch: (i, init) => fetch(i, init),
+    loadSignal: async (signalId) => {
+      const { data, error } = await service
+        .from("signals")
+        .select("*")
+        .eq("id", signalId)
+        .maybeSingle();
+      if (error) throw new Error(error.message);
+      return (data ?? null) as Awaited<
+        ReturnType<DraftReplyDeps["loadSignal"]>
       >;
     },
   };
