@@ -1,8 +1,10 @@
+import {
+  type AuthProxyEnv,
+  handleAuthProxyRequest,
+} from "../../../src/lib/auth-proxy";
+
 export default {
-  fetch(): Response {
-    return new Response("auth-proxy: not implemented yet\n", {
-      status: 501,
-      headers: { "content-type": "text/plain; charset=utf-8" },
-    });
+  fetch(request: Request, env: AuthProxyEnv): Promise<Response> {
+    return handleAuthProxyRequest(request, env);
   },
-} satisfies ExportedHandler;
+} satisfies ExportedHandler<AuthProxyEnv>;
