@@ -1,0 +1,72 @@
+// HTTP handlers for /api/signals* and /api/sources. The SPA reads through
+// these so it inherits the user's bearer-token auth (RLS would also gate the
+// queries if the SPA went direct, but routing through the Worker lets us
+// apply server-side filters and unify shapes).
+
+import type { SignalKind, SignalProvider } from "#/lib/signal";
+import {
+  dismissSignal,
+  listSignals,
+  type SupabaseLike,
+} from "#/lib/signal-store";
+import { json } from "#/worker/middleware";
+
+const KIND_BY_FILTER: Record<string, SignalKind[]> = {
+  prs: ["pr_review_requested", "pr_authored", "pr_assigned"],
+  meetings: ["meeting"],
+  mentions: ["dm", "mention", "thread_reply"],
+};
+
+const PROVIDERS: SignalProvider[] = ["github", "google", "slack"];
+
+export async function handleListSignals(
+  url: URL,
+  client: SupabaseLike,
+): Promise<Response> {
+  const filter = url.searchParams.get("filter") ?? "all";
+  const kinds = filter === "all" ? undefined : KIND_BY_FILTER[filter];
+  if (filter !== "all" && !kinds) {
+    return json({ error: `unknown filter: ${filter}` }, 400);
+  }
+  const signals = await listSignals(client, { kinds });
+  return json({ signals });
+}
+
+export async function handleDismissSignal(
+  id: string,
+  client: SupabaseLike,
+): Promise<Response> {
+  if (!id) return json({ error: "missing id" }, 400);
+  await dismissSignal(client, id);
+  return json({ ok: true });
+}
+
+export type SourceStatusRow = {
+  provider: string;
+  account_id: string | null;
+  updated_at: string | null;
+};
+
+export type SourceStatus = {
+  provider: SignalProvider;
+  status: "connected" | "disconnected";
+  account_id: string | null;
+  updated_at: string | null;
+};
+
+export async function handleSources(
+  loadAccounts: () => Promise<SourceStatusRow[]>,
+): Promise<Response> {
+  const rows = await loadAccounts();
+  const byProvider = new Map(rows.map((r) => [r.provider, r]));
+  const sources: SourceStatus[] = PROVIDERS.map((provider) => {
+    const row = byProvider.get(provider);
+    return {
+      provider,
+      status: row ? "connected" : "disconnected",
+      account_id: row?.account_id ?? null,
+      updated_at: row?.updated_at ?? null,
+    };
+  });
+  return json({ sources });
+}

@@ -14,6 +14,11 @@
     "SUPABASE_URL": "",
     "SUPABASE_ANON_KEY": "",
     "AUTH_PROXY_URL": "https://auth.clearday.geemeows.com"
+  },
+  "triggers": {
+    // Provider-sync cron: every 2 minutes the orchestrator polls each
+    // connected provider (currently only github) and upserts new Signals.
+    "crons": ["*/2 * * * *"]
   }
   // Secrets (set via `wrangler secret put`):
   //   STATE_HMAC_SECRET, SUPABASE_SERVICE_ROLE_KEY,

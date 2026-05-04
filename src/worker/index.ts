@@ -1,5 +1,7 @@
 /// <reference types="@cloudflare/workers-types" />
+import { createClient } from "@supabase/supabase-js";
 import { handleOAuthExchange } from "#/lib/oauth-exchange-handler";
+import { runScheduledPoll } from "#/worker/cron-orchestrator";
 import {
   defaultGetUser,
   json,
@@ -7,6 +9,11 @@ import {
   type WorkerEnv,
 } from "#/worker/middleware";
 import { persistProviderAccount } from "#/worker/provider-accounts";
+import {
+  handleDismissSignal,
+  handleListSignals,
+  handleSources,
+} from "#/worker/signals-api";
 
 export default {
   async fetch(
@@ -39,9 +46,79 @@ export default {
       return json({ email: gate.user.email });
     }
 
+    const service = serviceClient(env);
+
+    if (url.pathname === "/api/signals" && request.method === "GET") {
+      return handleListSignals(url, service);
+    }
+
+    const dismissMatch = url.pathname.match(
+      /^\/api\/signals\/([^/]+)\/dismiss$/,
+    );
+    if (dismissMatch && request.method === "POST") {
+      return handleDismissSignal(dismissMatch[1], service);
+    }
+
+    if (url.pathname === "/api/sources" && request.method === "GET") {
+      return handleSources(async () => {
+        const { data, error } = await service
+          .from("provider_accounts")
+          .select("provider, account_id, updated_at");
+        if (error) throw new Error(error.message);
+        return (data ?? []) as Array<{
+          provider: string;
+          account_id: string | null;
+          updated_at: string | null;
+        }>;
+      });
+    }
+
     return json({ error: "not found" }, 404);
   },
+
+  async scheduled(
+    _event: ScheduledController,
+    env: WorkerEnv,
+    ctx: ExecutionContext,
+  ): Promise<void> {
+    const service = serviceClient(env);
+    ctx.waitUntil(
+      runScheduledPoll({
+        loadAccounts: async () => {
+          const { data, error } = await service
+            .from("provider_accounts")
+            .select("provider, access_token");
+          if (error) throw new Error(error.message);
+          return (data ?? []) as Array<{
+            provider: string;
+            access_token: string | null;
+          }>;
+        },
+        store: service,
+        fetch: (input, init) => fetch(input, init),
+      })
+        .then((reports) => {
+          for (const r of reports) {
+            if (r.error) {
+              console.warn(`[cron] ${r.provider}: ${r.error}`);
+            } else {
+              console.log(`[cron] ${r.provider}: upserted ${r.upserted}`);
+            }
+          }
+        })
+        .catch((err) => {
+          console.error("[cron] orchestrator failed", err);
+        }),
+    );
+  },
 } satisfies ExportedHandler<WorkerEnv>;
+
+// biome-ignore lint/suspicious/noExplicitAny: thin Supabase service client
+function serviceClient(env: WorkerEnv): any {
+  return createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+}
 
 // Wrangler injects `env.ASSETS` (Fetcher) when an [assets] binding is
 // configured. We thread it through a helper so the worker file can be

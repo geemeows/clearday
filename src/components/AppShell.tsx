@@ -9,6 +9,8 @@ import {
   Sun,
   Trello,
 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { apiFetch } from "#/lib/api-client";
 import { cn } from "#/lib/cn";
 
 type NavItem = {
@@ -38,8 +40,22 @@ const SOURCES: Source[] = [
   { id: "google-calendar", label: "Google Calendar", icon: Calendar },
 ];
 
+// Maps the AppShell's Source ids onto the backend provider keys returned by
+// /api/sources. Linear and Jira aren't real providers in v1; they stay
+// neutral until those adapters land.
+const SOURCE_PROVIDER: Record<string, string> = {
+  github: "github",
+  slack: "slack",
+  "google-calendar": "google",
+};
+
+type SourceStatus = "ok" | "error" | "neutral";
+
+type ApiSource = { provider: string; status: "connected" | "disconnected" };
+
 export function AppShell() {
   const path = useRouterState({ select: (s) => s.location.pathname });
+  const statuses = useSourceStatuses();
 
   return (
     <div className="flex min-h-screen bg-zinc-50 text-zinc-900">
@@ -79,21 +95,24 @@ export function AppShell() {
         <nav aria-label="Sources" className="mt-6 px-2">
           <SectionTitle>Sources</SectionTitle>
           <ul className="mt-1 space-y-0.5">
-            {SOURCES.map((s) => (
-              <li
-                key={s.id}
-                className="flex items-center gap-2 rounded px-2 py-1.5 text-sm text-zinc-600"
-              >
-                <s.icon className="h-4 w-4" />
-                <span className="flex-1">{s.label}</span>
-                <output
-                  aria-label={`${s.label} status: not connected`}
-                  data-source={s.id}
-                  data-status="neutral"
-                  className="h-2 w-2 rounded-full bg-zinc-300"
-                />
-              </li>
-            ))}
+            {SOURCES.map((s) => {
+              const status = statuses[s.id] ?? "neutral";
+              return (
+                <li
+                  key={s.id}
+                  className="flex items-center gap-2 rounded px-2 py-1.5 text-sm text-zinc-600"
+                >
+                  <s.icon className="h-4 w-4" />
+                  <span className="flex-1">{s.label}</span>
+                  <output
+                    aria-label={`${s.label} status: ${statusLabel(status)}`}
+                    data-source={s.id}
+                    data-status={status}
+                    className={cn("h-2 w-2 rounded-full", dotClass(status))}
+                  />
+                </li>
+              );
+            })}
           </ul>
         </nav>
 
@@ -117,6 +136,53 @@ export function AppShell() {
       </main>
     </div>
   );
+}
+
+function useSourceStatuses(): Record<string, SourceStatus> {
+  const [statuses, setStatuses] = useState<Record<string, SourceStatus>>({});
+  useEffect(() => {
+    let cancelled = false;
+    apiFetch("/api/sources")
+      .then((body) => {
+        if (cancelled) return;
+        const sources = (body as { sources: ApiSource[] }).sources;
+        const next: Record<string, SourceStatus> = {};
+        for (const id of Object.keys(SOURCE_PROVIDER)) {
+          const match = sources.find((s) => s.provider === SOURCE_PROVIDER[id]);
+          next[id] = match?.status === "connected" ? "ok" : "neutral";
+        }
+        setStatuses(next);
+      })
+      .catch(() => {
+        // Leave dots neutral on auth/network failure.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  return statuses;
+}
+
+function statusLabel(status: SourceStatus): string {
+  switch (status) {
+    case "ok":
+      return "connected";
+    case "error":
+      return "error";
+    default:
+      return "not connected";
+  }
+}
+
+function dotClass(status: SourceStatus): string {
+  switch (status) {
+    case "ok":
+      return "bg-emerald-500";
+    case "error":
+      return "bg-red-500";
+    default:
+      return "bg-zinc-300";
+  }
 }
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
