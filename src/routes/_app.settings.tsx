@@ -30,6 +30,7 @@ function SettingsPage() {
 
       <NotificationsPanel />
       <WebPushDevicesPanel />
+      <EmailDigestPanel />
       <NotificationMatrixPanel />
       <QuietHoursPanel />
       <FocusBlockPanel />
@@ -1946,5 +1947,318 @@ function EffectInputs({
       disabled={busy}
       className="mt-2 w-full rounded border border-zinc-200 px-2 py-1"
     />
+  );
+}
+
+type EmailDigestSettingsView = {
+  enabled: boolean;
+  transport: "resend";
+  has_api_key: boolean;
+  from_email: string | null;
+  to_email: string | null;
+  hour_utc: number;
+  last_sent_date: string | null;
+};
+
+type EmailDigestPutBody = {
+  enabled?: boolean;
+  api_key?: string;
+  from_email?: string | null;
+  to_email?: string | null;
+  hour_utc?: number;
+};
+
+export function EmailDigestPanel({
+  loader,
+  saver,
+  tester,
+}: {
+  loader?: () => Promise<EmailDigestSettingsView>;
+  saver?: (
+    body: EmailDigestPutBody,
+  ) => Promise<
+    | { ok: true; settings: EmailDigestSettingsView }
+    | { ok: false; error: string }
+  >;
+  tester?: () => Promise<{ ok: boolean; error?: string }>;
+} = {}) {
+  const [view, setView] = useState<EmailDigestSettingsView | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+  const [draft, setDraft] = useState({
+    api_key: "",
+    from_email: "",
+    to_email: "",
+    hour_utc: 13,
+  });
+
+  const load = useMemo(
+    () =>
+      loader ??
+      (() => apiFetch("/api/email-digest") as Promise<EmailDigestSettingsView>),
+    [loader],
+  );
+  const save = useMemo(
+    () =>
+      saver ??
+      ((body: EmailDigestPutBody) =>
+        apiFetch("/api/email-digest", {
+          method: "PUT",
+          body,
+        }) as Promise<
+          | { ok: true; settings: EmailDigestSettingsView }
+          | { ok: false; error: string }
+        >),
+    [saver],
+  );
+  const test = useMemo(
+    () =>
+      tester ??
+      (() =>
+        apiFetch("/api/email-digest/test", {
+          method: "POST",
+        }) as Promise<{ ok: boolean; error?: string }>),
+    [tester],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    load()
+      .then((v) => {
+        if (cancelled) return;
+        setView(v);
+        setDraft((d) => ({
+          ...d,
+          from_email: v.from_email ?? "",
+          to_email: v.to_email ?? "",
+          hour_utc: v.hour_utc,
+        }));
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        setError(e instanceof Error ? e.message : "failed to load");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [load]);
+
+  const onSave = useCallback(async () => {
+    setBusy(true);
+    setStatus(null);
+    setError(null);
+    try {
+      const body: EmailDigestPutBody = {
+        from_email: draft.from_email.trim() || null,
+        to_email: draft.to_email.trim() || null,
+        hour_utc: draft.hour_utc,
+      };
+      if (draft.api_key.trim().length > 0) body.api_key = draft.api_key.trim();
+      const out = await save(body);
+      if (out.ok) {
+        setView(out.settings);
+        setDraft((d) => ({ ...d, api_key: "" }));
+        setStatus("Saved.");
+      } else {
+        setError(out.error);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "save failed");
+    } finally {
+      setBusy(false);
+    }
+  }, [draft, save]);
+
+  const onToggleEnabled = useCallback(async () => {
+    if (!view) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const out = await save({ enabled: !view.enabled });
+      if (out.ok) setView(out.settings);
+      else setError(out.error);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "save failed");
+    } finally {
+      setBusy(false);
+    }
+  }, [save, view]);
+
+  const onTest = useCallback(async () => {
+    setBusy(true);
+    setStatus(null);
+    setError(null);
+    try {
+      const out = await test();
+      setStatus(out.ok ? "Test email sent." : null);
+      if (!out.ok) setError(out.error ?? "test failed");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "test failed");
+    } finally {
+      setBusy(false);
+    }
+  }, [test]);
+
+  return (
+    <section
+      aria-label="Email digest"
+      className="mt-8 rounded border border-zinc-200 bg-white p-5"
+    >
+      <h2 className="text-base font-semibold text-zinc-900">Email digest</h2>
+      <p className="mt-1 text-sm text-zinc-500">
+        Daily morning email summarizing new Signals. Bring your own Resend API
+        key — Clearday never operates a shared mailer.
+      </p>
+
+      {error && (
+        <p className="mt-3 rounded border border-red-200 bg-red-50 p-2 text-sm text-red-700">
+          {error}
+        </p>
+      )}
+
+      {view == null && !error && (
+        <p className="mt-3 text-sm text-zinc-500">Loading…</p>
+      )}
+
+      {view && (
+        <div className="mt-4 space-y-3 text-sm">
+          <label className="flex items-center gap-3">
+            <input
+              type="checkbox"
+              checked={view.enabled}
+              onChange={onToggleEnabled}
+              disabled={busy}
+            />
+            <span>
+              <strong className="font-medium">Daily digest</strong>
+              <span className="ml-2 text-zinc-500">
+                {view.enabled
+                  ? `Sends each day at ${view.hour_utc}:00 UTC`
+                  : "Disabled"}
+              </span>
+            </span>
+          </label>
+
+          <div>
+            <label
+              htmlFor="email-digest-from"
+              className="block text-xs uppercase tracking-wide text-zinc-500"
+            >
+              From address
+            </label>
+            <input
+              id="email-digest-from"
+              type="text"
+              placeholder="Clearday <noreply@yourdomain.com>"
+              value={draft.from_email}
+              onChange={(e) =>
+                setDraft((d) => ({ ...d, from_email: e.target.value }))
+              }
+              disabled={busy}
+              className="mt-1 w-full rounded border border-zinc-200 px-2 py-1"
+            />
+          </div>
+
+          <div>
+            <label
+              htmlFor="email-digest-to"
+              className="block text-xs uppercase tracking-wide text-zinc-500"
+            >
+              To address
+            </label>
+            <input
+              id="email-digest-to"
+              type="email"
+              placeholder="you@example.com"
+              value={draft.to_email}
+              onChange={(e) =>
+                setDraft((d) => ({ ...d, to_email: e.target.value }))
+              }
+              disabled={busy}
+              className="mt-1 w-full rounded border border-zinc-200 px-2 py-1"
+            />
+          </div>
+
+          <div>
+            <label
+              htmlFor="email-digest-hour"
+              className="block text-xs uppercase tracking-wide text-zinc-500"
+            >
+              Send hour (UTC)
+            </label>
+            <input
+              id="email-digest-hour"
+              type="number"
+              min={0}
+              max={23}
+              value={draft.hour_utc}
+              onChange={(e) =>
+                setDraft((d) => ({
+                  ...d,
+                  hour_utc: Math.max(
+                    0,
+                    Math.min(23, Number(e.target.value) || 0),
+                  ),
+                }))
+              }
+              disabled={busy}
+              className="mt-1 w-24 rounded border border-zinc-200 px-2 py-1"
+            />
+          </div>
+
+          <div>
+            <label
+              htmlFor="email-digest-key"
+              className="block text-xs uppercase tracking-wide text-zinc-500"
+            >
+              Resend API key
+            </label>
+            <input
+              id="email-digest-key"
+              type="password"
+              placeholder={view.has_api_key ? "•••••• (already set)" : "re_..."}
+              value={draft.api_key}
+              onChange={(e) =>
+                setDraft((d) => ({ ...d, api_key: e.target.value }))
+              }
+              disabled={busy}
+              className="mt-1 w-full rounded border border-zinc-200 px-2 py-1"
+            />
+            <p className="mt-1 text-xs text-zinc-500">
+              Stored encrypted at rest; the key is only sent to Resend.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={onSave}
+              disabled={busy}
+              className="rounded border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50 disabled:opacity-50"
+            >
+              Save
+            </button>
+            <button
+              type="button"
+              onClick={onTest}
+              disabled={busy || !view.has_api_key}
+              className="rounded border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50 disabled:opacity-50"
+            >
+              Send test email
+            </button>
+            {status && (
+              <output className="text-sm text-zinc-600">{status}</output>
+            )}
+          </div>
+
+          {view.last_sent_date && (
+            <p className="text-xs text-zinc-500">
+              Last digest sent on {view.last_sent_date}.
+            </p>
+          )}
+        </div>
+      )}
+    </section>
   );
 }

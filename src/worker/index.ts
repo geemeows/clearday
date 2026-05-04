@@ -13,6 +13,16 @@ import type { AlertChannel } from "#/lib/alert-dispatcher";
 import { runAlertQueueDrain } from "#/lib/alert-queue-drain";
 import { type AskAiDeps, handleAskAi } from "#/lib/ask-ai-api";
 import { type BriefingDeps, handleBriefingGenerate } from "#/lib/briefing-api";
+import {
+  type EmailDigestDeps,
+  type EmailDigestPutBody,
+  type EmailDigestRow,
+  type EmailDigestStore,
+  getEmailDigestSettings,
+  putEmailDigestSettings,
+  runEmailDigestTick,
+  sendEmailDigestTest,
+} from "#/lib/email-digest-api";
 import { startFocusSession } from "#/lib/focus-session";
 import {
   getInboxRules,
@@ -266,6 +276,35 @@ export default {
       return json(out);
     }
 
+    if (url.pathname === "/api/email-digest") {
+      const store = emailDigestStore(service);
+      if (request.method === "GET") {
+        return json(await getEmailDigestSettings(store));
+      }
+      if (request.method === "PUT") {
+        let body: EmailDigestPutBody;
+        try {
+          body = (await request.json()) as EmailDigestPutBody;
+        } catch {
+          return json({ ok: false, error: "invalid json" }, 400);
+        }
+        const out = await putEmailDigestSettings(body, {
+          store,
+          keySecret: env.AI_KEY_SECRET,
+        });
+        if (!out.ok) return json({ ok: false, error: out.error }, 400);
+        return json({ ok: true, settings: out.settings });
+      }
+    }
+
+    if (
+      url.pathname === "/api/email-digest/test" &&
+      request.method === "POST"
+    ) {
+      const out = await sendEmailDigestTest(emailDigestDeps(service, env));
+      return json(out, out.ok ? 200 : 502);
+    }
+
     if (
       url.pathname === "/api/briefing/generate" &&
       request.method === "POST"
@@ -381,6 +420,22 @@ export default {
         })
         .catch((err) => {
           console.error("[cron] rollup failed", err);
+        }),
+    );
+
+    ctx.waitUntil(
+      runEmailDigestTick(emailDigestDeps(service, env))
+        .then((report) => {
+          if (report.kind === "sent") {
+            console.log(
+              `[cron] email-digest: sent to ${report.recipient} (${report.signal_count} signals)`,
+            );
+          } else if (report.kind === "error") {
+            console.warn(`[cron] email-digest: ${report.error}`);
+          }
+        })
+        .catch((err) => {
+          console.error("[cron] email-digest failed", err);
         }),
     );
 
@@ -817,6 +872,64 @@ function inboxRulesStore(service: SupabaseService): InboxRulesStore {
         .insert(rows);
       if (insError) throw new Error(insError.message);
       return loadInboxRulesFromService(service);
+    },
+  };
+}
+
+function emailDigestStore(service: SupabaseService): EmailDigestStore {
+  return {
+    load: async () => {
+      const { data, error } = await service
+        .from("user_preferences")
+        .select("email_digest")
+        .eq("id", true)
+        .maybeSingle();
+      if (error) throw new Error(error.message);
+      return (data?.email_digest as EmailDigestRow | null) ?? null;
+    },
+    save: async (patch) => {
+      // Read-modify-write: blob is JSONB, no per-field upsert support.
+      const { data: existing, error: readErr } = await service
+        .from("user_preferences")
+        .select("email_digest")
+        .eq("id", true)
+        .maybeSingle();
+      if (readErr) throw new Error(readErr.message);
+      const merged: EmailDigestRow = {
+        ...((existing?.email_digest as EmailDigestRow | null) ?? {}),
+        ...patch,
+      };
+      const { error } = await service
+        .from("user_preferences")
+        .update({
+          email_digest: merged,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", true);
+      if (error) throw new Error(error.message);
+      return merged;
+    },
+  };
+}
+
+function emailDigestDeps(
+  service: SupabaseService,
+  env: WorkerEnv,
+): EmailDigestDeps {
+  return {
+    store: emailDigestStore(service),
+    keySecret: env.AI_KEY_SECRET,
+    fetch: (i, init) => fetch(i, init),
+    loadSignals: async (sinceIso) => {
+      let q = service.from("signals").select("*").is("dismissed_at", null);
+      if (sinceIso) q = q.gte("created_at", sinceIso);
+      const { data, error } = await q
+        .order("created_at", { ascending: false })
+        .limit(200);
+      if (error) throw new Error(error.message);
+      return (data ?? []) as Array<
+        Awaited<ReturnType<EmailDigestDeps["loadSignals"]>>[number]
+      >;
     },
   };
 }

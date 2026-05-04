@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   AiProviderPanel,
   AiSafeguardsPanel,
+  EmailDigestPanel,
   FocusBlockPanel,
   NotificationMatrixPanel,
   NotificationsPanel,
@@ -547,6 +548,131 @@ describe("WebPushDevicesPanel", () => {
     );
     await waitFor(() =>
       expect(screen.getByText(/permission denied/i)).toBeTruthy(),
+    );
+  });
+});
+
+describe("EmailDigestPanel", () => {
+  const baseView = {
+    enabled: false,
+    transport: "resend" as const,
+    has_api_key: false,
+    from_email: null as string | null,
+    to_email: null as string | null,
+    hour_utc: 13,
+    last_sent_date: null as string | null,
+  };
+
+  it("loads the current settings and pre-fills the form", async () => {
+    const loader = vi.fn(async () => ({
+      ...baseView,
+      enabled: true,
+      has_api_key: true,
+      from_email: "from@example.com",
+      to_email: "to@example.com",
+      hour_utc: 9,
+      last_sent_date: "2026-05-03",
+    }));
+    render(<EmailDigestPanel loader={loader} />);
+    const fromInput = (await screen.findByLabelText(
+      /from address/i,
+    )) as HTMLInputElement;
+    expect(fromInput.value).toBe("from@example.com");
+    expect(
+      (screen.getByLabelText(/to address/i) as HTMLInputElement).value,
+    ).toBe("to@example.com");
+    expect(
+      (screen.getByLabelText(/send hour/i) as HTMLInputElement).value,
+    ).toBe("9");
+    expect(screen.getByText(/last digest sent on 2026-05-03/i)).toBeTruthy();
+  });
+
+  it("toggles enabled through the saver", async () => {
+    const loader = vi.fn(async () => baseView);
+    const saver = vi.fn(async (body: { enabled?: boolean }) => ({
+      ok: true as const,
+      settings: { ...baseView, enabled: !!body.enabled },
+    }));
+    render(<EmailDigestPanel loader={loader} saver={saver} />);
+    const toggle = (await screen.findByRole("checkbox", {
+      name: /daily digest/i,
+    })) as HTMLInputElement;
+    fireEvent.click(toggle);
+    await waitFor(() => expect(saver).toHaveBeenCalledWith({ enabled: true }));
+  });
+
+  it("forwards api_key + from + to + hour on Save", async () => {
+    const loader = vi.fn(async () => baseView);
+    const saver = vi.fn(
+      async (
+        body: Record<string, unknown>,
+      ): Promise<
+        { ok: true; settings: typeof baseView } | { ok: false; error: string }
+      > => ({
+        ok: true,
+        settings: {
+          ...baseView,
+          has_api_key: !!body.api_key,
+          from_email: (body.from_email as string) ?? null,
+          to_email: (body.to_email as string) ?? null,
+          hour_utc: (body.hour_utc as number) ?? 13,
+        },
+      }),
+    );
+    render(<EmailDigestPanel loader={loader} saver={saver} />);
+    const fromInput = (await screen.findByLabelText(
+      /from address/i,
+    )) as HTMLInputElement;
+    fireEvent.change(fromInput, { target: { value: "from@example.com" } });
+    fireEvent.change(screen.getByLabelText(/to address/i), {
+      target: { value: "to@example.com" },
+    });
+    fireEvent.change(screen.getByLabelText(/send hour/i), {
+      target: { value: "8" },
+    });
+    fireEvent.change(screen.getByLabelText(/resend api key/i), {
+      target: { value: "re_real" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
+    await waitFor(() => expect(saver).toHaveBeenCalled());
+    expect(saver.mock.calls[0][0]).toEqual({
+      from_email: "from@example.com",
+      to_email: "to@example.com",
+      hour_utc: 8,
+      api_key: "re_real",
+    });
+  });
+
+  it("disables Send test until an api_key is configured", async () => {
+    const loader = vi.fn(async () => baseView);
+    render(<EmailDigestPanel loader={loader} />);
+    const button = (await screen.findByRole("button", {
+      name: /send test email/i,
+    })) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+  });
+
+  it("calls the tester and surfaces success", async () => {
+    const loader = vi.fn(async () => ({ ...baseView, has_api_key: true }));
+    const tester = vi.fn(async () => ({ ok: true }));
+    render(<EmailDigestPanel loader={loader} tester={tester} />);
+    const button = await screen.findByRole("button", {
+      name: /send test email/i,
+    });
+    fireEvent.click(button);
+    await waitFor(() => expect(tester).toHaveBeenCalled());
+    expect(await screen.findByText(/test email sent/i)).toBeTruthy();
+  });
+
+  it("surfaces tester errors", async () => {
+    const loader = vi.fn(async () => ({ ...baseView, has_api_key: true }));
+    const tester = vi.fn(async () => ({ ok: false, error: "401 invalid key" }));
+    render(<EmailDigestPanel loader={loader} tester={tester} />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: /send test email/i }),
+    );
+    await waitFor(() =>
+      expect(screen.getByText(/401 invalid key/i)).toBeTruthy(),
     );
   });
 });
