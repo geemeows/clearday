@@ -5,6 +5,7 @@ import {
   exchangeCode,
   type FetchLike,
   redirectUri,
+  refreshGoogleToken,
 } from "#/lib/oauth-exchange";
 
 const env: ExchangeEnv = {
@@ -104,6 +105,38 @@ describe("exchangeCode — google", () => {
     await expect(
       exchangeCode("google", "code123", env, fetchImpl),
     ).rejects.toThrow(ExchangeError);
+  });
+});
+
+describe("refreshGoogleToken", () => {
+  it("posts grant_type=refresh_token and returns the new access_token", async () => {
+    const fetchImpl: FetchLike = async (url, init) => {
+      expect(url).toBe("https://oauth2.googleapis.com/token");
+      const params = new URLSearchParams(init?.body ?? "");
+      expect(params.get("grant_type")).toBe("refresh_token");
+      expect(params.get("refresh_token")).toBe("1//rt");
+      expect(params.get("client_id")).toBe("go-id");
+      return okJson({
+        access_token: "ya29.refreshed",
+        expires_in: 3600,
+        scope: "https://www.googleapis.com/auth/calendar.readonly",
+        token_type: "Bearer",
+      });
+    };
+    const refreshed = await refreshGoogleToken("1//rt", env, fetchImpl);
+    expect(refreshed.access_token).toBe("ya29.refreshed");
+    expect(refreshed.expires_at).toBeTruthy();
+    expect(refreshed.scopes).toContain(
+      "https://www.googleapis.com/auth/calendar.readonly",
+    );
+  });
+
+  it("throws ExchangeError on invalid_grant", async () => {
+    const fetchImpl: FetchLike = async () =>
+      okJson({ error: "invalid_grant" }, 400);
+    await expect(refreshGoogleToken("rt", env, fetchImpl)).rejects.toThrow(
+      ExchangeError,
+    );
   });
 });
 

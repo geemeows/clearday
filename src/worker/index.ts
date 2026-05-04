@@ -87,15 +87,37 @@ export default {
         loadAccounts: async () => {
           const { data, error } = await service
             .from("provider_accounts")
-            .select("provider, access_token");
+            .select("provider, access_token, refresh_token, expires_at");
           if (error) throw new Error(error.message);
           return (data ?? []) as Array<{
             provider: string;
             access_token: string | null;
+            refresh_token: string | null;
+            expires_at: string | null;
           }>;
+        },
+        saveRefreshedToken: async ({ provider, access_token, expires_at }) => {
+          const { error } = await service
+            .from("provider_accounts")
+            .update({
+              access_token,
+              expires_at,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("provider", provider);
+          if (error) throw new Error(error.message);
         },
         store: service,
         fetch: (input, init) => fetch(input, init),
+        oauthEnv: {
+          GITHUB_CLIENT_ID: env.GITHUB_CLIENT_ID,
+          GITHUB_CLIENT_SECRET: env.GITHUB_CLIENT_SECRET,
+          GOOGLE_CLIENT_ID: env.GOOGLE_CLIENT_ID,
+          GOOGLE_CLIENT_SECRET: env.GOOGLE_CLIENT_SECRET,
+          SLACK_CLIENT_ID: env.SLACK_CLIENT_ID,
+          SLACK_CLIENT_SECRET: env.SLACK_CLIENT_SECRET,
+          AUTH_PROXY_URL: env.AUTH_PROXY_URL,
+        },
       })
         .then((reports) => {
           for (const r of reports) {

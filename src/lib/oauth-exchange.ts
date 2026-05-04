@@ -51,6 +51,48 @@ export function redirectUri(env: ExchangeEnv, provider: Provider): string {
   return `${stripTrailingSlash(env.AUTH_PROXY_URL)}/callback/${provider}`;
 }
 
+export type RefreshedToken = {
+  access_token: string;
+  expires_at: string | null;
+  scopes: string[];
+};
+
+export async function refreshGoogleToken(
+  refreshToken: string,
+  env: ExchangeEnv,
+  fetchImpl: FetchLike,
+): Promise<RefreshedToken> {
+  const res = await fetchImpl("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: env.GOOGLE_CLIENT_ID,
+      client_secret: env.GOOGLE_CLIENT_SECRET,
+      refresh_token: refreshToken,
+      grant_type: "refresh_token",
+    }).toString(),
+  });
+  const body = (await res.json()) as {
+    access_token?: string;
+    expires_in?: number;
+    scope?: string;
+    error?: string;
+    error_description?: string;
+  };
+  if (!res.ok || !body.access_token) {
+    throw new ExchangeError(
+      "google",
+      res.status,
+      body.error_description || body.error || "google refresh failed",
+    );
+  }
+  return {
+    access_token: body.access_token,
+    expires_at: expiresAtFrom(body.expires_in),
+    scopes: parseScope(body.scope, " "),
+  };
+}
+
 export async function exchangeCode(
   provider: Provider,
   code: string,

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import type { ExchangeEnv } from "#/lib/oauth-exchange";
 import {
   type OrchestratorDeps,
   runScheduledPoll,
@@ -36,6 +37,26 @@ const githubItem = {
   requested_reviewers: [{ login: "me" }],
 };
 
+const oauthEnv: ExchangeEnv = {
+  GITHUB_CLIENT_ID: "gh-id",
+  GITHUB_CLIENT_SECRET: "gh-secret",
+  GOOGLE_CLIENT_ID: "go-id",
+  GOOGLE_CLIENT_SECRET: "go-secret",
+  SLACK_CLIENT_ID: "sl-id",
+  SLACK_CLIENT_SECRET: "sl-secret",
+  AUTH_PROXY_URL: "https://auth.example.com",
+};
+
+const calendarEvent = {
+  id: "evt-1",
+  summary: "Standup",
+  hangoutLink: "https://meet.google.com/abc-defg-hij",
+  htmlLink: "https://calendar.google.com/event?eid=evt-1",
+  start: { dateTime: "2026-05-04T15:00:00.000Z" },
+  end: { dateTime: "2026-05-04T15:15:00.000Z" },
+  attendees: [{ self: true, responseStatus: "accepted" }],
+};
+
 describe("runScheduledPoll", () => {
   it("polls github with the stored access_token and upserts every Signal", async () => {
     const store = makeStore();
@@ -45,17 +66,20 @@ describe("runScheduledPoll", () => {
     );
     const deps: OrchestratorDeps = {
       loadAccounts: async () => [
-        { provider: "github", access_token: "ghu_abc" },
+        {
+          provider: "github",
+          access_token: "ghu_abc",
+          refresh_token: null,
+          expires_at: null,
+        },
       ],
       store: store.client,
       fetch: fetchImpl as unknown as typeof fetch,
     };
     const reports = await runScheduledPoll(deps);
-    // 3 search queries → 1 deduped signal → 1 upsert
     expect(fetchImpl).toHaveBeenCalledTimes(3);
     expect(store.upsert).toHaveBeenCalledTimes(1);
     expect(reports).toEqual([{ provider: "github", upserted: 1 }]);
-    // Token was forwarded
     const firstCall = fetchImpl.mock.calls[0] as unknown as [
       string,
       { headers: Record<string, string> },
@@ -70,7 +94,12 @@ describe("runScheduledPoll", () => {
     );
     const deps: OrchestratorDeps = {
       loadAccounts: async () => [
-        { provider: "github", access_token: "ghu_abc" },
+        {
+          provider: "github",
+          access_token: "ghu_abc",
+          refresh_token: null,
+          expires_at: null,
+        },
       ],
       store: store.client,
       fetch: fetchImpl as unknown as typeof fetch,
@@ -84,12 +113,102 @@ describe("runScheduledPoll", () => {
   it("flags accounts with no access_token", async () => {
     const store = makeStore();
     const deps: OrchestratorDeps = {
-      loadAccounts: async () => [{ provider: "github", access_token: null }],
+      loadAccounts: async () => [
+        {
+          provider: "github",
+          access_token: null,
+          refresh_token: null,
+          expires_at: null,
+        },
+      ],
       store: store.client,
       fetch: (async () => new Response()) as unknown as typeof fetch,
     };
     const reports = await runScheduledPoll(deps);
     expect(reports[0].error).toBe("no access_token");
     expect(store.upsert).not.toHaveBeenCalled();
+  });
+
+  it("polls google calendar with a non-expired token without refreshing", async () => {
+    const store = makeStore();
+    const fetchImpl = vi.fn(async (url: string) => {
+      if (url.includes("/calendar/v3/")) {
+        return new Response(JSON.stringify({ items: [calendarEvent] }), {
+          status: 200,
+        });
+      }
+      throw new Error(`unexpected url: ${url}`);
+    });
+    const deps: OrchestratorDeps = {
+      loadAccounts: async () => [
+        {
+          provider: "google",
+          access_token: "ya29.fresh",
+          refresh_token: "1//rt",
+          expires_at: "2026-05-04T13:00:00.000Z",
+        },
+      ],
+      store: store.client,
+      fetch: fetchImpl as unknown as typeof fetch,
+      oauthEnv,
+      now: () => new Date("2026-05-04T12:00:00.000Z"),
+    };
+    const reports = await runScheduledPoll(deps);
+    expect(reports).toEqual([{ provider: "google", upserted: 1 }]);
+    expect(store.upsert).toHaveBeenCalledTimes(1);
+    // Only the calendar list call — no refresh.
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it("refreshes an expired google token, persists it, and then polls", async () => {
+    const store = makeStore();
+    const saveRefreshedToken = vi.fn(async () => {});
+    const fetchImpl = vi.fn(async (url: string) => {
+      if (url === "https://oauth2.googleapis.com/token") {
+        return new Response(
+          JSON.stringify({
+            access_token: "ya29.refreshed",
+            expires_in: 3600,
+            scope: "https://www.googleapis.com/auth/calendar.readonly",
+          }),
+          { status: 200 },
+        );
+      }
+      if (url.includes("/calendar/v3/")) {
+        return new Response(JSON.stringify({ items: [calendarEvent] }), {
+          status: 200,
+        });
+      }
+      throw new Error(`unexpected url: ${url}`);
+    });
+    const deps: OrchestratorDeps = {
+      loadAccounts: async () => [
+        {
+          provider: "google",
+          access_token: "ya29.stale",
+          refresh_token: "1//rt",
+          expires_at: "2026-05-04T11:30:00.000Z",
+        },
+      ],
+      saveRefreshedToken,
+      store: store.client,
+      fetch: fetchImpl as unknown as typeof fetch,
+      oauthEnv,
+      now: () => new Date("2026-05-04T12:00:00.000Z"),
+    };
+    const reports = await runScheduledPoll(deps);
+    expect(reports).toEqual([{ provider: "google", upserted: 1 }]);
+    expect(saveRefreshedToken).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: "google",
+        access_token: "ya29.refreshed",
+      }),
+    );
+    const calendarCall = fetchImpl.mock.calls.find((c) =>
+      String(c[0]).includes("/calendar/v3/"),
+    ) as unknown as [string, { headers: Record<string, string> }] | undefined;
+    expect(calendarCall?.[1].headers.authorization).toBe(
+      "Bearer ya29.refreshed",
+    );
   });
 });

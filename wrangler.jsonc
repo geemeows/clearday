@@ -17,7 +17,7 @@
   },
   "triggers": {
     // Provider-sync cron: every 2 minutes the orchestrator polls each
-    // connected provider (currently only github) and upserts new Signals.
+    // connected provider (github, google calendar) and upserts new Signals.
     "crons": ["*/2 * * * *"]
   }
   // Secrets (set via `wrangler secret put`):

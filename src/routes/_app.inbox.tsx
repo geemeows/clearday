@@ -18,7 +18,7 @@ const FILTERS: Array<{ id: Filter; label: string; enabled: boolean }> = [
   { id: "prs", label: "PRs", enabled: true },
   { id: "tickets", label: "Tickets", enabled: false },
   { id: "mentions", label: "Mentions", enabled: false },
-  { id: "meetings", label: "Meetings", enabled: false },
+  { id: "meetings", label: "Meetings", enabled: true },
 ];
 
 function InboxPage() {
@@ -182,12 +182,25 @@ function kindLabel(kind: string): string {
       return "Authored PR";
     case "pr_assigned":
       return "Assigned PR";
+    case "meeting":
+      return "Meeting";
     default:
       return kind;
   }
 }
 
 function secondaryLabel(s: StoredSignal): string {
+  if (s.kind === "meeting") {
+    const startsAt = s.payload?.starts_at as string | undefined;
+    if (!startsAt) return "";
+    const d = new Date(startsAt);
+    if (Number.isNaN(d.getTime())) return "";
+    return d.toLocaleString(undefined, {
+      weekday: "short",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  }
   const repo = (s.payload?.repo as string | undefined) ?? "";
   const author = (s.payload?.author as string | undefined) ?? "";
   return [repo, author && `by @${author}`].filter(Boolean).join(" · ");
