@@ -8,6 +8,17 @@ import type {
   RulePredicate,
 } from "#/lib/inbox-rules-engine";
 import { PROFILE_UPDATED_EVENT, type ProfileView } from "#/lib/profile-api";
+import {
+  ACCENTS,
+  type Accent,
+  DEFAULT_THEME,
+  DENSITIES,
+  type Density,
+  THEME_UPDATED_EVENT,
+  THEMES,
+  type Theme,
+  type ThemeView,
+} from "#/lib/theme-api";
 
 export const Route = createFileRoute("/_app/settings")({
   component: SettingsPage,
@@ -38,6 +49,7 @@ function SettingsPage() {
       </div>
 
       <ProfilePanel />
+      <ThemePanel />
       <NotificationsPanel />
       <WebPushDevicesPanel />
       <EmailDigestPanel />
@@ -2424,6 +2436,204 @@ export function ProfilePanel({
             >
               {busy ? "Saving…" : "Save"}
             </button>
+            {status && (
+              <output className="text-sm text-emerald-700">{status}</output>
+            )}
+            {error && (
+              <p role="alert" className="text-sm text-red-700">
+                {error}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+type ThemeSaveResult =
+  | { ok: true; theme: ThemeView }
+  | { ok: false; error: string };
+
+const ACCENT_LABELS: Record<Accent, string> = {
+  rausch: "Rausch",
+  ocean: "Ocean",
+  forest: "Forest",
+  plum: "Plum",
+};
+
+const ACCENT_SWATCHES: Record<Accent, string> = {
+  rausch: "#ff385c",
+  ocean: "#0066ff",
+  forest: "#10b981",
+  plum: "#92174d",
+};
+
+export function ThemePanel({
+  loader,
+  saver,
+}: {
+  loader?: () => Promise<ThemeView>;
+  saver?: (patch: ThemeView) => Promise<ThemeSaveResult>;
+} = {}) {
+  const [view, setView] = useState<ThemeView | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const load = useMemo(
+    () => loader ?? (() => apiFetch("/api/theme") as Promise<ThemeView>),
+    [loader],
+  );
+  const save = useMemo(
+    () =>
+      saver ??
+      ((patch: ThemeView) =>
+        apiFetch("/api/theme", {
+          method: "PUT",
+          body: patch,
+        }) as Promise<ThemeSaveResult>),
+    [saver],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    load()
+      .then((t) => {
+        if (!cancelled) setView(t);
+      })
+      .catch((e) => {
+        if (!cancelled) setError(e instanceof Error ? e.message : String(e));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [load]);
+
+  const update = async (patch: Partial<ThemeView>) => {
+    if (!view) return;
+    const next: ThemeView = { ...view, ...patch };
+    setView(next);
+    setStatus(null);
+    setError(null);
+    setBusy(true);
+    try {
+      const out = await save(next);
+      if (!out.ok) {
+        setError(out.error);
+        return;
+      }
+      setView(out.theme);
+      setStatus("Saved.");
+      window.dispatchEvent(
+        new CustomEvent(THEME_UPDATED_EVENT, { detail: out.theme }),
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const current = view ?? DEFAULT_THEME;
+
+  return (
+    <section className="mt-8">
+      <h2 className="text-lg font-semibold">Theme & layout</h2>
+      <p className="mt-1 text-sm text-zinc-500">
+        Light / dark / system, density, and accent color. Changes apply
+        immediately without a reload.
+      </p>
+      {view === null ? (
+        <p className="mt-3 text-sm text-zinc-500">Loading…</p>
+      ) : (
+        <div className="mt-3 grid max-w-xl gap-4">
+          <fieldset>
+            <legend className="text-sm font-medium text-zinc-700">Theme</legend>
+            <div className="mt-2 flex gap-2">
+              {THEMES.map((t: Theme) => (
+                <label
+                  key={t}
+                  className={`cursor-pointer rounded border px-3 py-1.5 text-sm capitalize ${
+                    current.theme === t
+                      ? "border-zinc-900 bg-zinc-900 text-white"
+                      : "border-zinc-300 hover:bg-zinc-50"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="theme"
+                    className="sr-only"
+                    checked={current.theme === t}
+                    onChange={() => update({ theme: t })}
+                  />
+                  {t}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend className="text-sm font-medium text-zinc-700">
+              Density
+            </legend>
+            <div className="mt-2 flex gap-2">
+              {DENSITIES.map((d: Density) => (
+                <label
+                  key={d}
+                  className={`cursor-pointer rounded border px-3 py-1.5 text-sm capitalize ${
+                    current.density === d
+                      ? "border-zinc-900 bg-zinc-900 text-white"
+                      : "border-zinc-300 hover:bg-zinc-50"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="density"
+                    className="sr-only"
+                    checked={current.density === d}
+                    onChange={() => update({ density: d })}
+                  />
+                  {d}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend className="text-sm font-medium text-zinc-700">
+              Accent color
+            </legend>
+            <div className="mt-2 flex gap-2">
+              {ACCENTS.map((a: Accent) => (
+                <label
+                  key={a}
+                  aria-label={ACCENT_LABELS[a]}
+                  className={`flex cursor-pointer items-center gap-2 rounded border px-3 py-1.5 text-sm ${
+                    current.accent === a
+                      ? "border-zinc-900"
+                      : "border-zinc-300 hover:bg-zinc-50"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="accent"
+                    className="sr-only"
+                    checked={current.accent === a}
+                    onChange={() => update({ accent: a })}
+                  />
+                  <span
+                    aria-hidden="true"
+                    className="inline-block h-4 w-4 rounded-full"
+                    style={{ backgroundColor: ACCENT_SWATCHES[a] }}
+                  />
+                  {ACCENT_LABELS[a]}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+
+          <div className="flex items-center gap-3" aria-busy={busy}>
             {status && (
               <output className="text-sm text-emerald-700">{status}</output>
             )}

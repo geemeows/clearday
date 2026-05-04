@@ -156,6 +156,68 @@
   --font-sans: var(--font-sans);
 }
 
+/*
+ * Dark theme overrides — selected by `<html data-theme="dark">`. The Theme
+ * panel writes this attribute via applyThemeToDocument() and on boot main.tsx
+ * resolves the user's saved preference (or the OS preference for "system").
+ */
+html[data-theme="dark"] {
+  --background: #0a0a0a;
+  --foreground: #f5f5f5;
+  --card: #161616;
+  --card-foreground: #f5f5f5;
+  --popover: #161616;
+  --popover-foreground: #f5f5f5;
+  --secondary: #222222;
+  --secondary-foreground: #f5f5f5;
+  --muted: #1a1a1a;
+  --muted-foreground: #a3a3a3;
+  --accent: #222222;
+  --accent-foreground: #f5f5f5;
+  --border: #2a2a2a;
+  --input: #2a2a2a;
+  --ring: #f5f5f5;
+  --body: #d4d4d4;
+  --muted-soft: #6a6a6a;
+  --hairline-soft: #1f1f1f;
+  --border-strong: #3a3a3a;
+}
+
+/*
+ * Accent presets — override --primary so buttons / focus rings / active
+ * states pick up the user's chosen accent. "rausch" is the default Airbnb
+ * brand defined in :root above; the rules below activate when the user
+ * picks a different accent in Settings → Theme & layout.
+ */
+html[data-accent="ocean"] {
+  --primary: #0066ff;
+  --primary-active: #0050cc;
+  --primary-disabled: #c9dcff;
+}
+html[data-accent="forest"] {
+  --primary: #10b981;
+  --primary-active: #0e9971;
+  --primary-disabled: #c8efe1;
+}
+html[data-accent="plum"] {
+  --primary: #92174d;
+  --primary-active: #75123e;
+  --primary-disabled: #e7c4d3;
+}
+
+/*
+ * Compact density — shrink the spacing scale so cards and rows pack tighter.
+ * Selected by `<html data-density="compact">`.
+ */
+html[data-density="compact"] {
+  --spacing-sm: 6px;
+  --spacing-md: 10px;
+  --spacing-base: 12px;
+  --spacing-lg: 18px;
+  --spacing-xl: 24px;
+  --spacing-xxl: 36px;
+}
+
 body {
   background-color: var(--background);
   color: var(--foreground);

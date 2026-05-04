@@ -48,6 +48,14 @@ import type { StoredSignal } from "#/lib/signal";
 import { runDueRollups } from "#/lib/signal-rollup";
 import { handleSlackWebhook } from "#/lib/slack-webhook";
 import {
+  DEFAULT_THEME,
+  getTheme,
+  putTheme,
+  type ThemePutBody,
+  type ThemeStore,
+  type ThemeView,
+} from "#/lib/theme-api";
+import {
   type DeviceView,
   listDevices,
   subscribe,
@@ -377,6 +385,24 @@ export default {
         const out = await putProfile(body, store);
         if (!out.ok) return json({ ok: false, error: out.error }, 400);
         return json({ ok: true, profile: out.profile });
+      }
+    }
+
+    if (url.pathname === "/api/theme") {
+      const store = themeStore(service);
+      if (request.method === "GET") {
+        return json(await getTheme(store));
+      }
+      if (request.method === "PUT") {
+        let body: ThemePutBody;
+        try {
+          body = (await request.json()) as ThemePutBody;
+        } catch {
+          return json({ ok: false, error: "invalid json" }, 400);
+        }
+        const out = await putTheme(body, store);
+        if (!out.ok) return json({ ok: false, error: out.error }, 400);
+        return json({ ok: true, theme: out.theme });
       }
     }
 
@@ -772,6 +798,36 @@ function profileStore(service: SupabaseService): ProfileStore {
         locale: row.locale ?? null,
         avatar_url: row.avatar_url ?? null,
       };
+    },
+  };
+}
+
+const THEME_COLUMNS = "theme, density, accent";
+
+function themeStore(service: SupabaseService): ThemeStore {
+  const read = async (): Promise<ThemeView> => {
+    const { data, error } = await service
+      .from("user_preferences")
+      .select(THEME_COLUMNS)
+      .eq("id", true)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    const row = (data ?? {}) as Partial<ThemeView>;
+    return {
+      theme: row.theme ?? DEFAULT_THEME.theme,
+      density: row.density ?? DEFAULT_THEME.density,
+      accent: row.accent ?? DEFAULT_THEME.accent,
+    };
+  };
+  return {
+    load: read,
+    save: async (patch) => {
+      const { error } = await service
+        .from("user_preferences")
+        .update({ ...patch, updated_at: new Date().toISOString() })
+        .eq("id", true);
+      if (error) throw new Error(error.message);
+      return read();
     },
   };
 }

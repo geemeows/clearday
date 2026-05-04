@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { PROFILE_UPDATED_EVENT } from "#/lib/profile-api";
+import { THEME_UPDATED_EVENT, type ThemeView } from "#/lib/theme-api";
 import {
   AiProviderPanel,
   AiSafeguardsPanel,
@@ -10,6 +11,7 @@ import {
   NotificationsPanel,
   ProfilePanel,
   QuietHoursPanel,
+  ThemePanel,
   WebPushDevicesPanel,
 } from "#/routes/_app.settings";
 
@@ -739,6 +741,104 @@ describe("ProfilePanel", () => {
     fireEvent.click(screen.getByRole("button", { name: /save/i }));
     await waitFor(() =>
       expect(screen.getByText(/at most 200 characters/i)).toBeTruthy(),
+    );
+  });
+});
+
+describe("ThemePanel", () => {
+  const initial: ThemeView = {
+    theme: "system",
+    density: "comfortable",
+    accent: "rausch",
+  };
+
+  it("loads the saved theme and reflects it in the radios", async () => {
+    const loader = vi.fn(
+      async () =>
+        ({
+          theme: "dark",
+          density: "compact",
+          accent: "ocean",
+        }) as ThemeView,
+    );
+    render(<ThemePanel loader={loader} />);
+    const darkRadio = (await screen.findByRole("radio", {
+      name: /dark/i,
+    })) as HTMLInputElement;
+    expect(darkRadio.checked).toBe(true);
+    expect(loader).toHaveBeenCalledTimes(1);
+  });
+
+  it("saves on radio change and dispatches the theme-updated event", async () => {
+    const loader = vi.fn(async () => initial);
+    const saver = vi.fn(async (patch: ThemeView) => ({
+      ok: true as const,
+      theme: patch,
+    }));
+    const onUpdate = vi.fn();
+    window.addEventListener(THEME_UPDATED_EVENT, onUpdate);
+    try {
+      render(<ThemePanel loader={loader} saver={saver} />);
+      const darkRadio = (await screen.findByRole("radio", {
+        name: /dark/i,
+      })) as HTMLInputElement;
+      fireEvent.click(darkRadio);
+      await waitFor(() => expect(saver).toHaveBeenCalled());
+      expect(saver).toHaveBeenCalledWith({
+        theme: "dark",
+        density: "comfortable",
+        accent: "rausch",
+      });
+      await waitFor(() =>
+        expect(screen.getByRole("status").textContent).toMatch(/saved/i),
+      );
+      expect(onUpdate).toHaveBeenCalled();
+    } finally {
+      window.removeEventListener(THEME_UPDATED_EVENT, onUpdate);
+    }
+  });
+
+  it("persists density + accent independently", async () => {
+    const loader = vi.fn(async () => initial);
+    const saver = vi.fn(async (patch: ThemeView) => ({
+      ok: true as const,
+      theme: patch,
+    }));
+    render(<ThemePanel loader={loader} saver={saver} />);
+    const compactRadio = (await screen.findByRole("radio", {
+      name: /compact/i,
+    })) as HTMLInputElement;
+    fireEvent.click(compactRadio);
+    await waitFor(() =>
+      expect(saver).toHaveBeenLastCalledWith(
+        expect.objectContaining({ density: "compact" }),
+      ),
+    );
+
+    const oceanRadio = (await screen.findByRole("radio", {
+      name: /ocean/i,
+    })) as HTMLInputElement;
+    fireEvent.click(oceanRadio);
+    await waitFor(() =>
+      expect(saver).toHaveBeenLastCalledWith(
+        expect.objectContaining({ accent: "ocean" }),
+      ),
+    );
+  });
+
+  it("surfaces a validation error from the saver", async () => {
+    const loader = vi.fn(async () => initial);
+    const saver = vi.fn(async () => ({
+      ok: false as const,
+      error: "theme must be one of light, dark, system",
+    }));
+    render(<ThemePanel loader={loader} saver={saver} />);
+    const lightRadio = (await screen.findByRole("radio", {
+      name: /light/i,
+    })) as HTMLInputElement;
+    fireEvent.click(lightRadio);
+    await waitFor(() =>
+      expect(screen.getByText(/theme must be one of/i)).toBeTruthy(),
     );
   });
 });
