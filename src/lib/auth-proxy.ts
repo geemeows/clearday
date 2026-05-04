@@ -46,6 +46,10 @@ export async function handleAuthProxyRequest(
   }
   target.searchParams.set("code", code);
   target.searchParams.set("provider", provider);
+  // Forward the signed state so the user-Worker can re-verify it. Without this,
+  // anyone who can reach /oauth/exchange could trigger a code redemption with
+  // a fabricated `code`. Re-verifying the HMAC there closes the gap.
+  target.searchParams.set("state", state);
   return Response.redirect(target.toString(), 302);
 }
 

@@ -9,6 +9,15 @@ const env: WorkerEnv = {
   ALLOWED_EMAIL: "owner@example.com",
   SUPABASE_URL: "https://test.supabase.co",
   SUPABASE_ANON_KEY: "anon",
+  SUPABASE_SERVICE_ROLE_KEY: "service",
+  STATE_HMAC_SECRET: "s",
+  AUTH_PROXY_URL: "https://auth.example.com",
+  GITHUB_CLIENT_ID: "",
+  GITHUB_CLIENT_SECRET: "",
+  GOOGLE_CLIENT_ID: "",
+  GOOGLE_CLIENT_SECRET: "",
+  SLACK_CLIENT_ID: "",
+  SLACK_CLIENT_SECRET: "",
 };
 
 const reqWith = (auth?: string) =>

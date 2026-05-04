@@ -5,6 +5,15 @@ export type WorkerEnv = {
   ALLOWED_EMAIL: string;
   SUPABASE_URL: string;
   SUPABASE_ANON_KEY: string;
+  SUPABASE_SERVICE_ROLE_KEY: string;
+  STATE_HMAC_SECRET: string;
+  AUTH_PROXY_URL: string;
+  GITHUB_CLIENT_ID: string;
+  GITHUB_CLIENT_SECRET: string;
+  GOOGLE_CLIENT_ID: string;
+  GOOGLE_CLIENT_SECRET: string;
+  SLACK_CLIENT_ID: string;
+  SLACK_CLIENT_SECRET: string;
 };
 
 export type AuthedUser = {

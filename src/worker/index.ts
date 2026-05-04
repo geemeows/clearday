@@ -1,10 +1,12 @@
 /// <reference types="@cloudflare/workers-types" />
+import { handleOAuthExchange } from "#/lib/oauth-exchange-handler";
 import {
   defaultGetUser,
   json,
   requireAllowedUser,
   type WorkerEnv,
 } from "#/worker/middleware";
+import { persistProviderAccount } from "#/worker/provider-accounts";
 
 export default {
   async fetch(
@@ -13,6 +15,18 @@ export default {
     _ctx: ExecutionContext,
   ): Promise<Response> {
     const url = new URL(request.url);
+
+    if (url.pathname === "/oauth/exchange") {
+      // Unauthenticated by design: the browser arrives here mid-redirect from
+      // the auth-proxy with no Clearday session. The signed `state` HMAC is
+      // what proves the request is part of an OAuth flow this deployment
+      // initiated.
+      return handleOAuthExchange(request, env, {
+        fetch: (input, init) => fetch(input, init),
+        persist: persistProviderAccount(env),
+      });
+    }
+
     if (!url.pathname.startsWith("/api/")) {
       // Anything outside /api/* is served by the static SPA assets binding.
       return env_assets_fetch(env, request);

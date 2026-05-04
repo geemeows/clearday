@@ -28,6 +28,7 @@ describe("handleAuthProxyRequest", () => {
     expect(location.pathname).toBe("/oauth/exchange");
     expect(location.searchParams.get("code")).toBe("abc");
     expect(location.searchParams.get("provider")).toBe("github");
+    expect(location.searchParams.get("state")).toBe(state);
   });
 
   it("rejects unknown providers with 400", async () => {

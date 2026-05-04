@@ -12,6 +12,12 @@
   "vars": {
     "ALLOWED_EMAIL": "",
     "SUPABASE_URL": "",
-    "SUPABASE_ANON_KEY": ""
+    "SUPABASE_ANON_KEY": "",
+    "AUTH_PROXY_URL": "https://auth.clearday.geemeows.com"
   }
+  // Secrets (set via `wrangler secret put`):
+  //   STATE_HMAC_SECRET, SUPABASE_SERVICE_ROLE_KEY,
+  //   GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET,
+  //   GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET,
+  //   SLACK_CLIENT_ID, SLACK_CLIENT_SECRET
 }
