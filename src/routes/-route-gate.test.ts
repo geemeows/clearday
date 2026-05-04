@@ -68,31 +68,35 @@ describe("/_app route gate", () => {
 });
 
 describe("/ index route", () => {
-  it("redirects unauthenticated users to /login", () => {
+  it("redirects unauthenticated users to /login", async () => {
+    let caught: unknown;
     try {
-      callBeforeLoad(IndexRoute as never, {
+      await callBeforeLoad(IndexRoute as never, {
         context: { auth: { loading: false, session: null } },
         location: { href: "/" },
       });
-      throw new Error("should have thrown");
     } catch (err) {
-      expect(isRedirect(err)).toBe(true);
-      expect(redirectTarget(err)).toBe("/login");
+      caught = err;
     }
+    expect(isRedirect(caught)).toBe(true);
+    expect(redirectTarget(caught)).toBe("/login");
   });
 
-  it("redirects authenticated users to /today", () => {
+  it("redirects authenticated users to /today when status fetch fails", async () => {
+    let caught: unknown;
     try {
-      callBeforeLoad(IndexRoute as never, {
+      await callBeforeLoad(IndexRoute as never, {
         context: {
           auth: { loading: false, session: { user: { email: "x" } } },
         },
         location: { href: "/" },
       });
-      throw new Error("should have thrown");
     } catch (err) {
-      expect(isRedirect(err)).toBe(true);
-      expect(redirectTarget(err)).toBe("/today");
+      caught = err;
     }
+    // Without a real supabase session the status fetch throws and is caught;
+    // beforeLoad falls through to /today.
+    expect(isRedirect(caught)).toBe(true);
+    expect(redirectTarget(caught)).toBe("/today");
   });
 });

@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch } from "#/lib/api-client";
 import { signOut, useAuth } from "#/lib/auth";
@@ -20,13 +20,21 @@ function SettingsPage() {
       <p className="mt-2 text-sm text-zinc-500">
         Signed in as <code>{session?.user.email}</code>
       </p>
-      <button
-        type="button"
-        onClick={() => signOut()}
-        className="mt-4 rounded border px-3 py-1.5 text-sm hover:bg-zinc-50"
-      >
-        Sign out
-      </button>
+      <div className="mt-4 flex gap-2">
+        <button
+          type="button"
+          onClick={() => signOut()}
+          className="rounded border px-3 py-1.5 text-sm hover:bg-zinc-50"
+        >
+          Sign out
+        </button>
+        <Link
+          to="/onboarding"
+          className="rounded border px-3 py-1.5 text-sm hover:bg-zinc-50"
+        >
+          Re-run onboarding
+        </Link>
+      </div>
 
       <NotificationsPanel />
       <WebPushDevicesPanel />
