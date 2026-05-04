@@ -1,13 +1,10 @@
 #!/bin/bash
-set -eo pipefail
-source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
+set -e
 
 if [ -z "$1" ]; then
   echo "Usage: $0 <iterations>"
   exit 1
 fi
-
-require_sandbox
 
 # jq filter to extract streaming text from assistant messages
 stream_text='select(.type == "assistant").message.content[]? | select(.type == "text").text // empty | gsub("\n"; "\r\n") | . + "\r\n\n"'
@@ -26,14 +23,14 @@ for ((i=1; i<=$1; i++)); do
     --verbose \
     --print \
     --output-format stream-json \
-    "$issues Previous RALPH commits: $ralph_commits @plans/backlog/prompt.md" \
+    "$issues Previous RALPH commits: $ralph_commits @ralph/prompt.md" \
   | grep --line-buffered '^{' \
   | tee "$tmpfile" \
   | jq --unbuffered -rj "$stream_text"
 
   result=$(jq -r "$final_result" "$tmpfile")
 
-  if [[ "$result" == *"<promise>COMPLETE</promise>"* ]]; then
+  if [[ "$result" == *"<promise>NO MORE TASKS</promise>"* ]]; then
     echo "Ralph complete after $i iterations."
     exit 0
   fi
