@@ -6,6 +6,7 @@
     "#/*": "./src/*"
   },
   "scripts": {
+    "dev:all": "pnpm run dev:worker & pnpm run dev",
     "dev": "vite dev --port 3000",
     "dev:worker": "mkdir -p dist && wrangler dev --port 8787",
     "build": "vite build",

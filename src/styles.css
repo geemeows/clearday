@@ -1,1 +1,163 @@
 @import 'tailwindcss';
+
+/* Airbnb Cereal — files live in /public/fonts and are served statically. */
+@font-face {
+  font-family: 'Airbnb Cereal';
+  src: url('/fonts/AirbnbCereal_W_Lt.otf') format('opentype');
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Airbnb Cereal';
+  src: url('/fonts/AirbnbCereal_W_Bk.otf') format('opentype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Airbnb Cereal';
+  src: url('/fonts/AirbnbCereal_W_Md.otf') format('opentype');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Airbnb Cereal';
+  /* No 600 file ships; alias to Bold so DESIGN.md weight 600 renders without synthesis. */
+  src: url('/fonts/AirbnbCereal_W_Bd.otf') format('opentype');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Airbnb Cereal';
+  src: url('/fonts/AirbnbCereal_W_Bd.otf') format('opentype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Airbnb Cereal';
+  src: url('/fonts/AirbnbCereal_W_XBd.otf') format('opentype');
+  font-weight: 800;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Airbnb Cereal';
+  src: url('/fonts/AirbnbCereal_W_Blk.otf') format('opentype');
+  font-weight: 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+/*
+ * Design tokens — see DESIGN.md at the repo root for the canonical spec.
+ * Colors follow the shadcn CSS-variable contract so `npx shadcn add` works
+ * out of the box; extra Airbnb-specific tokens (rausch-active, ink, hairline,
+ * luxe, plus, etc.) are exposed for direct use.
+ */
+
+:root {
+  /* Surfaces */
+  --background: #ffffff;        /* canvas */
+  --foreground: #222222;        /* ink */
+  --card: #ffffff;
+  --card-foreground: #222222;
+  --popover: #ffffff;
+  --popover-foreground: #222222;
+
+  /* Brand — Rausch */
+  --primary: #ff385c;
+  --primary-foreground: #ffffff;
+  --primary-active: #e00b41;
+  --primary-disabled: #ffd1da;
+
+  /* Neutrals */
+  --secondary: #f2f2f2;         /* surface-strong */
+  --secondary-foreground: #222222;
+  --muted: #f7f7f7;             /* surface-soft */
+  --muted-foreground: #6a6a6a;
+  --accent: #f2f2f2;
+  --accent-foreground: #222222;
+
+  /* Semantic */
+  --destructive: #c13515;
+  --destructive-foreground: #ffffff;
+
+  /* Lines */
+  --border: #dddddd;            /* hairline */
+  --input: #dddddd;
+  --ring: #222222;
+
+  /* Airbnb extras (not part of shadcn contract) */
+  --body: #3f3f3f;
+  --muted-soft: #929292;
+  --hairline-soft: #ebebeb;
+  --border-strong: #c1c1c1;
+  --luxe: #460479;
+  --plus: #92174d;
+  --legal-link: #428bff;
+
+  /* Type — Airbnb Cereal VF with Circular + system fallbacks */
+  --font-sans: 'Airbnb Cereal', Circular, -apple-system, system-ui, Roboto,
+    'Helvetica Neue', sans-serif;
+
+  /* Radius — shadcn reads --radius; component scale follows DESIGN.md */
+  --radius: 0.5rem;             /* 8px = rounded.sm, the default button radius */
+}
+
+@theme inline {
+  /* Map CSS variables into Tailwind's color scale so utilities like
+     `bg-primary` and `text-foreground` resolve to the tokens above. */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-active: var(--primary-active);
+  --color-primary-disabled: var(--primary-disabled);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-luxe: var(--luxe);
+  --color-plus: var(--plus);
+
+  /* Radius scale — matches DESIGN.md `rounded` tokens */
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-xl: 32px;
+
+  /* Spacing scale — matches DESIGN.md `spacing` tokens */
+  --spacing-xxs: 2px;
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 12px;
+  --spacing-base: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+  --spacing-xxl: 48px;
+  --spacing-section: 64px;
+
+  --font-sans: var(--font-sans);
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+}
