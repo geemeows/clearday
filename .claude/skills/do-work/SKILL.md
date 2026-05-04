@@ -34,6 +34,16 @@ pnpm run check
 
 If a check fails, fix the root cause — don't loosen types, skip tests, or disable Biome rules to make them pass. Re-run the full loop after each fix until all three pass.
 
+### If the work added a Supabase migration
+
+If you created or edited a file under `supabase/migrations/`, the change is not live until it's applied to the linked Supabase project. **Don't run `pnpm run db:push` yourself** — it touches shared infra. Instead, in the wrap-up message, tell the user to run it themselves:
+
+```sh
+pnpm run db:push    # applies pending migrations to the linked Supabase project
+```
+
+Also flag any one-time post-migration data steps the owner needs to do (e.g. `update public.app_settings set allowed_email = '...'`).
+
 ## 4. Commit
 
 Stage the relevant files explicitly (no `git add -A`) and commit with a [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/) message:
