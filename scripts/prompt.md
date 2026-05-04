@@ -66,8 +66,7 @@ Stage the relevant files explicitly (no `git add -A`). The commit message must:
 1. Start with `RALPH:` prefix
 2. Include task completed + PRD reference
 3. Key decisions made
-4. Files changed
-5. Blockers or notes for next iteration
+4. Blockers or notes for next iteration
 
 Rules:
 
