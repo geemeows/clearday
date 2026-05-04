@@ -1,10 +1,16 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import {
+  type ExportPayload,
+  PURGE_CONFIRMATION,
+  type RetentionView,
+} from "#/lib/data-privacy-api";
 import { PROFILE_UPDATED_EVENT } from "#/lib/profile-api";
 import { THEME_UPDATED_EVENT, type ThemeView } from "#/lib/theme-api";
 import {
   AiProviderPanel,
   AiSafeguardsPanel,
+  DataPrivacyPanel,
   EmailDigestPanel,
   FocusBlockPanel,
   NotificationMatrixPanel,
@@ -839,6 +845,146 @@ describe("ThemePanel", () => {
     fireEvent.click(lightRadio);
     await waitFor(() =>
       expect(screen.getByText(/theme must be one of/i)).toBeTruthy(),
+    );
+  });
+});
+
+describe("DataPrivacyPanel", () => {
+  const initial: RetentionView = { retention_days: 90 };
+
+  it("loads the retention value into the input", async () => {
+    const retentionLoader = vi.fn(async () => ({ retention_days: 30 }));
+    render(<DataPrivacyPanel retentionLoader={retentionLoader} />);
+    const input = (await screen.findByLabelText(
+      /retention \(days\)/i,
+    )) as HTMLInputElement;
+    expect(input.value).toBe("30");
+    expect(retentionLoader).toHaveBeenCalledTimes(1);
+  });
+
+  it("saves a new retention through the saver", async () => {
+    const retentionLoader = vi.fn(async () => initial);
+    const retentionSaver = vi.fn(async (patch: RetentionView) => ({
+      ok: true as const,
+      retention: patch,
+    }));
+    render(
+      <DataPrivacyPanel
+        retentionLoader={retentionLoader}
+        retentionSaver={retentionSaver}
+      />,
+    );
+    const input = (await screen.findByLabelText(
+      /retention \(days\)/i,
+    )) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "45" } });
+    fireEvent.click(screen.getByRole("button", { name: /save retention/i }));
+    await waitFor(() =>
+      expect(retentionSaver).toHaveBeenCalledWith({ retention_days: 45 }),
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("status").textContent).toMatch(/saved/i),
+    );
+  });
+
+  it("invokes the exporter when Export is clicked", async () => {
+    const payload: ExportPayload = {
+      exported_at: "2026-05-04T10:00:00.000Z",
+      signals: [],
+      signal_rollups: [],
+      inbox_rules: [],
+      slack_channel_allowlist: [],
+      user_preferences: null,
+      ai_settings: null,
+    };
+    const exporter = vi.fn(async () => payload);
+    const createObjectURL = vi.fn(() => "blob:mock");
+    const revokeObjectURL = vi.fn();
+    Object.defineProperty(URL, "createObjectURL", {
+      configurable: true,
+      value: createObjectURL,
+    });
+    Object.defineProperty(URL, "revokeObjectURL", {
+      configurable: true,
+      value: revokeObjectURL,
+    });
+    render(
+      <DataPrivacyPanel
+        exporter={exporter}
+        retentionLoader={async () => initial}
+      />,
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: /export all data/i }),
+    );
+    await waitFor(() => expect(exporter).toHaveBeenCalledTimes(1));
+    expect(createObjectURL).toHaveBeenCalled();
+  });
+
+  it("requires the typed confirmation before purging", async () => {
+    const purger = vi.fn(async () => ({
+      ok: true as const,
+      deleted: { signals: 3, signal_rollups: 1 },
+    }));
+    render(
+      <DataPrivacyPanel
+        purger={purger}
+        retentionLoader={async () => initial}
+      />,
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: /purge all data/i }),
+    );
+    await screen.findByRole("dialog", { name: /confirm purge/i });
+    const confirmButton = (await screen.findByRole("button", {
+      name: /confirm purge/i,
+    })) as HTMLButtonElement;
+    expect(confirmButton.disabled).toBe(true);
+
+    const input = (await screen.findByLabelText(
+      /purge confirmation/i,
+    )) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "delete" } });
+    expect(confirmButton.disabled).toBe(true);
+    expect(purger).not.toHaveBeenCalled();
+
+    fireEvent.change(input, { target: { value: PURGE_CONFIRMATION } });
+    expect(confirmButton.disabled).toBe(false);
+    fireEvent.click(confirmButton);
+    await waitFor(() =>
+      expect(purger).toHaveBeenCalledWith(PURGE_CONFIRMATION),
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("status").textContent).toMatch(/purged 3/i),
+    );
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: /confirm purge/i }),
+      ).toBeNull(),
+    );
+  });
+
+  it("surfaces a purge error from the server", async () => {
+    const purger = vi.fn(async () => ({
+      ok: false as const,
+      error: 'confirmation must be the literal string "DELETE"',
+    }));
+    render(
+      <DataPrivacyPanel
+        purger={purger}
+        retentionLoader={async () => initial}
+      />,
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: /purge all data/i }),
+    );
+    const input = (await screen.findByLabelText(
+      /purge confirmation/i,
+    )) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: PURGE_CONFIRMATION } });
+    fireEvent.click(screen.getByRole("button", { name: /confirm purge/i }));
+    await waitFor(() =>
+      expect(screen.getByRole("alert").textContent).toMatch(/confirmation/i),
     );
   });
 });

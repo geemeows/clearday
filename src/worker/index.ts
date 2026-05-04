@@ -14,6 +14,18 @@ import { runAlertQueueDrain } from "#/lib/alert-queue-drain";
 import { type AskAiDeps, handleAskAi } from "#/lib/ask-ai-api";
 import { type BriefingDeps, handleBriefingGenerate } from "#/lib/briefing-api";
 import {
+  type ExportDeps,
+  exportData,
+  getRetention,
+  type PurgeBody,
+  type PurgeDeps,
+  purgeData,
+  putRetention,
+  type RetentionPutBody,
+  type RetentionStore,
+  type RetentionView,
+} from "#/lib/data-privacy-api";
+import {
   type EmailDigestDeps,
   type EmailDigestPutBody,
   type EmailDigestRow,
@@ -403,6 +415,47 @@ export default {
         const out = await putTheme(body, store);
         if (!out.ok) return json({ ok: false, error: out.error }, 400);
         return json({ ok: true, theme: out.theme });
+      }
+    }
+
+    if (url.pathname === "/api/data/export" && request.method === "GET") {
+      const payload = await exportData(dataPrivacyDeps(service));
+      return new Response(JSON.stringify(payload, null, 2), {
+        status: 200,
+        headers: {
+          "content-type": "application/json",
+          "content-disposition": 'attachment; filename="clearday-export.json"',
+        },
+      });
+    }
+
+    if (url.pathname === "/api/data/purge" && request.method === "POST") {
+      let body: PurgeBody;
+      try {
+        body = (await request.json()) as PurgeBody;
+      } catch {
+        return json({ ok: false, error: "invalid json" }, 400);
+      }
+      const out = await purgeData(body, purgeDeps(service));
+      if (!out.ok) return json({ ok: false, error: out.error }, 400);
+      return json({ ok: true, deleted: out.deleted });
+    }
+
+    if (url.pathname === "/api/retention") {
+      const store = retentionStore(service);
+      if (request.method === "GET") {
+        return json(await getRetention(store));
+      }
+      if (request.method === "PUT") {
+        let body: RetentionPutBody;
+        try {
+          body = (await request.json()) as RetentionPutBody;
+        } catch {
+          return json({ ok: false, error: "invalid json" }, 400);
+        }
+        const out = await putRetention(body, store);
+        if (!out.ok) return json({ ok: false, error: out.error }, 400);
+        return json({ ok: true, retention: out.retention });
       }
     }
 
@@ -829,6 +882,81 @@ function themeStore(service: SupabaseService): ThemeStore {
       if (error) throw new Error(error.message);
       return read();
     },
+  };
+}
+
+function retentionStore(service: SupabaseService): RetentionStore {
+  const read = async (): Promise<RetentionView> => {
+    const { data, error } = await service
+      .from("user_preferences")
+      .select("retention_days")
+      .eq("id", true)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    const days = (data?.retention_days as number | null) ?? 90;
+    return { retention_days: days };
+  };
+  return {
+    load: read,
+    save: async (patch) => {
+      const { error } = await service
+        .from("user_preferences")
+        .update({
+          retention_days: patch.retention_days,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", true);
+      if (error) throw new Error(error.message);
+      return read();
+    },
+  };
+}
+
+async function loadAllRows<T>(
+  service: SupabaseService,
+  table: string,
+): Promise<T[]> {
+  const { data, error } = await service.from(table).select("*");
+  if (error) throw new Error(error.message);
+  return (data ?? []) as T[];
+}
+
+async function loadSingleton(
+  service: SupabaseService,
+  table: string,
+): Promise<Record<string, unknown> | null> {
+  const { data, error } = await service
+    .from(table)
+    .select("*")
+    .eq("id", true)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return (data ?? null) as Record<string, unknown> | null;
+}
+
+function dataPrivacyDeps(service: SupabaseService): ExportDeps {
+  return {
+    loadSignals: () => loadAllRows(service, "signals"),
+    loadRollups: () => loadAllRows(service, "signal_rollups"),
+    loadInboxRules: () => loadAllRows(service, "inbox_rules"),
+    loadSlackAllowlist: () => loadAllRows(service, "slack_channel_allowlist"),
+    loadUserPreferences: () => loadSingleton(service, "user_preferences"),
+    loadAiSettings: () => loadSingleton(service, "ai_settings"),
+  };
+}
+
+function purgeDeps(service: SupabaseService): PurgeDeps {
+  const purgeAll = async (table: string): Promise<number> => {
+    const { error, count } = await service
+      .from(table)
+      .delete({ count: "exact" })
+      .neq("id", "00000000-0000-0000-0000-000000000000");
+    if (error) throw new Error(error.message);
+    return count ?? 0;
+  };
+  return {
+    purgeSignals: () => purgeAll("signals"),
+    purgeRollups: () => purgeAll("signal_rollups"),
   };
 }
 

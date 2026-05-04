@@ -2,6 +2,14 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch } from "#/lib/api-client";
 import { signOut, useAuth } from "#/lib/auth";
+import {
+  DEFAULT_RETENTION_DAYS,
+  type ExportPayload,
+  MAX_RETENTION_DAYS,
+  MIN_RETENTION_DAYS,
+  PURGE_CONFIRMATION,
+  type RetentionView,
+} from "#/lib/data-privacy-api";
 import type {
   InboxRule,
   RuleEffect,
@@ -50,6 +58,7 @@ function SettingsPage() {
 
       <ProfilePanel />
       <ThemePanel />
+      <DataPrivacyPanel />
       <NotificationsPanel />
       <WebPushDevicesPanel />
       <EmailDigestPanel />
@@ -2645,6 +2654,294 @@ export function ThemePanel({
           </div>
         </div>
       )}
+    </section>
+  );
+}
+
+type RetentionSaveResult =
+  | { ok: true; retention: RetentionView }
+  | { ok: false; error: string };
+
+type PurgeResult =
+  | { ok: true; deleted: { signals: number; signal_rollups: number } }
+  | { ok: false; error: string };
+
+export function DataPrivacyPanel({
+  exporter,
+  purger,
+  retentionLoader,
+  retentionSaver,
+}: {
+  exporter?: () => Promise<ExportPayload>;
+  purger?: (confirmation: string) => Promise<PurgeResult>;
+  retentionLoader?: () => Promise<RetentionView>;
+  retentionSaver?: (patch: RetentionView) => Promise<RetentionSaveResult>;
+} = {}) {
+  const [retention, setRetention] = useState<RetentionView | null>(null);
+  const [retentionError, setRetentionError] = useState<string | null>(null);
+  const [retentionStatus, setRetentionStatus] = useState<string | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [exportBusy, setExportBusy] = useState(false);
+  const [purgeOpen, setPurgeOpen] = useState(false);
+  const [purgeInput, setPurgeInput] = useState("");
+  const [purgeBusy, setPurgeBusy] = useState(false);
+  const [purgeError, setPurgeError] = useState<string | null>(null);
+  const [purgeStatus, setPurgeStatus] = useState<string | null>(null);
+
+  const loadRetention = useMemo(
+    () =>
+      retentionLoader ??
+      (() => apiFetch("/api/retention") as Promise<RetentionView>),
+    [retentionLoader],
+  );
+  const saveRetention = useMemo(
+    () =>
+      retentionSaver ??
+      ((patch: RetentionView) =>
+        apiFetch("/api/retention", {
+          method: "PUT",
+          body: patch,
+        }) as Promise<RetentionSaveResult>),
+    [retentionSaver],
+  );
+  const runExport = useMemo(
+    () =>
+      exporter ??
+      (() => apiFetch("/api/data/export") as Promise<ExportPayload>),
+    [exporter],
+  );
+  const runPurge = useMemo(
+    () =>
+      purger ??
+      ((confirmation: string) =>
+        apiFetch("/api/data/purge", {
+          method: "POST",
+          body: { confirmation },
+        }) as Promise<PurgeResult>),
+    [purger],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    loadRetention()
+      .then((r) => {
+        if (!cancelled) setRetention(r);
+      })
+      .catch((e) => {
+        if (!cancelled)
+          setRetentionError(e instanceof Error ? e.message : String(e));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [loadRetention]);
+
+  const onSaveRetention = async () => {
+    if (!retention) return;
+    setRetentionError(null);
+    setRetentionStatus(null);
+    try {
+      const out = await saveRetention(retention);
+      if (!out.ok) {
+        setRetentionError(out.error);
+        return;
+      }
+      setRetention(out.retention);
+      setRetentionStatus("Saved.");
+    } catch (e) {
+      setRetentionError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  const onExport = async () => {
+    setExportBusy(true);
+    setExportError(null);
+    try {
+      const payload = await runExport();
+      const blob = new Blob([JSON.stringify(payload, null, 2)], {
+        type: "application/json",
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "clearday-export.json";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setExportError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setExportBusy(false);
+    }
+  };
+
+  const onPurgeConfirm = async () => {
+    setPurgeBusy(true);
+    setPurgeError(null);
+    setPurgeStatus(null);
+    try {
+      const out = await runPurge(purgeInput);
+      if (!out.ok) {
+        setPurgeError(out.error);
+        return;
+      }
+      setPurgeStatus(
+        `Purged ${out.deleted.signals} signals and ${out.deleted.signal_rollups} rollups.`,
+      );
+      setPurgeOpen(false);
+      setPurgeInput("");
+    } catch (e) {
+      setPurgeError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setPurgeBusy(false);
+    }
+  };
+
+  return (
+    <section className="mt-8">
+      <h2 className="text-lg font-semibold">Data & privacy</h2>
+      <p className="mt-1 text-sm text-zinc-500">
+        Export or purge your Signals and rollups, and override how long raw
+        Signals are retained before rollup.
+      </p>
+
+      <div className="mt-4 grid max-w-xl gap-4">
+        <div>
+          <h3 className="text-sm font-medium text-zinc-700">Export all data</h3>
+          <p className="mt-1 text-xs text-zinc-500">
+            Downloads a JSON file with all your Signals, rollups, settings, and
+            inbox rules. Excludes encrypted secrets.
+          </p>
+          <div className="mt-2 flex items-center gap-3">
+            <button
+              type="button"
+              onClick={onExport}
+              disabled={exportBusy}
+              className="rounded border px-3 py-1.5 text-sm hover:bg-zinc-50 disabled:opacity-50"
+            >
+              {exportBusy ? "Exporting…" : "Export all data"}
+            </button>
+            {exportError && (
+              <p role="alert" className="text-sm text-red-700">
+                {exportError}
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-sm">
+            <span className="text-zinc-700">Retention (days)</span>
+            <input
+              type="number"
+              min={MIN_RETENTION_DAYS}
+              max={MAX_RETENTION_DAYS}
+              className="mt-1 block w-32 rounded border border-zinc-300 px-2 py-1.5 text-sm"
+              value={retention?.retention_days ?? DEFAULT_RETENTION_DAYS}
+              onChange={(e) => {
+                const n = Number.parseInt(e.target.value, 10);
+                if (Number.isFinite(n)) setRetention({ retention_days: n });
+              }}
+            />
+          </label>
+          <p className="mt-1 text-xs text-zinc-500">
+            Raw Signals older than this are rolled up into period aggregates and
+            removed from the hot table. Default: {DEFAULT_RETENTION_DAYS}.
+          </p>
+          <div className="mt-2 flex items-center gap-3">
+            <button
+              type="button"
+              onClick={onSaveRetention}
+              disabled={retention === null}
+              className="rounded border px-3 py-1.5 text-sm hover:bg-zinc-50 disabled:opacity-50"
+            >
+              Save retention
+            </button>
+            {retentionStatus && (
+              <output className="text-sm text-emerald-700">
+                {retentionStatus}
+              </output>
+            )}
+            {retentionError && (
+              <p role="alert" className="text-sm text-red-700">
+                {retentionError}
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div>
+          <h3 className="text-sm font-medium text-red-700">Purge all data</h3>
+          <p className="mt-1 text-xs text-zinc-500">
+            Permanently deletes every Signal and rollup. This cannot be undone.
+          </p>
+          {!purgeOpen ? (
+            <div className="mt-2 flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setPurgeOpen(true);
+                  setPurgeStatus(null);
+                  setPurgeError(null);
+                }}
+                className="rounded border border-red-300 px-3 py-1.5 text-sm text-red-700 hover:bg-red-50"
+              >
+                Purge all data…
+              </button>
+              {purgeStatus && (
+                <output className="text-sm text-emerald-700">
+                  {purgeStatus}
+                </output>
+              )}
+            </div>
+          ) : (
+            <div
+              role="dialog"
+              aria-label="Confirm purge"
+              className="mt-2 rounded border border-red-300 bg-red-50 p-3"
+            >
+              <p className="text-sm text-red-800">
+                Type <code className="font-mono">{PURGE_CONFIRMATION}</code> to
+                confirm. This cannot be undone.
+              </p>
+              <input
+                type="text"
+                aria-label="Purge confirmation"
+                className="mt-2 block w-full rounded border border-red-300 px-2 py-1.5 text-sm"
+                value={purgeInput}
+                onChange={(e) => setPurgeInput(e.target.value)}
+              />
+              <div className="mt-2 flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={onPurgeConfirm}
+                  disabled={purgeInput !== PURGE_CONFIRMATION || purgeBusy}
+                  className="rounded border border-red-400 bg-red-600 px-3 py-1.5 text-sm text-white hover:bg-red-700 disabled:opacity-50"
+                >
+                  {purgeBusy ? "Purging…" : "Confirm purge"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPurgeOpen(false);
+                    setPurgeInput("");
+                  }}
+                  disabled={purgeBusy}
+                  className="rounded border px-3 py-1.5 text-sm hover:bg-zinc-50 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                {purgeError && (
+                  <p role="alert" className="text-sm text-red-700">
+                    {purgeError}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
     </section>
   );
 }
