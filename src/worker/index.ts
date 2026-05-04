@@ -17,6 +17,7 @@ import { startFocusSession } from "#/lib/focus-session";
 import { runMeetingAlertTick } from "#/lib/meeting-alert-tick";
 import { handleOAuthExchange } from "#/lib/oauth-exchange-handler";
 import type { StoredSignal } from "#/lib/signal";
+import { runDueRollups } from "#/lib/signal-rollup";
 import { handleSlackWebhook } from "#/lib/slack-webhook";
 import {
   buildDispatcherDeps,
@@ -289,6 +290,22 @@ export default {
         })
         .catch((err) => {
           console.error("[cron] meeting-alert tick failed", err);
+        }),
+    );
+
+    ctx.waitUntil(
+      runDueRollups(rollupDeps(service))
+        .then((reports) => {
+          for (const r of reports) {
+            if (r.rolledKinds > 0 || r.rawDeleted > 0) {
+              console.log(
+                `[cron] rollup ${r.period} ${r.periodStart}: kinds=${r.rolledKinds} raw_deleted=${r.rawDeleted}`,
+              );
+            }
+          }
+        })
+        .catch((err) => {
+          console.error("[cron] rollup failed", err);
         }),
     );
 
@@ -614,6 +631,63 @@ function askAiDeps(service: SupabaseService, env: WorkerEnv): AskAiDeps {
       return (data ?? []) as Array<
         Awaited<ReturnType<AskAiDeps["loadSignals"]>>[number]
       >;
+    },
+  };
+}
+
+function rollupDeps(service: SupabaseService) {
+  return {
+    loadRawInRange: async (startIso: string, endIso: string) => {
+      const { data, error } = await service
+        .from("signals")
+        .select("kind, created_at, dismissed_at, requires_action")
+        .gte("created_at", startIso)
+        .lt("created_at", endIso);
+      if (error) throw new Error(error.message);
+      return (data ?? []) as Array<{
+        kind: string;
+        created_at: string;
+        dismissed_at: string | null;
+        requires_action: boolean;
+      }>;
+    },
+    loadMonthRollupsInRange: async (startDate: string, endDate: string) => {
+      const { data, error } = await service
+        .from("signal_rollups")
+        .select("period, period_start, kind, count, stats")
+        .eq("period", "month")
+        .gte("period_start", startDate)
+        .lt("period_start", endDate);
+      if (error) throw new Error(error.message);
+      return (data ?? []) as Array<{
+        period: "month";
+        period_start: string;
+        kind: string;
+        count: number;
+        stats: Record<string, number>;
+      }>;
+    },
+    upsertRollup: async (row: {
+      period: string;
+      period_start: string;
+      kind: string;
+      count: number;
+      stats: Record<string, number>;
+    }) => {
+      const { error } = await service.from("signal_rollups").upsert(row, {
+        onConflict: "period,period_start,kind",
+      });
+      if (error) throw new Error(error.message);
+    },
+    deleteRawInRange: async (startIso: string, endIso: string) => {
+      const { data, error } = await service
+        .from("signals")
+        .delete()
+        .gte("created_at", startIso)
+        .lt("created_at", endIso)
+        .select("id");
+      if (error) throw new Error(error.message);
+      return (data ?? []).length;
     },
   };
 }
