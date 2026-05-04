@@ -78,3 +78,19 @@ when `snoozed_until <= now()`.
 
 Closes #6
 ```
+
+## 5. Unblock dependents
+
+After an issue is closed (either by `Closes #N` in the commit landing on the default branch, or manually), find every open issue that lists `#N` under its `## Blocked by` section and edit each one to remove `#N`. If `#N` was the only entry, replace the list with `None`.
+
+```sh
+# find candidates
+gh issue list --repo geemeows/clearday --state open --search "in:body \"Blocked by\" \"#N\"" --json number,title
+
+# for each match, fetch body, edit the Blocked by line, push back
+gh issue view <num> --repo geemeows/clearday --json body -q .body > /tmp/issue.md
+# edit /tmp/issue.md: drop "#N" from the Blocked by list (or replace with "None")
+gh issue edit <num> --repo geemeows/clearday --body-file /tmp/issue.md
+```
+
+Only touch the `## Blocked by` section. Don't reword anything else. If the closed issue isn't yet pushed/merged (so dependents are still legitimately blocked), skip this step.
