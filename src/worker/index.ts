@@ -1,5 +1,13 @@
 /// <reference types="@cloudflare/workers-types" />
 import { createClient } from "@supabase/supabase-js";
+import {
+  type AiSettingsRow,
+  type AiSettingsStore,
+  getAiSettings,
+  type PutBody,
+  putAiSettings,
+  testAiConnection,
+} from "#/lib/ai-settings-api";
 import { sendSlackDm } from "#/lib/alert-channel/slack-dm";
 import type { AlertChannel } from "#/lib/alert-dispatcher";
 import { startFocusSession } from "#/lib/focus-session";
@@ -162,6 +170,30 @@ export default {
 
     if (url.pathname === "/api/focus" && request.method === "POST") {
       return handleStartFocus(request, service);
+    }
+
+    if (url.pathname === "/api/ai/settings") {
+      const deps = aiDeps(service, env);
+      if (request.method === "GET") {
+        const view = await getAiSettings(deps);
+        return json(view);
+      }
+      if (request.method === "PUT") {
+        let body: PutBody;
+        try {
+          body = (await request.json()) as PutBody;
+        } catch {
+          return json({ error: "invalid json" }, 400);
+        }
+        const out = await putAiSettings(body, deps);
+        if (!out.ok) return json({ error: out.error }, 400);
+        return json(out.settings);
+      }
+    }
+
+    if (url.pathname === "/api/ai/test" && request.method === "POST") {
+      const out = await testAiConnection(aiDeps(service, env));
+      return json(out, out.ok ? 200 : 502);
     }
 
     return json({ error: "not found" }, 404);
@@ -358,6 +390,41 @@ async function loadFocusTokens(
   const find = (p: string) =>
     rows.find((r) => r.provider === p)?.access_token ?? null;
   return { google: find("google"), slack: find("slack") };
+}
+
+function aiSettingsStore(service: SupabaseService): AiSettingsStore {
+  return {
+    load: async () => {
+      const { data, error } = await service
+        .from("ai_settings")
+        .select("provider, model, api_key, base_url, last_validated_at")
+        .eq("id", true)
+        .maybeSingle();
+      if (error) throw new Error(error.message);
+      return (data ?? null) as AiSettingsRow | null;
+    },
+    save: async (patch) => {
+      const { data, error } = await service
+        .from("ai_settings")
+        .update({
+          ...patch,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", true)
+        .select("provider, model, api_key, base_url, last_validated_at")
+        .single();
+      if (error) throw new Error(error.message);
+      return data as AiSettingsRow;
+    },
+  };
+}
+
+function aiDeps(service: SupabaseService, env: WorkerEnv) {
+  return {
+    store: aiSettingsStore(service),
+    keySecret: env.AI_KEY_SECRET,
+    fetch: (i: RequestInfo | URL, init?: RequestInit) => fetch(i, init),
+  };
 }
 
 // biome-ignore lint/suspicious/noExplicitAny: thin Supabase client surface

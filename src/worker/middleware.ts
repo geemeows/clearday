@@ -15,6 +15,7 @@ export type WorkerEnv = {
   SLACK_CLIENT_ID: string;
   SLACK_CLIENT_SECRET: string;
   SLACK_SIGNING_SECRET: string;
+  AI_KEY_SECRET: string;
 };
 
 export type AuthedUser = {

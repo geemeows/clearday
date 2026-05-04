@@ -19,6 +19,7 @@ const env: WorkerEnv = {
   SLACK_CLIENT_ID: "",
   SLACK_CLIENT_SECRET: "",
   SLACK_SIGNING_SECRET: "",
+  AI_KEY_SECRET: "",
 };
 
 const reqWith = (auth?: string) =>
