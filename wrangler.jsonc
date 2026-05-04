@@ -10,9 +10,6 @@
     "not_found_handling": "single-page-application"
   },
   "vars": {
-    "ALLOWED_EMAIL": "",
-    "SUPABASE_URL": "",
-    "SUPABASE_ANON_KEY": "",
     "AUTH_PROXY_URL": "https://auth.clearday.geemeows.com"
   },
   "triggers": {

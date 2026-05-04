@@ -6,6 +6,13 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   resolve: { tsconfigPaths: true },
+  server: {
+    proxy: {
+      "/api": "http://localhost:8787",
+      "/oauth": "http://localhost:8787",
+      "/webhooks": "http://localhost:8787",
+    },
+  },
   plugins: [
     devtools(),
     tailwindcss(),
