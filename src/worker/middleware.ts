@@ -16,6 +16,12 @@ export type WorkerEnv = {
   SLACK_CLIENT_SECRET: string;
   SLACK_SIGNING_SECRET: string;
   AI_KEY_SECRET: string;
+  /** VAPID public key (uncompressed P-256, 65 bytes, b64url). */
+  VAPID_PUBLIC_KEY: string;
+  /** VAPID private key (32-byte P-256 scalar, b64url). */
+  VAPID_PRIVATE_KEY: string;
+  /** mailto: contact for VAPID `sub`; required by RFC 8292. */
+  VAPID_SUBJECT: string;
 };
 
 export type AuthedUser = {

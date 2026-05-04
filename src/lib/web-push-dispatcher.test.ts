@@ -1,0 +1,156 @@
+import { describe, expect, it, vi } from "vitest";
+import type { StoredSignal } from "#/lib/signal";
+import {
+  dispatchWebPush,
+  type WebPushDispatcherDeps,
+} from "#/lib/web-push-dispatcher";
+import { b64urlDecode, b64urlEncode } from "#/lib/web-push-vapid";
+
+async function vapidConfig() {
+  const pair = await crypto.subtle.generateKey(
+    { name: "ECDSA", namedCurve: "P-256" },
+    true,
+    ["sign", "verify"],
+  );
+  const jwk = (await crypto.subtle.exportKey("jwk", pair.privateKey)) as {
+    x: string;
+    y: string;
+    d: string;
+  };
+  const xb = b64urlDecode(jwk.x);
+  const yb = b64urlDecode(jwk.y);
+  const pub = new Uint8Array(65);
+  pub[0] = 0x04;
+  pub.set(xb, 1);
+  pub.set(yb, 33);
+  return {
+    publicKey: b64urlEncode(pub),
+    privateKey: jwk.d,
+    subject: "mailto:dev@example.com",
+  };
+}
+
+const signal: StoredSignal = {
+  id: "sig-1",
+  provider: "github",
+  kind: "pr_review_requested",
+  source_id: "pr-1",
+  title: "Review me",
+  url: "https://github.com/x/y/pull/1",
+  payload: {},
+  requires_action: true,
+  source_created_at: null,
+  unread_count: 0,
+  created_at: "2026-05-04T00:00:00Z",
+  updated_at: "2026-05-04T00:00:00Z",
+  dismissed_at: null,
+};
+
+describe("dispatchWebPush", () => {
+  it("signs each request with VAPID and stamps delivered", async () => {
+    const vapid = await vapidConfig();
+    const fetchImpl = vi.fn(
+      async (_url: string | URL | Request, _init?: RequestInit) =>
+        new Response(null, { status: 201 }),
+    );
+    const stampDelivered = vi.fn(async () => {});
+    const deps: WebPushDispatcherDeps = {
+      vapid,
+      loadSubscriptions: async () => [
+        {
+          id: "dev-1",
+          endpoint: "https://fcm.googleapis.com/fcm/send/abc",
+          p256dh: "p1",
+          auth: "a1",
+        },
+        {
+          id: "dev-2",
+          endpoint: "https://updates.push.services.mozilla.com/wpush/v2/xyz",
+          p256dh: "p2",
+          auth: "a2",
+        },
+      ],
+      removeSubscription: vi.fn(async () => {}),
+      stampDelivered,
+      fetch: fetchImpl as unknown as typeof fetch,
+      now: () => new Date("2026-05-04T12:00:00Z"),
+    };
+
+    const report = await dispatchWebPush(signal, deps);
+    expect(report.delivered).toEqual(["dev-1", "dev-2"]);
+    expect(report.pruned).toEqual([]);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    const init1 = fetchImpl.mock.calls[0][1] as RequestInit | undefined;
+    const headers = init1?.headers as Record<string, string>;
+    expect(headers.authorization.startsWith("vapid t=")).toBe(true);
+    expect(headers.authorization).toContain(vapid.publicKey);
+    expect(headers.ttl).toBe("60");
+    expect(stampDelivered).toHaveBeenCalledWith(
+      ["dev-1", "dev-2"],
+      new Date("2026-05-04T12:00:00Z"),
+    );
+  });
+
+  it("prunes subscriptions on 404 / 410", async () => {
+    const vapid = await vapidConfig();
+    const responses: Response[] = [
+      new Response(null, { status: 410 }),
+      new Response(null, { status: 404 }),
+      new Response(null, { status: 201 }),
+    ];
+    const fetchImpl = vi.fn(async () => responses.shift() as Response);
+    const removeSubscription = vi.fn(async () => {});
+    const deps: WebPushDispatcherDeps = {
+      vapid,
+      loadSubscriptions: async () => [
+        { id: "gone", endpoint: "https://x/1", p256dh: "p", auth: "a" },
+        { id: "missing", endpoint: "https://x/2", p256dh: "p", auth: "a" },
+        { id: "ok", endpoint: "https://x/3", p256dh: "p", auth: "a" },
+      ],
+      removeSubscription,
+      stampDelivered: async () => {},
+      fetch: fetchImpl as unknown as typeof fetch,
+    };
+    const report = await dispatchWebPush(signal, deps);
+    expect(report.pruned.sort()).toEqual(["gone", "missing"]);
+    expect(report.delivered).toEqual(["ok"]);
+    expect(removeSubscription).toHaveBeenCalledWith("gone");
+    expect(removeSubscription).toHaveBeenCalledWith("missing");
+  });
+
+  it("captures non-2xx errors per subscription without rolling back others", async () => {
+    const vapid = await vapidConfig();
+    const responses: Response[] = [
+      new Response(null, { status: 500 }),
+      new Response(null, { status: 201 }),
+    ];
+    const fetchImpl = vi.fn(async () => responses.shift() as Response);
+    const deps: WebPushDispatcherDeps = {
+      vapid,
+      loadSubscriptions: async () => [
+        { id: "broken", endpoint: "https://x/1", p256dh: "p", auth: "a" },
+        { id: "ok", endpoint: "https://x/2", p256dh: "p", auth: "a" },
+      ],
+      removeSubscription: async () => {},
+      stampDelivered: async () => {},
+      fetch: fetchImpl as unknown as typeof fetch,
+    };
+    const report = await dispatchWebPush(signal, deps);
+    expect(report.delivered).toEqual(["ok"]);
+    expect(report.errors).toEqual({ broken: "push HTTP 500" });
+  });
+
+  it("returns empty report when there are no subscriptions", async () => {
+    const vapid = await vapidConfig();
+    const deps: WebPushDispatcherDeps = {
+      vapid,
+      loadSubscriptions: async () => [],
+      removeSubscription: async () => {},
+      stampDelivered: vi.fn(async () => {}),
+      fetch: vi.fn() as unknown as typeof fetch,
+    };
+    const report = await dispatchWebPush(signal, deps);
+    expect(report).toEqual({ delivered: [], pruned: [], errors: {} });
+    expect(deps.stampDelivered).not.toHaveBeenCalled();
+  });
+});

@@ -22,5 +22,6 @@
   //   GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET,
   //   GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET,
   //   SLACK_CLIENT_ID, SLACK_CLIENT_SECRET, SLACK_SIGNING_SECRET,
-  //   AI_KEY_SECRET (envelope-encryption key for stored LLM API keys)
+  //   AI_KEY_SECRET (envelope-encryption key for stored LLM API keys),
+  //   VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT (Web Push)
 }

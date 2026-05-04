@@ -26,6 +26,14 @@ import type { StoredSignal } from "#/lib/signal";
 import { runDueRollups } from "#/lib/signal-rollup";
 import { handleSlackWebhook } from "#/lib/slack-webhook";
 import {
+  type DeviceView,
+  listDevices,
+  subscribe,
+  unsubscribe,
+  type WebPushSubscriptionStore,
+} from "#/lib/web-push-api";
+import type { VapidConfig } from "#/lib/web-push-vapid";
+import {
   buildDispatcherDeps,
   dispatchUpsertedSignal,
   loadDueQueuedAlerts,
@@ -56,8 +64,10 @@ export default {
 
     if (url.pathname === "/webhooks/slack" && request.method === "POST") {
       const service = serviceClient(env);
-      const dispatcher = buildDispatcherDeps(service, (i, init) =>
-        fetch(i, init),
+      const dispatcher = buildDispatcherDeps(
+        service,
+        (i, init) => fetch(i, init),
+        vapidFromEnv(env),
       );
       const outcome = await handleSlackWebhook(request, {
         signingSecret: env.SLACK_SIGNING_SECRET,
@@ -221,6 +231,41 @@ export default {
       }
     }
 
+    if (url.pathname === "/api/push/public-key" && request.method === "GET") {
+      return json({ publicKey: env.VAPID_PUBLIC_KEY ?? null });
+    }
+
+    if (
+      url.pathname === "/api/push/subscriptions" &&
+      request.method === "GET"
+    ) {
+      const out = await listDevices(webPushStore(service));
+      return json(out);
+    }
+
+    if (url.pathname === "/api/push/subscribe" && request.method === "POST") {
+      let body: unknown;
+      try {
+        body = await request.json();
+      } catch {
+        return json({ ok: false, error: "invalid json" }, 400);
+      }
+      const out = await subscribe(
+        body as Parameters<typeof subscribe>[0],
+        webPushStore(service),
+      );
+      if (!out.ok) return json({ ok: false, error: out.error }, 400);
+      return json({ ok: true, device: out.device });
+    }
+
+    const pushUnsubMatch = url.pathname.match(
+      /^\/api\/push\/subscriptions\/([^/]+)$/,
+    );
+    if (pushUnsubMatch && request.method === "DELETE") {
+      const out = await unsubscribe(pushUnsubMatch[1], webPushStore(service));
+      return json(out);
+    }
+
     if (
       url.pathname === "/api/briefing/generate" &&
       request.method === "POST"
@@ -301,7 +346,11 @@ export default {
         }),
     );
 
-    const dispatcher = buildDispatcherDeps(service, fetchImpl);
+    const dispatcher = buildDispatcherDeps(
+      service,
+      fetchImpl,
+      vapidFromEnv(env),
+    );
     ctx.waitUntil(
       runMeetingAlertTick({
         loadUpcomingMeetings: () => loadUpcomingMeetings(service),
@@ -768,6 +817,57 @@ function inboxRulesStore(service: SupabaseService): InboxRulesStore {
         .insert(rows);
       if (insError) throw new Error(insError.message);
       return loadInboxRulesFromService(service);
+    },
+  };
+}
+
+function vapidFromEnv(env: WorkerEnv): VapidConfig | null {
+  if (!env.VAPID_PUBLIC_KEY || !env.VAPID_PRIVATE_KEY || !env.VAPID_SUBJECT) {
+    return null;
+  }
+  return {
+    publicKey: env.VAPID_PUBLIC_KEY,
+    privateKey: env.VAPID_PRIVATE_KEY,
+    subject: env.VAPID_SUBJECT,
+  };
+}
+
+function webPushStore(service: SupabaseService): WebPushSubscriptionStore {
+  return {
+    list: async () => {
+      const { data, error } = await service
+        .from("web_push_subscriptions")
+        .select("id, endpoint, device_label, last_delivered_at, created_at")
+        .order("created_at", { ascending: false });
+      if (error) throw new Error(error.message);
+      return (data ?? []) as DeviceView[];
+    },
+    upsert: async (input) => {
+      const { data, error } = await service
+        .from("web_push_subscriptions")
+        .upsert(
+          {
+            endpoint: input.endpoint,
+            p256dh: input.p256dh,
+            auth: input.auth,
+            user_agent: input.user_agent,
+            device_label: input.device_label,
+          },
+          { onConflict: "endpoint" },
+        )
+        .select("id, endpoint, device_label, last_delivered_at, created_at")
+        .single();
+      if (error) throw new Error(error.message);
+      return data as DeviceView;
+    },
+    remove: async (id) => {
+      const { data, error } = await service
+        .from("web_push_subscriptions")
+        .delete()
+        .eq("id", id)
+        .select("id");
+      if (error) throw new Error(error.message);
+      return { removed: (data ?? []).length > 0 };
     },
   };
 }

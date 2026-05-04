@@ -7,6 +7,7 @@ import {
   NotificationMatrixPanel,
   NotificationsPanel,
   QuietHoursPanel,
+  WebPushDevicesPanel,
 } from "#/routes/_app.settings";
 
 describe("NotificationsPanel", () => {
@@ -17,7 +18,9 @@ describe("NotificationsPanel", () => {
     render(
       <NotificationsPanel loader={loader} saver={saver} tester={tester} />,
     );
-    const toggle = (await screen.findByRole("checkbox")) as HTMLInputElement;
+    const toggle = (await screen.findByRole("checkbox", {
+      name: /slack self-dm/i,
+    })) as HTMLInputElement;
     expect(toggle.checked).toBe(true);
     expect(loader).toHaveBeenCalledTimes(1);
   });
@@ -26,7 +29,9 @@ describe("NotificationsPanel", () => {
     const loader = vi.fn(async () => ({ alert_channels: [] }));
     const saver = vi.fn(async (cs: string[]) => ({ alert_channels: cs }));
     render(<NotificationsPanel loader={loader} saver={saver} />);
-    const toggle = (await screen.findByRole("checkbox")) as HTMLInputElement;
+    const toggle = (await screen.findByRole("checkbox", {
+      name: /slack self-dm/i,
+    })) as HTMLInputElement;
     fireEvent.click(toggle);
     await waitFor(() => expect(saver).toHaveBeenCalledWith(["slack_dm"]));
   });
@@ -490,5 +495,58 @@ describe("InboxRulesPanel", () => {
     await waitFor(() => expect(saver).toHaveBeenCalled());
     const saved = saver.mock.calls[0][0];
     expect(saved.map((r: InboxRule) => r.id)).toEqual(["b", "a"]);
+  });
+});
+
+describe("WebPushDevicesPanel", () => {
+  const sample = {
+    id: "dev-1",
+    endpoint: "https://x/1",
+    device_label: "Chrome on macOS",
+    last_delivered_at: null,
+    created_at: "2026-05-04T00:00:00Z",
+  };
+
+  it("loads and renders devices with their labels", async () => {
+    const loader = vi.fn(async () => ({ devices: [sample] }));
+    render(<WebPushDevicesPanel loader={loader} />);
+    expect(await screen.findByText(/chrome on macos/i)).toBeTruthy();
+    expect(screen.getByText(/never delivered/i)).toBeTruthy();
+  });
+
+  it("registers the current device and prepends the result", async () => {
+    const loader = vi.fn(async () => ({ devices: [] }));
+    const register = vi.fn(async () => sample);
+    render(<WebPushDevicesPanel loader={loader} register={register} />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: /register this device/i }),
+    );
+    await waitFor(() => expect(register).toHaveBeenCalled());
+    expect(await screen.findByText(/chrome on macos/i)).toBeTruthy();
+  });
+
+  it("removes a device through the remover", async () => {
+    const loader = vi.fn(async () => ({ devices: [sample] }));
+    const remover = vi.fn(async () => {});
+    render(<WebPushDevicesPanel loader={loader} remover={remover} />);
+    fireEvent.click(await screen.findByRole("button", { name: /remove/i }));
+    await waitFor(() => expect(remover).toHaveBeenCalledWith("dev-1"));
+    await waitFor(() =>
+      expect(screen.queryByText(/chrome on macos/i)).toBeNull(),
+    );
+  });
+
+  it("surfaces registration errors", async () => {
+    const loader = vi.fn(async () => ({ devices: [] }));
+    const register = vi.fn(async () => {
+      throw new Error("permission denied");
+    });
+    render(<WebPushDevicesPanel loader={loader} register={register} />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: /register this device/i }),
+    );
+    await waitFor(() =>
+      expect(screen.getByText(/permission denied/i)).toBeTruthy(),
+    );
   });
 });

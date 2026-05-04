@@ -29,6 +29,7 @@ function SettingsPage() {
       </button>
 
       <NotificationsPanel />
+      <WebPushDevicesPanel />
       <NotificationMatrixPanel />
       <QuietHoursPanel />
       <FocusBlockPanel />
@@ -169,6 +170,21 @@ export function NotificationsPanel({
             </span>
           </label>
 
+          <label className="flex items-center gap-3 text-sm">
+            <input
+              type="checkbox"
+              checked={enabled.has("web_push")}
+              onChange={() => toggle("web_push")}
+              disabled={busy}
+            />
+            <span>
+              <strong className="font-medium">Web Push</strong>
+              <span className="ml-2 text-zinc-500">
+                Native browser notifications on devices you've registered below.
+              </span>
+            </span>
+          </label>
+
           <button
             type="button"
             onClick={sendTest}
@@ -185,6 +201,230 @@ export function NotificationsPanel({
       )}
     </section>
   );
+}
+
+type DeviceView = {
+  id: string;
+  endpoint: string;
+  device_label: string | null;
+  last_delivered_at: string | null;
+  created_at: string;
+};
+
+type RegisterFn = () => Promise<DeviceView>;
+
+export function WebPushDevicesPanel({
+  loader,
+  remover,
+  register,
+}: {
+  loader?: () => Promise<{ devices: DeviceView[] }>;
+  remover?: (id: string) => Promise<void>;
+  register?: RegisterFn;
+} = {}) {
+  const [devices, setDevices] = useState<DeviceView[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+
+  const load = useMemo(
+    () =>
+      loader ??
+      (() =>
+        apiFetch("/api/push/subscriptions") as Promise<{
+          devices: DeviceView[];
+        }>),
+    [loader],
+  );
+  const remove = useMemo(
+    () =>
+      remover ??
+      (async (id: string) => {
+        await apiFetch(`/api/push/subscriptions/${id}`, { method: "DELETE" });
+      }),
+    [remover],
+  );
+  const reg = useMemo(
+    () => register ?? (() => registerThisDevice()),
+    [register],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    load()
+      .then((body) => {
+        if (cancelled) return;
+        setDevices(body.devices);
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        setError(e instanceof Error ? e.message : "failed to load devices");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [load]);
+
+  const onRegister = useCallback(async () => {
+    setBusy(true);
+    setStatus(null);
+    try {
+      const device = await reg();
+      setDevices((current) => {
+        const next = current ? [...current] : [];
+        const existing = next.findIndex((d) => d.id === device.id);
+        if (existing >= 0) next[existing] = device;
+        else next.unshift(device);
+        return next;
+      });
+      setStatus("This device is registered for push.");
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "registration failed");
+    } finally {
+      setBusy(false);
+    }
+  }, [reg]);
+
+  const onRemove = useCallback(
+    async (id: string) => {
+      setBusy(true);
+      try {
+        await remove(id);
+        setDevices((current) => current?.filter((d) => d.id !== id) ?? null);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "remove failed");
+      } finally {
+        setBusy(false);
+      }
+    },
+    [remove],
+  );
+
+  return (
+    <section
+      aria-label="Push devices"
+      className="mt-8 rounded border border-zinc-200 bg-white p-5"
+    >
+      <h2 className="text-base font-semibold text-zinc-900">Push devices</h2>
+      <p className="mt-1 text-sm text-zinc-500">
+        Devices registered for Web Push delivery.
+      </p>
+
+      {error && (
+        <p className="mt-3 rounded border border-red-200 bg-red-50 p-2 text-sm text-red-700">
+          {error}
+        </p>
+      )}
+
+      <div className="mt-4 space-y-3">
+        <button
+          type="button"
+          onClick={onRegister}
+          disabled={busy}
+          className="rounded border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50 disabled:opacity-50"
+        >
+          Register this device
+        </button>
+        {status && (
+          <output className="ml-3 text-sm text-zinc-600">{status}</output>
+        )}
+      </div>
+
+      {devices == null && !error && (
+        <p className="mt-3 text-sm text-zinc-500">Loading…</p>
+      )}
+
+      {devices && devices.length === 0 && (
+        <p className="mt-4 text-sm text-zinc-500">No devices registered yet.</p>
+      )}
+
+      {devices && devices.length > 0 && (
+        <ul className="mt-4 divide-y divide-zinc-100">
+          {devices.map((d) => (
+            <li
+              key={d.id}
+              className="flex items-center justify-between py-2 text-sm"
+            >
+              <span>
+                <strong className="font-medium">
+                  {d.device_label ?? "Unknown device"}
+                </strong>
+                <span className="ml-2 text-zinc-500">
+                  {d.last_delivered_at
+                    ? `Last delivered ${formatRelative(d.last_delivered_at)}`
+                    : "Never delivered"}
+                </span>
+              </span>
+              <button
+                type="button"
+                onClick={() => onRemove(d.id)}
+                disabled={busy}
+                className="text-xs text-zinc-500 underline hover:text-zinc-700 disabled:opacity-50"
+              >
+                Remove
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function formatRelative(iso: string): string {
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return iso;
+  const diffSec = Math.max(0, Math.round((Date.now() - t) / 1000));
+  if (diffSec < 60) return `${diffSec}s ago`;
+  if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`;
+  if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h ago`;
+  return `${Math.floor(diffSec / 86400)}d ago`;
+}
+
+async function registerThisDevice(): Promise<DeviceView> {
+  if (typeof window === "undefined" || !("Notification" in window)) {
+    throw new Error("notifications are not supported in this browser");
+  }
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+    throw new Error("Web Push is not supported in this browser");
+  }
+  const permission = await Notification.requestPermission();
+  if (permission !== "granted") {
+    throw new Error(`notifications permission ${permission}`);
+  }
+  const keyResp = (await apiFetch("/api/push/public-key")) as {
+    publicKey: string | null;
+  };
+  if (!keyResp.publicKey) {
+    throw new Error("server has no VAPID public key configured");
+  }
+  const reg = await navigator.serviceWorker.ready;
+  const subscription = await reg.pushManager.subscribe({
+    userVisibleOnly: true,
+    applicationServerKey: urlBase64ToUint8Array(
+      keyResp.publicKey,
+    ) as BufferSource,
+  });
+  const json = subscription.toJSON();
+  const out = (await apiFetch("/api/push/subscribe", {
+    method: "POST",
+    body: {
+      endpoint: json.endpoint,
+      keys: json.keys,
+      user_agent: navigator.userAgent,
+    },
+  })) as { ok: boolean; device: DeviceView };
+  return out.device;
+}
+
+function urlBase64ToUint8Array(s: string): Uint8Array {
+  const pad = "=".repeat((4 - (s.length % 4)) % 4);
+  const std = (s + pad).replace(/-/g, "+").replace(/_/g, "/");
+  const bin = atob(std);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
 }
 
 type AiProvider = "anthropic" | "openai" | "gemini" | "groq" | "ollama";

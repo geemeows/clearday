@@ -8,8 +8,11 @@
       "type": "image/x-icon"
     }
   ],
+  "description": "Open-source command center for engineers — PRs, mentions, meetings, and focus blocks in one place.",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
+  "orientation": "any",
   "theme_color": "#0a0a0a",
   "background_color": "#ffffff"
 }

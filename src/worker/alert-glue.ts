@@ -4,6 +4,7 @@
 // dispatcher's `alreadyRecorded` / `enqueueDelivery` contracts.
 
 import { sendSlackDm } from "#/lib/alert-channel/slack-dm";
+import { sendWebPush } from "#/lib/alert-channel/web-push";
 import type {
   AlertChannel,
   AlertThreshold,
@@ -21,6 +22,7 @@ import {
   type QuietHoursWindow,
 } from "#/lib/quiet-hours";
 import type { Signal, StoredSignal } from "#/lib/signal";
+import type { VapidConfig } from "#/lib/web-push-vapid";
 
 const KNOWN_CHANNELS: AlertChannel[] = [
   "slack_dm",
@@ -35,6 +37,7 @@ type Service = any;
 export function buildDispatcherDeps(
   service: Service,
   fetchImpl: typeof fetch,
+  vapid?: VapidConfig | null,
 ): DispatcherDeps {
   return {
     loadPreferences: () => loadNotificationPrefs(service),
@@ -79,6 +82,49 @@ export function buildDispatcherDeps(
           fetch: fetchImpl,
         });
       },
+      ...(vapid
+        ? {
+            web_push: async (signal: StoredSignal) => {
+              await sendWebPush(signal, {
+                vapid,
+                fetch: fetchImpl,
+                loadSubscriptions: async () => {
+                  const { data, error } = await service
+                    .from("web_push_subscriptions")
+                    .select("id, endpoint, p256dh, auth");
+                  if (error) throw new Error(error.message);
+                  return (
+                    (data ?? []) as Array<{
+                      id: string;
+                      endpoint: string;
+                      p256dh: string;
+                      auth: string;
+                    }>
+                  ).map((r) => ({
+                    id: r.id,
+                    endpoint: r.endpoint,
+                    p256dh: r.p256dh,
+                    auth: r.auth,
+                  }));
+                },
+                removeSubscription: async (id) => {
+                  const { error } = await service
+                    .from("web_push_subscriptions")
+                    .delete()
+                    .eq("id", id);
+                  if (error) throw new Error(error.message);
+                },
+                stampDelivered: async (ids, at) => {
+                  const { error } = await service
+                    .from("web_push_subscriptions")
+                    .update({ last_delivered_at: at.toISOString() })
+                    .in("id", ids);
+                  if (error) throw new Error(error.message);
+                },
+              });
+            },
+          }
+        : {}),
     },
   };
 }

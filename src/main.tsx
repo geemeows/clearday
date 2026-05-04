@@ -10,6 +10,14 @@ function App() {
   return <RouterProvider router={router} context={{ auth }} />;
 }
 
+if ("serviceWorker" in navigator) {
+  // Register the PWA / Web Push service worker. Failures are non-fatal: the
+  // app stays usable; only push notifications won't work until SW registers.
+  navigator.serviceWorker
+    .register("/sw.js")
+    .catch((err) => console.warn("[sw] registration failed", err));
+}
+
 const rootEl = document.getElementById("root");
 if (!rootEl) throw new Error("#root not found");
 

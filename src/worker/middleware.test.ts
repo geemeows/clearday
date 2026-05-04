@@ -20,6 +20,9 @@ const env: WorkerEnv = {
   SLACK_CLIENT_SECRET: "",
   SLACK_SIGNING_SECRET: "",
   AI_KEY_SECRET: "",
+  VAPID_PUBLIC_KEY: "",
+  VAPID_PRIVATE_KEY: "",
+  VAPID_SUBJECT: "",
 };
 
 const reqWith = (auth?: string) =>
