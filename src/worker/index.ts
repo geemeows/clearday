@@ -55,6 +55,7 @@ import {
   completeOnboarding,
   getOnboardingStatus,
 } from "#/lib/onboarding-api";
+import { type PrReviewEvent, submitPrReview } from "#/lib/pr-review";
 import {
   getProfile,
   type ProfilePutBody,
@@ -229,6 +230,10 @@ export default {
 
     if (url.pathname === "/api/focus" && request.method === "POST") {
       return handleStartFocus(request, service);
+    }
+
+    if (url.pathname === "/api/pr/review" && request.method === "POST") {
+      return handleSubmitPrReview(request, service);
     }
 
     if (url.pathname === "/api/ai/settings") {
@@ -838,6 +843,42 @@ async function handleStartFocus(
     { tokens, fetch: (i, init) => fetch(i, init) },
   );
   return json(result);
+}
+
+async function handleSubmitPrReview(
+  request: Request,
+  service: SupabaseService,
+): Promise<Response> {
+  let body: {
+    repo?: unknown;
+    number?: unknown;
+    event?: unknown;
+    body?: unknown;
+  };
+  try {
+    body = (await request.json()) as typeof body;
+  } catch {
+    return json({ ok: false, error: "invalid json" }, 400);
+  }
+  const repo = typeof body.repo === "string" ? body.repo : "";
+  const number = Number(body.number);
+  const event = body.event as PrReviewEvent;
+  const message = typeof body.body === "string" ? body.body : undefined;
+
+  const { data, error } = await service
+    .from("provider_accounts")
+    .select("access_token")
+    .eq("provider", "github")
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  const token =
+    (data as { access_token: string | null } | null)?.access_token ?? null;
+
+  const out = await submitPrReview(
+    { repo, number, event, body: message },
+    { token, fetch: (i, init) => fetch(i, init) },
+  );
+  return json(out, out.ok ? 200 : 400);
 }
 
 async function loadFocusTokens(

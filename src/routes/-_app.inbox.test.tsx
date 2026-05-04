@@ -1,7 +1,17 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { Signal } from "#/lib/signal";
-import { InboxDetailPane, InboxView } from "#/routes/_app.inbox";
+import {
+  InboxDetailPane,
+  InboxView,
+  PrReviewActions,
+} from "#/routes/_app.inbox";
 
 const sample = (
   overrides: Partial<Signal & { id: string }> = {},
@@ -239,5 +249,70 @@ describe("InboxDetailPane", () => {
     expect(onClose).toHaveBeenCalled();
     fireEvent.click(within(pane).getByRole("button", { name: /dismiss/i }));
     expect(onDismiss).toHaveBeenCalledWith("xyz");
+  });
+});
+
+describe("PrReviewActions", () => {
+  it("approves a PR with empty body and forwards repo+number", async () => {
+    const submit = vi.fn(async () => ({ ok: true }));
+    render(<PrReviewActions repo="o/r" number={42} submit={submit} />);
+    fireEvent.click(screen.getByRole("button", { name: /approve/i }));
+    await waitFor(() => expect(submit).toHaveBeenCalled());
+    expect(submit).toHaveBeenCalledWith({
+      repo: "o/r",
+      number: 42,
+      event: "APPROVE",
+      body: "",
+    });
+    expect(screen.getByRole("status").textContent).toMatch(/approved/i);
+  });
+
+  it("disables Request changes / Comment until a body is typed", () => {
+    render(
+      <PrReviewActions
+        repo="o/r"
+        number={1}
+        submit={async () => ({ ok: true })}
+      />,
+    );
+    const req = screen.getByRole("button", { name: /request changes/i });
+    const com = screen.getByRole("button", { name: /^comment$/i });
+    expect(req.hasAttribute("disabled")).toBe(true);
+    expect(com.hasAttribute("disabled")).toBe(true);
+    fireEvent.change(screen.getByLabelText(/review comment/i), {
+      target: { value: "lgtm with nits" },
+    });
+    expect(req.hasAttribute("disabled")).toBe(false);
+    expect(com.hasAttribute("disabled")).toBe(false);
+  });
+
+  it("posts a comment with the typed body", async () => {
+    const submit = vi.fn(async () => ({ ok: true }));
+    render(<PrReviewActions repo="o/r" number={3} submit={submit} />);
+    fireEvent.change(screen.getByLabelText(/review comment/i), {
+      target: { value: "  please rename foo  " },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^comment$/i }));
+    await waitFor(() => expect(submit).toHaveBeenCalled());
+    expect(submit).toHaveBeenCalledWith({
+      repo: "o/r",
+      number: 3,
+      event: "COMMENT",
+      body: "please rename foo",
+    });
+  });
+
+  it("surfaces a Reauthorize hint on needs_reauth", async () => {
+    const submit = vi.fn(async () => ({
+      ok: false,
+      error: "scope missing",
+      needs_reauth: true,
+    }));
+    render(<PrReviewActions repo="o/r" number={1} submit={submit} />);
+    fireEvent.click(screen.getByRole("button", { name: /approve/i }));
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toMatch(/scope missing/);
+    const reauth = within(alert).getByRole("link", { name: /reauthorize/i });
+    expect(reauth.getAttribute("href")).toBe("/settings");
   });
 });

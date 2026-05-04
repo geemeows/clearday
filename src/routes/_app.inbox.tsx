@@ -306,31 +306,159 @@ function PrBody({ signal }: { signal: StoredSignal }) {
   const author = signal.payload?.author as string | undefined;
   const draft = Boolean(signal.payload?.draft);
   return (
-    <dl className="mt-3 grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1.5 text-sm">
-      {repo && (
-        <>
-          <dt className="text-zinc-500">Repo</dt>
-          <dd className="text-zinc-900">
-            {repo}
-            {typeof number === "number" ? `#${number}` : ""}
-          </dd>
-        </>
+    <div className="mt-3 space-y-4">
+      <dl className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1.5 text-sm">
+        {repo && (
+          <>
+            <dt className="text-zinc-500">Repo</dt>
+            <dd className="text-zinc-900">
+              {repo}
+              {typeof number === "number" ? `#${number}` : ""}
+            </dd>
+          </>
+        )}
+        {author && (
+          <>
+            <dt className="text-zinc-500">Author</dt>
+            <dd className="text-zinc-900">@{author}</dd>
+          </>
+        )}
+        <dt className="text-zinc-500">Status</dt>
+        <dd className="text-zinc-900">
+          {draft
+            ? "Draft"
+            : signal.requires_action
+              ? "Awaiting your action"
+              : "Tracking"}
+        </dd>
+      </dl>
+      {repo && typeof number === "number" && !draft && (
+        <PrReviewActions repo={repo} number={number} />
       )}
-      {author && (
-        <>
-          <dt className="text-zinc-500">Author</dt>
-          <dd className="text-zinc-900">@{author}</dd>
-        </>
+    </div>
+  );
+}
+
+type PrReviewEvent = "APPROVE" | "REQUEST_CHANGES" | "COMMENT";
+
+type PrReviewSubmit = (params: {
+  repo: string;
+  number: number;
+  event: PrReviewEvent;
+  body?: string;
+}) => Promise<{ ok: boolean; error?: string; needs_reauth?: boolean }>;
+
+const defaultPrReviewSubmit: PrReviewSubmit = async (params) =>
+  (await apiFetch("/api/pr/review", {
+    method: "POST",
+    body: params,
+  })) as { ok: boolean; error?: string; needs_reauth?: boolean };
+
+export function PrReviewActions({
+  repo,
+  number,
+  submit = defaultPrReviewSubmit,
+}: {
+  repo: string;
+  number: number;
+  submit?: PrReviewSubmit;
+}) {
+  const [body, setBody] = useState("");
+  const [pending, setPending] = useState<PrReviewEvent | null>(null);
+  const [status, setStatus] = useState<
+    | { kind: "ok"; event: PrReviewEvent }
+    | { kind: "error"; message: string; needs_reauth?: boolean }
+    | null
+  >(null);
+
+  const run = async (event: PrReviewEvent) => {
+    setPending(event);
+    setStatus(null);
+    try {
+      const out = await submit({ repo, number, event, body: body.trim() });
+      if (out.ok) {
+        setStatus({ kind: "ok", event });
+        setBody("");
+      } else {
+        setStatus({
+          kind: "error",
+          message: out.error ?? "review failed",
+          needs_reauth: out.needs_reauth,
+        });
+      }
+    } catch (e) {
+      setStatus({
+        kind: "error",
+        message: e instanceof Error ? e.message : "review failed",
+      });
+    } finally {
+      setPending(null);
+    }
+  };
+
+  return (
+    <section
+      aria-label="PR review actions"
+      className="space-y-2 rounded border border-zinc-200 bg-zinc-50 p-3"
+    >
+      <textarea
+        value={body}
+        onChange={(e) => setBody(e.target.value)}
+        placeholder="Leave a comment (required for Request changes / Comment)"
+        aria-label="Review comment"
+        rows={3}
+        className="w-full resize-y rounded border border-zinc-200 bg-white px-2 py-1.5 text-sm text-zinc-900 outline-none focus:border-zinc-400"
+      />
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={() => run("APPROVE")}
+          disabled={pending !== null}
+          className="rounded bg-emerald-600 px-3 py-1.5 text-sm text-white hover:bg-emerald-700 disabled:opacity-60"
+        >
+          {pending === "APPROVE" ? "Approving…" : "Approve"}
+        </button>
+        <button
+          type="button"
+          onClick={() => run("REQUEST_CHANGES")}
+          disabled={pending !== null || body.trim().length === 0}
+          className="rounded bg-rose-600 px-3 py-1.5 text-sm text-white hover:bg-rose-700 disabled:opacity-60"
+        >
+          {pending === "REQUEST_CHANGES" ? "Sending…" : "Request changes"}
+        </button>
+        <button
+          type="button"
+          onClick={() => run("COMMENT")}
+          disabled={pending !== null || body.trim().length === 0}
+          className="rounded border border-zinc-300 bg-white px-3 py-1.5 text-sm text-zinc-800 hover:bg-zinc-100 disabled:opacity-60"
+        >
+          {pending === "COMMENT" ? "Sending…" : "Comment"}
+        </button>
+      </div>
+      {status?.kind === "ok" && (
+        <output className="block text-xs text-emerald-700">
+          {status.event === "APPROVE"
+            ? "Approved."
+            : status.event === "REQUEST_CHANGES"
+              ? "Changes requested."
+              : "Comment posted."}
+        </output>
       )}
-      <dt className="text-zinc-500">Status</dt>
-      <dd className="text-zinc-900">
-        {draft
-          ? "Draft"
-          : signal.requires_action
-            ? "Awaiting your action"
-            : "Tracking"}
-      </dd>
-    </dl>
+      {status?.kind === "error" && (
+        <p role="alert" className="text-xs text-rose-700">
+          {status.message}
+          {status.needs_reauth && (
+            <>
+              {" "}
+              <a href="/settings" className="underline">
+                Reauthorize GitHub
+              </a>
+              .
+            </>
+          )}
+        </p>
+      )}
+    </section>
   );
 }
 
