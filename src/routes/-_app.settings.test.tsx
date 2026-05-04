@@ -1,6 +1,10 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { AiProviderPanel, NotificationsPanel } from "#/routes/_app.settings";
+import {
+  AiProviderPanel,
+  AiSafeguardsPanel,
+  NotificationsPanel,
+} from "#/routes/_app.settings";
 
 describe("NotificationsPanel", () => {
   it("loads the current alert channels and reflects them in the toggle", async () => {
@@ -193,6 +197,133 @@ describe("AiProviderPanel", () => {
     await waitFor(() =>
       expect(screen.getByRole("status").textContent).toMatch(
         /401 unauthorized/i,
+      ),
+    );
+  });
+});
+
+describe("AiSafeguardsPanel", () => {
+  const baseView = {
+    provider: "openai" as const,
+    default_model: "gpt-4o",
+    base_url: null,
+    has_api_key: true,
+    last_validated_at: null,
+    monthly_budget_usd: 25,
+    fallback_model: "gpt-4o-mini",
+    privacy_mode: false,
+    redact_patterns: [],
+    ai_disabled: false,
+    month_spent_usd: 5,
+  };
+
+  it("renders spend / budget and shows the green bar below 80%", async () => {
+    render(<AiSafeguardsPanel loader={async () => baseView} />);
+    await waitFor(() =>
+      expect(screen.getByText(/\$5\.00 of \$25\.00/)).toBeTruthy(),
+    );
+    // No fallback or budget-reached banner below 80%.
+    expect(screen.queryByText(/running on fallback/i)).toBeNull();
+    expect(screen.queryByText(/budget reached/i)).toBeNull();
+  });
+
+  it("shows the 'fallback model' banner at ≥80% of budget", async () => {
+    render(
+      <AiSafeguardsPanel
+        loader={async () => ({ ...baseView, month_spent_usd: 22 })}
+      />,
+    );
+    await waitFor(() =>
+      expect(screen.getByText(/running on fallback model/i)).toBeTruthy(),
+    );
+    expect(screen.queryByText(/budget reached/i)).toBeNull();
+  });
+
+  it("shows the 'AI disabled — monthly budget reached' banner at 100%", async () => {
+    render(
+      <AiSafeguardsPanel
+        loader={async () => ({ ...baseView, month_spent_usd: 30 })}
+      />,
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByText(/ai disabled — monthly budget reached/i),
+      ).toBeTruthy(),
+    );
+  });
+
+  it("saves the budget + fallback through the saver", async () => {
+    const saver = vi.fn(async () => baseView);
+    render(<AiSafeguardsPanel loader={async () => baseView} saver={saver} />);
+    const budgetInput = (await screen.findByLabelText(
+      /monthly budget/i,
+    )) as HTMLInputElement;
+    fireEvent.change(budgetInput, { target: { value: "50" } });
+    const fallbackInput = screen.getByLabelText(
+      /fallback model/i,
+    ) as HTMLInputElement;
+    fireEvent.change(fallbackInput, { target: { value: "gpt-4o-mini" } });
+    fireEvent.click(screen.getByRole("button", { name: /save budget/i }));
+    await waitFor(() =>
+      expect(saver).toHaveBeenCalledWith(
+        expect.objectContaining({
+          provider: "openai",
+          monthly_budget_usd: 50,
+          fallback_model: "gpt-4o-mini",
+        }),
+      ),
+    );
+  });
+
+  it("toggles privacy mode through the saver", async () => {
+    const saver = vi.fn(async () => ({ ...baseView, privacy_mode: true }));
+    render(<AiSafeguardsPanel loader={async () => baseView} saver={saver} />);
+    const toggle = (await screen.findByLabelText(
+      /redact sensitive content/i,
+    )) as HTMLInputElement;
+    fireEvent.click(toggle);
+    await waitFor(() =>
+      expect(saver).toHaveBeenCalledWith(
+        expect.objectContaining({
+          provider: "openai",
+          privacy_mode: true,
+        }),
+      ),
+    );
+  });
+
+  it("toggles 'Disable AI' through the saver", async () => {
+    const saver = vi.fn(async () => ({ ...baseView, ai_disabled: true }));
+    render(<AiSafeguardsPanel loader={async () => baseView} saver={saver} />);
+    const toggle = (await screen.findByLabelText(
+      /disable ai on this account/i,
+    )) as HTMLInputElement;
+    fireEvent.click(toggle);
+    await waitFor(() =>
+      expect(saver).toHaveBeenCalledWith(
+        expect.objectContaining({
+          provider: "openai",
+          ai_disabled: true,
+        }),
+      ),
+    );
+  });
+
+  it("saves redact patterns parsed line-by-line", async () => {
+    const saver = vi.fn(async () => baseView);
+    render(<AiSafeguardsPanel loader={async () => baseView} saver={saver} />);
+    const textarea = (await screen.findByLabelText(
+      /custom redaction patterns/i,
+    )) as HTMLTextAreaElement;
+    fireEvent.change(textarea, {
+      target: { value: "acme-[a-z]+\n\n  secret  " },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /save patterns/i }));
+    await waitFor(() =>
+      expect(saver).toHaveBeenCalledWith(
+        expect.objectContaining({
+          redact_patterns: ["acme-[a-z]+", "secret"],
+        }),
       ),
     );
   });

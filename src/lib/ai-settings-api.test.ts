@@ -9,10 +9,27 @@ import {
 
 const SECRET = "deployment-key-secret-32bytes-or-so";
 
-function memoryStore(initial: AiSettingsRow | null = null): AiSettingsStore & {
-  rows: AiSettingsRow | null;
-} {
-  let rows: AiSettingsRow | null = initial;
+const ROW_DEFAULTS: AiSettingsRow = {
+  provider: null,
+  model: null,
+  api_key: null,
+  base_url: null,
+  last_validated_at: null,
+  monthly_budget_usd: 25,
+  fallback_model: null,
+  privacy_mode: false,
+  redact_patterns: [],
+  ai_disabled: false,
+};
+
+function row(overrides: Partial<AiSettingsRow>): AiSettingsRow {
+  return { ...ROW_DEFAULTS, ...overrides };
+}
+
+function memoryStore(
+  initial?: Partial<AiSettingsRow>,
+): AiSettingsStore & { rows: AiSettingsRow | null } {
+  let rows: AiSettingsRow | null = initial ? row(initial) : null;
   return {
     get rows() {
       return rows;
@@ -20,11 +37,8 @@ function memoryStore(initial: AiSettingsRow | null = null): AiSettingsStore & {
     load: async () => rows,
     save: async (patch) => {
       const merged: AiSettingsRow = {
-        provider: rows?.provider ?? null,
-        model: rows?.model ?? null,
-        api_key: rows?.api_key ?? null,
-        base_url: rows?.base_url ?? null,
-        last_validated_at: rows?.last_validated_at ?? null,
+        ...ROW_DEFAULTS,
+        ...(rows ?? {}),
         ...patch,
       };
       rows = merged;
@@ -47,12 +61,17 @@ describe("ai-settings-api", () => {
       keySecret: SECRET,
       fetch: vi.fn() as unknown as typeof fetch,
     });
-    expect(view).toEqual({
+    expect(view).toMatchObject({
       provider: "openai",
       default_model: "gpt-4o-mini",
       base_url: null,
       has_api_key: true,
       last_validated_at: "2026-05-04T12:00:00Z",
+      monthly_budget_usd: 25,
+      privacy_mode: false,
+      ai_disabled: false,
+      redact_patterns: [],
+      month_spent_usd: 0,
     });
   });
 
@@ -204,5 +223,65 @@ describe("ai-settings-api", () => {
       fetch: fetchMock,
     });
     expect(out).toEqual({ ok: true, model: "llama3" });
+  });
+
+  it("putAiSettings: persists budget + fallback + privacy + redact_patterns + ai_disabled", async () => {
+    const store = memoryStore({
+      provider: "openai",
+      model: "gpt-4o-mini",
+    });
+    const out = await putAiSettings(
+      {
+        provider: "openai",
+        default_model: "gpt-4o-mini",
+        monthly_budget_usd: 50,
+        fallback_model: "gpt-4o-mini",
+        privacy_mode: true,
+        redact_patterns: ["acme-[a-z]+", "  ", "secret"],
+        ai_disabled: false,
+      },
+      { store, keySecret: SECRET, fetch: vi.fn() as unknown as typeof fetch },
+    );
+    expect(out.ok).toBe(true);
+    expect(store.rows?.monthly_budget_usd).toBe(50);
+    expect(store.rows?.fallback_model).toBe("gpt-4o-mini");
+    expect(store.rows?.privacy_mode).toBe(true);
+    expect(store.rows?.redact_patterns).toEqual(["acme-[a-z]+", "secret"]);
+    expect(store.rows?.ai_disabled).toBe(false);
+  });
+
+  it("putAiSettings: rejects negative budget", async () => {
+    const store = memoryStore({ provider: "openai", model: "gpt-4o-mini" });
+    const out = await putAiSettings(
+      { provider: "openai", monthly_budget_usd: -1 },
+      { store, keySecret: SECRET, fetch: vi.fn() as unknown as typeof fetch },
+    );
+    expect(out).toEqual({
+      ok: false,
+      error: "monthly_budget_usd must be a non-negative number",
+    });
+  });
+
+  it("getAiSettings: includes month_spent_usd from the usage store", async () => {
+    const store = memoryStore({ provider: "openai", model: "gpt-4o-mini" });
+    const usageStore = {
+      from: () => ({
+        select: () => ({
+          gte: () => ({
+            lt: async () => ({
+              data: [{ cost_usd: 1.25 }, { cost_usd: 0.5 }],
+              error: null,
+            }),
+          }),
+        }),
+      }),
+    };
+    const view = await getAiSettings({
+      store,
+      usageStore,
+      keySecret: SECRET,
+      fetch: vi.fn() as unknown as typeof fetch,
+    });
+    expect(view.month_spent_usd).toBeCloseTo(1.75, 4);
   });
 });

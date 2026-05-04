@@ -392,12 +392,16 @@ async function loadFocusTokens(
   return { google: find("google"), slack: find("slack") };
 }
 
+const AI_SETTINGS_COLUMNS =
+  "provider, model, api_key, base_url, last_validated_at, " +
+  "monthly_budget_usd, fallback_model, privacy_mode, redact_patterns, ai_disabled";
+
 function aiSettingsStore(service: SupabaseService): AiSettingsStore {
   return {
     load: async () => {
       const { data, error } = await service
         .from("ai_settings")
-        .select("provider, model, api_key, base_url, last_validated_at")
+        .select(AI_SETTINGS_COLUMNS)
         .eq("id", true)
         .maybeSingle();
       if (error) throw new Error(error.message);
@@ -411,7 +415,7 @@ function aiSettingsStore(service: SupabaseService): AiSettingsStore {
           updated_at: new Date().toISOString(),
         })
         .eq("id", true)
-        .select("provider, model, api_key, base_url, last_validated_at")
+        .select(AI_SETTINGS_COLUMNS)
         .single();
       if (error) throw new Error(error.message);
       return data as AiSettingsRow;
@@ -422,6 +426,7 @@ function aiSettingsStore(service: SupabaseService): AiSettingsStore {
 function aiDeps(service: SupabaseService, env: WorkerEnv) {
   return {
     store: aiSettingsStore(service),
+    usageStore: service,
     keySecret: env.AI_KEY_SECRET,
     fetch: (i: RequestInfo | URL, init?: RequestInit) => fetch(i, init),
   };

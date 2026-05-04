@@ -25,6 +25,7 @@ function SettingsPage() {
 
       <NotificationsPanel />
       <AiProviderPanel />
+      <AiSafeguardsPanel />
     </section>
   );
 }
@@ -185,6 +186,15 @@ type AiSettingsView = {
   base_url: string | null;
   has_api_key: boolean;
   last_validated_at: string | null;
+  // Budget meter + privacy redactor fields. Optional so older fixtures
+  // (and the initial pre-load empty state) can omit them; the UI falls
+  // back to sensible defaults below.
+  monthly_budget_usd?: number;
+  fallback_model?: string | null;
+  privacy_mode?: boolean;
+  redact_patterns?: string[];
+  ai_disabled?: boolean;
+  month_spent_usd?: number;
 };
 
 type AiPutBody = {
@@ -192,6 +202,11 @@ type AiPutBody = {
   default_model?: string;
   base_url?: string;
   api_key?: string;
+  monthly_budget_usd?: number;
+  fallback_model?: string | null;
+  privacy_mode?: boolean;
+  redact_patterns?: string[];
+  ai_disabled?: boolean;
 };
 
 const AI_PROVIDERS: Array<{
@@ -476,6 +491,268 @@ export function AiProviderPanel({
           )}
         </div>
       )}
+    </section>
+  );
+}
+
+export function AiSafeguardsPanel({
+  loader,
+  saver,
+}: {
+  loader?: () => Promise<AiSettingsView>;
+  saver?: (body: AiPutBody) => Promise<AiSettingsView>;
+} = {}) {
+  const [view, setView] = useState<AiSettingsView | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [draftBudget, setDraftBudget] = useState("");
+  const [draftFallback, setDraftFallback] = useState("");
+  const [draftPatterns, setDraftPatterns] = useState("");
+
+  const load = useMemo(
+    () =>
+      loader ?? (() => apiFetch("/api/ai/settings") as Promise<AiSettingsView>),
+    [loader],
+  );
+  const save = useMemo(
+    () =>
+      saver ??
+      ((body: AiPutBody) =>
+        apiFetch("/api/ai/settings", {
+          method: "PUT",
+          body,
+        }) as Promise<AiSettingsView>),
+    [saver],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    load()
+      .then((v) => {
+        if (cancelled) return;
+        setView(v);
+        setDraftBudget(String(v.monthly_budget_usd ?? 25));
+        setDraftFallback(v.fallback_model ?? "");
+        setDraftPatterns((v.redact_patterns ?? []).join("\n"));
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        setError(e instanceof Error ? e.message : "failed to load");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [load]);
+
+  const persist = useCallback(
+    async (patch: Partial<AiPutBody>) => {
+      if (!view?.provider) return;
+      setBusy(true);
+      try {
+        const next = await save({ provider: view.provider, ...patch });
+        setView(next);
+        setError(null);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "save failed");
+      } finally {
+        setBusy(false);
+      }
+    },
+    [save, view?.provider],
+  );
+
+  const saveBudget = useCallback(async () => {
+    const n = Number(draftBudget);
+    if (!Number.isFinite(n) || n < 0) {
+      setError("Budget must be a non-negative number.");
+      return;
+    }
+    await persist({
+      monthly_budget_usd: n,
+      fallback_model: draftFallback || null,
+    });
+  }, [draftBudget, draftFallback, persist]);
+
+  const savePatterns = useCallback(async () => {
+    const patterns = draftPatterns
+      .split("\n")
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+    await persist({ redact_patterns: patterns });
+  }, [draftPatterns, persist]);
+
+  const togglePrivacy = useCallback(async () => {
+    if (!view) return;
+    await persist({ privacy_mode: !view.privacy_mode });
+  }, [persist, view]);
+
+  const toggleDisabled = useCallback(async () => {
+    if (!view) return;
+    await persist({ ai_disabled: !view.ai_disabled });
+  }, [persist, view]);
+
+  if (view == null && !error) {
+    return (
+      <section
+        aria-label="AI safeguards"
+        className="mt-8 rounded border border-zinc-200 bg-white p-5"
+      >
+        <h2 className="text-base font-semibold text-zinc-900">AI safeguards</h2>
+        <p className="mt-3 text-sm text-zinc-500">Loading…</p>
+      </section>
+    );
+  }
+
+  const budget = view?.monthly_budget_usd ?? 25;
+  const spent = view?.month_spent_usd ?? 0;
+  const ratio = budget > 0 ? spent / budget : 0;
+  const overFallback = ratio >= 0.8;
+  const overBudget = ratio >= 1;
+  const pctClass = overBudget
+    ? "bg-red-500"
+    : overFallback
+      ? "bg-amber-500"
+      : "bg-emerald-500";
+
+  return (
+    <section
+      aria-label="AI safeguards"
+      className="mt-8 rounded border border-zinc-200 bg-white p-5"
+    >
+      <h2 className="text-base font-semibold text-zinc-900">AI safeguards</h2>
+      <p className="mt-1 text-sm text-zinc-500">
+        Caps cost and keeps sensitive content out of the model provider.
+      </p>
+
+      {error && (
+        <p className="mt-3 rounded border border-red-200 bg-red-50 p-2 text-sm text-red-700">
+          {error}
+        </p>
+      )}
+
+      <div className="mt-4 space-y-6">
+        <div>
+          <div className="flex items-baseline justify-between">
+            <span className="text-sm font-medium text-zinc-900">
+              Monthly spend
+            </span>
+            <span className="text-sm text-zinc-700">
+              ${spent.toFixed(2)} of ${budget.toFixed(2)}
+            </span>
+          </div>
+          <div className="mt-2 h-2 w-full overflow-hidden rounded bg-zinc-100">
+            <div
+              className={`h-full ${pctClass}`}
+              style={{ width: `${Math.min(100, Math.round(ratio * 100))}%` }}
+            />
+          </div>
+          {overBudget && (
+            <p className="mt-2 text-sm text-red-700">
+              AI disabled — monthly budget reached.
+            </p>
+          )}
+          {overFallback && !overBudget && (
+            <p className="mt-2 text-sm text-amber-700">
+              Running on fallback model (≥80% of budget spent).
+            </p>
+          )}
+        </div>
+
+        <label className="block text-sm">
+          <span className="block font-medium text-zinc-900">
+            Monthly budget (USD)
+          </span>
+          <input
+            type="number"
+            min="0"
+            step="0.5"
+            value={draftBudget}
+            onChange={(e) => setDraftBudget(e.target.value)}
+            className="mt-1 w-40 rounded border border-zinc-200 px-2 py-1.5 text-sm"
+            disabled={busy}
+          />
+        </label>
+
+        <label className="block text-sm">
+          <span className="block font-medium text-zinc-900">
+            Fallback model
+          </span>
+          <input
+            type="text"
+            value={draftFallback}
+            onChange={(e) => setDraftFallback(e.target.value)}
+            placeholder="e.g. gpt-4o-mini"
+            className="mt-1 w-full rounded border border-zinc-200 px-2 py-1.5 text-sm"
+            disabled={busy}
+          />
+          <span className="mt-1 block text-xs text-zinc-500">
+            Used in place of your default model once 80% of the budget has been
+            spent.
+          </span>
+        </label>
+
+        <button
+          type="button"
+          onClick={saveBudget}
+          disabled={busy || !view?.provider}
+          className="rounded border border-zinc-900 bg-zinc-900 px-3 py-1.5 text-sm text-white hover:bg-zinc-800 disabled:opacity-50"
+        >
+          Save budget
+        </button>
+
+        <label className="flex items-center gap-3 border-t border-zinc-100 pt-4 text-sm">
+          <input
+            type="checkbox"
+            checked={!!view?.privacy_mode}
+            onChange={togglePrivacy}
+            disabled={busy}
+          />
+          <span>
+            <strong className="font-medium">Redact sensitive content</strong>
+            <span className="ml-2 text-zinc-500">
+              Strips code blocks, secrets, paths, and PR diffs from prompts
+              before they leave the Worker.
+            </span>
+          </span>
+        </label>
+
+        <label className="block text-sm">
+          <span className="block font-medium text-zinc-900">
+            Custom redaction patterns
+          </span>
+          <textarea
+            value={draftPatterns}
+            onChange={(e) => setDraftPatterns(e.target.value)}
+            placeholder="One regex per line"
+            rows={3}
+            className="mt-1 w-full rounded border border-zinc-200 px-2 py-1.5 font-mono text-xs"
+            disabled={busy}
+          />
+          <button
+            type="button"
+            onClick={savePatterns}
+            disabled={busy || !view?.provider}
+            className="mt-2 rounded border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50 disabled:opacity-50"
+          >
+            Save patterns
+          </button>
+        </label>
+
+        <label className="flex items-center gap-3 border-t border-zinc-100 pt-4 text-sm">
+          <input
+            type="checkbox"
+            checked={!!view?.ai_disabled}
+            onChange={toggleDisabled}
+            disabled={busy}
+          />
+          <span>
+            <strong className="font-medium">Disable AI on this account</strong>
+            <span className="ml-2 text-zinc-500">
+              Skips every AI call regardless of budget or provider config.
+            </span>
+          </span>
+        </label>
+      </div>
     </section>
   );
 }
