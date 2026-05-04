@@ -14,6 +14,7 @@ import {
 } from "#/lib/oauth-exchange";
 import { pollGithubSignals } from "#/lib/provider-adapter/github";
 import { pollCalendarSignals } from "#/lib/provider-adapter/google-calendar";
+import { pollJiraSignals } from "#/lib/provider-adapter/jira";
 import { pollLinearSignals } from "#/lib/provider-adapter/linear";
 import type { SupabaseLike } from "#/lib/signal-store";
 import { upsertSignal } from "#/lib/signal-store";
@@ -110,6 +111,15 @@ async function pollOne(
 
   if (account.provider === "linear") {
     const signals = await pollLinearSignals(
+      account.access_token,
+      async (url, init) => deps.fetch(url, init),
+    );
+    for (const sig of signals) await upsertSignal(deps.store, sig, { rules });
+    return signals.length;
+  }
+
+  if (account.provider === "jira") {
+    const signals = await pollJiraSignals(
       account.access_token,
       async (url, init) => deps.fetch(url, init),
     );

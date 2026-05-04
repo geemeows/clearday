@@ -218,3 +218,51 @@ describe("exchangeCode — linear", () => {
     ).rejects.toThrow(ExchangeError);
   });
 });
+
+describe("exchangeCode — jira", () => {
+  const jiraEnv: ExchangeEnv = {
+    ...env,
+    JIRA_CLIENT_ID: "atl-id",
+    JIRA_CLIENT_SECRET: "atl-secret",
+  };
+
+  it("posts a JSON body to atlassian's token endpoint and normalizes the response", async () => {
+    const fetchImpl: FetchLike = async (url, init) => {
+      expect(url).toBe("https://auth.atlassian.com/oauth/token");
+      expect(init?.headers["content-type"]).toBe("application/json");
+      const body = JSON.parse(init?.body ?? "{}") as Record<string, unknown>;
+      expect(body.client_id).toBe("atl-id");
+      expect(body.client_secret).toBe("atl-secret");
+      expect(body.code).toBe("c");
+      expect(body.grant_type).toBe("authorization_code");
+      expect(body.redirect_uri).toBe("https://auth.example.com/callback/jira");
+      return okJson({
+        access_token: "atl_access",
+        refresh_token: "atl_rt",
+        expires_in: 3600,
+        scope: "read:jira-work offline_access",
+      });
+    };
+    const record = await exchangeCode("jira", "c", jiraEnv, fetchImpl);
+    expect(record.provider).toBe("jira");
+    expect(record.access_token).toBe("atl_access");
+    expect(record.refresh_token).toBe("atl_rt");
+    expect(record.scopes).toEqual(["read:jira-work", "offline_access"]);
+    expect(record.expires_at).not.toBeNull();
+  });
+
+  it("throws when JIRA_CLIENT_ID is not configured", async () => {
+    const fetchImpl: FetchLike = async () => okJson({});
+    await expect(
+      exchangeCode("jira", "c", env, fetchImpl),
+    ).rejects.toBeInstanceOf(ExchangeError);
+  });
+
+  it("throws when jira returns an error body", async () => {
+    const fetchImpl: FetchLike = async () =>
+      okJson({ error: "invalid_grant" }, 400);
+    await expect(exchangeCode("jira", "c", jiraEnv, fetchImpl)).rejects.toThrow(
+      ExchangeError,
+    );
+  });
+});

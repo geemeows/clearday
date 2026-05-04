@@ -165,7 +165,7 @@ describe("handleSources", () => {
     const body = (await res.json()) as {
       sources: Array<{ provider: string; status: string }>;
     };
-    expect(body.sources).toHaveLength(4);
+    expect(body.sources).toHaveLength(5);
     const map = Object.fromEntries(
       body.sources.map((s) => [s.provider, s.status]),
     );
@@ -173,5 +173,6 @@ describe("handleSources", () => {
     expect(map.google).toBe("disconnected");
     expect(map.slack).toBe("disconnected");
     expect(map.linear).toBe("disconnected");
+    expect(map.jira).toBe("disconnected");
   });
 });

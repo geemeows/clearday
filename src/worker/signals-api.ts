@@ -23,7 +23,13 @@ const KIND_BY_FILTER: Record<string, SignalKind[]> = {
   ],
 };
 
-const PROVIDERS: SignalProvider[] = ["github", "google", "slack", "linear"];
+const PROVIDERS: SignalProvider[] = [
+  "github",
+  "google",
+  "slack",
+  "linear",
+  "jira",
+];
 
 export async function handleListSignals(
   url: URL,

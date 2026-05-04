@@ -214,6 +214,72 @@ describe("runScheduledPoll", () => {
     expect(call[1].headers.authorization).toBe("Bearer lin_oauth_abc");
   });
 
+  it("polls jira accessible-resources then per-cloud search and upserts ticket Signals", async () => {
+    const store = makeStore();
+    const fetchImpl = vi.fn(async (url: string) => {
+      if (
+        url === "https://api.atlassian.com/oauth/token/accessible-resources"
+      ) {
+        return new Response(
+          JSON.stringify([
+            {
+              id: "cloud-1",
+              name: "Acme",
+              url: "https://acme.atlassian.net",
+            },
+          ]),
+          { status: 200 },
+        );
+      }
+      if (url.includes("/ex/jira/cloud-1/")) {
+        return new Response(
+          JSON.stringify({
+            issues: [
+              {
+                id: "10001",
+                key: "ENG-42",
+                fields: {
+                  summary: "Wire orchestrator for jira",
+                  created: "2026-05-01T10:00:00Z",
+                  status: {
+                    name: "To Do",
+                    statusCategory: { key: "new" },
+                  },
+                  priority: { name: "High" },
+                  assignee: { displayName: "Alice" },
+                  project: { key: "ENG" },
+                  issuetype: { name: "Task" },
+                },
+              },
+            ],
+          }),
+          { status: 200 },
+        );
+      }
+      throw new Error(`unexpected url: ${url}`);
+    });
+    const deps: OrchestratorDeps = {
+      loadAccounts: async () => [
+        {
+          provider: "jira",
+          access_token: "atl_oauth_abc",
+          refresh_token: null,
+          expires_at: null,
+        },
+      ],
+      store: store.client,
+      fetch: fetchImpl as unknown as typeof fetch,
+    };
+    const reports = await runScheduledPoll(deps);
+    expect(reports).toEqual([{ provider: "jira", upserted: 1 }]);
+    expect(store.upsert).toHaveBeenCalledTimes(1);
+    const firstCall = fetchImpl.mock.calls[0] as unknown as [
+      string,
+      { headers: Record<string, string> },
+    ];
+    expect(firstCall[1].headers.authorization).toBe("Bearer atl_oauth_abc");
+  });
+
   it("refreshes an expired google token, persists it, and then polls", async () => {
     const store = makeStore();
     const saveRefreshedToken = vi.fn(async () => {});

@@ -4,7 +4,7 @@
 // the state, calls the matching provider exchange, and returns a normalized
 // token record for persistence.
 
-export type Provider = "github" | "google" | "slack" | "linear";
+export type Provider = "github" | "google" | "slack" | "linear" | "jira";
 
 export type ExchangeEnv = {
   GITHUB_CLIENT_ID: string;
@@ -15,6 +15,8 @@ export type ExchangeEnv = {
   SLACK_CLIENT_SECRET: string;
   LINEAR_CLIENT_ID?: string;
   LINEAR_CLIENT_SECRET?: string;
+  JIRA_CLIENT_ID?: string;
+  JIRA_CLIENT_SECRET?: string;
   AUTH_PROXY_URL: string;
 };
 
@@ -110,6 +112,8 @@ export async function exchangeCode(
       return exchangeSlack(code, env, fetchImpl);
     case "linear":
       return exchangeLinear(code, env, fetchImpl);
+    case "jira":
+      return exchangeJira(code, env, fetchImpl);
   }
 }
 
@@ -286,6 +290,51 @@ async function exchangeLinear(
     refresh_token: body.refresh_token ?? null,
     expires_at: expiresAtFrom(body.expires_in),
     scopes: parseScope(body.scope, ","),
+    metadata: {},
+  };
+}
+
+async function exchangeJira(
+  code: string,
+  env: ExchangeEnv,
+  fetchImpl: FetchLike,
+): Promise<TokenRecord> {
+  if (!env.JIRA_CLIENT_ID || !env.JIRA_CLIENT_SECRET) {
+    throw new ExchangeError("jira", 500, "jira client credentials missing");
+  }
+  const res = await fetchImpl("https://auth.atlassian.com/oauth/token", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      grant_type: "authorization_code",
+      client_id: env.JIRA_CLIENT_ID,
+      client_secret: env.JIRA_CLIENT_SECRET,
+      code,
+      redirect_uri: redirectUri(env, "jira"),
+    }),
+  });
+  const body = (await res.json()) as {
+    access_token?: string;
+    refresh_token?: string;
+    expires_in?: number;
+    scope?: string;
+    error?: string;
+    error_description?: string;
+  };
+  if (!res.ok || !body.access_token) {
+    throw new ExchangeError(
+      "jira",
+      res.status,
+      body.error_description || body.error || "jira exchange failed",
+    );
+  }
+  return {
+    provider: "jira",
+    account_id: null,
+    access_token: body.access_token,
+    refresh_token: body.refresh_token ?? null,
+    expires_at: expiresAtFrom(body.expires_in),
+    scopes: parseScope(body.scope, " "),
     metadata: {},
   };
 }

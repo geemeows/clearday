@@ -13,6 +13,7 @@ import {
   Slack,
   Sparkles,
   SquareKanban,
+  Trello,
 } from "lucide-react";
 import {
   type KeyboardEvent as ReactKeyboardEvent,
@@ -427,7 +428,9 @@ function ProviderBadge({ provider }: { provider: SignalProvider }) {
         ? Slack
         : provider === "linear"
           ? SquareKanban
-          : CalIcon;
+          : provider === "jira"
+            ? Trello
+            : CalIcon;
   return (
     <span
       role="img"

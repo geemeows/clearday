@@ -2,7 +2,7 @@
 // thing Clearday surfaces. Identity = (provider, kind, source_id); updates
 // upsert into the same row, never duplicate. See ADR-0002.
 
-export type SignalProvider = "github" | "google" | "slack" | "linear";
+export type SignalProvider = "github" | "google" | "slack" | "linear" | "jira";
 
 export type SignalKind =
   // GitHub PRs

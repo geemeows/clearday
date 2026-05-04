@@ -5,6 +5,7 @@ import {
   Github,
   Slack,
   SquareKanban,
+  Trello,
   Video,
   X,
 } from "lucide-react";
@@ -811,6 +812,7 @@ function openLabel(provider: SignalProvider): string {
   if (provider === "github") return "Open in GitHub";
   if (provider === "slack") return "Open in Slack";
   if (provider === "linear") return "Open in Linear";
+  if (provider === "jira") return "Open in Jira";
   return "Open in Calendar";
 }
 
@@ -822,7 +824,9 @@ function ProviderBadge({ provider }: { provider: SignalProvider }) {
         ? Slack
         : provider === "linear"
           ? SquareKanban
-          : CalIcon;
+          : provider === "jira"
+            ? Trello
+            : CalIcon;
   return (
     <span
       role="img"
@@ -882,7 +886,7 @@ function secondaryLabel(s: StoredSignal): string {
       minute: "2-digit",
     });
   }
-  if (s.provider === "linear") {
+  if (s.provider === "linear" || s.provider === "jira") {
     const identifier =
       (s.payload?.identifier as string | undefined) ?? s.source_id;
     const stateName = (s.payload?.state_name as string | undefined) ?? "";
