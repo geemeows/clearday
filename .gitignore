@@ -14,3 +14,4 @@ supabase/.branches
 __unconfig*
 todos.json
 .pnpm-store
+scripts/.afk-input.md
