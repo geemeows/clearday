@@ -10,6 +10,7 @@ import {
 } from "#/lib/ai-settings-api";
 import { sendSlackDm } from "#/lib/alert-channel/slack-dm";
 import type { AlertChannel } from "#/lib/alert-dispatcher";
+import { runAlertQueueDrain } from "#/lib/alert-queue-drain";
 import { type BriefingDeps, handleBriefingGenerate } from "#/lib/briefing-api";
 import { startFocusSession } from "#/lib/focus-session";
 import { runMeetingAlertTick } from "#/lib/meeting-alert-tick";
@@ -19,7 +20,9 @@ import { handleSlackWebhook } from "#/lib/slack-webhook";
 import {
   buildDispatcherDeps,
   dispatchUpsertedSignal,
+  loadDueQueuedAlerts,
   loadUpcomingMeetings,
+  removeQueuedAlert,
 } from "#/worker/alert-glue";
 import { runScheduledPoll } from "#/worker/cron-orchestrator";
 import {
@@ -44,8 +47,6 @@ export default {
     const url = new URL(request.url);
 
     if (url.pathname === "/webhooks/slack" && request.method === "POST") {
-      // Public endpoint by design — Slack signs the request and we verify
-      // before doing anything. No Clearday session is involved.
       const service = serviceClient(env);
       const dispatcher = buildDispatcherDeps(service, (i, init) =>
         fetch(i, init),
@@ -88,10 +89,6 @@ export default {
     }
 
     if (url.pathname === "/oauth/exchange") {
-      // Unauthenticated by design: the browser arrives here mid-redirect from
-      // the auth-proxy with no Clearday session. The signed `state` HMAC is
-      // what proves the request is part of an OAuth flow this deployment
-      // initiated.
       return handleOAuthExchange(request, env, {
         fetch: (input, init) => fetch(input, init),
         persist: persistProviderAccount(env),
@@ -99,7 +96,6 @@ export default {
     }
 
     if (!url.pathname.startsWith("/api/")) {
-      // Anything outside /api/* is served by the static SPA assets binding.
       return env_assets_fetch(env, request);
     }
 
@@ -139,26 +135,16 @@ export default {
 
     if (url.pathname === "/api/preferences") {
       if (request.method === "GET") {
-        const channels = await loadAlertChannels(service);
-        return json({ alert_channels: channels });
+        return json(await loadFullPreferences(service));
       }
       if (request.method === "PUT") {
-        let body: { alert_channels?: unknown };
+        let body: PreferencesPutBody;
         try {
-          body = (await request.json()) as { alert_channels?: unknown };
+          body = (await request.json()) as PreferencesPutBody;
         } catch {
           return json({ error: "invalid json" }, 400);
         }
-        const channels = sanitizeChannels(body.alert_channels);
-        const { error } = await service
-          .from("user_preferences")
-          .update({
-            alert_channels: channels,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", true);
-        if (error) return json({ error: error.message }, 500);
-        return json({ alert_channels: channels });
+        return await handlePreferencesPut(body, service);
       }
     }
 
@@ -293,21 +279,112 @@ export default {
           console.error("[cron] meeting-alert tick failed", err);
         }),
     );
+
+    ctx.waitUntil(
+      runAlertQueueDrain({
+        loadDue: (now) => loadDueQueuedAlerts(service, now),
+        removeQueued: (signalId, threshold) =>
+          removeQueuedAlert(service, signalId, threshold),
+        dispatcher,
+      })
+        .then((report) => {
+          for (const d of report.delivered) {
+            console.log(
+              `[cron] queue-drain ${d.signalId}: fired=${d.fired.join(",")}`,
+            );
+          }
+        })
+        .catch((err) => {
+          console.error("[cron] queue-drain failed", err);
+        }),
+    );
   },
 } satisfies ExportedHandler<WorkerEnv>;
 
-const KNOWN_CHANNELS: AlertChannel[] = ["slack_dm"];
+const KNOWN_CHANNELS: AlertChannel[] = [
+  "slack_dm",
+  "web_push",
+  "email",
+  "desktop",
+];
 
-async function loadAlertChannels(service: SupabaseService): Promise<string[]> {
+const PREFERENCES_COLUMNS =
+  "alert_channels, notification_matrix, quiet_hours_v2, focus_block";
+
+type PreferencesPutBody = {
+  alert_channels?: unknown;
+  notification_matrix?: unknown;
+  quiet_hours_v2?: unknown;
+  focus_block?: unknown;
+};
+
+async function loadFullPreferences(service: SupabaseService): Promise<{
+  alert_channels: string[];
+  notification_matrix: Record<string, string[]>;
+  quiet_hours_v2: Record<string, unknown>;
+  focus_block: Record<string, unknown>;
+}> {
   const { data, error } = await service
     .from("user_preferences")
-    .select("alert_channels")
+    .select(PREFERENCES_COLUMNS)
     .eq("id", true)
     .maybeSingle();
   if (error) throw new Error(error.message);
-  return ((data?.alert_channels ?? []) as string[]).filter((c) =>
-    (KNOWN_CHANNELS as string[]).includes(c),
-  );
+  const row = (data ?? {}) as {
+    alert_channels?: string[];
+    notification_matrix?: Record<string, string[]>;
+    quiet_hours_v2?: Record<string, unknown>;
+    focus_block?: Record<string, unknown>;
+  };
+  return {
+    alert_channels: (row.alert_channels ?? []).filter((c) =>
+      (KNOWN_CHANNELS as string[]).includes(c),
+    ),
+    notification_matrix: row.notification_matrix ?? {},
+    quiet_hours_v2: row.quiet_hours_v2 ?? {},
+    focus_block: row.focus_block ?? {},
+  };
+}
+
+async function handlePreferencesPut(
+  body: PreferencesPutBody,
+  service: SupabaseService,
+): Promise<Response> {
+  const patch: Record<string, unknown> = {
+    updated_at: new Date().toISOString(),
+  };
+  if (body.alert_channels !== undefined) {
+    patch.alert_channels = sanitizeChannels(body.alert_channels);
+  }
+  if (body.notification_matrix !== undefined) {
+    patch.notification_matrix = sanitizeMatrixForPut(body.notification_matrix);
+  }
+  if (body.quiet_hours_v2 !== undefined) {
+    if (
+      typeof body.quiet_hours_v2 !== "object" ||
+      body.quiet_hours_v2 === null ||
+      Array.isArray(body.quiet_hours_v2)
+    ) {
+      return json({ error: "quiet_hours_v2 must be an object" }, 400);
+    }
+    patch.quiet_hours_v2 = body.quiet_hours_v2;
+  }
+  if (body.focus_block !== undefined) {
+    if (
+      typeof body.focus_block !== "object" ||
+      body.focus_block === null ||
+      Array.isArray(body.focus_block)
+    ) {
+      return json({ error: "focus_block must be an object" }, 400);
+    }
+    patch.focus_block = body.focus_block;
+  }
+  const { error } = await service
+    .from("user_preferences")
+    .update(patch)
+    .eq("id", true);
+  if (error) return json({ error: error.message }, 500);
+  return json(await loadFullPreferences(service));
 }
 
 function sanitizeChannels(input: unknown): string[] {
@@ -317,6 +394,19 @@ function sanitizeChannels(input: unknown): string[] {
     if (typeof v !== "string") continue;
     if (!(KNOWN_CHANNELS as string[]).includes(v)) continue;
     if (!out.includes(v)) out.push(v);
+  }
+  return out;
+}
+
+function sanitizeMatrixForPut(input: unknown): Record<string, string[]> {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return {};
+  const out: Record<string, string[]> = {};
+  for (const [k, v] of Object.entries(input as Record<string, unknown>)) {
+    if (!Array.isArray(v)) continue;
+    out[k] = v.filter(
+      (c): c is string =>
+        typeof c === "string" && (KNOWN_CHANNELS as string[]).includes(c),
+    );
   }
   return out;
 }
@@ -514,9 +604,6 @@ function serviceClient(env: WorkerEnv): SupabaseService {
   });
 }
 
-// Wrangler injects `env.ASSETS` (Fetcher) when an [assets] binding is
-// configured. We thread it through a helper so the worker file can be
-// loaded under Vitest where `env.ASSETS` doesn't exist.
 function env_assets_fetch(
   env: WorkerEnv,
   request: Request,

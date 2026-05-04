@@ -1,8 +1,7 @@
 // Worker-side glue between the pure alert-dispatcher / channel modules and
-// Supabase + Slack. Kept thin: the heavy logic lives in
-// src/lib/alert-dispatcher.ts and src/lib/alert-channel/*. This file just
-// loads runtime state (preferences, Slack token) and turns idempotency
-// failures into the dispatcher's `alreadyRecorded` contract.
+// Supabase + Slack. Loads runtime state (preferences, Slack token,
+// active focus block) and turns idempotency / queue inserts into the
+// dispatcher's `alreadyRecorded` / `enqueueDelivery` contracts.
 
 import { sendSlackDm } from "#/lib/alert-channel/slack-dm";
 import type {
@@ -11,9 +10,24 @@ import type {
   DispatcherDeps,
 } from "#/lib/alert-dispatcher";
 import { dispatchAlert } from "#/lib/alert-dispatcher";
+import {
+  DEFAULT_FOCUS_BLOCK,
+  DEFAULT_MATRIX,
+  DEFAULT_QUIET_HOURS,
+  type FocusBlockContext,
+  type FocusBlockSettings,
+  type NotificationMatrix,
+  type NotificationPrefs,
+  type QuietHoursWindow,
+} from "#/lib/quiet-hours";
 import type { Signal, StoredSignal } from "#/lib/signal";
 
-const KNOWN_CHANNELS: AlertChannel[] = ["slack_dm"];
+const KNOWN_CHANNELS: AlertChannel[] = [
+  "slack_dm",
+  "web_push",
+  "email",
+  "desktop",
+];
 
 // biome-ignore lint/suspicious/noExplicitAny: thin Supabase client surface
 type Service = any;
@@ -23,19 +37,8 @@ export function buildDispatcherDeps(
   fetchImpl: typeof fetch,
 ): DispatcherDeps {
   return {
-    loadPreferences: async () => {
-      const { data, error } = await service
-        .from("user_preferences")
-        .select("alert_channels")
-        .eq("id", true)
-        .maybeSingle();
-      if (error) throw new Error(error.message);
-      const raw = (data?.alert_channels ?? []) as string[];
-      const enabledChannels = raw.filter((c): c is AlertChannel =>
-        (KNOWN_CHANNELS as string[]).includes(c),
-      );
-      return { enabledChannels };
-    },
+    loadPreferences: () => loadNotificationPrefs(service),
+    loadFocusContext: () => loadFocusContext(service),
     recordIdempotency: async (signalId, threshold, channels) => {
       const { error } = await service.from("signal_alerts").insert({
         signal_id: signalId,
@@ -43,10 +46,21 @@ export function buildDispatcherDeps(
         channels,
       });
       if (!error) return { alreadyRecorded: false };
-      // Postgres unique violation is the idempotency signal.
       const code = (error as { code?: string }).code;
       if (code === "23505") return { alreadyRecorded: true };
       throw new Error(error.message);
+    },
+    enqueueDelivery: async (signalId, threshold, channels, deliverAt) => {
+      const { error } = await service.from("signal_alert_queue").upsert(
+        {
+          signal_id: signalId,
+          threshold,
+          channels,
+          deliver_at: deliverAt.toISOString(),
+        },
+        { onConflict: "signal_id,threshold" },
+      );
+      if (error) throw new Error(error.message);
     },
     channels: {
       slack_dm: async (signal: StoredSignal) => {
@@ -66,6 +80,123 @@ export function buildDispatcherDeps(
         });
       },
     },
+  };
+}
+
+async function loadNotificationPrefs(
+  service: Service,
+): Promise<NotificationPrefs> {
+  const { data, error } = await service
+    .from("user_preferences")
+    .select("alert_channels, notification_matrix, quiet_hours_v2, focus_block")
+    .eq("id", true)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  const raw = (data?.alert_channels ?? []) as string[];
+  const enabledChannels = raw.filter((c): c is AlertChannel =>
+    (KNOWN_CHANNELS as string[]).includes(c),
+  );
+  const matrix = sanitizeMatrix(data?.notification_matrix);
+  const quietHours = sanitizeQuietHours(data?.quiet_hours_v2);
+  const focusBlock = sanitizeFocusBlock(data?.focus_block);
+  return { enabledChannels, matrix, quietHours, focusBlock };
+}
+
+async function loadFocusContext(service: Service): Promise<FocusBlockContext> {
+  const nowIso = new Date().toISOString();
+  // Calendar focus events become regular meeting Signals; we mark them with
+  // payload.is_focus when ingesting (or the title contains "focus"). For v1,
+  // we look for any active meeting Signal with starts_at <= now < ends_at.
+  const { data, error } = await service
+    .from("signals")
+    .select("payload, title")
+    .eq("kind", "meeting")
+    .is("dismissed_at", null)
+    .order("source_created_at", { ascending: false })
+    .limit(50);
+  if (error) throw new Error(error.message);
+  const rows = (data ?? []) as Array<{
+    payload: Record<string, unknown> | null;
+    title: string | null;
+  }>;
+  const now = Date.parse(nowIso);
+  let endsAt: Date | null = null;
+  for (const row of rows) {
+    const startsAt = row.payload?.starts_at;
+    const endsAtRaw = row.payload?.ends_at;
+    if (typeof startsAt !== "string" || typeof endsAtRaw !== "string") continue;
+    const start = Date.parse(startsAt);
+    const end = Date.parse(endsAtRaw);
+    if (Number.isNaN(start) || Number.isNaN(end)) continue;
+    if (start > now || end <= now) continue;
+    const isFocus =
+      row.payload?.is_focus === true ||
+      (typeof row.title === "string" && /focus/i.test(row.title));
+    if (!isFocus) continue;
+    endsAt = new Date(end);
+    break;
+  }
+  return { active: endsAt !== null, endsAt };
+}
+
+function sanitizeMatrix(value: unknown): NotificationMatrix {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return DEFAULT_MATRIX;
+  }
+  const out: NotificationMatrix = {};
+  for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+    if (!Array.isArray(v)) continue;
+    const cs = v.filter(
+      (c): c is AlertChannel =>
+        typeof c === "string" && (KNOWN_CHANNELS as string[]).includes(c),
+    );
+    out[k as keyof NotificationMatrix] = cs;
+  }
+  // Merge with defaults so any kind missing from the user's row still has a
+  // sensible default. The user's explicit choices win.
+  return { ...DEFAULT_MATRIX, ...out };
+}
+
+function sanitizeQuietHours(value: unknown): QuietHoursWindow {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return DEFAULT_QUIET_HOURS;
+  }
+  const v = value as Record<string, unknown>;
+  return {
+    enabled: v.enabled === true,
+    days: Array.isArray(v.days)
+      ? v.days
+          .filter((d): d is number => typeof d === "number" && d >= 0 && d <= 6)
+          .slice(0, 7)
+      : DEFAULT_QUIET_HOURS.days,
+    start: typeof v.start === "string" ? v.start : DEFAULT_QUIET_HOURS.start,
+    end: typeof v.end === "string" ? v.end : DEFAULT_QUIET_HOURS.end,
+    utc_offset_minutes:
+      typeof v.utc_offset_minutes === "number" ? v.utc_offset_minutes : 0,
+    allow_through: Array.isArray(v.allow_through)
+      ? (v.allow_through.filter(
+          (r) => r && typeof r === "object",
+        ) as QuietHoursWindow["allow_through"])
+      : [],
+  };
+}
+
+function sanitizeFocusBlock(value: unknown): FocusBlockSettings {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return DEFAULT_FOCUS_BLOCK;
+  }
+  const v = value as Record<string, unknown>;
+  return {
+    enabled:
+      typeof v.enabled === "boolean" ? v.enabled : DEFAULT_FOCUS_BLOCK.enabled,
+    allow_mentions:
+      typeof v.allow_mentions === "boolean"
+        ? v.allow_mentions
+        : DEFAULT_FOCUS_BLOCK.allow_mentions,
+    allow_imminent_meeting_minutes:
+      typeof v.allow_imminent_meeting_minutes === "number"
+        ? v.allow_imminent_meeting_minutes
+        : DEFAULT_FOCUS_BLOCK.allow_imminent_meeting_minutes,
   };
 }
 
@@ -93,6 +224,65 @@ export async function loadUpcomingMeetings(
     .is("dismissed_at", null);
   if (error) throw new Error(error.message);
   return (data ?? []) as StoredSignal[];
+}
+
+/**
+ * Loads queued alerts due for delivery (deliver_at <= now), joining on
+ * signals so the drain caller can decide whether each row should still
+ * fire. Limit is intentionally small — the drain runs every 2 min so a
+ * single pass doesn't have to clear a backlog all at once.
+ */
+export async function loadDueQueuedAlerts(
+  service: Service,
+  now: Date,
+): Promise<
+  Array<{
+    queued: {
+      signal_id: string;
+      threshold: AlertThreshold;
+      channels: AlertChannel[];
+      deliver_at: string;
+    };
+    signal: StoredSignal | null;
+  }>
+> {
+  const { data, error } = await service
+    .from("signal_alert_queue")
+    .select("signal_id, threshold, channels, deliver_at, signals(*)")
+    .lte("deliver_at", now.toISOString())
+    .order("deliver_at", { ascending: true })
+    .limit(100);
+  if (error) throw new Error(error.message);
+  return (
+    (data ?? []) as Array<{
+      signal_id: string;
+      threshold: AlertThreshold;
+      channels: AlertChannel[];
+      deliver_at: string;
+      signals: StoredSignal | null;
+    }>
+  ).map((r) => ({
+    queued: {
+      signal_id: r.signal_id,
+      threshold: r.threshold,
+      channels: r.channels,
+      deliver_at: r.deliver_at,
+    },
+    signal: r.signals,
+  }));
+}
+
+export async function removeQueuedAlert(
+  service: Service,
+  signalId: string,
+  threshold: AlertThreshold,
+): Promise<void> {
+  const { error } = await service
+    .from("signal_alert_queue")
+    .delete()
+    .eq("signal_id", signalId)
+    .eq("threshold", threshold);
+  if (error) throw new Error(error.message);
 }
 
 async function fetchSignalRow(

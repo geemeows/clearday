@@ -1,7 +1,20 @@
 import { describe, expect, it, vi } from "vitest";
 import type { DispatcherDeps } from "#/lib/alert-dispatcher";
 import { runMeetingAlertTick } from "#/lib/meeting-alert-tick";
+import {
+  DEFAULT_FOCUS_BLOCK,
+  DEFAULT_MATRIX,
+  DEFAULT_QUIET_HOURS,
+  type NotificationPrefs,
+} from "#/lib/quiet-hours";
 import type { StoredSignal } from "#/lib/signal";
+
+const permissivePrefs: NotificationPrefs = {
+  enabledChannels: ["slack_dm"],
+  matrix: DEFAULT_MATRIX,
+  quietHours: DEFAULT_QUIET_HOURS,
+  focusBlock: DEFAULT_FOCUS_BLOCK,
+};
 
 function meeting(id: string, startsAt: string): StoredSignal {
   return {
@@ -32,8 +45,10 @@ function makeDispatcher(): {
   const record = vi.fn(async () => ({ alreadyRecorded: false }));
   return {
     deps: {
-      loadPreferences: async () => ({ enabledChannels: ["slack_dm"] }),
+      loadPreferences: async () => permissivePrefs,
+      loadFocusContext: async () => ({ active: false, endsAt: null }),
       recordIdempotency: record,
+      enqueueDelivery: async () => undefined,
       channels: { slack_dm: slack },
     },
     spies: { record, slack },
@@ -80,8 +95,10 @@ describe("runMeetingAlertTick", () => {
     const slack = vi.fn(async () => undefined);
     const record = vi.fn(async () => ({ alreadyRecorded: true }));
     const dispatcher: DispatcherDeps = {
-      loadPreferences: async () => ({ enabledChannels: ["slack_dm"] }),
+      loadPreferences: async () => permissivePrefs,
+      loadFocusContext: async () => ({ active: false, endsAt: null }),
       recordIdempotency: record,
+      enqueueDelivery: async () => undefined,
       channels: { slack_dm: slack },
     };
     const report = await runMeetingAlertTick({

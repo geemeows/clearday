@@ -3,7 +3,10 @@ import { describe, expect, it, vi } from "vitest";
 import {
   AiProviderPanel,
   AiSafeguardsPanel,
+  FocusBlockPanel,
+  NotificationMatrixPanel,
   NotificationsPanel,
+  QuietHoursPanel,
 } from "#/routes/_app.settings";
 
 describe("NotificationsPanel", () => {
@@ -323,6 +326,82 @@ describe("AiSafeguardsPanel", () => {
       expect(saver).toHaveBeenCalledWith(
         expect.objectContaining({
           redact_patterns: ["acme-[a-z]+", "secret"],
+        }),
+      ),
+    );
+  });
+});
+
+const basePrefs = {
+  alert_channels: ["slack_dm"],
+  notification_matrix: {
+    mention: ["slack_dm"],
+    meeting: ["slack_dm"],
+  },
+  quiet_hours_v2: {
+    enabled: true,
+    days: [1, 2, 3, 4, 5],
+    start: "22:00",
+    end: "08:00",
+    utc_offset_minutes: 0,
+    allow_through: [{ kind: "mention" }],
+  },
+  focus_block: {
+    enabled: true,
+    allow_mentions: true,
+    allow_imminent_meeting_minutes: 5,
+  },
+};
+
+describe("NotificationMatrixPanel", () => {
+  it("toggles a kind × channel cell and persists the new matrix", async () => {
+    const saver = vi.fn(async () => basePrefs);
+    render(
+      <NotificationMatrixPanel loader={async () => basePrefs} saver={saver} />,
+    );
+    const cell = await screen.findByLabelText("Slack mentions via Push");
+    expect((cell as HTMLInputElement).checked).toBe(false);
+    fireEvent.click(cell);
+    await waitFor(() =>
+      expect(saver).toHaveBeenCalledWith(
+        expect.objectContaining({
+          notification_matrix: expect.objectContaining({
+            mention: ["slack_dm", "web_push"],
+          }),
+        }),
+      ),
+    );
+  });
+});
+
+describe("QuietHoursPanel", () => {
+  it("toggles a day chip and persists", async () => {
+    const saver = vi.fn(async () => basePrefs);
+    render(<QuietHoursPanel loader={async () => basePrefs} saver={saver} />);
+    const sat = await screen.findByRole("button", { name: /Quiet on Sat/i });
+    fireEvent.click(sat);
+    await waitFor(() =>
+      expect(saver).toHaveBeenCalledWith(
+        expect.objectContaining({
+          quiet_hours_v2: expect.objectContaining({
+            days: expect.arrayContaining([6]),
+          }),
+        }),
+      ),
+    );
+  });
+});
+
+describe("FocusBlockPanel", () => {
+  it("toggles allow_mentions and persists", async () => {
+    const saver = vi.fn(async () => basePrefs);
+    render(<FocusBlockPanel loader={async () => basePrefs} saver={saver} />);
+    const allow = await screen.findByLabelText(/let mentions and dms through/i);
+    fireEvent.click(allow);
+    await waitFor(() =>
+      expect(saver).toHaveBeenCalledWith(
+        expect.objectContaining({
+          focus_block: expect.objectContaining({ allow_mentions: false }),
         }),
       ),
     );

@@ -24,6 +24,9 @@ function SettingsPage() {
       </button>
 
       <NotificationsPanel />
+      <NotificationMatrixPanel />
+      <QuietHoursPanel />
+      <FocusBlockPanel />
       <AiProviderPanel />
       <AiSafeguardsPanel />
     </section>
@@ -753,6 +756,487 @@ export function AiSafeguardsPanel({
           </span>
         </label>
       </div>
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Quiet hours, per-event matrix, and auto focus-block panels (issue #9). All
+// three read/write the same /api/preferences endpoint; each owns its slice
+// of the body so saves don't clobber each other.
+// ---------------------------------------------------------------------------
+
+const SIGNAL_KINDS_FOR_MATRIX: Array<{ id: string; label: string }> = [
+  { id: "meeting", label: "Meetings" },
+  { id: "mention", label: "Slack mentions" },
+  { id: "dm", label: "Direct messages" },
+  { id: "thread_reply", label: "Thread replies" },
+  { id: "pr_review_requested", label: "PR review requested" },
+  { id: "pr_authored", label: "Authored PRs" },
+  { id: "pr_assigned", label: "Assigned PRs" },
+];
+
+const MATRIX_CHANNELS: Array<{ id: string; label: string }> = [
+  { id: "slack_dm", label: "Slack" },
+  { id: "web_push", label: "Push" },
+  { id: "email", label: "Email" },
+  { id: "desktop", label: "Desktop" },
+];
+
+type PreferencesView = {
+  alert_channels: string[];
+  notification_matrix: Record<string, string[]>;
+  quiet_hours_v2: Record<string, unknown>;
+  focus_block: Record<string, unknown>;
+};
+
+type PreferencesPatch = {
+  notification_matrix?: Record<string, string[]>;
+  quiet_hours_v2?: Record<string, unknown>;
+  focus_block?: Record<string, unknown>;
+};
+
+function defaultPrefsLoader(): Promise<PreferencesView> {
+  return apiFetch("/api/preferences") as Promise<PreferencesView>;
+}
+
+function defaultPrefsSaver(patch: PreferencesPatch): Promise<PreferencesView> {
+  return apiFetch("/api/preferences", {
+    method: "PUT",
+    body: patch,
+  }) as Promise<PreferencesView>;
+}
+
+export function NotificationMatrixPanel({
+  loader,
+  saver,
+}: {
+  loader?: () => Promise<PreferencesView>;
+  saver?: (patch: PreferencesPatch) => Promise<PreferencesView>;
+} = {}) {
+  const [matrix, setMatrix] = useState<Record<string, string[]> | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const load = useMemo(() => loader ?? defaultPrefsLoader, [loader]);
+  const save = useMemo(() => saver ?? defaultPrefsSaver, [saver]);
+
+  useEffect(() => {
+    let cancelled = false;
+    load()
+      .then((view) => {
+        if (cancelled) return;
+        setMatrix(view.notification_matrix ?? {});
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        setError(e instanceof Error ? e.message : "failed to load");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [load]);
+
+  const toggle = useCallback(
+    async (kind: string, channel: string) => {
+      if (!matrix) return;
+      const cur = matrix[kind] ?? [];
+      const next = cur.includes(channel)
+        ? cur.filter((c) => c !== channel)
+        : [...cur, channel];
+      const nextMatrix = { ...matrix, [kind]: next };
+      setMatrix(nextMatrix);
+      setBusy(true);
+      try {
+        const view = await save({ notification_matrix: nextMatrix });
+        setMatrix(view.notification_matrix ?? nextMatrix);
+        setError(null);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "save failed");
+      } finally {
+        setBusy(false);
+      }
+    },
+    [matrix, save],
+  );
+
+  return (
+    <section
+      aria-label="Per-event channel matrix"
+      className="mt-8 rounded border border-zinc-200 bg-white p-5"
+    >
+      <h2 className="text-base font-semibold text-zinc-900">
+        Per-event channels
+      </h2>
+      <p className="mt-1 text-sm text-zinc-500">
+        Pick which channels fire for each kind of Signal.
+      </p>
+
+      {error && (
+        <p className="mt-3 rounded border border-red-200 bg-red-50 p-2 text-sm text-red-700">
+          {error}
+        </p>
+      )}
+
+      {matrix == null && !error && (
+        <p className="mt-3 text-sm text-zinc-500">Loading…</p>
+      )}
+
+      {matrix && (
+        <table className="mt-4 w-full text-sm">
+          <thead>
+            <tr className="text-left text-zinc-500">
+              <th className="pb-2 font-medium">Kind</th>
+              {MATRIX_CHANNELS.map((c) => (
+                <th key={c.id} className="pb-2 text-center font-medium">
+                  {c.label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {SIGNAL_KINDS_FOR_MATRIX.map((kind) => (
+              <tr key={kind.id} className="border-t border-zinc-100">
+                <td className="py-2 text-zinc-700">{kind.label}</td>
+                {MATRIX_CHANNELS.map((channel) => {
+                  const checked = (matrix[kind.id] ?? []).includes(channel.id);
+                  const ariaLabel = `${kind.label} via ${channel.label}`;
+                  return (
+                    <td key={channel.id} className="py-2 text-center">
+                      <input
+                        type="checkbox"
+                        aria-label={ariaLabel}
+                        checked={checked}
+                        onChange={() => toggle(kind.id, channel.id)}
+                        disabled={busy}
+                      />
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </section>
+  );
+}
+
+const DAYS_OF_WEEK: Array<{ id: number; label: string }> = [
+  { id: 0, label: "Sun" },
+  { id: 1, label: "Mon" },
+  { id: 2, label: "Tue" },
+  { id: 3, label: "Wed" },
+  { id: 4, label: "Thu" },
+  { id: 5, label: "Fri" },
+  { id: 6, label: "Sat" },
+];
+
+type QuietHoursState = {
+  enabled: boolean;
+  days: number[];
+  start: string;
+  end: string;
+  utc_offset_minutes: number;
+  allow_through: Array<{ kind?: string; threshold?: string; tag?: string }>;
+};
+
+function defaultQuietHoursState(raw: Record<string, unknown>): QuietHoursState {
+  const days = Array.isArray(raw.days)
+    ? raw.days.filter(
+        (d): d is number => typeof d === "number" && d >= 0 && d <= 6,
+      )
+    : [1, 2, 3, 4, 5];
+  return {
+    enabled: raw.enabled === true,
+    days,
+    start: typeof raw.start === "string" ? raw.start : "22:00",
+    end: typeof raw.end === "string" ? raw.end : "08:00",
+    utc_offset_minutes:
+      typeof raw.utc_offset_minutes === "number" ? raw.utc_offset_minutes : 0,
+    allow_through: Array.isArray(raw.allow_through)
+      ? (raw.allow_through.filter(
+          (r) => r && typeof r === "object",
+        ) as QuietHoursState["allow_through"])
+      : [{ kind: "mention" }, { kind: "dm" }],
+  };
+}
+
+export function QuietHoursPanel({
+  loader,
+  saver,
+}: {
+  loader?: () => Promise<PreferencesView>;
+  saver?: (patch: PreferencesPatch) => Promise<PreferencesView>;
+} = {}) {
+  const [state, setState] = useState<QuietHoursState | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const load = useMemo(() => loader ?? defaultPrefsLoader, [loader]);
+  const save = useMemo(() => saver ?? defaultPrefsSaver, [saver]);
+
+  useEffect(() => {
+    let cancelled = false;
+    load()
+      .then((view) => {
+        if (cancelled) return;
+        setState(defaultQuietHoursState(view.quiet_hours_v2 ?? {}));
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        setError(e instanceof Error ? e.message : "failed to load");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [load]);
+
+  const persist = useCallback(
+    async (next: QuietHoursState) => {
+      setState(next);
+      setBusy(true);
+      try {
+        await save({
+          quiet_hours_v2: next as unknown as Record<string, unknown>,
+        });
+        setError(null);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "save failed");
+      } finally {
+        setBusy(false);
+      }
+    },
+    [save],
+  );
+
+  return (
+    <section
+      aria-label="Quiet hours"
+      className="mt-8 rounded border border-zinc-200 bg-white p-5"
+    >
+      <h2 className="text-base font-semibold text-zinc-900">Quiet hours</h2>
+      <p className="mt-1 text-sm text-zinc-500">
+        Hold non-urgent alerts until the window ends. Allow-through kinds
+        deliver immediately.
+      </p>
+
+      {error && (
+        <p className="mt-3 rounded border border-red-200 bg-red-50 p-2 text-sm text-red-700">
+          {error}
+        </p>
+      )}
+
+      {state == null && !error && (
+        <p className="mt-3 text-sm text-zinc-500">Loading…</p>
+      )}
+
+      {state && (
+        <div className="mt-4 space-y-4 text-sm">
+          <label className="flex items-center gap-3">
+            <input
+              type="checkbox"
+              checked={state.enabled}
+              onChange={() => persist({ ...state, enabled: !state.enabled })}
+              disabled={busy}
+            />
+            <span>Enable quiet hours</span>
+          </label>
+
+          <div className="flex items-center gap-3">
+            <label className="flex items-center gap-2">
+              <span className="text-zinc-500">Start</span>
+              <input
+                type="time"
+                aria-label="Quiet hours start"
+                value={state.start}
+                onChange={(e) => setState({ ...state, start: e.target.value })}
+                onBlur={() => persist(state)}
+                disabled={busy || !state.enabled}
+                className="rounded border border-zinc-200 px-2 py-1"
+              />
+            </label>
+            <label className="flex items-center gap-2">
+              <span className="text-zinc-500">End</span>
+              <input
+                type="time"
+                aria-label="Quiet hours end"
+                value={state.end}
+                onChange={(e) => setState({ ...state, end: e.target.value })}
+                onBlur={() => persist(state)}
+                disabled={busy || !state.enabled}
+                className="rounded border border-zinc-200 px-2 py-1"
+              />
+            </label>
+          </div>
+
+          <div>
+            <p className="mb-2 text-zinc-500">Days</p>
+            <div className="flex flex-wrap gap-2">
+              {DAYS_OF_WEEK.map((d) => {
+                const on = state.days.includes(d.id);
+                return (
+                  <button
+                    key={d.id}
+                    type="button"
+                    aria-pressed={on}
+                    aria-label={`Quiet on ${d.label}`}
+                    onClick={() => {
+                      const days = on
+                        ? state.days.filter((x) => x !== d.id)
+                        : [...state.days, d.id].sort();
+                      persist({ ...state, days });
+                    }}
+                    disabled={busy || !state.enabled}
+                    className={`rounded border px-2 py-1 ${
+                      on
+                        ? "border-zinc-900 bg-zinc-900 text-white"
+                        : "border-zinc-200 bg-white text-zinc-700"
+                    }`}
+                  >
+                    {d.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+type FocusBlockState = {
+  enabled: boolean;
+  allow_mentions: boolean;
+  allow_imminent_meeting_minutes: number;
+};
+
+function defaultFocusState(raw: Record<string, unknown>): FocusBlockState {
+  return {
+    enabled: typeof raw.enabled === "boolean" ? raw.enabled : true,
+    allow_mentions:
+      typeof raw.allow_mentions === "boolean" ? raw.allow_mentions : true,
+    allow_imminent_meeting_minutes:
+      typeof raw.allow_imminent_meeting_minutes === "number"
+        ? raw.allow_imminent_meeting_minutes
+        : 5,
+  };
+}
+
+export function FocusBlockPanel({
+  loader,
+  saver,
+}: {
+  loader?: () => Promise<PreferencesView>;
+  saver?: (patch: PreferencesPatch) => Promise<PreferencesView>;
+} = {}) {
+  const [state, setState] = useState<FocusBlockState | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const load = useMemo(() => loader ?? defaultPrefsLoader, [loader]);
+  const save = useMemo(() => saver ?? defaultPrefsSaver, [saver]);
+
+  useEffect(() => {
+    let cancelled = false;
+    load()
+      .then((view) => {
+        if (cancelled) return;
+        setState(defaultFocusState(view.focus_block ?? {}));
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        setError(e instanceof Error ? e.message : "failed to load");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [load]);
+
+  const persist = useCallback(
+    async (next: FocusBlockState) => {
+      setState(next);
+      setBusy(true);
+      try {
+        await save({ focus_block: next as unknown as Record<string, unknown> });
+        setError(null);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "save failed");
+      } finally {
+        setBusy(false);
+      }
+    },
+    [save],
+  );
+
+  return (
+    <section
+      aria-label="Focus block auto-suppression"
+      className="mt-8 rounded border border-zinc-200 bg-white p-5"
+    >
+      <h2 className="text-base font-semibold text-zinc-900">
+        Auto focus-block
+      </h2>
+      <p className="mt-1 text-sm text-zinc-500">
+        While a calendar Focus event is active, silence everything except what
+        you allow.
+      </p>
+
+      {error && (
+        <p className="mt-3 rounded border border-red-200 bg-red-50 p-2 text-sm text-red-700">
+          {error}
+        </p>
+      )}
+
+      {state == null && !error && (
+        <p className="mt-3 text-sm text-zinc-500">Loading…</p>
+      )}
+
+      {state && (
+        <div className="mt-4 space-y-3 text-sm">
+          <label className="flex items-center gap-3">
+            <input
+              type="checkbox"
+              checked={state.enabled}
+              onChange={() => persist({ ...state, enabled: !state.enabled })}
+              disabled={busy}
+            />
+            <span>Auto-suppress alerts during focus blocks</span>
+          </label>
+          <label className="flex items-center gap-3">
+            <input
+              type="checkbox"
+              checked={state.allow_mentions}
+              onChange={() =>
+                persist({ ...state, allow_mentions: !state.allow_mentions })
+              }
+              disabled={busy || !state.enabled}
+            />
+            <span>Let mentions and DMs through</span>
+          </label>
+          <label className="flex items-center gap-3">
+            <span className="text-zinc-500">Imminent meeting window</span>
+            <input
+              type="number"
+              min={0}
+              max={60}
+              aria-label="Imminent meeting minutes"
+              value={state.allow_imminent_meeting_minutes}
+              onChange={(e) =>
+                setState({
+                  ...state,
+                  allow_imminent_meeting_minutes: Number(e.target.value) || 0,
+                })
+              }
+              onBlur={() => persist(state)}
+              disabled={busy || !state.enabled}
+              className="w-20 rounded border border-zinc-200 px-2 py-1"
+            />
+            <span className="text-zinc-500">min</span>
+          </label>
+        </div>
+      )}
     </section>
   );
 }
