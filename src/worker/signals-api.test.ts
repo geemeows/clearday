@@ -11,10 +11,11 @@ function listClient() {
   const inFn = vi.fn(() => chain);
   const is = vi.fn(() => chain);
   const ilike = vi.fn(() => chain);
-  const chain = { is, in: inFn, ilike, order, limit };
+  const or = vi.fn(() => chain);
+  const chain = { is, in: inFn, ilike, or, order, limit };
   const select = vi.fn(() => chain);
   return {
-    spies: { is, in: inFn, ilike, order, limit, select },
+    spies: { is, in: inFn, ilike, or, order, limit, select },
     client: {
       from: () => ({
         select,

@@ -2,6 +2,11 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch } from "#/lib/api-client";
 import { signOut, useAuth } from "#/lib/auth";
+import type {
+  InboxRule,
+  RuleEffect,
+  RulePredicate,
+} from "#/lib/inbox-rules-engine";
 
 export const Route = createFileRoute("/_app/settings")({
   component: SettingsPage,
@@ -29,6 +34,7 @@ function SettingsPage() {
       <FocusBlockPanel />
       <AiProviderPanel />
       <AiSafeguardsPanel />
+      <InboxRulesPanel />
     </section>
   );
 }
@@ -1238,5 +1244,467 @@ export function FocusBlockPanel({
         </div>
       )}
     </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Inbox rules panel (issue #20). Lists user-defined rules with add / delete /
+// enable / reorder. Each rule is a single predicate + single effect for v1
+// to keep the form-shape simple; the engine itself supports rule lists with
+// multiple predicates/effects for future panels.
+// ---------------------------------------------------------------------------
+
+const PREDICATE_TYPES: Array<{ id: RulePredicate["type"]; label: string }> = [
+  { id: "provider", label: "Provider is" },
+  { id: "kind", label: "Kind is" },
+  { id: "source_match", label: "Payload field equals" },
+  { id: "title_regex", label: "Title matches regex" },
+];
+
+const EFFECT_TYPES: Array<{ id: RuleEffect["type"]; label: string }> = [
+  { id: "auto_dismiss", label: "Auto-dismiss" },
+  { id: "snooze", label: "Snooze (minutes)" },
+  { id: "tag", label: "Tag" },
+];
+
+function emptyRule(): InboxRule {
+  return {
+    id:
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `rule-${Math.random().toString(36).slice(2)}`,
+    name: "",
+    enabled: true,
+    priority: 100,
+    predicates: [{ type: "kind", kind: "mention" }],
+    effects: [{ type: "auto_dismiss" }],
+  };
+}
+
+export function InboxRulesPanel({
+  loader,
+  saver,
+}: {
+  loader?: () => Promise<{ rules: InboxRule[] }>;
+  saver?: (
+    rules: InboxRule[],
+  ) => Promise<{ ok: boolean; rules?: InboxRule[]; error?: string }>;
+} = {}) {
+  const [rules, setRules] = useState<InboxRule[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const load = useMemo(
+    () =>
+      loader ??
+      (() => apiFetch("/api/inbox-rules") as Promise<{ rules: InboxRule[] }>),
+    [loader],
+  );
+  const save = useMemo(
+    () =>
+      saver ??
+      ((next: InboxRule[]) =>
+        apiFetch("/api/inbox-rules", {
+          method: "PUT",
+          body: { rules: next },
+        }) as Promise<{ ok: boolean; rules?: InboxRule[]; error?: string }>),
+    [saver],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    load()
+      .then((body) => {
+        if (cancelled) return;
+        setRules(body.rules);
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        setError(e instanceof Error ? e.message : "failed to load");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [load]);
+
+  const persist = useCallback(
+    async (next: InboxRule[]) => {
+      setRules(next);
+      setBusy(true);
+      try {
+        const out = await save(next);
+        if (!out.ok) {
+          setError(out.error ?? "save failed");
+        } else {
+          if (out.rules) setRules(out.rules);
+          setError(null);
+        }
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "save failed");
+      } finally {
+        setBusy(false);
+      }
+    },
+    [save],
+  );
+
+  const addRule = useCallback(() => {
+    if (!rules) return;
+    const next = [
+      ...rules,
+      { ...emptyRule(), priority: rules.length + 1, name: "New rule" },
+    ];
+    persist(next);
+  }, [persist, rules]);
+
+  const updateRule = useCallback(
+    (id: string, patch: Partial<InboxRule>) => {
+      if (!rules) return;
+      persist(rules.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+    },
+    [persist, rules],
+  );
+
+  const deleteRule = useCallback(
+    (id: string) => {
+      if (!rules) return;
+      persist(rules.filter((r) => r.id !== id));
+    },
+    [persist, rules],
+  );
+
+  const move = useCallback(
+    (id: string, dir: -1 | 1) => {
+      if (!rules) return;
+      const idx = rules.findIndex((r) => r.id === id);
+      const target = idx + dir;
+      if (idx < 0 || target < 0 || target >= rules.length) return;
+      const next = [...rules];
+      [next[idx], next[target]] = [next[target], next[idx]];
+      next.forEach((r, i) => {
+        r.priority = i + 1;
+      });
+      persist(next);
+    },
+    [persist, rules],
+  );
+
+  return (
+    <section
+      aria-label="Inbox rules"
+      className="mt-8 rounded border border-zinc-200 bg-white p-5"
+    >
+      <h2 className="text-base font-semibold text-zinc-900">Inbox rules</h2>
+      <p className="mt-1 text-sm text-zinc-500">
+        Auto-categorize, snooze, or dismiss Signals on write.
+      </p>
+
+      {error && (
+        <p className="mt-3 rounded border border-red-200 bg-red-50 p-2 text-sm text-red-700">
+          {error}
+        </p>
+      )}
+
+      {rules == null && !error && (
+        <p className="mt-3 text-sm text-zinc-500">Loading…</p>
+      )}
+
+      {rules && (
+        <div className="mt-4 space-y-3">
+          {rules.length === 0 && (
+            <p className="text-sm text-zinc-500">
+              No rules yet. Add one below to start shaping your inbox.
+            </p>
+          )}
+
+          {rules.map((rule, i) => (
+            <RuleRow
+              key={rule.id}
+              rule={rule}
+              busy={busy}
+              isFirst={i === 0}
+              isLast={i === rules.length - 1}
+              onChange={(patch) => updateRule(rule.id, patch)}
+              onDelete={() => deleteRule(rule.id)}
+              onMoveUp={() => move(rule.id, -1)}
+              onMoveDown={() => move(rule.id, 1)}
+            />
+          ))}
+
+          <button
+            type="button"
+            onClick={addRule}
+            disabled={busy}
+            className="rounded border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50 disabled:opacity-50"
+          >
+            Add rule
+          </button>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function RuleRow({
+  rule,
+  busy,
+  isFirst,
+  isLast,
+  onChange,
+  onDelete,
+  onMoveUp,
+  onMoveDown,
+}: {
+  rule: InboxRule;
+  busy: boolean;
+  isFirst: boolean;
+  isLast: boolean;
+  onChange: (patch: Partial<InboxRule>) => void;
+  onDelete: () => void;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
+}) {
+  const predicate = rule.predicates[0];
+  const effect = rule.effects[0];
+
+  const setPredicateType = (t: RulePredicate["type"]) => {
+    let next: RulePredicate;
+    if (t === "provider") next = { type: "provider", provider: "github" };
+    else if (t === "kind") next = { type: "kind", kind: "mention" };
+    else if (t === "source_match")
+      next = { type: "source_match", field: "author", equals: "" };
+    else next = { type: "title_regex", pattern: "" };
+    onChange({ predicates: [next] });
+  };
+
+  const setEffectType = (t: RuleEffect["type"]) => {
+    let next: RuleEffect;
+    if (t === "auto_dismiss") next = { type: "auto_dismiss" };
+    else if (t === "snooze") next = { type: "snooze", minutes: 60 };
+    else next = { type: "tag", tag: "" };
+    onChange({ effects: [next] });
+  };
+
+  return (
+    <fieldset
+      aria-label={`Rule ${rule.name || rule.id}`}
+      className="rounded border border-zinc-200 bg-zinc-50 p-3"
+    >
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          type="text"
+          aria-label="Rule name"
+          value={rule.name}
+          onChange={(e) => onChange({ name: e.target.value })}
+          placeholder="Name"
+          disabled={busy}
+          className="flex-1 rounded border border-zinc-200 bg-white px-2 py-1 text-sm"
+        />
+        <label className="flex items-center gap-1 text-xs text-zinc-600">
+          <input
+            type="checkbox"
+            checked={rule.enabled}
+            onChange={() => onChange({ enabled: !rule.enabled })}
+            disabled={busy}
+          />
+          Enabled
+        </label>
+        <button
+          type="button"
+          aria-label="Move up"
+          onClick={onMoveUp}
+          disabled={busy || isFirst}
+          className="rounded border border-zinc-200 bg-white px-2 py-1 text-xs disabled:opacity-30"
+        >
+          ↑
+        </button>
+        <button
+          type="button"
+          aria-label="Move down"
+          onClick={onMoveDown}
+          disabled={busy || isLast}
+          className="rounded border border-zinc-200 bg-white px-2 py-1 text-xs disabled:opacity-30"
+        >
+          ↓
+        </button>
+        <button
+          type="button"
+          aria-label="Delete rule"
+          onClick={onDelete}
+          disabled={busy}
+          className="rounded border border-red-200 bg-white px-2 py-1 text-xs text-red-700 hover:bg-red-50 disabled:opacity-50"
+        >
+          Delete
+        </button>
+      </div>
+
+      <div className="mt-3 grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
+        <div className="rounded border border-zinc-200 bg-white p-2">
+          <p className="text-xs font-medium text-zinc-500">When</p>
+          <select
+            aria-label="Predicate type"
+            value={predicate?.type ?? "kind"}
+            onChange={(e) =>
+              setPredicateType(e.target.value as RulePredicate["type"])
+            }
+            disabled={busy}
+            className="mt-1 w-full rounded border border-zinc-200 px-2 py-1"
+          >
+            {PREDICATE_TYPES.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.label}
+              </option>
+            ))}
+          </select>
+          <PredicateInputs
+            predicate={predicate}
+            busy={busy}
+            onChange={(p) => onChange({ predicates: [p] })}
+          />
+        </div>
+
+        <div className="rounded border border-zinc-200 bg-white p-2">
+          <p className="text-xs font-medium text-zinc-500">Then</p>
+          <select
+            aria-label="Effect type"
+            value={effect?.type ?? "auto_dismiss"}
+            onChange={(e) =>
+              setEffectType(e.target.value as RuleEffect["type"])
+            }
+            disabled={busy}
+            className="mt-1 w-full rounded border border-zinc-200 px-2 py-1"
+          >
+            {EFFECT_TYPES.map((e) => (
+              <option key={e.id} value={e.id}>
+                {e.label}
+              </option>
+            ))}
+          </select>
+          <EffectInputs
+            effect={effect}
+            busy={busy}
+            onChange={(e) => onChange({ effects: [e] })}
+          />
+        </div>
+      </div>
+    </fieldset>
+  );
+}
+
+function PredicateInputs({
+  predicate,
+  busy,
+  onChange,
+}: {
+  predicate: RulePredicate | undefined;
+  busy: boolean;
+  onChange: (p: RulePredicate) => void;
+}) {
+  if (!predicate) return null;
+  if (predicate.type === "provider") {
+    return (
+      <input
+        type="text"
+        aria-label="Provider value"
+        value={predicate.provider}
+        onChange={(e) => onChange({ ...predicate, provider: e.target.value })}
+        placeholder="github / slack / google"
+        disabled={busy}
+        className="mt-2 w-full rounded border border-zinc-200 px-2 py-1"
+      />
+    );
+  }
+  if (predicate.type === "kind") {
+    return (
+      <input
+        type="text"
+        aria-label="Kind value"
+        value={predicate.kind}
+        onChange={(e) => onChange({ ...predicate, kind: e.target.value })}
+        placeholder="mention / pr_review_requested / …"
+        disabled={busy}
+        className="mt-2 w-full rounded border border-zinc-200 px-2 py-1"
+      />
+    );
+  }
+  if (predicate.type === "source_match") {
+    return (
+      <div className="mt-2 grid grid-cols-2 gap-2">
+        <input
+          type="text"
+          aria-label="Payload field"
+          value={predicate.field}
+          onChange={(e) => onChange({ ...predicate, field: e.target.value })}
+          placeholder="field (e.g. author)"
+          disabled={busy}
+          className="rounded border border-zinc-200 px-2 py-1"
+        />
+        <input
+          type="text"
+          aria-label="Payload equals"
+          value={predicate.equals}
+          onChange={(e) => onChange({ ...predicate, equals: e.target.value })}
+          placeholder="equals"
+          disabled={busy}
+          className="rounded border border-zinc-200 px-2 py-1"
+        />
+      </div>
+    );
+  }
+  return (
+    <input
+      type="text"
+      aria-label="Title regex"
+      value={predicate.pattern}
+      onChange={(e) => onChange({ ...predicate, pattern: e.target.value })}
+      placeholder="^chore"
+      disabled={busy}
+      className="mt-2 w-full rounded border border-zinc-200 px-2 py-1 font-mono"
+    />
+  );
+}
+
+function EffectInputs({
+  effect,
+  busy,
+  onChange,
+}: {
+  effect: RuleEffect | undefined;
+  busy: boolean;
+  onChange: (e: RuleEffect) => void;
+}) {
+  if (!effect) return null;
+  if (effect.type === "auto_dismiss") {
+    return (
+      <p className="mt-2 text-xs text-zinc-500">
+        Marks the Signal as dismissed on the spot.
+      </p>
+    );
+  }
+  if (effect.type === "snooze") {
+    return (
+      <input
+        type="number"
+        min={1}
+        aria-label="Snooze minutes"
+        value={effect.minutes}
+        onChange={(e) =>
+          onChange({ ...effect, minutes: Number(e.target.value) || 0 })
+        }
+        disabled={busy}
+        className="mt-2 w-full rounded border border-zinc-200 px-2 py-1"
+      />
+    );
+  }
+  return (
+    <input
+      type="text"
+      aria-label="Tag value"
+      value={effect.tag}
+      onChange={(e) => onChange({ ...effect, tag: e.target.value })}
+      placeholder="tag"
+      disabled={busy}
+      className="mt-2 w-full rounded border border-zinc-200 px-2 py-1"
+    />
   );
 }

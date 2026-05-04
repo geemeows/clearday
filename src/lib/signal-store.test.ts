@@ -20,6 +20,7 @@ function makeClient(overrides: {
     is: ReturnType<typeof vi.fn>;
     in: ReturnType<typeof vi.fn>;
     ilike: ReturnType<typeof vi.fn>;
+    or: ReturnType<typeof vi.fn>;
     order: ReturnType<typeof vi.fn>;
     limit: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
@@ -34,7 +35,8 @@ function makeClient(overrides: {
   const inFn = vi.fn(() => chain);
   const is = vi.fn(() => chain);
   const ilike = vi.fn(() => chain);
-  const chain = { is, in: inFn, ilike, order, limit };
+  const or = vi.fn(() => chain);
+  const chain = { is, in: inFn, ilike, or, order, limit };
   const select = vi.fn(() => chain);
   const upsert = vi.fn(async () => overrides.upsertResult ?? { error: null });
   const eq = vi.fn(async () => overrides.updateResult ?? { error: null });
@@ -50,6 +52,7 @@ function makeClient(overrides: {
       is,
       in: inFn,
       ilike,
+      or,
       order,
       limit,
       update,
@@ -145,6 +148,85 @@ describe("listSignals", () => {
     const { client, spies } = makeClient({ listData: [] });
     await listSignals(client, { query: "  " });
     expect(spies.ilike).not.toHaveBeenCalled();
+  });
+});
+
+describe("upsertSignal — inbox rules", () => {
+  it("auto_dismiss rule sets dismissed_at on the upsert", async () => {
+    const { client, spies } = makeClient({});
+    const now = new Date("2026-05-04T12:00:00.000Z");
+    await upsertSignal(client, sample, {
+      now,
+      rules: [
+        {
+          id: "r-dismiss",
+          name: "x",
+          enabled: true,
+          priority: 1,
+          predicates: [{ type: "kind", kind: "pr_review_requested" }],
+          effects: [{ type: "auto_dismiss" }],
+        },
+      ],
+    });
+    const values = spies.upsert.mock.calls[0][0];
+    expect(values.dismissed_at).toBe("2026-05-04T12:00:00.000Z");
+  });
+
+  it("snooze rule sets snoozed_until column", async () => {
+    const { client, spies } = makeClient({});
+    const now = new Date("2026-05-04T12:00:00.000Z");
+    await upsertSignal(client, sample, {
+      now,
+      rules: [
+        {
+          id: "r-snooze",
+          name: "x",
+          enabled: true,
+          priority: 1,
+          predicates: [{ type: "kind", kind: "pr_review_requested" }],
+          effects: [{ type: "snooze", minutes: 60 }],
+        },
+      ],
+    });
+    const values = spies.upsert.mock.calls[0][0];
+    expect(values.snoozed_until).toBe("2026-05-04T13:00:00.000Z");
+  });
+
+  it("does not set override columns when no rule matches", async () => {
+    const { client, spies } = makeClient({});
+    await upsertSignal(client, sample, {
+      rules: [
+        {
+          id: "r-other",
+          name: "x",
+          enabled: true,
+          priority: 1,
+          predicates: [{ type: "kind", kind: "mention" }],
+          effects: [{ type: "auto_dismiss" }],
+        },
+      ],
+    });
+    const values = spies.upsert.mock.calls[0][0];
+    expect(values).not.toHaveProperty("dismissed_at");
+    expect(values).not.toHaveProperty("snoozed_until");
+    expect(values).not.toHaveProperty("tags");
+  });
+});
+
+describe("listSignals — snoozed filter", () => {
+  it("filters out future-snoozed signals by default", async () => {
+    const { client, spies } = makeClient({ listData: [] });
+    const now = new Date("2026-05-04T12:00:00.000Z");
+    await listSignals(client, { now });
+    expect(spies.or).toHaveBeenCalledWith(
+      "snoozed_until.is.null,snoozed_until.lt.2026-05-04T12:00:00.000Z",
+    );
+  });
+
+  it("does not call or() when includeSnoozed", async () => {
+    const { client, spies } = makeClient({ listData: [] });
+    await listSignals(client, { includeSnoozed: true });
+    expect(spies.or).not.toHaveBeenCalled();
   });
 });
 

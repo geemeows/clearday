@@ -6,6 +6,7 @@
 // Each provider's poll is best-effort and isolated: a failure in one source
 // must not block others. Errors are returned so the caller can log them.
 
+import type { InboxRule } from "#/lib/inbox-rules-engine";
 import {
   type ExchangeEnv,
   type FetchLike,
@@ -42,6 +43,12 @@ export type OrchestratorDeps = {
   oauthEnv?: ExchangeEnv;
   /** Now, injected for deterministic expiry checks in tests. */
   now?: () => Date;
+  /**
+   * Loaded once per tick; passed to every upsertSignal so the inbox-rules
+   * engine can apply overrides at the write seam. Optional — when absent,
+   * upsertSignal writes are unmodified.
+   */
+  loadInboxRules?: () => Promise<InboxRule[]>;
 };
 
 export type OrchestratorReport = {
@@ -56,10 +63,11 @@ export async function runScheduledPoll(
   deps: OrchestratorDeps,
 ): Promise<OrchestratorReport[]> {
   const accounts = await deps.loadAccounts();
+  const rules = deps.loadInboxRules ? await deps.loadInboxRules() : [];
   const reports: OrchestratorReport[] = [];
   for (const account of accounts) {
     try {
-      const upserted = await pollOne(account, deps);
+      const upserted = await pollOne(account, deps, rules);
       reports.push({ provider: account.provider, upserted });
     } catch (err) {
       reports.push({
@@ -75,6 +83,7 @@ export async function runScheduledPoll(
 async function pollOne(
   account: ProviderAccountRow,
   deps: OrchestratorDeps,
+  rules: InboxRule[],
 ): Promise<number> {
   if (!account.access_token) throw new Error("no access_token");
 
@@ -83,7 +92,7 @@ async function pollOne(
       account.access_token,
       async (url, init) => deps.fetch(url, init),
     );
-    for (const sig of signals) await upsertSignal(deps.store, sig);
+    for (const sig of signals) await upsertSignal(deps.store, sig, { rules });
     return signals.length;
   }
 
@@ -94,7 +103,7 @@ async function pollOne(
       async (url, init) => deps.fetch(url, init),
       deps.now?.(),
     );
-    for (const sig of signals) await upsertSignal(deps.store, sig);
+    for (const sig of signals) await upsertSignal(deps.store, sig, { rules });
     return signals.length;
   }
 

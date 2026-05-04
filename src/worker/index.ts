@@ -14,6 +14,12 @@ import { runAlertQueueDrain } from "#/lib/alert-queue-drain";
 import { type AskAiDeps, handleAskAi } from "#/lib/ask-ai-api";
 import { type BriefingDeps, handleBriefingGenerate } from "#/lib/briefing-api";
 import { startFocusSession } from "#/lib/focus-session";
+import {
+  getInboxRules,
+  type InboxRulesStore,
+  putInboxRules,
+} from "#/lib/inbox-rules-api";
+import type { InboxRule } from "#/lib/inbox-rules-engine";
 import { runMeetingAlertTick } from "#/lib/meeting-alert-tick";
 import { handleOAuthExchange } from "#/lib/oauth-exchange-handler";
 import type { StoredSignal } from "#/lib/signal";
@@ -56,6 +62,7 @@ export default {
       const outcome = await handleSlackWebhook(request, {
         signingSecret: env.SLACK_SIGNING_SECRET,
         store: service,
+        loadInboxRules: () => loadInboxRulesFromService(service),
         loadAllowlist: async () => {
           const { data, error } = await service
             .from("slack_channel_allowlist")
@@ -196,6 +203,24 @@ export default {
       return json(out, out.ok ? 200 : out.reason === "error" ? 400 : 200);
     }
 
+    if (url.pathname === "/api/inbox-rules") {
+      const store = inboxRulesStore(service);
+      if (request.method === "GET") {
+        return json(await getInboxRules(store));
+      }
+      if (request.method === "PUT") {
+        let body: unknown;
+        try {
+          body = await request.json();
+        } catch {
+          return json({ ok: false, error: "invalid json" }, 400);
+        }
+        const out = await putInboxRules(body, store);
+        if (!out.ok) return json({ ok: false, error: out.error }, 400);
+        return json({ ok: true, rules: out.rules });
+      }
+    }
+
     if (
       url.pathname === "/api/briefing/generate" &&
       request.method === "POST"
@@ -226,6 +251,7 @@ export default {
       fetch(input, init);
     ctx.waitUntil(
       runScheduledPoll({
+        loadInboxRules: () => loadInboxRulesFromService(service),
         loadAccounts: async () => {
           const { data, error } = await service
             .from("provider_accounts")
@@ -688,6 +714,60 @@ function rollupDeps(service: SupabaseService) {
         .select("id");
       if (error) throw new Error(error.message);
       return (data ?? []).length;
+    },
+  };
+}
+
+async function loadInboxRulesFromService(
+  service: SupabaseService,
+): Promise<InboxRule[]> {
+  const { data, error } = await service
+    .from("inbox_rules")
+    .select("id, name, enabled, priority, match, action")
+    .order("priority", { ascending: true });
+  if (error) throw new Error(error.message);
+  const rows = (data ?? []) as Array<{
+    id: string;
+    name: string;
+    enabled: boolean;
+    priority: number;
+    match: { predicates?: InboxRule["predicates"] } | null;
+    action: { effects?: InboxRule["effects"] } | null;
+  }>;
+  return rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    enabled: r.enabled,
+    priority: r.priority,
+    predicates: r.match?.predicates ?? [],
+    effects: r.action?.effects ?? [],
+  }));
+}
+
+function inboxRulesStore(service: SupabaseService): InboxRulesStore {
+  return {
+    load: () => loadInboxRulesFromService(service),
+    save: async (rules) => {
+      // Delete then insert: simplest correct semantics for "replace whole list".
+      const { error: delError } = await service
+        .from("inbox_rules")
+        .delete()
+        .neq("id", "00000000-0000-0000-0000-000000000000");
+      if (delError) throw new Error(delError.message);
+      if (rules.length === 0) return [];
+      const rows = rules.map((r) => ({
+        id: r.id,
+        name: r.name,
+        enabled: r.enabled,
+        priority: r.priority,
+        match: { predicates: r.predicates },
+        action: { effects: r.effects },
+      }));
+      const { error: insError } = await service
+        .from("inbox_rules")
+        .insert(rows);
+      if (insError) throw new Error(insError.message);
+      return loadInboxRulesFromService(service);
     },
   };
 }

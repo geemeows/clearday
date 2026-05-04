@@ -8,6 +8,7 @@
 // The handler is parametric on its dependencies so it can be tested without
 // the Worker runtime.
 
+import type { InboxRule } from "#/lib/inbox-rules-engine";
 import {
   normalizeSlackEvent,
   type SlackEventPayload,
@@ -92,6 +93,8 @@ export type SlackWebhookDeps = {
    * Slack will retry the event and the upsert is the source of truth.
    */
   onStored?: (signal: Signal) => Promise<void>;
+  /** Loaded once per webhook for the inbox-rules engine. Optional. */
+  loadInboxRules?: () => Promise<InboxRule[]>;
   now?: () => number;
 };
 
@@ -148,7 +151,8 @@ export async function handleSlackWebhook(
   const signal = normalizeSlackEvent(envelope.event, ctx);
   if (!signal) return { kind: "ignored", reason: "not_actionable" };
 
-  await upsertSignal(deps.store, signal);
+  const rules = deps.loadInboxRules ? await deps.loadInboxRules() : [];
+  await upsertSignal(deps.store, signal, { rules });
   if (deps.onStored) {
     try {
       await deps.onStored(signal);
