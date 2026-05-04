@@ -5,6 +5,7 @@ import {
   PURGE_CONFIRMATION,
   type RetentionView,
 } from "#/lib/data-privacy-api";
+import type { IntegrationView } from "#/lib/integrations-api";
 import { PROFILE_UPDATED_EVENT } from "#/lib/profile-api";
 import type { HealthCheckResult, SelfHostInfo } from "#/lib/self-host-api";
 import { THEME_UPDATED_EVENT, type ThemeView } from "#/lib/theme-api";
@@ -14,6 +15,7 @@ import {
   DataPrivacyPanel,
   EmailDigestPanel,
   FocusBlockPanel,
+  IntegrationsPanel,
   NotificationMatrixPanel,
   NotificationsPanel,
   ProfilePanel,
@@ -1078,6 +1080,128 @@ describe("SelfHostPanel", () => {
     );
     await waitFor(() =>
       expect(screen.getByRole("alert").textContent).toMatch(/502/),
+    );
+  });
+});
+
+describe("IntegrationsPanel", () => {
+  function makeIntegrations(
+    overrides: Partial<IntegrationView> = {},
+  ): IntegrationView[] {
+    const providers: IntegrationView["provider"][] = [
+      "github",
+      "slack",
+      "google",
+      "linear",
+      "jira",
+    ];
+    return providers.map((provider) => ({
+      provider,
+      status: "disconnected",
+      account_id: null,
+      scopes: [],
+      connected_at: null,
+      last_sync_at: null,
+      expires_at: null,
+      ...(provider === "github" ? overrides : {}),
+    }));
+  }
+
+  it("renders one row per provider with connection status + scopes + account", async () => {
+    const loader = vi.fn(async () => ({
+      integrations: makeIntegrations({
+        status: "connected",
+        account_id: "U123",
+        scopes: ["repo"],
+        last_sync_at: new Date().toISOString(),
+      }),
+    }));
+    render(<IntegrationsPanel loader={loader} />);
+    expect(await screen.findByLabelText(/GitHub integration/i)).toBeTruthy();
+    expect(screen.getByLabelText(/Slack integration/i)).toBeTruthy();
+    expect(screen.getByLabelText(/GitHub connected/i)).toBeTruthy();
+    expect(screen.getByLabelText(/Slack disconnected/i)).toBeTruthy();
+    expect(screen.getByText("U123")).toBeTruthy();
+    expect(screen.getByText("repo")).toBeTruthy();
+  });
+
+  it("disconnect calls the disconnect handler and reloads", async () => {
+    let calls = 0;
+    const loader = vi.fn(async () => {
+      calls += 1;
+      return {
+        integrations: makeIntegrations(
+          calls === 1
+            ? { status: "connected", account_id: "U123", scopes: ["repo"] }
+            : {},
+        ),
+      };
+    });
+    const disconnect = vi.fn(async () => ({ ok: true }));
+    render(<IntegrationsPanel loader={loader} disconnect={disconnect} />);
+    const ghRow = await screen.findByLabelText(/GitHub integration/i);
+    const button = ghRow.querySelector(
+      "button.text-red-700",
+    ) as HTMLButtonElement;
+    fireEvent.click(button);
+    await waitFor(() => expect(disconnect).toHaveBeenCalledWith("github"));
+    await waitFor(() =>
+      expect(screen.getByLabelText(/GitHub disconnected/i)).toBeTruthy(),
+    );
+  });
+
+  it("reauthorize fetches the connect URL and opens it", async () => {
+    const loader = vi.fn(async () => ({
+      integrations: makeIntegrations({
+        status: "connected",
+        account_id: "U123",
+        scopes: ["repo"],
+      }),
+    }));
+    const connectUrl = vi.fn(async () => ({
+      ok: true,
+      url: "https://auth.example.com/start/github",
+    }));
+    const openUrl = vi.fn();
+    render(
+      <IntegrationsPanel
+        loader={loader}
+        connectUrl={connectUrl}
+        openUrl={openUrl}
+      />,
+    );
+    const ghRow = await screen.findByLabelText(/GitHub integration/i);
+    const reauth = Array.from(ghRow.querySelectorAll("button")).find((b) =>
+      /Reauthorize/i.test(b.textContent ?? ""),
+    ) as HTMLButtonElement;
+    fireEvent.click(reauth);
+    await waitFor(() =>
+      expect(openUrl).toHaveBeenCalledWith(
+        "https://auth.example.com/start/github",
+      ),
+    );
+  });
+
+  it("surfaces a disconnect error", async () => {
+    const loader = vi.fn(async () => ({
+      integrations: makeIntegrations({
+        status: "connected",
+        account_id: "U123",
+        scopes: ["repo"],
+      }),
+    }));
+    const disconnect = vi.fn(async () => ({
+      ok: false,
+      error: "supabase down",
+    }));
+    render(<IntegrationsPanel loader={loader} disconnect={disconnect} />);
+    const ghRow = await screen.findByLabelText(/GitHub integration/i);
+    const button = ghRow.querySelector(
+      "button.text-red-700",
+    ) as HTMLButtonElement;
+    fireEvent.click(button);
+    await waitFor(() =>
+      expect(screen.getByRole("alert").textContent).toMatch(/supabase down/),
     );
   });
 });

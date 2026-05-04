@@ -15,6 +15,7 @@ import type {
   RuleEffect,
   RulePredicate,
 } from "#/lib/inbox-rules-engine";
+import type { IntegrationView } from "#/lib/integrations-api";
 import { PROFILE_UPDATED_EVENT, type ProfileView } from "#/lib/profile-api";
 import type { HealthCheckResult, SelfHostInfo } from "#/lib/self-host-api";
 import {
@@ -58,6 +59,7 @@ function SettingsPage() {
       </div>
 
       <ProfilePanel />
+      <IntegrationsPanel />
       <ThemePanel />
       <DataPrivacyPanel />
       <SelfHostPanel />
@@ -3122,6 +3124,223 @@ export function SelfHostPanel({
             )}
           </div>
         </div>
+      )}
+    </section>
+  );
+}
+
+const INTEGRATION_LABELS: Record<string, string> = {
+  github: "GitHub",
+  slack: "Slack",
+  google: "Google Calendar",
+  linear: "Linear",
+  jira: "Jira",
+};
+
+type IntegrationsLoader = () => Promise<{ integrations: IntegrationView[] }>;
+type IntegrationsDisconnect = (
+  provider: string,
+) => Promise<{ ok: boolean; error?: string }>;
+type IntegrationsConnectUrl = (
+  provider: string,
+) => Promise<{ ok: boolean; url?: string; error?: string }>;
+
+export function IntegrationsPanel({
+  loader,
+  disconnect,
+  connectUrl,
+  openUrl,
+}: {
+  loader?: IntegrationsLoader;
+  disconnect?: IntegrationsDisconnect;
+  connectUrl?: IntegrationsConnectUrl;
+  openUrl?: (url: string) => void;
+} = {}) {
+  const [integrations, setIntegrations] = useState<IntegrationView[] | null>(
+    null,
+  );
+  const [error, setError] = useState<string | null>(null);
+  const [busyProvider, setBusyProvider] = useState<string | null>(null);
+
+  const load = useMemo(
+    () =>
+      loader ??
+      (() =>
+        apiFetch("/api/integrations") as Promise<{
+          integrations: IntegrationView[];
+        }>),
+    [loader],
+  );
+  const doDisconnect = useMemo(
+    () =>
+      disconnect ??
+      ((provider: string) =>
+        apiFetch(`/api/integrations/${provider}`, {
+          method: "DELETE",
+        }) as Promise<{ ok: boolean; error?: string }>),
+    [disconnect],
+  );
+  const doConnectUrl = useMemo(
+    () =>
+      connectUrl ??
+      ((provider: string) =>
+        apiFetch(`/api/providers/${provider}/connect-url`) as Promise<{
+          ok: boolean;
+          url?: string;
+          error?: string;
+        }>),
+    [connectUrl],
+  );
+  const doOpen = useMemo(
+    () =>
+      openUrl ??
+      ((url: string) => {
+        window.open(url, "_blank", "noopener,noreferrer");
+      }),
+    [openUrl],
+  );
+
+  const refresh = useCallback(() => {
+    let cancelled = false;
+    load()
+      .then((body) => {
+        if (!cancelled) setIntegrations(body.integrations);
+      })
+      .catch((e) => {
+        if (!cancelled) setError(e instanceof Error ? e.message : String(e));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [load]);
+
+  useEffect(refresh, [refresh]);
+
+  const onDisconnect = async (provider: string) => {
+    setBusyProvider(provider);
+    setError(null);
+    try {
+      const out = await doDisconnect(provider);
+      if (!out.ok) {
+        setError(out.error ?? "disconnect failed");
+        return;
+      }
+      refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusyProvider(null);
+    }
+  };
+
+  const onReauthorize = async (provider: string) => {
+    setBusyProvider(provider);
+    setError(null);
+    try {
+      const out = await doConnectUrl(provider);
+      if (out.ok && out.url) doOpen(out.url);
+      else setError(out.error ?? "could not start connection");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusyProvider(null);
+    }
+  };
+
+  return (
+    <section className="mt-8">
+      <h2 className="text-lg font-semibold">Integrations</h2>
+      <p className="mt-1 text-sm text-zinc-500">
+        Per-provider connection detail. Disconnect clears the stored OAuth
+        tokens; reauthorize re-runs the OAuth flow through the auth-proxy.
+      </p>
+
+      {error && (
+        <p role="alert" className="mt-2 text-sm text-red-700">
+          {error}
+        </p>
+      )}
+
+      {integrations == null && !error && (
+        <p className="mt-3 text-sm text-zinc-500">Loading…</p>
+      )}
+
+      {integrations && (
+        <ul className="mt-4 grid max-w-2xl gap-2">
+          {integrations.map((i) => {
+            const label = INTEGRATION_LABELS[i.provider] ?? i.provider;
+            const busy = busyProvider === i.provider;
+            return (
+              <li
+                key={i.provider}
+                aria-label={`${label} integration`}
+                className="rounded border border-zinc-200 p-3"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <output
+                      aria-label={`${label} ${i.status}`}
+                      data-status={i.status === "connected" ? "ok" : "neutral"}
+                      className={`h-2 w-2 rounded-full ${
+                        i.status === "connected"
+                          ? "bg-emerald-500"
+                          : "bg-zinc-300"
+                      }`}
+                    />
+                    <span className="text-sm font-medium">{label}</span>
+                    <span className="text-xs text-zinc-500">
+                      {i.status === "connected" ? "Connected" : "Not connected"}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => onReauthorize(i.provider)}
+                      disabled={busy}
+                      className="rounded border border-zinc-200 px-2 py-1 text-xs hover:bg-zinc-50 disabled:opacity-50"
+                    >
+                      {i.status === "connected" ? "Reauthorize" : "Connect"}
+                    </button>
+                    {i.status === "connected" && (
+                      <button
+                        type="button"
+                        onClick={() => onDisconnect(i.provider)}
+                        disabled={busy}
+                        className="rounded border border-red-200 px-2 py-1 text-xs text-red-700 hover:bg-red-50 disabled:opacity-50"
+                      >
+                        Disconnect
+                      </button>
+                    )}
+                  </div>
+                </div>
+                {i.status === "connected" && (
+                  <dl className="mt-2 grid grid-cols-[max-content_1fr] gap-x-4 gap-y-0.5 text-xs">
+                    {i.account_id && (
+                      <>
+                        <dt className="text-zinc-500">Account</dt>
+                        <dd>
+                          <code className="font-mono">{i.account_id}</code>
+                        </dd>
+                      </>
+                    )}
+                    {i.scopes.length > 0 && (
+                      <>
+                        <dt className="text-zinc-500">Scopes</dt>
+                        <dd className="font-mono">{i.scopes.join(", ")}</dd>
+                      </>
+                    )}
+                    <dt className="text-zinc-500">Last sync</dt>
+                    <dd>
+                      {i.last_sync_at
+                        ? formatRelative(i.last_sync_at)
+                        : "never"}
+                    </dd>
+                  </dl>
+                )}
+              </li>
+            );
+          })}
+        </ul>
       )}
     </section>
   );

@@ -42,6 +42,12 @@ import {
   putInboxRules,
 } from "#/lib/inbox-rules-api";
 import type { InboxRule } from "#/lib/inbox-rules-engine";
+import {
+  disconnectIntegration,
+  getIntegrations,
+  type IntegrationsStore,
+  type ProviderAccountRow,
+} from "#/lib/integrations-api";
 import { runMeetingAlertTick } from "#/lib/meeting-alert-tick";
 import { handleOAuthExchange } from "#/lib/oauth-exchange-handler";
 import {
@@ -476,6 +482,22 @@ export default {
         pingDatabase: () => pingDatabase(service),
       });
       return json(out, out.ok ? 200 : 502);
+    }
+
+    if (url.pathname === "/api/integrations" && request.method === "GET") {
+      return json(await getIntegrations(integrationsStore(service)));
+    }
+
+    const disconnectMatch = url.pathname.match(
+      /^\/api\/integrations\/([^/]+)$/,
+    );
+    if (disconnectMatch && request.method === "DELETE") {
+      const out = await disconnectIntegration(
+        disconnectMatch[1],
+        integrationsStore(service),
+      );
+      if (!out.ok) return json({ ok: false, error: out.error }, 400);
+      return json({ ok: true, provider: out.provider });
     }
 
     if (url.pathname === "/api/slack/allowlist") {
@@ -1034,6 +1056,27 @@ function sanitizeAllowlist(input: unknown): string[] {
     if (!out.includes(trimmed)) out.push(trimmed);
   }
   return out;
+}
+
+function integrationsStore(service: SupabaseService): IntegrationsStore {
+  return {
+    loadAccounts: async () => {
+      const { data, error } = await service
+        .from("provider_accounts")
+        .select(
+          "provider, account_id, scopes, expires_at, created_at, updated_at",
+        );
+      if (error) throw new Error(error.message);
+      return (data ?? []) as ProviderAccountRow[];
+    },
+    deleteAccount: async (provider) => {
+      const { error } = await service
+        .from("provider_accounts")
+        .delete()
+        .eq("provider", provider);
+      if (error) throw new Error(error.message);
+    },
+  };
 }
 
 async function pingDatabase(
