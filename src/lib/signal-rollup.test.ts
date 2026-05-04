@@ -270,6 +270,28 @@ describe("dueRollupPeriods", () => {
     ]);
   });
 
+  it("honors a custom retentionDays override (shorter cutoff)", () => {
+    // now = 2026-05-04, retention=30 → cutoff = 2026-04-04.
+    // Latest month period whose end ≤ Apr 4 = March (ends 4/1).
+    const now = new Date(Date.UTC(2026, 4, 4));
+    const periods = dueRollupPeriods(now, 30);
+    expect(periods[0]).toEqual({
+      periodKind: "month",
+      periodStart: new Date(Date.UTC(2026, 2, 1)),
+    });
+  });
+
+  it("honors a custom retentionDays override (longer cutoff)", () => {
+    // now = 2026-05-04, retention=180 → cutoff = 2025-11-05.
+    // Latest month period whose end ≤ Nov 5 = October (ends 11/1).
+    const now = new Date(Date.UTC(2026, 4, 4));
+    const periods = dueRollupPeriods(now, 180);
+    expect(periods[0]).toEqual({
+      periodKind: "month",
+      periodStart: new Date(Date.UTC(2025, 9, 1)),
+    });
+  });
+
   it("handles year boundary", () => {
     // now = 2026-01-15, cutoff = 2025-10-17. Latest month ≤ Sep (ends 10/1),
     // latest quarter = Q3 (ends 10/1 ≤ 10/17), latest year = 2024.
@@ -363,5 +385,24 @@ describe("runDueRollups", () => {
       (r) => r.period === "year" && r.period_start === "2025-01-01",
     );
     expect(y?.count).toBe(6);
+  });
+
+  it("a shorter retentionDays rolls a more recent month", async () => {
+    // now = 2026-05-04. retention=30 → cutoff = 2026-04-04 → roll March.
+    const now = new Date(Date.UTC(2026, 4, 4));
+    const raw: RawSignalForRollup[] = [
+      {
+        kind: "mention",
+        created_at: "2026-03-15T10:00:00Z",
+        dismissed_at: null,
+        requires_action: true,
+      },
+    ];
+    const { deps, rollups } = makeDeps({ raw, now });
+    await runDueRollups(deps, 30);
+    const m = rollups.find(
+      (r) => r.period === "month" && r.period_start === "2026-03-01",
+    );
+    expect(m?.count).toBe(1);
   });
 });

@@ -562,7 +562,9 @@ export default {
     );
 
     ctx.waitUntil(
-      runDueRollups(rollupDeps(service))
+      retentionStore(service)
+        .load()
+        .then((view) => runDueRollups(rollupDeps(service), view.retention_days))
         .then((reports) => {
           for (const r of reports) {
             if (r.rolledKinds > 0 || r.rawDeleted > 0) {

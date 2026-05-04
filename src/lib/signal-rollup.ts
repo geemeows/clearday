@@ -101,8 +101,9 @@ export async function rollup(
 
 export function dueRollupPeriods(
   now: Date,
+  retentionDays: number = HOT_RETENTION_DAYS,
 ): Array<{ periodKind: PeriodKind; periodStart: Date }> {
-  const cutoff = subDays(now, HOT_RETENTION_DAYS);
+  const cutoff = subDays(now, retentionDays);
   return [
     { periodKind: "month", periodStart: lastMonthStartBefore(cutoff) },
     { periodKind: "quarter", periodStart: lastQuarterStartBefore(cutoff) },
@@ -116,10 +117,16 @@ export function dueRollupPeriods(
  * deployment, the cron runs this on every tick — successive ticks will catch
  * up older periods because `rollup` reads/writes are idempotent and the
  * latest-eligible heuristic is stable.
+ *
+ * `retentionDays` is the per-deployment override from
+ * `user_preferences.retention_days`; defaults to 90 when not set.
  */
-export async function runDueRollups(deps: RollupDeps): Promise<RollupReport[]> {
+export async function runDueRollups(
+  deps: RollupDeps,
+  retentionDays: number = HOT_RETENTION_DAYS,
+): Promise<RollupReport[]> {
   const now = (deps.now ?? (() => new Date()))();
-  const periods = dueRollupPeriods(now);
+  const periods = dueRollupPeriods(now, retentionDays);
   const reports: RollupReport[] = [];
   for (const p of periods) {
     reports.push(await rollup(p, deps));
