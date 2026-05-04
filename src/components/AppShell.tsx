@@ -10,6 +10,7 @@ import {
   Trello,
 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { FocusButton } from "#/components/FocusButton";
 import { apiFetch } from "#/lib/api-client";
 import { cn } from "#/lib/cn";
 
@@ -132,6 +133,9 @@ export function AppShell() {
       </aside>
 
       <main className="flex-1">
+        <header className="flex items-center justify-end border-b border-zinc-200 bg-white px-6 py-3">
+          <FocusButton />
+        </header>
         <Outlet />
       </main>
     </div>
