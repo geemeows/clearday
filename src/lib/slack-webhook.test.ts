@@ -256,6 +256,69 @@ describe("handleSlackWebhook", () => {
     expect(store.upsert).toHaveBeenCalledTimes(1);
   });
 
+  it("calls onStored after a successful Signal upsert", async () => {
+    const ts = "1714820000";
+    const body = JSON.stringify({
+      type: "event_callback",
+      team_id: "T1",
+      event: {
+        type: "message",
+        channel_type: "im",
+        channel: "D1",
+        user: "U_OTHER",
+        ts: "1714820000.000100",
+        text: "ping",
+      },
+    });
+    const sig = await sign(SECRET, ts, body);
+    const store = makeStore();
+    const onStored = vi.fn(async (_s: unknown) => undefined);
+    await handleSlackWebhook(makeRequest({ ts, signature: sig, body }), {
+      signingSecret: SECRET,
+      store: store.client,
+      loadAllowlist: async () => [],
+      loadSelfUserId: async () => "U_SELF",
+      onStored,
+      now: () => 1714820010,
+    });
+    expect(onStored).toHaveBeenCalledTimes(1);
+    const [stored] = onStored.mock.calls[0];
+    expect((stored as { kind: string }).kind).toBe("dm");
+  });
+
+  it("swallows onStored errors so Slack does not retry", async () => {
+    const ts = "1714820000";
+    const body = JSON.stringify({
+      type: "event_callback",
+      team_id: "T1",
+      event: {
+        type: "message",
+        channel_type: "im",
+        channel: "D1",
+        user: "U_OTHER",
+        ts: "1714820000.000100",
+        text: "ping",
+      },
+    });
+    const sig = await sign(SECRET, ts, body);
+    const store = makeStore();
+    const onStored = vi.fn(async (_s: unknown) => {
+      throw new Error("dispatch boom");
+    });
+    const outcome = await handleSlackWebhook(
+      makeRequest({ ts, signature: sig, body }),
+      {
+        signingSecret: SECRET,
+        store: store.client,
+        loadAllowlist: async () => [],
+        loadSelfUserId: async () => "U_SELF",
+        onStored,
+        now: () => 1714820010,
+      },
+    );
+    expect(outcome.kind).toBe("stored");
+  });
+
   it("upsert is idempotent across resent events (same source_id)", async () => {
     const ts1 = "1714820010";
     const ts2 = "1714820020";

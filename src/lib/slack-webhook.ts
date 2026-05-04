@@ -85,6 +85,13 @@ export type SlackWebhookDeps = {
   loadAllowlist: () => Promise<string[]>;
   /** Owner's Slack user id; loaded from provider_accounts.account_id. */
   loadSelfUserId: () => Promise<string | null>;
+  /**
+   * Called after a Signal is upserted. The Worker plumbs this to
+   * alert-dispatcher so requires-action mentions/DMs ping the user via
+   * their enabled channels. Errors here must not fail the webhook —
+   * Slack will retry the event and the upsert is the source of truth.
+   */
+  onStored?: (signal: Signal) => Promise<void>;
   now?: () => number;
 };
 
@@ -142,5 +149,13 @@ export async function handleSlackWebhook(
   if (!signal) return { kind: "ignored", reason: "not_actionable" };
 
   await upsertSignal(deps.store, signal);
+  if (deps.onStored) {
+    try {
+      await deps.onStored(signal);
+    } catch {
+      // best-effort: swallow so Slack doesn't retry on a downstream alert
+      // failure. The Signal is already persisted.
+    }
+  }
   return { kind: "stored", signal };
 }
