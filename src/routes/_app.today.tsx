@@ -1,7 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Calendar as CalIcon, ExternalLink, Video, X } from "lucide-react";
+import {
+  Calendar as CalIcon,
+  ExternalLink,
+  RefreshCw,
+  Sparkles,
+  Video,
+  X,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch } from "#/lib/api-client";
+import type { BriefingResult } from "#/lib/morning-briefing";
 import {
   formatCountdown,
   type LinkedItem,
@@ -76,6 +84,7 @@ function TodayPage() {
       error={error}
       alertSignal={alertSignal}
       onDismissAlert={dismissAlert}
+      briefing={<BriefingCard />}
     />
   );
 }
@@ -87,6 +96,7 @@ export function TodayView({
   error,
   alertSignal,
   onDismissAlert,
+  briefing,
 }: {
   meetings: StoredSignal[] | null;
   nextUp: NextUpMeeting | null;
@@ -94,6 +104,7 @@ export function TodayView({
   error: string | null;
   alertSignal: StoredSignal | null;
   onDismissAlert: () => void;
+  briefing?: React.ReactNode;
 }) {
   return (
     <section className="p-8">
@@ -114,6 +125,8 @@ export function TodayView({
       {meetings == null && !error && (
         <p className="mt-6 text-sm text-zinc-500">Loading…</p>
       )}
+
+      {briefing}
 
       {meetings != null && <NextUpCard meeting={nextUp} now={now} />}
 
@@ -199,6 +212,163 @@ export function NextUpCard({
       )}
     </article>
   );
+}
+
+type Generator = (force: boolean) => Promise<BriefingResult>;
+
+export function BriefingCard({
+  generator,
+  date,
+}: {
+  generator?: Generator;
+  date?: string;
+} = {}) {
+  const [result, setResult] = useState<BriefingResult | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const localDate = date ?? localDateString(new Date());
+  const gen = useMemo<Generator>(
+    () =>
+      generator ??
+      ((force: boolean) =>
+        apiFetch("/api/briefing/generate", {
+          method: "POST",
+          body: { date: localDate, force },
+        }) as Promise<BriefingResult>),
+    [generator, localDate],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    setBusy(true);
+    gen(false)
+      .then((r) => {
+        if (!cancelled) setResult(r);
+      })
+      .catch((e) => {
+        if (!cancelled) {
+          setResult({
+            ok: false,
+            reason: "error",
+            error: e instanceof Error ? e.message : String(e),
+          });
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setBusy(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [gen]);
+
+  const regenerate = useCallback(async () => {
+    setBusy(true);
+    try {
+      const r = await gen(true);
+      setResult(r);
+    } catch (e) {
+      setResult({
+        ok: false,
+        reason: "error",
+        error: e instanceof Error ? e.message : String(e),
+      });
+    } finally {
+      setBusy(false);
+    }
+  }, [gen]);
+
+  return (
+    <article
+      aria-label="Morning briefing"
+      className="mt-6 rounded border border-zinc-200 bg-white p-5"
+    >
+      <header className="flex items-center justify-between">
+        <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-zinc-500">
+          <Sparkles className="h-4 w-4" />
+          Morning briefing
+        </div>
+        {result?.ok && (
+          <button
+            type="button"
+            onClick={regenerate}
+            disabled={busy}
+            className="inline-flex items-center gap-1 rounded border border-zinc-200 px-2.5 py-1 text-xs text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
+          >
+            <RefreshCw className="h-3 w-3" />
+            Regenerate
+          </button>
+        )}
+      </header>
+      <div className="mt-3 text-sm text-zinc-800">
+        {busy && !result && (
+          <p className="text-zinc-500">Generating your briefing…</p>
+        )}
+        {result?.ok && (
+          <>
+            <p className="whitespace-pre-line">{result.text}</p>
+            <p className="mt-3 text-xs text-zinc-500">
+              {result.provider} · {result.model}
+              {result.used_fallback && " · running on fallback model"}
+              {result.cached && " · cached for today"}
+            </p>
+          </>
+        )}
+        {result?.ok === false && (
+          <BriefingFallback result={result} busy={busy} />
+        )}
+      </div>
+    </article>
+  );
+}
+
+function BriefingFallback({
+  result,
+  busy,
+}: {
+  result: Extract<BriefingResult, { ok: false }>;
+  busy: boolean;
+}) {
+  if (result.reason === "no_provider") {
+    return (
+      <p className="text-zinc-600">
+        No AI provider configured. Add your API key in{" "}
+        <a href="/settings" className="underline hover:text-zinc-900">
+          Settings → AI provider
+        </a>
+        .
+      </p>
+    );
+  }
+  if (result.reason === "disabled") {
+    return (
+      <p className="text-zinc-600">
+        AI is disabled for this account. Enable it in{" "}
+        <a href="/settings" className="underline hover:text-zinc-900">
+          Settings
+        </a>{" "}
+        to see your briefing.
+      </p>
+    );
+  }
+  if (result.reason === "budget_reached") {
+    return (
+      <p className="text-zinc-600">AI disabled — monthly budget reached.</p>
+    );
+  }
+  return (
+    <p className="text-red-700">
+      Couldn't generate briefing{result.error ? `: ${result.error}` : ""}.
+      {busy && " Retrying…"}
+    </p>
+  );
+}
+
+function localDateString(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 function MeetingAlertToast({

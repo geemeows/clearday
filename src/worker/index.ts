@@ -10,6 +10,7 @@ import {
 } from "#/lib/ai-settings-api";
 import { sendSlackDm } from "#/lib/alert-channel/slack-dm";
 import type { AlertChannel } from "#/lib/alert-dispatcher";
+import { type BriefingDeps, handleBriefingGenerate } from "#/lib/briefing-api";
 import { startFocusSession } from "#/lib/focus-session";
 import { runMeetingAlertTick } from "#/lib/meeting-alert-tick";
 import { handleOAuthExchange } from "#/lib/oauth-exchange-handler";
@@ -194,6 +195,23 @@ export default {
     if (url.pathname === "/api/ai/test" && request.method === "POST") {
       const out = await testAiConnection(aiDeps(service, env));
       return json(out, out.ok ? 200 : 502);
+    }
+
+    if (
+      url.pathname === "/api/briefing/generate" &&
+      request.method === "POST"
+    ) {
+      let body: { date?: unknown; force?: unknown };
+      try {
+        body = (await request.json()) as { date?: unknown; force?: unknown };
+      } catch {
+        return json({ ok: false, reason: "error", error: "invalid json" }, 400);
+      }
+      const out = await handleBriefingGenerate(
+        body,
+        briefingDeps(service, env),
+      );
+      return json(out, out.ok ? 200 : out.reason === "error" ? 400 : 200);
     }
 
     return json({ error: "not found" }, 404);
@@ -419,6 +437,61 @@ function aiSettingsStore(service: SupabaseService): AiSettingsStore {
         .single();
       if (error) throw new Error(error.message);
       return data as AiSettingsRow;
+    },
+  };
+}
+
+function briefingDeps(service: SupabaseService, env: WorkerEnv): BriefingDeps {
+  return {
+    aiStore: aiSettingsStore(service),
+    usageStore: service,
+    keySecret: env.AI_KEY_SECRET,
+    fetch: (i, init) => fetch(i, init),
+    cacheStore: {
+      load: async () => {
+        const { data, error } = await service
+          .from("user_preferences")
+          .select("briefing")
+          .eq("id", true)
+          .maybeSingle();
+        if (error) throw new Error(error.message);
+        const cached = (data?.briefing ?? null) as {
+          date?: string;
+          text?: string;
+        } | null;
+        if (
+          !cached ||
+          typeof cached.date !== "string" ||
+          typeof cached.text !== "string"
+        ) {
+          return null;
+        }
+        return cached as Awaited<
+          ReturnType<BriefingDeps["cacheStore"]["load"]>
+        >;
+      },
+      save: async (entry) => {
+        const { error } = await service
+          .from("user_preferences")
+          .update({
+            briefing: entry,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", true);
+        if (error) throw new Error(error.message);
+      },
+    },
+    loadSignals: async () => {
+      const { data, error } = await service
+        .from("signals")
+        .select("*")
+        .is("dismissed_at", null)
+        .order("source_created_at", { ascending: false })
+        .limit(200);
+      if (error) throw new Error(error.message);
+      return (data ?? []) as Array<
+        Awaited<ReturnType<BriefingDeps["loadSignals"]>>[number]
+      >;
     },
   };
 }
