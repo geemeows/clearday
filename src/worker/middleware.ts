@@ -22,6 +22,8 @@ export type WorkerEnv = {
   VAPID_PRIVATE_KEY: string;
   /** mailto: contact for VAPID `sub`; required by RFC 8292. */
   VAPID_SUBJECT: string;
+  /** Optional build-time version stamp surfaced on the Self-host page. */
+  WORKER_VERSION?: string;
 };
 
 export type AuthedUser = {

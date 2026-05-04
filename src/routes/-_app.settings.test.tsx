@@ -6,6 +6,7 @@ import {
   type RetentionView,
 } from "#/lib/data-privacy-api";
 import { PROFILE_UPDATED_EVENT } from "#/lib/profile-api";
+import type { HealthCheckResult, SelfHostInfo } from "#/lib/self-host-api";
 import { THEME_UPDATED_EVENT, type ThemeView } from "#/lib/theme-api";
 import {
   AiProviderPanel,
@@ -17,6 +18,7 @@ import {
   NotificationsPanel,
   ProfilePanel,
   QuietHoursPanel,
+  SelfHostPanel,
   ThemePanel,
   WebPushDevicesPanel,
 } from "#/routes/_app.settings";
@@ -985,6 +987,97 @@ describe("DataPrivacyPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: /confirm purge/i }));
     await waitFor(() =>
       expect(screen.getByRole("alert").textContent).toMatch(/confirmation/i),
+    );
+  });
+});
+
+describe("SelfHostPanel", () => {
+  const baseInfo: SelfHostInfo = {
+    worker_url: "https://worker.example.com",
+    supabase_url: "https://abc.supabase.co",
+    auth_proxy_url: "https://auth.example.com",
+    worker_version: "abc1234",
+    env_vars: [
+      { name: "ALLOWED_EMAIL", required: true, present: true },
+      { name: "AI_KEY_SECRET", required: true, present: false },
+      { name: "GITHUB_CLIENT_ID", required: false, present: true },
+      { name: "VAPID_PUBLIC_KEY", required: false, present: false },
+    ],
+  };
+
+  it("renders deployment URLs and the worker version after load", async () => {
+    const loader = vi.fn(async () => baseInfo);
+    render(<SelfHostPanel loader={loader} />);
+    await screen.findByText("https://worker.example.com");
+    expect(screen.getByText("https://abc.supabase.co")).toBeTruthy();
+    expect(screen.getByText("https://auth.example.com")).toBeTruthy();
+    expect(screen.getByText("abc1234")).toBeTruthy();
+    expect(loader).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows env-var presence (set/unset) without leaking values", async () => {
+    const loader = vi.fn(async () => baseInfo);
+    render(<SelfHostPanel loader={loader} />);
+    expect(
+      (await screen.findByLabelText(/ALLOWED_EMAIL set/)).textContent,
+    ).toBe("set");
+    expect(screen.getByLabelText(/AI_KEY_SECRET unset/).textContent).toBe(
+      "unset",
+    );
+    expect(screen.getByLabelText(/GITHUB_CLIENT_ID set/).textContent).toBe(
+      "set",
+    );
+  });
+
+  it("runs the health check and renders the per-check result", async () => {
+    const loader = vi.fn(async () => baseInfo);
+    const result: HealthCheckResult = {
+      ok: false,
+      checks: [
+        { name: "env:ALLOWED_EMAIL", ok: true },
+        {
+          name: "env:AI_KEY_SECRET",
+          ok: false,
+          detail: "missing required env var",
+        },
+        { name: "supabase", ok: true },
+      ],
+    };
+    const healthRunner = vi.fn(async () => result);
+    render(<SelfHostPanel loader={loader} healthRunner={healthRunner} />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: /run health check/i }),
+    );
+    await waitFor(() => expect(healthRunner).toHaveBeenCalledTimes(1));
+    const status = await screen.findByRole("status", {
+      name: /health check result/i,
+    });
+    expect(status.textContent).toMatch(/some checks failed/i);
+    expect(status.textContent).toMatch(/env:AI_KEY_SECRET/);
+    expect(status.textContent).toMatch(/missing required env var/);
+  });
+
+  it("surfaces a load error from the loader", async () => {
+    const loader = vi.fn(async () => {
+      throw new Error("network down");
+    });
+    render(<SelfHostPanel loader={loader} />);
+    await waitFor(() =>
+      expect(screen.getByRole("alert").textContent).toMatch(/network down/),
+    );
+  });
+
+  it("surfaces a thrown health-check error inline", async () => {
+    const loader = vi.fn(async () => baseInfo);
+    const healthRunner = vi.fn(async () => {
+      throw new Error("502 bad gateway");
+    });
+    render(<SelfHostPanel loader={loader} healthRunner={healthRunner} />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: /run health check/i }),
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("alert").textContent).toMatch(/502/),
     );
   });
 });

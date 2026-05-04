@@ -56,6 +56,11 @@ import {
   type ProfileView,
   putProfile,
 } from "#/lib/profile-api";
+import {
+  getSelfHostInfo,
+  runHealthCheck,
+  type SelfHostEnv,
+} from "#/lib/self-host-api";
 import type { StoredSignal } from "#/lib/signal";
 import { runDueRollups } from "#/lib/signal-rollup";
 import { handleSlackWebhook } from "#/lib/slack-webhook";
@@ -457,6 +462,20 @@ export default {
         if (!out.ok) return json({ ok: false, error: out.error }, 400);
         return json({ ok: true, retention: out.retention });
       }
+    }
+
+    if (url.pathname === "/api/self-host" && request.method === "GET") {
+      return json(
+        getSelfHostInfo(env as SelfHostEnv, `${url.protocol}//${url.host}`),
+      );
+    }
+
+    if (url.pathname === "/api/self-host/health" && request.method === "POST") {
+      const out = await runHealthCheck({
+        env: env as SelfHostEnv,
+        pingDatabase: () => pingDatabase(service),
+      });
+      return json(out, out.ok ? 200 : 502);
     }
 
     if (url.pathname === "/api/slack/allowlist") {
@@ -1015,6 +1034,17 @@ function sanitizeAllowlist(input: unknown): string[] {
     if (!out.includes(trimmed)) out.push(trimmed);
   }
   return out;
+}
+
+async function pingDatabase(
+  service: SupabaseService,
+): Promise<{ ok: boolean; error?: string }> {
+  const { error } = await service
+    .from("user_preferences")
+    .select("id", { head: true, count: "exact" })
+    .eq("id", true);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
 }
 
 async function replaceSlackAllowlist(

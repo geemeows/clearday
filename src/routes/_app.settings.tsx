@@ -16,6 +16,7 @@ import type {
   RulePredicate,
 } from "#/lib/inbox-rules-engine";
 import { PROFILE_UPDATED_EVENT, type ProfileView } from "#/lib/profile-api";
+import type { HealthCheckResult, SelfHostInfo } from "#/lib/self-host-api";
 import {
   ACCENTS,
   type Accent,
@@ -59,6 +60,7 @@ function SettingsPage() {
       <ProfilePanel />
       <ThemePanel />
       <DataPrivacyPanel />
+      <SelfHostPanel />
       <NotificationsPanel />
       <WebPushDevicesPanel />
       <EmailDigestPanel />
@@ -2942,6 +2944,185 @@ export function DataPrivacyPanel({
           )}
         </div>
       </div>
+    </section>
+  );
+}
+
+export function SelfHostPanel({
+  loader,
+  healthRunner,
+}: {
+  loader?: () => Promise<SelfHostInfo>;
+  healthRunner?: () => Promise<HealthCheckResult>;
+} = {}) {
+  const [info, setInfo] = useState<SelfHostInfo | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [health, setHealth] = useState<HealthCheckResult | null>(null);
+  const [healthError, setHealthError] = useState<string | null>(null);
+  const [healthBusy, setHealthBusy] = useState(false);
+
+  const load = useMemo(
+    () => loader ?? (() => apiFetch("/api/self-host") as Promise<SelfHostInfo>),
+    [loader],
+  );
+  const runHealth = useMemo(
+    () =>
+      healthRunner ??
+      (() =>
+        apiFetch("/api/self-host/health", {
+          method: "POST",
+        }) as Promise<HealthCheckResult>),
+    [healthRunner],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    load()
+      .then((view) => {
+        if (!cancelled) setInfo(view);
+      })
+      .catch((e) => {
+        if (!cancelled)
+          setLoadError(e instanceof Error ? e.message : String(e));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [load]);
+
+  const onRunHealth = async () => {
+    setHealthBusy(true);
+    setHealth(null);
+    setHealthError(null);
+    try {
+      setHealth(await runHealth());
+    } catch (e) {
+      setHealthError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setHealthBusy(false);
+    }
+  };
+
+  return (
+    <section className="mt-8">
+      <h2 className="text-lg font-semibold">Self-host</h2>
+      <p className="mt-1 text-sm text-zinc-500">
+        Deployment URLs, Worker version, and required environment variables.
+        Values are never displayed — only whether each one is set.
+      </p>
+
+      {loadError && (
+        <p role="alert" className="mt-2 text-sm text-red-700">
+          {loadError}
+        </p>
+      )}
+
+      {info && (
+        <div className="mt-4 grid max-w-xl gap-4">
+          <dl className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1 text-sm">
+            <dt className="text-zinc-500">Worker URL</dt>
+            <dd>
+              <code className="font-mono">{info.worker_url ?? "—"}</code>
+            </dd>
+            <dt className="text-zinc-500">Supabase URL</dt>
+            <dd>
+              <code className="font-mono">{info.supabase_url ?? "—"}</code>
+            </dd>
+            <dt className="text-zinc-500">Auth proxy</dt>
+            <dd>
+              <code className="font-mono">{info.auth_proxy_url ?? "—"}</code>
+            </dd>
+            <dt className="text-zinc-500">Worker version</dt>
+            <dd>
+              <code className="font-mono">{info.worker_version}</code>
+            </dd>
+          </dl>
+
+          <div>
+            <h3 className="text-sm font-medium text-zinc-700">
+              Environment variables
+            </h3>
+            <ul className="mt-2 grid grid-cols-1 gap-1 text-sm sm:grid-cols-2">
+              {info.env_vars.map((v) => (
+                <li
+                  key={v.name}
+                  className="flex items-center justify-between gap-2 rounded border border-zinc-200 px-2 py-1"
+                >
+                  <code className="font-mono text-xs">{v.name}</code>
+                  <span className="flex items-center gap-2 text-xs">
+                    {v.required ? (
+                      <span className="text-zinc-500">required</span>
+                    ) : (
+                      <span className="text-zinc-400">optional</span>
+                    )}
+                    <output
+                      aria-label={`${v.name} ${v.present ? "set" : "unset"}`}
+                      className={
+                        v.present
+                          ? "text-emerald-700"
+                          : v.required
+                            ? "text-red-700"
+                            : "text-zinc-400"
+                      }
+                    >
+                      {v.present ? "set" : "unset"}
+                    </output>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <div>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={onRunHealth}
+                disabled={healthBusy}
+                className="rounded border px-3 py-1.5 text-sm hover:bg-zinc-50 disabled:opacity-50"
+              >
+                {healthBusy ? "Running…" : "Run health check"}
+              </button>
+              {healthError && (
+                <p role="alert" className="text-sm text-red-700">
+                  {healthError}
+                </p>
+              )}
+            </div>
+            {health && (
+              <output aria-label="Health check result" className="mt-2 block">
+                <p
+                  className={
+                    health.ok
+                      ? "text-sm text-emerald-700"
+                      : "text-sm text-red-700"
+                  }
+                >
+                  {health.ok ? "All checks passed." : "Some checks failed."}
+                </p>
+                <ul className="mt-1 space-y-0.5 text-sm">
+                  {health.checks.map((c) => (
+                    <li key={c.name} className="flex items-center gap-2">
+                      <span
+                        className={c.ok ? "text-emerald-700" : "text-red-700"}
+                        aria-hidden="true"
+                      >
+                        {c.ok ? "✓" : "✗"}
+                      </span>
+                      <code className="font-mono text-xs">{c.name}</code>
+                      {c.detail && (
+                        <span className="text-xs text-zinc-500">
+                          — {c.detail}
+                        </span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </output>
+            )}
+          </div>
+        </div>
+      )}
     </section>
   );
 }
