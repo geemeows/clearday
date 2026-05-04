@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import {
   Calendar as CalIcon,
   ExternalLink,
+  Inbox,
   RefreshCw,
   Sparkles,
   Video,
@@ -9,6 +10,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch } from "#/lib/api-client";
+import type { MeetingEvent } from "#/lib/calendar-view";
 import type { BriefingResult } from "#/lib/morning-briefing";
 import {
   formatCountdown,
@@ -18,6 +20,7 @@ import {
   pickNextUp,
   type StoredSignal,
 } from "#/lib/next-up";
+import { pickInboxPreview, pickTodaySchedule } from "#/lib/today-cards";
 
 export const Route = createFileRoute("/_app/today")({
   component: TodayPage,
@@ -76,6 +79,11 @@ function TodayPage() {
     [meetings, activeAlertId],
   );
 
+  const todaysMeetings = useMemo(
+    () => (meetings ? pickTodaySchedule(meetings, now) : []),
+    [meetings, now],
+  );
+
   return (
     <TodayView
       meetings={meetings}
@@ -85,6 +93,12 @@ function TodayPage() {
       alertSignal={alertSignal}
       onDismissAlert={dismissAlert}
       briefing={<BriefingCard />}
+      schedule={
+        meetings != null && (
+          <TodayScheduleCard events={todaysMeetings} now={now} />
+        )
+      }
+      inboxPreview={<InboxPreviewCard />}
     />
   );
 }
@@ -97,6 +111,8 @@ export function TodayView({
   alertSignal,
   onDismissAlert,
   briefing,
+  schedule,
+  inboxPreview,
 }: {
   meetings: StoredSignal[] | null;
   nextUp: NextUpMeeting | null;
@@ -105,6 +121,8 @@ export function TodayView({
   alertSignal: StoredSignal | null;
   onDismissAlert: () => void;
   briefing?: React.ReactNode;
+  schedule?: React.ReactNode;
+  inboxPreview?: React.ReactNode;
 }) {
   return (
     <section className="p-8">
@@ -129,6 +147,10 @@ export function TodayView({
       {briefing}
 
       {meetings != null && <NextUpCard meeting={nextUp} now={now} />}
+
+      {schedule}
+
+      {inboxPreview}
 
       {alertSignal && (
         <MeetingAlertToast signal={alertSignal} onDismiss={onDismissAlert} />
@@ -412,6 +434,169 @@ function MeetingAlertToast({
       </button>
     </output>
   );
+}
+
+export function TodayScheduleCard({
+  events,
+  now,
+}: {
+  events: MeetingEvent[];
+  now: Date;
+}) {
+  return (
+    <article
+      aria-label="Today schedule"
+      className="mt-6 rounded border border-zinc-200 bg-white p-5"
+    >
+      <header className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-zinc-500">
+        <CalIcon className="h-4 w-4" />
+        Today's schedule
+      </header>
+      {events.length === 0 ? (
+        <p className="mt-3 text-sm text-zinc-500">No meetings today.</p>
+      ) : (
+        <ul className="mt-3 divide-y divide-zinc-100">
+          {events.map((e) => (
+            <li
+              key={e.signal.id}
+              className="flex items-start gap-3 py-2 first:pt-0 last:pb-0"
+            >
+              <time
+                dateTime={e.startsAt.toISOString()}
+                className="w-20 shrink-0 text-sm text-zinc-500"
+              >
+                {formatLocalTime(e.startsAt)}
+              </time>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium text-zinc-900">
+                  {e.signal.title}
+                </p>
+                {e.endsAt && (
+                  <p className="text-xs text-zinc-500">
+                    {formatRange(e.startsAt, e.endsAt, now)}
+                  </p>
+                )}
+              </div>
+              {e.videoLink && (
+                <a
+                  href={e.videoLink}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 rounded border border-zinc-200 px-2 py-1 text-xs text-zinc-700 hover:bg-zinc-50"
+                >
+                  <Video className="h-3 w-3" />
+                  Join
+                </a>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </article>
+  );
+}
+
+type InboxLoader = () => Promise<StoredSignal[]>;
+
+const defaultInboxLoader: InboxLoader = async () => {
+  const body = (await apiFetch("/api/signals?filter=all")) as {
+    signals: StoredSignal[];
+  };
+  return body.signals;
+};
+
+export function InboxPreviewCard({
+  loader = defaultInboxLoader,
+  limit = 5,
+}: {
+  loader?: InboxLoader;
+  limit?: number;
+} = {}) {
+  const [signals, setSignals] = useState<StoredSignal[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    loader()
+      .then((list) => {
+        if (cancelled) return;
+        setSignals(list);
+        setError(null);
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        setError(e instanceof Error ? e.message : "failed to load");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [loader]);
+
+  const preview = useMemo(
+    () => (signals ? pickInboxPreview(signals, limit) : []),
+    [signals, limit],
+  );
+
+  return (
+    <article
+      aria-label="Inbox preview"
+      className="mt-6 rounded border border-zinc-200 bg-white p-5"
+    >
+      <header className="flex items-center justify-between">
+        <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-zinc-500">
+          <Inbox className="h-4 w-4" />
+          Inbox
+        </div>
+        <a
+          href="/inbox"
+          className="text-xs text-zinc-700 underline hover:text-zinc-900"
+        >
+          Open all
+        </a>
+      </header>
+      {error && <p className="mt-3 text-sm text-red-700">{error}</p>}
+      {!error && signals == null && (
+        <p className="mt-3 text-sm text-zinc-500">Loading…</p>
+      )}
+      {!error && signals != null && preview.length === 0 && (
+        <p className="mt-3 text-sm text-zinc-500">
+          Nothing actionable. Inbox zero.
+        </p>
+      )}
+      {!error && preview.length > 0 && (
+        <ul className="mt-3 divide-y divide-zinc-100">
+          {preview.map((s) => (
+            <li
+              key={s.id}
+              className="flex items-center gap-3 py-2 first:pt-0 last:pb-0"
+            >
+              <span className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium text-zinc-900">
+                  {s.title}
+                </p>
+                <p className="truncate text-xs text-zinc-500">{s.provider}</p>
+              </span>
+              {s.url && (
+                <a
+                  href={s.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 rounded border border-zinc-200 px-2 py-1 text-xs text-zinc-700 hover:bg-zinc-50"
+                >
+                  <ExternalLink className="h-3 w-3" />
+                  Open
+                </a>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </article>
+  );
+}
+
+function formatRange(start: Date, end: Date, _now: Date): string {
+  return `${formatLocalTime(start)} – ${formatLocalTime(end)}`;
 }
 
 function linkedLabel(item: LinkedItem): string {

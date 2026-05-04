@@ -6,9 +6,16 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import { toMeetingEvents } from "#/lib/calendar-view";
 import type { BriefingResult } from "#/lib/morning-briefing";
 import type { StoredSignal } from "#/lib/next-up";
-import { BriefingCard, NextUpCard, TodayView } from "#/routes/_app.today";
+import {
+  BriefingCard,
+  InboxPreviewCard,
+  NextUpCard,
+  TodayScheduleCard,
+  TodayView,
+} from "#/routes/_app.today";
 
 const meetingSignal = (id = "m1"): StoredSignal => ({
   id,
@@ -178,5 +185,78 @@ describe("BriefingCard", () => {
     });
     await waitFor(() => screen.getByText(/Refreshed briefing/));
     expect(generator).toHaveBeenNthCalledWith(2, true);
+  });
+});
+
+describe("TodayScheduleCard", () => {
+  it("renders today's meetings with Join links and a time range", () => {
+    const events = toMeetingEvents([meetingSignal("evt-1")]);
+    render(
+      <TodayScheduleCard
+        events={events}
+        now={new Date("2026-05-04T12:00:00.000Z")}
+      />,
+    );
+    const card = screen.getByRole("article", { name: /today schedule/i });
+    expect(card.textContent).toContain("Standup");
+    expect(
+      screen.getByRole("link", { name: /^join$/i }).getAttribute("href"),
+    ).toBe("https://meet.google.com/abc-defg-hij");
+  });
+
+  it("renders an empty-state when nothing is scheduled today", () => {
+    render(
+      <TodayScheduleCard
+        events={[]}
+        now={new Date("2026-05-04T12:00:00.000Z")}
+      />,
+    );
+    expect(screen.getByText(/no meetings today/i)).toBeTruthy();
+  });
+});
+
+describe("InboxPreviewCard", () => {
+  const prSignal = (
+    id: string,
+    requires_action: boolean,
+    createdAt: string,
+  ): StoredSignal => ({
+    id,
+    provider: "github",
+    kind: requires_action ? "pr_review_requested" : "pr_authored",
+    source_id: id,
+    title: `PR ${id}`,
+    url: `https://github.com/acme/web/pull/${id}`,
+    payload: {},
+    requires_action,
+    source_created_at: createdAt,
+    dismissed_at: null,
+  });
+
+  it("renders top actionable signals with an Open-all link", async () => {
+    const loader = vi.fn(async () => [
+      prSignal("1", false, "2026-05-04T08:00:00.000Z"),
+      prSignal("2", true, "2026-05-04T10:00:00.000Z"),
+    ]);
+    render(<InboxPreviewCard loader={loader} limit={3} />);
+    await waitFor(() => screen.getByText("PR 2"));
+    expect(screen.getByText("PR 1")).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: /open all/i }).getAttribute("href"),
+    ).toBe("/inbox");
+  });
+
+  it("renders an empty-state when nothing is actionable", async () => {
+    const loader = vi.fn(async () => [] as StoredSignal[]);
+    render(<InboxPreviewCard loader={loader} />);
+    await waitFor(() => screen.getByText(/inbox zero/i));
+  });
+
+  it("surfaces a load error", async () => {
+    const loader = vi.fn(async () => {
+      throw new Error("network down");
+    });
+    render(<InboxPreviewCard loader={loader} />);
+    await waitFor(() => screen.getByText(/network down/i));
   });
 });
