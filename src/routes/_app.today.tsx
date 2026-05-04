@@ -1,10 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 import {
+  BarChart3,
   Calendar as CalIcon,
   ExternalLink,
   Inbox,
   RefreshCw,
   Sparkles,
+  SquareKanban,
   Video,
   X,
 } from "lucide-react";
@@ -20,7 +22,13 @@ import {
   pickNextUp,
   type StoredSignal,
 } from "#/lib/next-up";
-import { pickInboxPreview, pickTodaySchedule } from "#/lib/today-cards";
+import {
+  computeWeekStats,
+  pickInboxPreview,
+  pickInProgressTickets,
+  pickTodaySchedule,
+  type WeekStats,
+} from "#/lib/today-cards";
 
 export const Route = createFileRoute("/_app/today")({
   component: TodayPage,
@@ -99,6 +107,8 @@ function TodayPage() {
         )
       }
       inboxPreview={<InboxPreviewCard />}
+      inProgress={<InProgressCard />}
+      weekStats={<WeekStatsCard now={now} />}
     />
   );
 }
@@ -113,6 +123,8 @@ export function TodayView({
   briefing,
   schedule,
   inboxPreview,
+  inProgress,
+  weekStats,
 }: {
   meetings: StoredSignal[] | null;
   nextUp: NextUpMeeting | null;
@@ -123,6 +135,8 @@ export function TodayView({
   briefing?: React.ReactNode;
   schedule?: React.ReactNode;
   inboxPreview?: React.ReactNode;
+  inProgress?: React.ReactNode;
+  weekStats?: React.ReactNode;
 }) {
   return (
     <section className="p-8">
@@ -150,7 +164,11 @@ export function TodayView({
 
       {schedule}
 
+      {inProgress}
+
       {inboxPreview}
+
+      {weekStats}
 
       {alertSignal && (
         <MeetingAlertToast signal={alertSignal} onDismiss={onDismissAlert} />
@@ -592,6 +610,185 @@ export function InboxPreviewCard({
         </ul>
       )}
     </article>
+  );
+}
+
+type TicketLoader = () => Promise<StoredSignal[]>;
+
+const defaultTicketLoader: TicketLoader = async () => {
+  const body = (await apiFetch("/api/signals?filter=tickets")) as {
+    signals: StoredSignal[];
+  };
+  return body.signals;
+};
+
+const TICKET_STATUS_LABEL: Record<string, string> = {
+  ticket_in_progress: "In progress",
+  ticket_in_review: "In review",
+  ticket_blocked: "Blocked",
+  ticket_assigned: "Assigned",
+};
+
+export function InProgressCard({
+  loader = defaultTicketLoader,
+  limit = 5,
+}: {
+  loader?: TicketLoader;
+  limit?: number;
+} = {}) {
+  const [tickets, setTickets] = useState<StoredSignal[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    loader()
+      .then((list) => {
+        if (cancelled) return;
+        setTickets(list);
+        setError(null);
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        setError(e instanceof Error ? e.message : "failed to load");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [loader]);
+
+  const top = useMemo(
+    () => (tickets ? pickInProgressTickets(tickets, limit) : []),
+    [tickets, limit],
+  );
+
+  return (
+    <article
+      aria-label="In progress"
+      className="mt-6 rounded border border-zinc-200 bg-white p-5"
+    >
+      <header className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-zinc-500">
+        <SquareKanban className="h-4 w-4" />
+        In progress
+      </header>
+      {error && <p className="mt-3 text-sm text-red-700">{error}</p>}
+      {!error && tickets == null && (
+        <p className="mt-3 text-sm text-zinc-500">Loading…</p>
+      )}
+      {!error && tickets != null && top.length === 0 && (
+        <p className="mt-3 text-sm text-zinc-500">
+          Nothing in progress. Connect Linear or Jira in{" "}
+          <a href="/settings" className="underline hover:text-zinc-900">
+            Settings
+          </a>
+          .
+        </p>
+      )}
+      {!error && top.length > 0 && (
+        <ul className="mt-3 divide-y divide-zinc-100">
+          {top.map((s) => (
+            <li
+              key={s.id}
+              className="flex items-center gap-3 py-2 first:pt-0 last:pb-0"
+            >
+              <span className="rounded bg-zinc-100 px-2 py-0.5 font-mono text-xs text-zinc-700">
+                {TICKET_STATUS_LABEL[s.kind] ?? s.kind}
+              </span>
+              <span className="min-w-0 flex-1 truncate text-sm font-medium text-zinc-900">
+                {s.title}
+              </span>
+              {s.url && (
+                <a
+                  href={s.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 rounded border border-zinc-200 px-2 py-1 text-xs text-zinc-700 hover:bg-zinc-50"
+                >
+                  <ExternalLink className="h-3 w-3" />
+                  Open
+                </a>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </article>
+  );
+}
+
+type WeekLoader = (since: string) => Promise<StoredSignal[]>;
+
+const defaultWeekLoader: WeekLoader = async (since) => {
+  const body = (await apiFetch(
+    `/api/signals?filter=all&include_dismissed=true&since=${encodeURIComponent(since)}&limit=200`,
+  )) as { signals: StoredSignal[] };
+  return body.signals;
+};
+
+export function WeekStatsCard({
+  now,
+  loader = defaultWeekLoader,
+}: {
+  now: Date;
+  loader?: WeekLoader;
+}) {
+  const [stats, setStats] = useState<WeekStats | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  // Stabilise the `since` ISO so the effect doesn't refetch every render
+  // when callers pass a fresh `now` from a 1-minute tick.
+  const sinceIso = useMemo(() => {
+    const d = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    return d.toISOString();
+  }, [now]);
+
+  useEffect(() => {
+    let cancelled = false;
+    loader(sinceIso)
+      .then((list) => {
+        if (cancelled) return;
+        setStats(computeWeekStats(list, new Date()));
+        setError(null);
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        setError(e instanceof Error ? e.message : "failed to load");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [loader, sinceIso]);
+
+  return (
+    <article
+      aria-label="This week"
+      className="mt-6 rounded border border-zinc-200 bg-white p-5"
+    >
+      <header className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-zinc-500">
+        <BarChart3 className="h-4 w-4" />
+        This week
+      </header>
+      {error && <p className="mt-3 text-sm text-red-700">{error}</p>}
+      {!error && stats == null && (
+        <p className="mt-3 text-sm text-zinc-500">Loading…</p>
+      )}
+      {!error && stats != null && (
+        <dl className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <Stat label="PRs reviewed" value={stats.prsReviewed} />
+          <Stat label="Tickets shipped" value={stats.ticketsShipped} />
+          <Stat label="Mentions handled" value={stats.mentionsHandled} />
+          <Stat label="Meetings" value={stats.meetingsAttended} />
+        </dl>
+      )}
+    </article>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded border border-zinc-100 bg-zinc-50 px-3 py-2">
+      <dt className="text-xs text-zinc-500">{label}</dt>
+      <dd className="mt-0.5 text-lg font-semibold text-zinc-900">{value}</dd>
+    </div>
   );
 }
 

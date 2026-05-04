@@ -21,6 +21,7 @@ function makeClient(overrides: {
     in: ReturnType<typeof vi.fn>;
     ilike: ReturnType<typeof vi.fn>;
     or: ReturnType<typeof vi.fn>;
+    gte: ReturnType<typeof vi.fn>;
     order: ReturnType<typeof vi.fn>;
     limit: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
@@ -36,7 +37,8 @@ function makeClient(overrides: {
   const is = vi.fn(() => chain);
   const ilike = vi.fn(() => chain);
   const or = vi.fn(() => chain);
-  const chain = { is, in: inFn, ilike, or, order, limit };
+  const gte = vi.fn(() => chain);
+  const chain = { is, in: inFn, ilike, or, gte, order, limit };
   const select = vi.fn(() => chain);
   const upsert = vi.fn(async () => overrides.upsertResult ?? { error: null });
   const eq = vi.fn(async () => overrides.updateResult ?? { error: null });
@@ -53,6 +55,7 @@ function makeClient(overrides: {
       in: inFn,
       ilike,
       or,
+      gte,
       order,
       limit,
       update,
@@ -148,6 +151,21 @@ describe("listSignals", () => {
     const { client, spies } = makeClient({ listData: [] });
     await listSignals(client, { query: "  " });
     expect(spies.ilike).not.toHaveBeenCalled();
+  });
+
+  it("applies gte('source_created_at', since) when since is provided", async () => {
+    const { client, spies } = makeClient({ listData: [] });
+    await listSignals(client, { since: "2026-04-27T00:00:00.000Z" });
+    expect(spies.gte).toHaveBeenCalledWith(
+      "source_created_at",
+      "2026-04-27T00:00:00.000Z",
+    );
+  });
+
+  it("does not call gte when since is omitted", async () => {
+    const { client, spies } = makeClient({ listData: [] });
+    await listSignals(client, {});
+    expect(spies.gte).not.toHaveBeenCalled();
   });
 });
 

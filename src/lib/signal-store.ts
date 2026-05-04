@@ -30,6 +30,7 @@ type SelectChain = {
   in: (col: string, vals: string[]) => SelectChain;
   ilike: (col: string, pattern: string) => SelectChain;
   or: (filter: string) => SelectChain;
+  gte: (col: string, val: string) => SelectChain;
   order: (col: string, opts: { ascending: boolean }) => SelectChain;
   limit: (n: number) => Promise<{
     data: StoredSignal[] | null;
@@ -98,6 +99,8 @@ export type ListSignalsArgs = {
   query?: string;
   /** Include signals whose `snoozed_until` is in the future. Default: false. */
   includeSnoozed?: boolean;
+  /** ISO timestamp; rows with `source_created_at` strictly before are dropped. */
+  since?: string;
   limit?: number;
   now?: Date;
 };
@@ -118,6 +121,7 @@ export async function listSignals(
   if (args.query && args.query.trim().length > 0) {
     q = q.ilike("title", `%${escapeLikePattern(args.query.trim())}%`);
   }
+  if (args.since) q = q.gte("source_created_at", args.since);
   q = q.order("source_created_at", { ascending: false });
   const { data, error } = await q.limit(args.limit ?? 200);
   if (error) throw new Error(`signal list failed: ${error.message}`);

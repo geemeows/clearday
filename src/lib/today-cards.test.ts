@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { StoredSignal } from "#/lib/next-up";
-import { pickInboxPreview, pickTodaySchedule } from "#/lib/today-cards";
+import type { SignalKind } from "#/lib/signal";
+import {
+  computeWeekStats,
+  pickInboxPreview,
+  pickInProgressTickets,
+  pickTodaySchedule,
+} from "#/lib/today-cards";
 
 const meeting = (
   id: string,
@@ -106,5 +112,154 @@ describe("pickInboxPreview", () => {
     expect(
       pickInboxPreview([pr("1", "2026-05-04T09:00:00.000Z", true)], -3),
     ).toEqual([]);
+  });
+});
+
+const ticket = (
+  id: string,
+  kind: SignalKind,
+  createdAt: string,
+  dismissedAt: string | null = null,
+): StoredSignal => ({
+  id,
+  provider: "linear",
+  kind,
+  source_id: id,
+  title: `Ticket ${id}`,
+  url: `https://linear.app/x/issue/${id}`,
+  payload: {},
+  requires_action: kind !== "ticket_in_progress",
+  source_created_at: createdAt,
+  dismissed_at: dismissedAt,
+});
+
+describe("pickInProgressTickets", () => {
+  it("orders by status (in_progress > in_review > blocked > assigned), then recency", () => {
+    const out = pickInProgressTickets([
+      ticket("a", "ticket_blocked", "2026-05-04T09:00:00.000Z"),
+      ticket("b", "ticket_in_progress", "2026-05-03T09:00:00.000Z"),
+      ticket("c", "ticket_in_review", "2026-05-04T09:00:00.000Z"),
+      ticket("d", "ticket_assigned", "2026-05-04T09:00:00.000Z"),
+      ticket("e", "ticket_in_progress", "2026-05-04T10:00:00.000Z"),
+    ]);
+    expect(out.map((s) => s.id)).toEqual(["e", "b", "c", "a", "d"]);
+  });
+
+  it("drops dismissed and non-ticket signals; clamps via limit", () => {
+    const out = pickInProgressTickets(
+      [
+        ticket("a", "ticket_in_progress", "2026-05-04T09:00:00.000Z"),
+        ticket(
+          "b",
+          "ticket_in_progress",
+          "2026-05-03T09:00:00.000Z",
+          "2026-05-04T00:00:00.000Z",
+        ),
+        pr("p", "2026-05-04T09:00:00.000Z", true),
+      ],
+      1,
+    );
+    expect(out.map((s) => s.id)).toEqual(["a"]);
+  });
+});
+
+describe("computeWeekStats", () => {
+  const now = new Date("2026-05-04T12:00:00.000Z");
+  const inWindow = "2026-05-02T09:00:00.000Z"; // 2d ago
+  const outOfWindow = "2026-04-20T09:00:00.000Z"; // 14d ago
+
+  it("counts pr_review_requested signals dismissed-or-acted in window", () => {
+    const review = (
+      id: string,
+      createdAt: string,
+      requires_action: boolean,
+      dismissed_at: string | null = null,
+    ): StoredSignal => ({
+      id,
+      provider: "github",
+      kind: "pr_review_requested",
+      source_id: id,
+      title: `PR ${id}`,
+      url: null,
+      payload: {},
+      requires_action,
+      source_created_at: createdAt,
+      dismissed_at,
+    });
+    const out = computeWeekStats(
+      [
+        // acted (requires_action=false) + in window → counts
+        review("1", inWindow, false),
+        // dismissed in window → counts
+        review("2", inWindow, true, inWindow),
+        // requires_action true and not dismissed → doesn't count
+        review("3", inWindow, true),
+        // out of window → doesn't count
+        review("4", outOfWindow, false),
+      ],
+      now,
+    );
+    expect(out.prsReviewed).toBe(2);
+  });
+
+  it("counts ticket_* signals dismissed in window as shipped", () => {
+    const out = computeWeekStats(
+      [
+        ticket("a", "ticket_in_progress", outOfWindow, inWindow),
+        ticket("b", "ticket_assigned", outOfWindow, outOfWindow),
+        ticket("c", "ticket_in_review", inWindow, null), // not shipped
+      ],
+      now,
+    );
+    expect(out.ticketsShipped).toBe(1);
+  });
+
+  it("counts mention/dm/thread_reply rows dismissed in window", () => {
+    const mention = (id: string, dismissed: string | null): StoredSignal => ({
+      id,
+      provider: "slack",
+      kind: "mention",
+      source_id: id,
+      title: `m${id}`,
+      url: null,
+      payload: {},
+      requires_action: true,
+      source_created_at: outOfWindow,
+      dismissed_at: dismissed,
+    });
+    const out = computeWeekStats(
+      [mention("1", inWindow), mention("2", null), mention("3", outOfWindow)],
+      now,
+    );
+    expect(out.mentionsHandled).toBe(1);
+  });
+
+  it("counts meetings whose start is in the window", () => {
+    const meeting = (id: string, startsAt: string): StoredSignal => ({
+      id,
+      provider: "google",
+      kind: "meeting",
+      source_id: id,
+      title: `m${id}`,
+      url: null,
+      payload: { starts_at: startsAt },
+      requires_action: false,
+      source_created_at: startsAt,
+      dismissed_at: null,
+    });
+    const out = computeWeekStats(
+      [meeting("1", inWindow), meeting("2", outOfWindow)],
+      now,
+    );
+    expect(out.meetingsAttended).toBe(1);
+  });
+
+  it("returns zeros for an empty list", () => {
+    expect(computeWeekStats([], now)).toEqual({
+      prsReviewed: 0,
+      ticketsShipped: 0,
+      mentionsHandled: 0,
+      meetingsAttended: 0,
+    });
   });
 });

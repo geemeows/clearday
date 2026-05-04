@@ -12,10 +12,11 @@ function listClient() {
   const is = vi.fn(() => chain);
   const ilike = vi.fn(() => chain);
   const or = vi.fn(() => chain);
-  const chain = { is, in: inFn, ilike, or, order, limit };
+  const gte = vi.fn(() => chain);
+  const chain = { is, in: inFn, ilike, or, gte, order, limit };
   const select = vi.fn(() => chain);
   return {
-    spies: { is, in: inFn, ilike, or, order, limit, select },
+    spies: { is, in: inFn, ilike, or, gte, order, limit, select },
     client: {
       from: () => ({
         select,
@@ -80,6 +81,42 @@ describe("handleListSignals", () => {
       client,
     );
     expect(spies.ilike).toHaveBeenCalledWith("title", "%focus%");
+  });
+
+  it("forwards since= as a gte filter on source_created_at", async () => {
+    const { client, spies } = listClient();
+    await handleListSignals(
+      new URL(
+        "https://x/api/signals?filter=all&since=2026-04-27T00%3A00%3A00.000Z",
+      ),
+      client,
+    );
+    expect(spies.gte).toHaveBeenCalledWith(
+      "source_created_at",
+      "2026-04-27T00:00:00.000Z",
+    );
+  });
+
+  it("ignores a malformed since value", async () => {
+    const { client, spies } = listClient();
+    await handleListSignals(
+      new URL("https://x/api/signals?filter=all&since=garbage"),
+      client,
+    );
+    expect(spies.gte).not.toHaveBeenCalled();
+  });
+
+  it("skips the dismissed filter when include_dismissed=true", async () => {
+    const { client, spies } = listClient();
+    await handleListSignals(
+      new URL("https://x/api/signals?filter=all&include_dismissed=true"),
+      client,
+    );
+    // is("dismissed_at", null) is the gate; absence means dismissed rows
+    // are returned alongside live ones.
+    expect(
+      spies.is.mock.calls.some((call: unknown[]) => call[0] === "dismissed_at"),
+    ).toBe(false);
   });
 
   it("clamps user-supplied limit to 200", async () => {

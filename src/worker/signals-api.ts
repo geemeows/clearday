@@ -40,7 +40,19 @@ export async function handleListSignals(
     limitParam && /^\d+$/.test(limitParam)
       ? Math.min(Number(limitParam), 200)
       : undefined;
-  const signals = await listSignals(client, { kinds, query, limit });
+  const sinceParam = url.searchParams.get("since");
+  const since =
+    sinceParam && !Number.isNaN(Date.parse(sinceParam))
+      ? new Date(sinceParam).toISOString()
+      : undefined;
+  const includeDismissed = url.searchParams.get("include_dismissed") === "true";
+  const signals = await listSignals(client, {
+    kinds,
+    query,
+    limit,
+    since,
+    includeDismissed,
+  });
   return json({ signals });
 }
 

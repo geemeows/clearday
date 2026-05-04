@@ -12,9 +12,11 @@ import type { StoredSignal } from "#/lib/next-up";
 import {
   BriefingCard,
   InboxPreviewCard,
+  InProgressCard,
   NextUpCard,
   TodayScheduleCard,
   TodayView,
+  WeekStatsCard,
 } from "#/routes/_app.today";
 
 const meetingSignal = (id = "m1"): StoredSignal => ({
@@ -258,5 +260,134 @@ describe("InboxPreviewCard", () => {
     });
     render(<InboxPreviewCard loader={loader} />);
     await waitFor(() => screen.getByText(/network down/i));
+  });
+});
+
+describe("InProgressCard", () => {
+  const ticket = (
+    id: string,
+    kind:
+      | "ticket_in_progress"
+      | "ticket_in_review"
+      | "ticket_blocked"
+      | "ticket_assigned",
+  ): StoredSignal => ({
+    id,
+    provider: "linear",
+    kind,
+    source_id: id,
+    title: `Ticket ${id}`,
+    url: `https://linear.app/x/issue/${id}`,
+    payload: {},
+    requires_action: kind !== "ticket_in_progress",
+    source_created_at: "2026-05-04T08:00:00.000Z",
+    dismissed_at: null,
+  });
+
+  it("renders tickets with their status label and an Open link", async () => {
+    const loader = vi.fn(async () => [
+      ticket("ENG-1", "ticket_in_progress"),
+      ticket("ENG-2", "ticket_blocked"),
+    ]);
+    render(<InProgressCard loader={loader} />);
+    await waitFor(() => screen.getByText("Ticket ENG-1"));
+    expect(screen.getAllByText("In progress").length).toBeGreaterThan(0);
+    expect(screen.getByText("Blocked")).toBeTruthy();
+    expect(
+      screen.getAllByRole("link", { name: /^open$/i })[0].getAttribute("href"),
+    ).toBe("https://linear.app/x/issue/ENG-1");
+  });
+
+  it("renders an empty-state with a Settings link when nothing is in progress", async () => {
+    const loader = vi.fn(async () => [] as StoredSignal[]);
+    render(<InProgressCard loader={loader} />);
+    await waitFor(() => screen.getByText(/Connect Linear or Jira/i));
+    expect(
+      screen.getByRole("link", { name: /settings/i }).getAttribute("href"),
+    ).toBe("/settings");
+  });
+});
+
+describe("WeekStatsCard", () => {
+  const now = new Date("2026-05-04T12:00:00.000Z");
+
+  it("renders the four counts from the loaded signals", async () => {
+    const loader = vi.fn(
+      async (_since: string) =>
+        [
+          // PR reviewed (acted, in window)
+          {
+            id: "p1",
+            provider: "github",
+            kind: "pr_review_requested",
+            source_id: "p1",
+            title: "PR p1",
+            url: null,
+            payload: {},
+            requires_action: false,
+            source_created_at: "2026-05-02T09:00:00.000Z",
+            dismissed_at: null,
+          },
+          // Ticket shipped (dismissed in window)
+          {
+            id: "t1",
+            provider: "linear",
+            kind: "ticket_in_progress",
+            source_id: "t1",
+            title: "Ticket t1",
+            url: null,
+            payload: {},
+            requires_action: false,
+            source_created_at: "2026-04-20T09:00:00.000Z",
+            dismissed_at: "2026-05-02T09:00:00.000Z",
+          },
+          // Meeting attended
+          {
+            id: "m1",
+            provider: "google",
+            kind: "meeting",
+            source_id: "m1",
+            title: "Standup",
+            url: null,
+            payload: { starts_at: "2026-05-03T10:00:00.000Z" },
+            requires_action: false,
+            source_created_at: "2026-05-03T10:00:00.000Z",
+            dismissed_at: null,
+          },
+        ] as StoredSignal[],
+    );
+    render(<WeekStatsCard now={now} loader={loader} />);
+    await waitFor(() => {
+      const card = screen.getByRole("article", { name: /this week/i });
+      expect(card.textContent).toContain("PRs reviewed");
+    });
+    const card = screen.getByRole("article", { name: /this week/i });
+    // Each stat is rendered as label + value pair; assert via dt/dd.
+    const dts = card.querySelectorAll("dt");
+    const dds = card.querySelectorAll("dd");
+    const map: Record<string, string> = {};
+    dts.forEach((dt, i) => {
+      map[dt.textContent ?? ""] = dds[i]?.textContent ?? "";
+    });
+    expect(map["PRs reviewed"]).toBe("1");
+    expect(map["Tickets shipped"]).toBe("1");
+    expect(map.Meetings).toBe("1");
+    expect(map["Mentions handled"]).toBe("0");
+  });
+
+  it("passes a 7-day-ago ISO `since` to the loader", async () => {
+    const loader = vi.fn(async (_since: string) => [] as StoredSignal[]);
+    render(<WeekStatsCard now={now} loader={loader} />);
+    await waitFor(() => expect(loader).toHaveBeenCalled());
+    const since = loader.mock.calls[0][0];
+    expect(since).toBe("2026-04-27T12:00:00.000Z");
+  });
+
+  it("surfaces a load error", async () => {
+    const loader = vi.fn(async (_since: string) => {
+      throw new Error("boom");
+    });
+    render(<WeekStatsCard now={now} loader={loader} />);
+    await waitFor(() => screen.getByText(/boom/i));
   });
 });
