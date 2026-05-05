@@ -79,8 +79,14 @@ export function AppShell() {
         aria-label="Primary"
         className="flex w-60 shrink-0 flex-col border-r border-zinc-200 bg-white"
       >
-        <div className="px-4 py-5 text-sm font-semibold tracking-tight">
-          ClearDay
+        <div className="flex items-center gap-2 px-4 py-5 text-sm font-semibold tracking-tight">
+          <span
+            aria-hidden="true"
+            className="inline-flex h-6 w-6 items-center justify-center rounded-md bg-primary font-bold text-primary-foreground text-xs"
+          >
+            D
+          </span>
+          Devy
         </div>
 
         <nav aria-label="Workspace" className="px-2">

@@ -20,9 +20,16 @@ function LoginComponent() {
   return (
     <main className="flex min-h-screen items-center justify-center p-8">
       <div className="w-full max-w-sm space-y-6 text-center">
-        <div>
-          <h1 className="text-2xl font-semibold">ClearDay</h1>
-          <p className="mt-1 text-sm text-zinc-500">
+        <div className="flex flex-col items-center gap-3">
+          <img
+            src="/brand/devy_logo.svg"
+            alt="Devy"
+            className="h-12 w-12"
+            width={48}
+            height={48}
+          />
+          <h1 className="text-2xl font-semibold">Devy</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
             Your developer command center.
           </p>
         </div>
