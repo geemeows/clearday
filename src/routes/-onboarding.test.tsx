@@ -78,6 +78,40 @@ describe("OnboardingWizard", () => {
     ).toBeTruthy();
     expect(complete).not.toHaveBeenCalled();
   });
+
+  it("re-entry: Skip-through all 5 steps then Finish re-stamps onboarded_at and signals navigation to /today", async () => {
+    // Simulates the Settings → Re-run onboarding → wizard → /today flow:
+    // a previously-onboarded user clicks the link, skips every step, and
+    // Finish should call POST /api/onboarding/complete (re-stamping
+    // onboarded_at) and then navigate to /today via onFinish.
+    const restamp = vi.fn(async () => ({ ok: true as const }));
+    const navigateToToday = vi.fn();
+    render(<OnboardingWizard onFinish={navigateToToday} complete={restamp} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /^skip$/i })); // 1 -> 2
+    expect(
+      await screen.findByRole("region", { name: /Step 2: Alert channels/i }),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /^skip$/i })); // 2 -> 3
+    expect(
+      await screen.findByRole("region", { name: /Step 3: Quiet hours/i }),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /^skip$/i })); // 3 -> 4
+    expect(
+      await screen.findByRole("region", { name: /Step 4: AI provider/i }),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /^skip$/i })); // 4 -> 5
+    expect(
+      await screen.findByRole("region", { name: /Step 5: Slack channels/i }),
+    ).toBeTruthy();
+
+    expect(restamp).not.toHaveBeenCalled();
+    expect(navigateToToday).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: /^finish$/i }));
+    await waitFor(() => expect(restamp).toHaveBeenCalledTimes(1));
+    expect(navigateToToday).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("ProvidersStep", () => {
