@@ -164,6 +164,23 @@ export type SlackRepliesResponse = {
   messages?: SlackReplyMessage[];
 };
 
+export type SlackHistoryMessage = {
+  type?: string;
+  subtype?: string;
+  bot_id?: string;
+  user?: string;
+  ts?: string;
+  thread_ts?: string;
+  text?: string;
+  team?: string;
+};
+
+export type SlackHistoryResponse = {
+  ok?: boolean;
+  error?: string;
+  messages?: SlackHistoryMessage[];
+};
+
 export type SlackParticipatedThread = {
   channel: string;
   thread_ts: string;
@@ -174,6 +191,11 @@ export type SlackPollOptions = {
    *  fetched and any reply not authored by self becomes a thread_reply Signal
    *  on the parent's `(channel, thread_ts)` row. */
   participatedThreads?: ReadonlyArray<SlackParticipatedThread>;
+  /** Channel ids opted in to capture `@here` / `@channel` broadcasts. For
+   *  each, conversations.history is fetched and every broadcast message not
+   *  authored by self becomes a mention Signal. Mirrors the webhook's
+   *  `broadcastAllowlist` gate so polling matches webhook semantics. */
+  broadcastChannels?: ReadonlyArray<string>;
 };
 
 export type SlackFetch = (
@@ -193,12 +215,18 @@ export async function pollSlackSignals(
   options: SlackPollOptions = {},
 ): Promise<Signal[]> {
   const threads = options.participatedThreads ?? [];
-  const [mentions, dms, threadReplies] = await Promise.all([
+  const broadcastChannels = options.broadcastChannels ?? [];
+  const [mentions, dms, threadReplies, broadcastHistories] = await Promise.all([
     runSearchQuery(accessToken, `<@${selfUserId}>`, fetchImpl),
     runSearchQuery(accessToken, "is:dm", fetchImpl),
     Promise.all(
       threads.map((t) =>
         runRepliesQuery(accessToken, t.channel, t.thread_ts, fetchImpl),
+      ),
+    ),
+    Promise.all(
+      broadcastChannels.map((channel) =>
+        runHistoryQuery(accessToken, channel, fetchImpl),
       ),
     ),
   ]);
@@ -218,6 +246,14 @@ export async function pollSlackSignals(
       selfUserId,
     );
     if (sig) out.push(sig);
+  }
+  for (let i = 0; i < broadcastChannels.length; i++) {
+    const channel = broadcastChannels[i];
+    if (!channel) continue;
+    for (const msg of broadcastHistories[i] ?? []) {
+      const sig = normalizeBroadcastMessage(channel, msg, selfUserId);
+      if (sig) out.push(sig);
+    }
   }
   return out;
 }
@@ -270,6 +306,68 @@ async function runRepliesQuery(
     throw new SlackPollError(res.status, body.error ?? "unknown");
   }
   return body.messages ?? [];
+}
+
+async function runHistoryQuery(
+  accessToken: string,
+  channel: string,
+  fetchImpl: SlackFetch,
+): Promise<SlackHistoryMessage[]> {
+  const url = `https://slack.com/api/conversations.history?channel=${encodeURIComponent(
+    channel,
+  )}&limit=100`;
+  const res = await fetchImpl(url, {
+    method: "GET",
+    headers: {
+      authorization: `Bearer ${accessToken}`,
+      accept: "application/json",
+    },
+  });
+  if (!res.ok) {
+    throw new SlackPollError(res.status, await safeText(res));
+  }
+  const body = (await res.json()) as SlackHistoryResponse;
+  if (!body.ok) {
+    throw new SlackPollError(res.status, body.error ?? "unknown");
+  }
+  return body.messages ?? [];
+}
+
+function normalizeBroadcastMessage(
+  channel: string,
+  msg: SlackHistoryMessage,
+  selfUserId: string,
+): Signal | null {
+  if (!msg.ts || !msg.user) return null;
+  if (msg.user === selfUserId) return null;
+  if (msg.bot_id) return null;
+  if (msg.subtype && msg.subtype !== "thread_broadcast") return null;
+  const text = msg.text ?? "";
+  if (!BROADCAST_RE.test(text)) return null;
+
+  const anchorTs = msg.thread_ts ?? msg.ts;
+  const teamId = msg.team ?? null;
+  const url = teamId
+    ? `https://app.slack.com/client/${teamId}/${channel}/thread/${channel}-${anchorTs}`
+    : null;
+  return {
+    provider: "slack",
+    kind: "mention",
+    source_id: `${channel}:${anchorTs}`,
+    title: titleFromText(text, "mention"),
+    url,
+    payload: {
+      channel,
+      channel_type: null,
+      ts: msg.ts,
+      thread_ts: msg.thread_ts ?? null,
+      author: msg.user,
+      text,
+      team: teamId,
+    },
+    requires_action: true,
+    source_created_at: tsToIso(anchorTs),
+  };
 }
 
 function normalizeThreadReplies(

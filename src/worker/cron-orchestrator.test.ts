@@ -585,6 +585,70 @@ describe("runScheduledPoll", () => {
     });
   });
 
+  it("loads the slack broadcast allowlist and pulls conversations.history for each channel", async () => {
+    const store = makeStore();
+    const fetchImpl = vi.fn(async (url: string) => {
+      if (url.includes("conversations.history")) {
+        return new Response(
+          JSON.stringify({
+            ok: true,
+            messages: [
+              {
+                type: "message",
+                user: "U_OTHER",
+                ts: "1714820000.000100",
+                text: "<!here> deploy starting",
+                team: "T1",
+              },
+            ],
+          }),
+          { status: 200 },
+        );
+      }
+      return new Response(
+        JSON.stringify({ ok: true, messages: { matches: [] } }),
+        { status: 200 },
+      );
+    });
+    const loadSlackBroadcastAllowlist = vi.fn(async () => ["C_ANNOUNCE"]);
+    const deps: OrchestratorDeps = {
+      loadAccounts: async () => [
+        {
+          provider: "slack",
+          access_token: "xoxp-abc",
+          refresh_token: null,
+          expires_at: null,
+          account_id: "U_SELF",
+        },
+      ],
+      loadSlackBroadcastAllowlist,
+      store: store.client,
+      fetch: fetchImpl as unknown as typeof fetch,
+    };
+    const reports = await runScheduledPoll(deps);
+    expect(reports).toEqual([{ provider: "slack", upserted: 1 }]);
+    expect(loadSlackBroadcastAllowlist).toHaveBeenCalledTimes(1);
+    const urls = (fetchImpl.mock.calls as unknown as Array<[string]>).map(
+      (c) => c[0],
+    );
+    expect(
+      urls.some(
+        (u) =>
+          u.includes("conversations.history") &&
+          u.includes(`channel=${encodeURIComponent("C_ANNOUNCE")}`),
+      ),
+    ).toBe(true);
+    const upserted = (
+      store.upsert.mock.calls as unknown as Array<
+        [Array<{ kind: string; source_id: string }>]
+      >
+    )[0][0];
+    expect(upserted[0]).toMatchObject({
+      kind: "mention",
+      source_id: "C_ANNOUNCE:1714820000.000100",
+    });
+  });
+
   it("flags slack accounts with no account_id (poll requires <@self>)", async () => {
     const store = makeStore();
     const fetchImpl = vi.fn(async () => new Response("{}", { status: 200 }));

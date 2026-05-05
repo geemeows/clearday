@@ -454,6 +454,101 @@ describe("pollSlackSignals", () => {
     expect(urls.every((u) => !u.includes("conversations.replies"))).toBe(true);
   });
 
+  it("calls conversations.history for each broadcast-allowlisted channel and emits mention Signals for @here / @channel posts", async () => {
+    const fetchImpl = vi.fn(async (url: string) => {
+      if (url.includes("conversations.history")) {
+        return jsonResponse({
+          ok: true,
+          messages: [
+            {
+              type: "message",
+              user: "U_OTHER",
+              ts: "1714820000.000100",
+              text: "<!here> deploy starting now",
+              team: "T1",
+            },
+            {
+              type: "message",
+              user: "U_OTHER",
+              ts: "1714820100.000200",
+              text: "ordinary chatter",
+              team: "T1",
+            },
+          ],
+        });
+      }
+      return jsonResponse({ ok: true, messages: { matches: [] } });
+    });
+    const out = await pollSlackSignals("token", "U_SELF", fetchImpl, {
+      broadcastChannels: ["C_ANNOUNCE"],
+    });
+    const historyCall = (fetchImpl.mock.calls as unknown as Array<[string]>)
+      .map((c) => c[0])
+      .find((u) => u.includes("conversations.history"));
+    expect(historyCall).toContain(
+      `channel=${encodeURIComponent("C_ANNOUNCE")}`,
+    );
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({
+      provider: "slack",
+      kind: "mention",
+      source_id: "C_ANNOUNCE:1714820000.000100",
+      requires_action: true,
+    });
+    expect(out[0]?.payload).toMatchObject({
+      channel: "C_ANNOUNCE",
+      author: "U_OTHER",
+      text: "<!here> deploy starting now",
+    });
+  });
+
+  it("drops broadcast history entries authored by self, by bots, or with non-broadcast text", async () => {
+    const fetchImpl = vi.fn(async (url: string) => {
+      if (url.includes("conversations.history")) {
+        return jsonResponse({
+          ok: true,
+          messages: [
+            {
+              type: "message",
+              user: "U_SELF",
+              ts: "1.0",
+              text: "<!here> from self",
+            },
+            {
+              type: "message",
+              user: "U_OTHER",
+              bot_id: "B1",
+              ts: "2.0",
+              text: "<!channel> from bot",
+            },
+            {
+              type: "message",
+              user: "U_OTHER",
+              ts: "3.0",
+              text: "no broadcast token",
+            },
+          ],
+        });
+      }
+      return jsonResponse({ ok: true, messages: { matches: [] } });
+    });
+    const out = await pollSlackSignals("token", "U_SELF", fetchImpl, {
+      broadcastChannels: ["C_ANNOUNCE"],
+    });
+    expect(out).toHaveLength(0);
+  });
+
+  it("does not call conversations.history when no broadcast channels are supplied", async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse({ ok: true, messages: { matches: [] } }),
+    );
+    await pollSlackSignals("token", "U_SELF", fetchImpl);
+    const urls = (fetchImpl.mock.calls as unknown as Array<[string]>).map(
+      (c) => c[0],
+    );
+    expect(urls.every((u) => !u.includes("conversations.history"))).toBe(true);
+  });
+
   it("throws on non-2xx HTTP", async () => {
     const fetchImpl = vi.fn(async () =>
       jsonResponse({ error: "ratelimited" }, 429),

@@ -659,6 +659,7 @@ export default {
             thread_ts: string;
           }>;
         },
+        loadSlackBroadcastAllowlist: () => loadSlackAllowlist(service),
         loadAccounts: async () => {
           const { data, error } = await service
             .from("provider_accounts")

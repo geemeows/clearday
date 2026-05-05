@@ -89,6 +89,13 @@ export type OrchestratorDeps = {
   loadSlackParticipatedThreads?: () => Promise<
     Array<{ channel: string; thread_ts: string }>
   >;
+  /**
+   * Loads `slack_channel_allowlist` channel ids opted in to capture
+   * `@here` / `@channel` broadcasts. The slack poll fetches
+   * `conversations.history` for each and emits broadcast Signals. Optional —
+   * when absent, the slack poll only fires the mention + DM + thread queries.
+   */
+  loadSlackBroadcastAllowlist?: () => Promise<string[]>;
 };
 
 export type OrchestratorReport = {
@@ -228,11 +235,17 @@ async function pollOne(
     const participatedThreads = deps.loadSlackParticipatedThreads
       ? await deps.loadSlackParticipatedThreads()
       : undefined;
+    const broadcastChannels = deps.loadSlackBroadcastAllowlist
+      ? await deps.loadSlackBroadcastAllowlist()
+      : undefined;
     const signals = await pollSlackSignals(
       account.access_token,
       account.account_id,
       async (url, init) => deps.fetch(url, init),
-      participatedThreads ? { participatedThreads } : {},
+      {
+        ...(participatedThreads ? { participatedThreads } : {}),
+        ...(broadcastChannels ? { broadcastChannels } : {}),
+      },
     );
     await upsertSignals(deps.store, signals, { rules });
     return signals.length;
