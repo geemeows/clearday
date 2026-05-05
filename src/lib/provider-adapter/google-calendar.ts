@@ -106,16 +106,10 @@ export function normalize(event: GoogleCalendarEvent): Signal | null {
   if (!event.start.dateTime || !event.end.dateTime) return null;
 
   const responseStatus = selfResponseStatus(event);
-  if (responseStatus === "declined" || responseStatus === "needsAction") {
-    return null;
-  }
+  if (responseStatus === "declined") return null;
 
   const isFocus = isFocusEvent(event);
   const videoLink = pickVideoLink(event);
-  // Focus blocks don't need a video link — they're solo time, not meetings.
-  // Surfacing them as Signals lets alert-glue suppress noisy alerts during
-  // focus and lets the calendar UI mark the block exactly.
-  if (!videoLink && !isFocus) return null;
 
   const linkedItems = parseLinkedItems(event.description ?? "");
 

@@ -55,13 +55,15 @@ describe("normalize", () => {
     ).toBeNull();
   });
 
-  it("returns null for events with only needsAction (no response yet)", () => {
+  it("includes events with needsAction (no response yet)", () => {
+    // Awaiting RSVPs are often the most actionable items — surface them so
+    // the user can decide. Only declined events are dropped.
     expect(
       normalize({
         ...baseEvent,
         attendees: [{ self: true, responseStatus: "needsAction" }],
       }),
-    ).toBeNull();
+    ).not.toBeNull();
   });
 
   it("accepts tentative responses", () => {
@@ -83,15 +85,17 @@ describe("normalize", () => {
     ).toBeNull();
   });
 
-  it("returns null for events without any video link", () => {
-    expect(
-      normalize({
-        ...baseEvent,
-        hangoutLink: undefined,
-        location: "Room 4",
-        description: "no link here",
-      }),
-    ).toBeNull();
+  it("includes events without a video link (e.g. personal blocks)", () => {
+    // Personal calendar blocks like "Car Maintenance" matter to the user even
+    // without a Meet/Zoom link — surface them with video_link: null.
+    const sig = normalize({
+      ...baseEvent,
+      hangoutLink: undefined,
+      location: "Room 4",
+      description: "no link here",
+    });
+    expect(sig).not.toBeNull();
+    expect(sig?.payload.video_link).toBeNull();
   });
 
   it("falls back to conferenceData entry points", () => {
