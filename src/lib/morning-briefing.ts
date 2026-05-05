@@ -22,7 +22,15 @@ export type BriefingCacheEntry = {
   model: string;
   used_fallback: boolean;
   generated_at: string;
+  /** Number of force-regenerations performed against this cache entry today. */
+  regen_count?: number;
 };
+
+// Hard cap on per-day Regenerate clicks. Each click is a fresh LLM call that
+// counts against the monthly budget meter; without a guard a user could
+// drain the month's budget by spamming the button. Three feels generous for
+// a day's morning briefing — same paragraph re-rolled three times.
+export const REGEN_LIMIT = 3;
 
 export type BriefingCacheStore = {
   load: () => Promise<BriefingCacheEntry | null>;
@@ -52,31 +60,46 @@ export type BriefingResult =
     }
   | {
       ok: false;
-      reason: "no_provider" | "budget_reached" | "disabled" | "error";
+      reason:
+        | "no_provider"
+        | "budget_reached"
+        | "disabled"
+        | "regenerate_limit"
+        | "error";
       error?: string;
     };
 
 export async function generateBriefing(
   args: GenerateArgs,
 ): Promise<BriefingResult> {
-  if (!args.force) {
-    const cached = await args.cacheStore.load();
-    if (
-      cached &&
-      cached.date === args.date &&
-      cached.provider === args.settings.provider &&
-      cached.model === args.settings.defaultModel
-    ) {
-      return {
-        ok: true,
-        text: cached.text,
-        provider: cached.provider,
-        model: cached.model,
-        used_fallback: cached.used_fallback,
-        generated_at: cached.generated_at,
-        cached: true,
-      };
-    }
+  const cached = await args.cacheStore.load();
+  const cachedMatches =
+    !!cached &&
+    cached.date === args.date &&
+    cached.provider === args.settings.provider &&
+    cached.model === args.settings.defaultModel;
+
+  if (!args.force && cachedMatches && cached) {
+    return {
+      ok: true,
+      text: cached.text,
+      provider: cached.provider,
+      model: cached.model,
+      used_fallback: cached.used_fallback,
+      generated_at: cached.generated_at,
+      cached: true,
+    };
+  }
+
+  // Regenerate guard: cap force-regenerations per cache entry so the budget
+  // meter can't be drained by spamming the Regenerate button.
+  if (
+    args.force &&
+    cachedMatches &&
+    cached &&
+    (cached.regen_count ?? 0) >= REGEN_LIMIT
+  ) {
+    return { ok: false, reason: "regenerate_limit" };
   }
 
   const now = args.now?.() ?? new Date();
@@ -92,6 +115,10 @@ export async function generateBriefing(
         now: args.now,
       },
     );
+    // Only count toward the daily cap when force=true is overriding an
+    // existing same-day entry — a fresh generation (no matching cache) is
+    // the first paragraph of the day, not a regenerate.
+    const isRegen = !!args.force && cachedMatches && !!cached;
     const entry: BriefingCacheEntry = {
       date: args.date,
       text: result.response.content.trim(),
@@ -99,6 +126,7 @@ export async function generateBriefing(
       model: result.model,
       used_fallback: result.usedFallback,
       generated_at: now.toISOString(),
+      regen_count: isRegen ? (cached.regen_count ?? 0) + 1 : 0,
     };
     await args.cacheStore.save(entry);
     return { ok: true, ...entry, cached: false };

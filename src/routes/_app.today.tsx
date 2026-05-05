@@ -265,6 +265,7 @@ export function BriefingCard({
 } = {}) {
   const [result, setResult] = useState<BriefingResult | null>(null);
   const [busy, setBusy] = useState(false);
+  const [regenWarning, setRegenWarning] = useState<string | null>(null);
 
   const localDate = date ?? localDateString(new Date());
   const gen = useMemo<Generator>(
@@ -304,9 +305,17 @@ export function BriefingCard({
 
   const regenerate = useCallback(async () => {
     setBusy(true);
+    setRegenWarning(null);
     try {
       const r = await gen(true);
-      setResult(r);
+      // Daily regenerate cap: keep the existing briefing visible and surface
+      // an inline warning rather than replacing the cached text with the
+      // fallback layout.
+      if (!r.ok && r.reason === "regenerate_limit") {
+        setRegenWarning("Daily regenerate limit reached. Try again tomorrow.");
+      } else {
+        setResult(r);
+      }
     } catch (e) {
       setResult({
         ok: false,
@@ -352,6 +361,9 @@ export function BriefingCard({
               {result.used_fallback && " · running on fallback model"}
               {result.cached && " · cached for today"}
             </p>
+            {regenWarning && (
+              <p className="mt-2 text-xs text-amber-700">{regenWarning}</p>
+            )}
           </>
         )}
         {result?.ok === false && (
@@ -394,6 +406,13 @@ function BriefingFallback({
   if (result.reason === "budget_reached") {
     return (
       <p className="text-zinc-600">AI disabled — monthly budget reached.</p>
+    );
+  }
+  if (result.reason === "regenerate_limit") {
+    return (
+      <p className="text-zinc-600">
+        Daily regenerate limit reached. Try again tomorrow.
+      </p>
     );
   }
   return (

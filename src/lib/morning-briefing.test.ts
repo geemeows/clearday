@@ -282,6 +282,63 @@ describe("generateBriefing", () => {
       cached: false,
       text: "Regenerated.",
     });
+    // Force-regenerate increments the per-day counter so the budget guard
+    // can refuse later calls.
+    expect(cache.current?.regen_count).toBe(1);
+  });
+
+  it("refuses with regenerate_limit after the daily cap is reached", async () => {
+    const cache = memCacheStore({
+      date: "2026-05-04",
+      text: "Already regenerated thrice.",
+      provider: "openai",
+      model: "gpt-4o-mini",
+      used_fallback: false,
+      generated_at: "2026-05-04T07:00:00.000Z",
+      regen_count: 3,
+    });
+    const fetchMock = okFetch("Should not be called.");
+    const result = await generateBriefing({
+      date: "2026-05-04",
+      force: true,
+      signals: [],
+      settings: baseSettings,
+      cacheStore: cache,
+      usageStore: fakeUsageStore(),
+      fetch: fetchMock,
+      now: () => new Date("2026-05-04T09:00:00.000Z"),
+    });
+    expect(result).toEqual({ ok: false, reason: "regenerate_limit" });
+    expect(fetchMock).not.toHaveBeenCalled();
+    // Count is unchanged — no LLM call was made.
+    expect(cache.current?.regen_count).toBe(3);
+  });
+
+  it("resets the regenerate counter when the date rolls over", async () => {
+    const cache = memCacheStore({
+      date: "2026-05-03",
+      text: "Yesterday.",
+      provider: "openai",
+      model: "gpt-4o-mini",
+      used_fallback: false,
+      generated_at: "2026-05-03T07:00:00.000Z",
+      regen_count: 3,
+    });
+    const fetchMock = okFetch("Today, fresh.");
+    const result = await generateBriefing({
+      date: "2026-05-04",
+      force: true,
+      signals: [],
+      settings: baseSettings,
+      cacheStore: cache,
+      usageStore: fakeUsageStore(),
+      fetch: fetchMock,
+      now: () => new Date("2026-05-04T08:00:00.000Z"),
+    });
+    expect(result).toMatchObject({ ok: true, cached: false });
+    // New date = fresh entry. The counter resets to 0 — this is the first
+    // paragraph for the new day, not a regenerate.
+    expect(cache.current?.regen_count).toBe(0);
   });
 
   it("returns no_provider when AI is not configured", async () => {

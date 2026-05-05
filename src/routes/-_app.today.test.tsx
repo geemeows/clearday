@@ -175,6 +175,21 @@ describe("BriefingCard", () => {
     await waitFor(() => screen.getByText(/monthly budget reached/i));
   });
 
+  it("keeps the existing briefing visible when Regenerate hits the daily cap", async () => {
+    const generator = vi
+      .fn<(force: boolean) => Promise<BriefingResult>>()
+      .mockResolvedValueOnce(okResult)
+      .mockResolvedValueOnce({ ok: false, reason: "regenerate_limit" });
+    render(<BriefingCard generator={generator} date="2026-05-04" />);
+    await waitFor(() => screen.getByText(/Lead with the design review/));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /regenerate/i }));
+    });
+    await waitFor(() => screen.getByText(/Daily regenerate limit reached/i));
+    // Cached briefing text stays visible alongside the warning.
+    expect(screen.getByText(/Lead with the design review/)).toBeTruthy();
+  });
+
   it("calls generator with force=true when Regenerate is clicked", async () => {
     const generator = vi
       .fn<(force: boolean) => Promise<BriefingResult>>()
