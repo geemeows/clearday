@@ -13,6 +13,7 @@ import {
   normalizeSlackEvent,
   type SlackEventPayload,
   type SlackNormalizeContext,
+  threadKey,
 } from "#/lib/provider-adapter/slack";
 import type { Signal } from "#/lib/signal";
 import type { SupabaseLike } from "#/lib/signal-store";
@@ -95,6 +96,24 @@ export type SlackWebhookDeps = {
   onStored?: (signal: Signal) => Promise<void>;
   /** Loaded once per webhook for the inbox-rules engine. Optional. */
   loadInboxRules?: () => Promise<InboxRule[]>;
+  /**
+   * Marks `(channel, thread_ts)` as a thread the owner has posted in, so
+   * subsequent replies from other users in that thread become `thread_reply`
+   * Signals. Called when the inbound event is authored by `selfUserId`.
+   */
+  recordParticipatedThread?: (
+    channel: string,
+    threadTs: string,
+  ) => Promise<void>;
+  /**
+   * Returns true when `(channel, thread_ts)` is a thread the owner has
+   * previously participated in. Looked up only for thread replies authored
+   * by other users.
+   */
+  loadParticipatedThread?: (
+    channel: string,
+    threadTs: string,
+  ) => Promise<boolean>;
   now?: () => number;
 };
 
@@ -142,13 +161,45 @@ export async function handleSlackWebhook(
   const selfUserId = await deps.loadSelfUserId();
   if (!selfUserId) return { kind: "ignored", reason: "no_self_user_id" };
 
+  const event = envelope.event;
+
+  // If the owner authored a (real) message in a channel/thread, mark the
+  // thread anchor as participated so future replies from other users
+  // surface as thread_reply Signals.
+  if (
+    event.type === "message" &&
+    !event.bot_id &&
+    (!event.subtype || event.subtype === "thread_broadcast") &&
+    event.user === selfUserId &&
+    event.channel &&
+    event.ts &&
+    deps.recordParticipatedThread
+  ) {
+    const anchor = event.thread_ts ?? event.ts;
+    try {
+      await deps.recordParticipatedThread(event.channel, anchor);
+    } catch {
+      // best-effort: a participation-record failure must not bubble up to
+      // Slack as a webhook error. The Signal path below is unaffected.
+    }
+  }
+
+  // For replies authored by other users, look up whether the parent thread
+  // is one the owner has participated in.
+  const participatedThreads = await loadParticipatedThreadsForEvent(
+    event,
+    selfUserId,
+    deps.loadParticipatedThread,
+  );
+
   const allowlist = await deps.loadAllowlist();
   const ctx: SlackNormalizeContext = {
     selfUserId,
     broadcastAllowlist: new Set(allowlist),
+    participatedThreads,
     teamId: envelope.team_id ?? null,
   };
-  const signal = normalizeSlackEvent(envelope.event, ctx);
+  const signal = normalizeSlackEvent(event, ctx);
   if (!signal) return { kind: "ignored", reason: "not_actionable" };
 
   const rules = deps.loadInboxRules ? await deps.loadInboxRules() : [];
@@ -162,4 +213,29 @@ export async function handleSlackWebhook(
     }
   }
   return { kind: "stored", signal };
+}
+
+async function loadParticipatedThreadsForEvent(
+  event: SlackEventPayload,
+  selfUserId: string,
+  loader: SlackWebhookDeps["loadParticipatedThread"],
+): Promise<ReadonlySet<string> | undefined> {
+  if (!loader) return undefined;
+  if (event.type !== "message" && event.type !== "app_mention")
+    return undefined;
+  if (event.bot_id) return undefined;
+  if (event.user === selfUserId) return undefined;
+  const threadParent = event.thread_ts;
+  if (!threadParent || !event.channel) return undefined;
+  if (threadParent === event.ts) return undefined;
+  let participated = false;
+  try {
+    participated = await loader(event.channel, threadParent);
+  } catch {
+    // best-effort: a lookup failure simply leaves the thread unmarked, so
+    // the event normalizes as today (drop) rather than failing the webhook.
+    return undefined;
+  }
+  if (!participated) return undefined;
+  return new Set([threadKey(event.channel, threadParent)]);
 }

@@ -319,6 +319,185 @@ describe("handleSlackWebhook", () => {
     expect(outcome.kind).toBe("stored");
   });
 
+  it("records the parent thread when the owner posts in a channel", async () => {
+    const ts = "1714820000";
+    const body = JSON.stringify({
+      type: "event_callback",
+      team_id: "T1",
+      event: {
+        type: "message",
+        channel_type: "channel",
+        channel: "C1",
+        user: "U_SELF",
+        ts: "1714820000.000100",
+        text: "kicking off the thread",
+      },
+    });
+    const sig = await sign(SECRET, ts, body);
+    const store = makeStore();
+    const recordParticipatedThread = vi.fn(
+      async (_c: string, _t: string) => undefined,
+    );
+    const outcome = await handleSlackWebhook(
+      makeRequest({ ts, signature: sig, body }),
+      {
+        signingSecret: SECRET,
+        store: store.client,
+        loadAllowlist: async () => [],
+        loadSelfUserId: async () => "U_SELF",
+        recordParticipatedThread,
+        now: () => 1714820010,
+      },
+    );
+    expect(outcome).toEqual({ kind: "ignored", reason: "not_actionable" });
+    expect(recordParticipatedThread).toHaveBeenCalledWith(
+      "C1",
+      "1714820000.000100",
+    );
+    expect(store.upsert).not.toHaveBeenCalled();
+  });
+
+  it("records the existing thread anchor when the owner replies in a thread", async () => {
+    const ts = "1714820000";
+    const body = JSON.stringify({
+      type: "event_callback",
+      team_id: "T1",
+      event: {
+        type: "message",
+        channel_type: "channel",
+        channel: "C1",
+        user: "U_SELF",
+        ts: "1714820000.000200",
+        thread_ts: "1714820000.000100",
+        text: "my reply",
+      },
+    });
+    const sig = await sign(SECRET, ts, body);
+    const store = makeStore();
+    const recordParticipatedThread = vi.fn(
+      async (_c: string, _t: string) => undefined,
+    );
+    await handleSlackWebhook(makeRequest({ ts, signature: sig, body }), {
+      signingSecret: SECRET,
+      store: store.client,
+      loadAllowlist: async () => [],
+      loadSelfUserId: async () => "U_SELF",
+      recordParticipatedThread,
+      now: () => 1714820010,
+    });
+    expect(recordParticipatedThread).toHaveBeenCalledWith(
+      "C1",
+      "1714820000.000100",
+    );
+  });
+
+  it("turns thread replies in participated threads into thread_reply Signals", async () => {
+    const ts = "1714820000";
+    const body = JSON.stringify({
+      type: "event_callback",
+      team_id: "T1",
+      event: {
+        type: "message",
+        channel_type: "channel",
+        channel: "C1",
+        user: "U_OTHER",
+        ts: "1714820000.000300",
+        thread_ts: "1714820000.000100",
+        text: "follow-up on the thread",
+      },
+    });
+    const sig = await sign(SECRET, ts, body);
+    const store = makeStore();
+    const loadParticipatedThread = vi.fn(
+      async (channel: string, thread_ts: string) =>
+        channel === "C1" && thread_ts === "1714820000.000100",
+    );
+    const outcome = await handleSlackWebhook(
+      makeRequest({ ts, signature: sig, body }),
+      {
+        signingSecret: SECRET,
+        store: store.client,
+        loadAllowlist: async () => [],
+        loadSelfUserId: async () => "U_SELF",
+        loadParticipatedThread,
+        now: () => 1714820010,
+      },
+    );
+    expect(outcome.kind).toBe("stored");
+    expect(loadParticipatedThread).toHaveBeenCalledWith(
+      "C1",
+      "1714820000.000100",
+    );
+    const written = store.upsert.mock.calls[0][0] as { kind: string };
+    expect(written.kind).toBe("thread_reply");
+  });
+
+  it("drops thread replies in unparticipated threads", async () => {
+    const ts = "1714820000";
+    const body = JSON.stringify({
+      type: "event_callback",
+      team_id: "T1",
+      event: {
+        type: "message",
+        channel_type: "channel",
+        channel: "C1",
+        user: "U_OTHER",
+        ts: "1714820000.000300",
+        thread_ts: "1714820000.000100",
+        text: "follow-up nobody asked for",
+      },
+    });
+    const sig = await sign(SECRET, ts, body);
+    const store = makeStore();
+    const loadParticipatedThread = vi.fn(async () => false);
+    const outcome = await handleSlackWebhook(
+      makeRequest({ ts, signature: sig, body }),
+      {
+        signingSecret: SECRET,
+        store: store.client,
+        loadAllowlist: async () => [],
+        loadSelfUserId: async () => "U_SELF",
+        loadParticipatedThread,
+        now: () => 1714820010,
+      },
+    );
+    expect(outcome).toEqual({ kind: "ignored", reason: "not_actionable" });
+    expect(store.upsert).not.toHaveBeenCalled();
+  });
+
+  it("swallows recordParticipatedThread errors so the webhook does not fail", async () => {
+    const ts = "1714820000";
+    const body = JSON.stringify({
+      type: "event_callback",
+      team_id: "T1",
+      event: {
+        type: "message",
+        channel_type: "channel",
+        channel: "C1",
+        user: "U_SELF",
+        ts: "1714820000.000100",
+        text: "owner saying hi",
+      },
+    });
+    const sig = await sign(SECRET, ts, body);
+    const store = makeStore();
+    const recordParticipatedThread = vi.fn(async () => {
+      throw new Error("db down");
+    });
+    const outcome = await handleSlackWebhook(
+      makeRequest({ ts, signature: sig, body }),
+      {
+        signingSecret: SECRET,
+        store: store.client,
+        loadAllowlist: async () => [],
+        loadSelfUserId: async () => "U_SELF",
+        recordParticipatedThread,
+        now: () => 1714820010,
+      },
+    );
+    expect(outcome).toEqual({ kind: "ignored", reason: "not_actionable" });
+  });
+
   it("upsert is idempotent across resent events (same source_id)", async () => {
     const ts1 = "1714820010";
     const ts2 = "1714820020";

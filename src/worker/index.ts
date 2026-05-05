@@ -153,6 +153,25 @@ export default {
           if (error) throw new Error(error.message);
           return (data?.account_id as string | null) ?? null;
         },
+        recordParticipatedThread: async (channel, thread_ts) => {
+          const { error } = await service
+            .from("slack_participated_threads")
+            .upsert(
+              { channel, thread_ts },
+              { onConflict: "channel,thread_ts", ignoreDuplicates: true },
+            );
+          if (error) throw new Error(error.message);
+        },
+        loadParticipatedThread: async (channel, thread_ts) => {
+          const { data, error } = await service
+            .from("slack_participated_threads")
+            .select("channel")
+            .eq("channel", channel)
+            .eq("thread_ts", thread_ts)
+            .maybeSingle();
+          if (error) throw new Error(error.message);
+          return data !== null;
+        },
         onStored: async (signal) => {
           await dispatchUpsertedSignal(signal, service, dispatcher);
         },

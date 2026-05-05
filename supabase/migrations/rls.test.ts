@@ -34,6 +34,11 @@ const providerStatusSql = readFileSync(
   "utf8",
 );
 
+const slackParticipatedSql = readFileSync(
+  resolve(__dirname, "0016_slack_participated_threads.sql"),
+  "utf8",
+);
+
 describe("0001_init.sql contents", () => {
   it("declares the (provider, kind, source_id) unique constraint on signals", () => {
     expect(migrationSql).toMatch(
@@ -75,6 +80,22 @@ describe("0015_provider_accounts_status.sql contents", () => {
       expect(providerStatusSql).toContain(`'${v}'`);
     }
     expect(providerStatusSql).toMatch(/check\s*\(\s*status in/i);
+  });
+});
+
+describe("0016_slack_participated_threads.sql contents", () => {
+  it("creates the participated-threads table keyed on (channel, thread_ts)", () => {
+    expect(slackParticipatedSql).toMatch(
+      /create table if not exists public\.slack_participated_threads/i,
+    );
+    expect(slackParticipatedSql).toMatch(
+      /primary key\s*\(\s*channel\s*,\s*thread_ts\s*\)/i,
+    );
+  });
+
+  it("enables RLS with the allowed-user predicate", () => {
+    expect(slackParticipatedSql).toMatch(/enable row level security/);
+    expect(slackParticipatedSql).toMatch(/public\.is_allowed_user\(\)/);
   });
 });
 
