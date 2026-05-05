@@ -4,6 +4,7 @@ import { verifyState } from "#/lib/oauth-state";
 
 const env: AuthorizeEnv = {
   GITHUB_CLIENT_ID: "gh-client-id",
+  GOOGLE_CLIENT_ID: "go-client-id",
   STATE_HMAC_SECRET: "test-secret",
   AUTH_PROXY_URL: "https://auth.example.com",
 };
@@ -62,6 +63,43 @@ describe("buildAuthorizeUrl (github)", () => {
       1000,
     );
     expect(out).toEqual({ ok: false, error: "unknown_provider" });
+  });
+
+  it("builds the google authorize URL with offline access + prompt=consent + calendar scope", async () => {
+    const out = await buildAuthorizeUrl(
+      "google",
+      "https://owner.example.com",
+      env,
+      1000,
+      () => "fixed-nonce",
+    );
+    if (!out.ok) throw new Error(`expected ok, got ${out.error}`);
+    const url = new URL(out.url);
+    expect(url.origin + url.pathname).toBe(
+      "https://accounts.google.com/o/oauth2/v2/auth",
+    );
+    expect(url.searchParams.get("client_id")).toBe("go-client-id");
+    expect(url.searchParams.get("redirect_uri")).toBe(
+      "https://auth.example.com/callback/google",
+    );
+    expect(url.searchParams.get("scope")).toContain(
+      "https://www.googleapis.com/auth/calendar.readonly",
+    );
+    expect(url.searchParams.get("scope")).toContain("openid");
+    expect(url.searchParams.get("access_type")).toBe("offline");
+    expect(url.searchParams.get("prompt")).toBe("consent");
+    expect(url.searchParams.get("response_type")).toBe("code");
+    expect(url.searchParams.get("state")).toBeTruthy();
+  });
+
+  it("errors when the project google client_id is not configured", async () => {
+    const out = await buildAuthorizeUrl(
+      "google",
+      "https://owner.example.com",
+      { ...env, GOOGLE_CLIENT_ID: undefined },
+      1000,
+    );
+    expect(out).toEqual({ ok: false, error: "missing_client_id" });
   });
 
   it("rejects missing backend", async () => {

@@ -1188,7 +1188,7 @@ describe("SelfHostPanel", () => {
     env_vars: [
       { name: "ALLOWED_EMAIL", required: true, present: true },
       { name: "AI_KEY_SECRET", required: true, present: false },
-      { name: "GOOGLE_CLIENT_ID", required: false, present: true },
+      { name: "SLACK_CLIENT_ID", required: false, present: true },
       { name: "VAPID_PUBLIC_KEY", required: false, present: false },
     ],
   };
@@ -1212,7 +1212,7 @@ describe("SelfHostPanel", () => {
     expect(screen.getByLabelText(/AI_KEY_SECRET unset/).textContent).toBe(
       "unset",
     );
-    expect(screen.getByLabelText(/GOOGLE_CLIENT_ID set/).textContent).toBe(
+    expect(screen.getByLabelText(/SLACK_CLIENT_ID set/).textContent).toBe(
       "set",
     );
   });

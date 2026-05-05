@@ -6,7 +6,7 @@
 // kickoff to a new OAuth target — the authorize-URL builder reads the rest
 // from this entry. Scopes start narrow; widen by feature issue when needed.
 
-export type AuthorizeProvider = "github";
+export type AuthorizeProvider = "github" | "google";
 
 export type AuthorizeProviderConfig = {
   authorizeUrl: string;
@@ -29,6 +29,19 @@ export const AUTHORIZE_PROVIDERS: Record<
     scopeSeparator: " ",
     scopeParam: "scope",
     extraParams: {},
+  },
+  google: {
+    authorizeUrl: "https://accounts.google.com/o/oauth2/v2/auth",
+    scopes: ["openid", "https://www.googleapis.com/auth/calendar.readonly"],
+    scopeSeparator: " ",
+    scopeParam: "scope",
+    // `access_type=offline` + `prompt=consent` together force Google to issue
+    // a refresh_token on every authorization (Google omits it on subsequent
+    // consents to a previously-authorized app otherwise).
+    extraParams: {
+      access_type: "offline",
+      prompt: "consent",
+    },
   },
 };
 

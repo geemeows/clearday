@@ -322,15 +322,68 @@ async function exchangeGoogle(
       body.error_description || body.error || "google exchange failed",
     );
   }
+  if (!body.refresh_token) {
+    throw new ExchangeError(
+      "google",
+      res.status,
+      "google response missing refresh_token (offline access requested)",
+    );
+  }
+  if (!body.id_token) {
+    throw new ExchangeError(
+      "google",
+      res.status,
+      "google response missing id_token",
+    );
+  }
+  const accountId = decodeGoogleSub(body.id_token);
   return {
     provider: "google",
-    account_id: null,
+    account_id: accountId,
     access_token: body.access_token,
-    refresh_token: body.refresh_token ?? null,
+    refresh_token: body.refresh_token,
     expires_at: expiresAtFrom(body.expires_in),
     scopes: parseScope(body.scope, " "),
-    metadata: body.id_token ? { id_token: body.id_token } : {},
+    metadata: { id_token: body.id_token },
   };
+}
+
+function decodeGoogleSub(idToken: string): string {
+  const parts = idToken.split(".");
+  if (parts.length !== 3) {
+    throw new ExchangeError("google", 0, "google id_token malformed");
+  }
+  let json: string;
+  try {
+    json = b64urlDecodeToString(parts[1]);
+  } catch {
+    throw new ExchangeError(
+      "google",
+      0,
+      "google id_token payload not base64url",
+    );
+  }
+  let payload: unknown;
+  try {
+    payload = JSON.parse(json);
+  } catch {
+    throw new ExchangeError("google", 0, "google id_token payload not JSON");
+  }
+  const sub = (payload as { sub?: unknown })?.sub;
+  if (typeof sub !== "string" || !sub) {
+    throw new ExchangeError("google", 0, "google id_token missing sub");
+  }
+  return sub;
+}
+
+function b64urlDecodeToString(s: string): string {
+  const padded = s.replace(/-/g, "+").replace(/_/g, "/");
+  const pad =
+    padded.length % 4 === 0 ? "" : "=".repeat(4 - (padded.length % 4));
+  const binary = atob(padded + pad);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return new TextDecoder().decode(bytes);
 }
 
 async function exchangeSlack(

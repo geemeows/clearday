@@ -289,7 +289,7 @@ describe("handleAuthProxyRequest /start", () => {
   it("400s when provider is not in the scope table", async () => {
     const res = await handleAuthProxyRequest(
       new Request(
-        "https://auth.example.com/start/google?backend=https://owner.example.com",
+        "https://auth.example.com/start/dropbox?backend=https://owner.example.com",
       ),
       env,
       { fetch: vi.fn() as unknown as FetchLike },
@@ -297,5 +297,74 @@ describe("handleAuthProxyRequest /start", () => {
     );
     expect(res.status).toBe(400);
     expect(await res.text()).toMatch(/unknown_provider/);
+  });
+
+  it("302s to the google authorize URL with project client_id, offline access, and prompt=consent", async () => {
+    const res = await handleAuthProxyRequest(
+      new Request(
+        "https://auth.example.com/start/google?backend=https://owner.example.com",
+      ),
+      env,
+      { fetch: vi.fn() as unknown as FetchLike },
+      1000,
+    );
+    expect(res.status).toBe(302);
+    const location = new URL(res.headers.get("location") ?? "");
+    expect(location.origin + location.pathname).toBe(
+      "https://accounts.google.com/o/oauth2/v2/auth",
+    );
+    expect(location.searchParams.get("client_id")).toBe("go-id");
+    expect(location.searchParams.get("redirect_uri")).toBe(
+      "https://auth.example.com/callback/google",
+    );
+    expect(location.searchParams.get("access_type")).toBe("offline");
+    expect(location.searchParams.get("prompt")).toBe("consent");
+    expect(location.searchParams.get("state")).toBeTruthy();
+  });
+});
+
+describe("handleAuthProxyRequest /callback (google)", () => {
+  // {"sub":"110001"} base64url-encoded.
+  const googleIdToken = "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiIxMTAwMDEifQ.sig";
+
+  const googleFetch: FetchLike = async (url) => {
+    if (url === "https://oauth2.googleapis.com/token") {
+      return okJson({
+        access_token: "ya29.x",
+        refresh_token: "1//rt",
+        expires_in: 3600,
+        scope: "https://www.googleapis.com/auth/calendar.readonly openid",
+        token_type: "Bearer",
+        id_token: googleIdToken,
+      });
+    }
+    throw new Error(`unexpected url: ${url}`);
+  };
+
+  it("verifies state, exchanges code, and 302s with a signed envelope carrying refresh_token + expires_at + sub-derived account_id", async () => {
+    const state = await signState(
+      { userBackendUrl: "https://owner.example.com", nonce: "ng1" },
+      env.STATE_HMAC_SECRET,
+      1000,
+    );
+    const res = await handleAuthProxyRequest(
+      callbackUrl("google", { code: "abc", state }),
+      env,
+      { fetch: googleFetch },
+      1000,
+    );
+    expect(res.status).toBe(302);
+    const location = new URL(res.headers.get("location") ?? "");
+    expect(location.origin + location.pathname).toBe(
+      "https://owner.example.com/oauth/exchange",
+    );
+    const envelope = location.searchParams.get("envelope") ?? "";
+    const verified = await verifyEnvelope(envelope, keys.publicKey, 1000);
+    if (!verified.ok) throw new Error(`expected ok, got ${verified.reason}`);
+    expect(verified.payload.provider).toBe("google");
+    expect(verified.payload.access_token).toBe("ya29.x");
+    expect(verified.payload.refresh_token).toBe("1//rt");
+    expect(verified.payload.account_id).toBe("110001");
+    expect(typeof verified.payload.expires_at).toBe("number");
   });
 });
