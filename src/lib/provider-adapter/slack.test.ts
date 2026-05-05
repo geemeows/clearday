@@ -144,51 +144,84 @@ describe("pollSlackSignals", () => {
     };
   }
 
-  it("calls search.messages once for the self-mention query and once for is:dm with bearer auth", async () => {
-    const fetchImpl = vi.fn(async () =>
-      jsonResponse({ ok: true, messages: { matches: [] } }),
-    );
-    await pollSlackSignals(SELF, "U_SELF", fetchImpl);
-    expect(fetchImpl).toHaveBeenCalledTimes(2);
-    const calls = fetchImpl.mock.calls as unknown as Array<
-      [string, { method: string; headers: Record<string, string> }]
-    >;
-    const queries = calls.map((c) => c[0]);
+  type ConvFixtures = {
+    channels?: Array<{ id: string; is_archived?: boolean }>;
+    ims?: Array<{ id: string }>;
+    history?: Record<string, unknown[]>;
+    replies?: Record<string, unknown[]>;
+  };
+
+  function buildFetch(fx: ConvFixtures) {
+    return vi.fn(async (url: string) => {
+      if (url.includes("users.conversations")) {
+        if (/types=im(&|$)/.test(url)) {
+          return jsonResponse({ ok: true, channels: fx.ims ?? [] });
+        }
+        return jsonResponse({ ok: true, channels: fx.channels ?? [] });
+      }
+      if (url.includes("conversations.history")) {
+        const m = url.match(/channel=([^&]+)/);
+        const ch = m ? decodeURIComponent(m[1]!) : "";
+        return jsonResponse({ ok: true, messages: fx.history?.[ch] ?? [] });
+      }
+      if (url.includes("conversations.replies")) {
+        const m = url.match(/channel=([^&]+)/);
+        const ts = url.match(/ts=([^&]+)/);
+        const key = `${m ? decodeURIComponent(m[1]!) : ""}:${
+          ts ? decodeURIComponent(ts[1]!) : ""
+        }`;
+        return jsonResponse({ ok: true, messages: fx.replies?.[key] ?? [] });
+      }
+      return jsonResponse({ ok: false, error: `unexpected ${url}` });
+    });
+  }
+
+  it("lists the user's channels + DMs and scans conversations.history with an oldest cutoff", async () => {
+    const now = new Date("2026-05-05T00:00:00Z");
+    const fetchImpl = buildFetch({
+      channels: [{ id: "C1" }],
+      ims: [{ id: "D1" }],
+      history: { C1: [], D1: [] },
+    });
+    await pollSlackSignals("tok", "U_SELF", fetchImpl, {
+      now,
+      historyWindowSec: 120,
+    });
+    const calls = (
+      fetchImpl.mock.calls as unknown as Array<[string, unknown]>
+    ).map((c) => c[0]);
     expect(
-      queries.some((q) =>
-        q.includes(`query=${encodeURIComponent("<@U_SELF>")}`),
+      calls.some((u) => u.includes("users.conversations") && u.includes("im")),
+    ).toBe(true);
+    expect(
+      calls.some(
+        (u) =>
+          u.includes("users.conversations") && u.includes("public_channel"),
       ),
     ).toBe(true);
-    expect(
-      queries.some((q) => q.includes(`query=${encodeURIComponent("is:dm")}`)),
-    ).toBe(true);
-    for (const [url, init] of calls) {
-      expect(url).toContain("https://slack.com/api/search.messages");
-      expect(init.method).toBe("GET");
-      expect(init.headers.authorization).toBe(`Bearer ${SELF}`);
+    const expectedOldest = (now.getTime() / 1000 - 120).toFixed(6);
+    const histories = calls.filter((u) => u.includes("conversations.history"));
+    expect(histories.length).toBe(2);
+    for (const u of histories) {
+      expect(u).toContain(`oldest=${encodeURIComponent(expectedOldest)}`);
     }
   });
 
-  it("normalizes mention matches into Signals with the shared identity rule", async () => {
-    const fetchImpl = vi.fn(async (url: string) =>
-      url.includes("is%3Adm")
-        ? jsonResponse({ ok: true, messages: { matches: [] } })
-        : jsonResponse({
-            ok: true,
-            messages: {
-              matches: [
-                {
-                  type: "message",
-                  user: "U_OTHER",
-                  channel: { id: "C1", name: "general" },
-                  ts: "1714820000.000100",
-                  text: "<@U_SELF> can you take a look?",
-                  team: "T1",
-                },
-              ],
-            },
-          }),
-    );
+  it("emits a mention Signal for a channel message containing <@self>", async () => {
+    const fetchImpl = buildFetch({
+      channels: [{ id: "C1" }],
+      history: {
+        C1: [
+          {
+            type: "message",
+            user: "U_OTHER",
+            ts: "1714820000.000100",
+            text: "<@U_SELF> can you take a look?",
+            team: "T1",
+          },
+        ],
+      },
+    });
     const out = await pollSlackSignals("token", "U_SELF", fetchImpl);
     expect(out).toHaveLength(1);
     expect(out[0]).toMatchObject({
@@ -207,80 +240,64 @@ describe("pollSlackSignals", () => {
     );
   });
 
-  it("uses thread_ts as the identity anchor so a reply folds into the parent row", async () => {
-    const fetchImpl = vi.fn(async (url: string) =>
-      url.includes("is%3Adm")
-        ? jsonResponse({ ok: true, messages: { matches: [] } })
-        : jsonResponse({
-            ok: true,
-            messages: {
-              matches: [
-                {
-                  type: "message",
-                  user: "U_OTHER",
-                  channel: { id: "C1" },
-                  ts: "1714820100.000200",
-                  thread_ts: "1714820000.000100",
-                  text: "<@U_SELF> ping",
-                },
-              ],
-            },
-          }),
-    );
+  it("anchors a reply to the parent's thread_ts so it folds into the parent row", async () => {
+    const fetchImpl = buildFetch({
+      channels: [{ id: "C1" }],
+      history: {
+        C1: [
+          {
+            type: "message",
+            user: "U_OTHER",
+            ts: "1714820100.000200",
+            thread_ts: "1714820000.000100",
+            text: "<@U_SELF> ping",
+          },
+        ],
+      },
+    });
     const out = await pollSlackSignals("token", "U_SELF", fetchImpl);
     expect(out[0]?.source_id).toBe("C1:1714820000.000100");
   });
 
-  it("drops mention matches authored by self and matches that don't contain the self mention", async () => {
-    const fetchImpl = vi.fn(async (url: string) =>
-      url.includes("is%3Adm")
-        ? jsonResponse({ ok: true, messages: { matches: [] } })
-        : jsonResponse({
-            ok: true,
-            messages: {
-              matches: [
-                {
-                  type: "message",
-                  user: "U_SELF",
-                  channel: { id: "C1" },
-                  ts: "1.0",
-                  text: "<@U_SELF> note to self",
-                },
-                {
-                  type: "message",
-                  user: "U_OTHER",
-                  channel: { id: "C1" },
-                  ts: "2.0",
-                  text: "no mention here",
-                },
-              ],
-            },
-          }),
-    );
+  it("drops channel messages authored by self and messages without a self mention", async () => {
+    const fetchImpl = buildFetch({
+      channels: [{ id: "C1" }],
+      history: {
+        C1: [
+          {
+            type: "message",
+            user: "U_SELF",
+            ts: "1.0",
+            text: "<@U_SELF> note to self",
+          },
+          {
+            type: "message",
+            user: "U_OTHER",
+            ts: "2.0",
+            text: "ordinary chatter",
+          },
+        ],
+      },
+    });
     const out = await pollSlackSignals("token", "U_SELF", fetchImpl);
     expect(out).toHaveLength(0);
   });
 
-  it("normalizes is:dm matches into dm Signals (no <@self> required, channel_type=im)", async () => {
-    const fetchImpl = vi.fn(async (url: string) =>
-      url.includes("is%3Adm")
-        ? jsonResponse({
-            ok: true,
-            messages: {
-              matches: [
-                {
-                  type: "message",
-                  user: "U_OTHER",
-                  channel: { id: "D1" },
-                  ts: "1714820500.000100",
-                  text: "hey, got a sec?",
-                  team: "T1",
-                },
-              ],
-            },
-          })
-        : jsonResponse({ ok: true, messages: { matches: [] } }),
-    );
+  it("emits a dm Signal for every non-self message in an im channel", async () => {
+    const fetchImpl = buildFetch({
+      ims: [{ id: "D1" }],
+      history: {
+        D1: [
+          {
+            type: "message",
+            user: "U_OTHER",
+            ts: "1714820500.000100",
+            text: "hey, got a sec?",
+            team: "T1",
+          },
+        ],
+      },
+    });
     const out = await pollSlackSignals("token", "U_SELF", fetchImpl);
     expect(out).toHaveLength(1);
     expect(out[0]).toMatchObject({
@@ -296,60 +313,50 @@ describe("pollSlackSignals", () => {
     });
   });
 
-  it("drops is:dm matches authored by self", async () => {
-    const fetchImpl = vi.fn(async (url: string) =>
-      url.includes("is%3Adm")
-        ? jsonResponse({
-            ok: true,
-            messages: {
-              matches: [
-                {
-                  type: "message",
-                  user: "U_SELF",
-                  channel: { id: "D1" },
-                  ts: "1.0",
-                  text: "note to self",
-                },
-              ],
-            },
-          })
-        : jsonResponse({ ok: true, messages: { matches: [] } }),
-    );
+  it("drops dm messages authored by self", async () => {
+    const fetchImpl = buildFetch({
+      ims: [{ id: "D1" }],
+      history: {
+        D1: [
+          {
+            type: "message",
+            user: "U_SELF",
+            ts: "1.0",
+            text: "note to self",
+          },
+        ],
+      },
+    });
     const out = await pollSlackSignals("token", "U_SELF", fetchImpl);
     expect(out).toHaveLength(0);
   });
 
   it("calls conversations.replies for each participated thread and emits thread_reply Signals for non-self replies", async () => {
-    const fetchImpl = vi.fn(async (url: string) => {
-      if (url.includes("conversations.replies")) {
-        return jsonResponse({
-          ok: true,
-          messages: [
-            {
-              type: "message",
-              user: "U_SELF",
-              ts: "1714820000.000100",
-              thread_ts: "1714820000.000100",
-              text: "I'll look into this",
-              team: "T1",
-            },
-            {
-              type: "message",
-              user: "U_OTHER",
-              ts: "1714820500.000200",
-              thread_ts: "1714820000.000100",
-              text: "thanks!",
-              team: "T1",
-            },
-          ],
-        });
-      }
-      return jsonResponse({ ok: true, messages: { matches: [] } });
+    const fetchImpl = buildFetch({
+      replies: {
+        "C1:1714820000.000100": [
+          {
+            type: "message",
+            user: "U_SELF",
+            ts: "1714820000.000100",
+            thread_ts: "1714820000.000100",
+            text: "I'll look into this",
+            team: "T1",
+          },
+          {
+            type: "message",
+            user: "U_OTHER",
+            ts: "1714820500.000200",
+            thread_ts: "1714820000.000100",
+            text: "thanks!",
+            team: "T1",
+          },
+        ],
+      },
     });
     const out = await pollSlackSignals("token", "U_SELF", fetchImpl, {
       participatedThreads: [{ channel: "C1", thread_ts: "1714820000.000100" }],
     });
-    expect(fetchImpl).toHaveBeenCalledTimes(3);
     const repliesCall = (fetchImpl.mock.calls as unknown as Array<[string]>)
       .map((c) => c[0])
       .find((u) => u.includes("conversations.replies"));
@@ -374,29 +381,25 @@ describe("pollSlackSignals", () => {
   });
 
   it("drops thread replies authored by self and the parent message itself", async () => {
-    const fetchImpl = vi.fn(async (url: string) => {
-      if (url.includes("conversations.replies")) {
-        return jsonResponse({
-          ok: true,
-          messages: [
-            {
-              type: "message",
-              user: "U_SELF",
-              ts: "1714820000.000100",
-              thread_ts: "1714820000.000100",
-              text: "parent",
-            },
-            {
-              type: "message",
-              user: "U_SELF",
-              ts: "1714820500.000200",
-              thread_ts: "1714820000.000100",
-              text: "self reply",
-            },
-          ],
-        });
-      }
-      return jsonResponse({ ok: true, messages: { matches: [] } });
+    const fetchImpl = buildFetch({
+      replies: {
+        "C1:1714820000.000100": [
+          {
+            type: "message",
+            user: "U_SELF",
+            ts: "1714820000.000100",
+            thread_ts: "1714820000.000100",
+            text: "parent",
+          },
+          {
+            type: "message",
+            user: "U_SELF",
+            ts: "1714820500.000200",
+            thread_ts: "1714820000.000100",
+            text: "self reply",
+          },
+        ],
+      },
     });
     const out = await pollSlackSignals("token", "U_SELF", fetchImpl, {
       participatedThreads: [{ channel: "C1", thread_ts: "1714820000.000100" }],
@@ -405,36 +408,32 @@ describe("pollSlackSignals", () => {
   });
 
   it("picks the latest non-self reply when a thread has many", async () => {
-    const fetchImpl = vi.fn(async (url: string) => {
-      if (url.includes("conversations.replies")) {
-        return jsonResponse({
-          ok: true,
-          messages: [
-            {
-              type: "message",
-              user: "U_OTHER",
-              ts: "1714820100.000200",
-              thread_ts: "1714820000.000100",
-              text: "first reply",
-            },
-            {
-              type: "message",
-              user: "U_OTHER",
-              ts: "1714820900.000300",
-              thread_ts: "1714820000.000100",
-              text: "newest reply",
-            },
-            {
-              type: "message",
-              user: "U_OTHER",
-              ts: "1714820500.000400",
-              thread_ts: "1714820000.000100",
-              text: "middle reply",
-            },
-          ],
-        });
-      }
-      return jsonResponse({ ok: true, messages: { matches: [] } });
+    const fetchImpl = buildFetch({
+      replies: {
+        "C1:1714820000.000100": [
+          {
+            type: "message",
+            user: "U_OTHER",
+            ts: "1714820100.000200",
+            thread_ts: "1714820000.000100",
+            text: "first reply",
+          },
+          {
+            type: "message",
+            user: "U_OTHER",
+            ts: "1714820900.000300",
+            thread_ts: "1714820000.000100",
+            text: "newest reply",
+          },
+          {
+            type: "message",
+            user: "U_OTHER",
+            ts: "1714820500.000400",
+            thread_ts: "1714820000.000100",
+            text: "middle reply",
+          },
+        ],
+      },
     });
     const out = await pollSlackSignals("token", "U_SELF", fetchImpl, {
       participatedThreads: [{ channel: "C1", thread_ts: "1714820000.000100" }],
@@ -444,9 +443,7 @@ describe("pollSlackSignals", () => {
   });
 
   it("does not call conversations.replies when no participated threads are supplied", async () => {
-    const fetchImpl = vi.fn(async () =>
-      jsonResponse({ ok: true, messages: { matches: [] } }),
-    );
+    const fetchImpl = buildFetch({});
     await pollSlackSignals("token", "U_SELF", fetchImpl);
     const urls = (fetchImpl.mock.calls as unknown as Array<[string]>).map(
       (c) => c[0],
@@ -454,83 +451,79 @@ describe("pollSlackSignals", () => {
     expect(urls.every((u) => !u.includes("conversations.replies"))).toBe(true);
   });
 
-  it("calls conversations.history for each broadcast-allowlisted channel and emits mention Signals for @here / @channel posts", async () => {
-    const fetchImpl = vi.fn(async (url: string) => {
-      if (url.includes("conversations.history")) {
-        return jsonResponse({
-          ok: true,
-          messages: [
-            {
-              type: "message",
-              user: "U_OTHER",
-              ts: "1714820000.000100",
-              text: "<!here> deploy starting now",
-              team: "T1",
-            },
-            {
-              type: "message",
-              user: "U_OTHER",
-              ts: "1714820100.000200",
-              text: "ordinary chatter",
-              team: "T1",
-            },
-          ],
-        });
-      }
-      return jsonResponse({ ok: true, messages: { matches: [] } });
+  it("emits a mention Signal for @here / @channel posts only when the channel is in the broadcast allowlist", async () => {
+    const broadcastMessages = [
+      {
+        type: "message",
+        user: "U_OTHER",
+        ts: "1714820000.000100",
+        text: "<!here> deploy starting now",
+        team: "T1",
+      },
+      {
+        type: "message",
+        user: "U_OTHER",
+        ts: "1714820100.000200",
+        text: "ordinary chatter",
+        team: "T1",
+      },
+    ];
+    // Allowlisted: emits a mention.
+    const allowedFetch = buildFetch({
+      channels: [{ id: "C_ANNOUNCE" }],
+      history: { C_ANNOUNCE: broadcastMessages },
     });
-    const out = await pollSlackSignals("token", "U_SELF", fetchImpl, {
+    const allowedOut = await pollSlackSignals("token", "U_SELF", allowedFetch, {
       broadcastChannels: ["C_ANNOUNCE"],
     });
-    const historyCall = (fetchImpl.mock.calls as unknown as Array<[string]>)
-      .map((c) => c[0])
-      .find((u) => u.includes("conversations.history"));
-    expect(historyCall).toContain(
-      `channel=${encodeURIComponent("C_ANNOUNCE")}`,
-    );
-    expect(out).toHaveLength(1);
-    expect(out[0]).toMatchObject({
+    expect(allowedOut).toHaveLength(1);
+    expect(allowedOut[0]).toMatchObject({
       provider: "slack",
       kind: "mention",
       source_id: "C_ANNOUNCE:1714820000.000100",
       requires_action: true,
     });
-    expect(out[0]?.payload).toMatchObject({
+    expect(allowedOut[0]?.payload).toMatchObject({
       channel: "C_ANNOUNCE",
       author: "U_OTHER",
       text: "<!here> deploy starting now",
     });
+
+    // Not allowlisted: broadcast token alone doesn't fire.
+    const deniedFetch = buildFetch({
+      channels: [{ id: "C_ANNOUNCE" }],
+      history: { C_ANNOUNCE: broadcastMessages },
+    });
+    const deniedOut = await pollSlackSignals("token", "U_SELF", deniedFetch);
+    expect(deniedOut).toHaveLength(0);
   });
 
-  it("drops broadcast history entries authored by self, by bots, or with non-broadcast text", async () => {
-    const fetchImpl = vi.fn(async (url: string) => {
-      if (url.includes("conversations.history")) {
-        return jsonResponse({
-          ok: true,
-          messages: [
-            {
-              type: "message",
-              user: "U_SELF",
-              ts: "1.0",
-              text: "<!here> from self",
-            },
-            {
-              type: "message",
-              user: "U_OTHER",
-              bot_id: "B1",
-              ts: "2.0",
-              text: "<!channel> from bot",
-            },
-            {
-              type: "message",
-              user: "U_OTHER",
-              ts: "3.0",
-              text: "no broadcast token",
-            },
-          ],
-        });
-      }
-      return jsonResponse({ ok: true, messages: { matches: [] } });
+  it("drops history entries authored by self, by bots, or with non-broadcast / non-mention text", async () => {
+    const fetchImpl = buildFetch({
+      channels: [{ id: "C_ANNOUNCE" }],
+      history: {
+        C_ANNOUNCE: [
+          {
+            type: "message",
+            user: "U_SELF",
+            ts: "1.0",
+            text: "<!here> from self",
+          },
+          {
+            type: "message",
+            user: "U_OTHER",
+            bot_id: "B1",
+            ts: "2.0",
+            text: "<!channel> from bot",
+          },
+          {
+            type: "message",
+            user: "U_OTHER",
+            ts: "3.0",
+            text: "no broadcast token",
+          },
+        ],
+      },
     });
     const out = await pollSlackSignals("token", "U_SELF", fetchImpl, {
       broadcastChannels: ["C_ANNOUNCE"],
@@ -538,11 +531,22 @@ describe("pollSlackSignals", () => {
     expect(out).toHaveLength(0);
   });
 
-  it("does not call conversations.history when no broadcast channels are supplied", async () => {
-    const fetchImpl = vi.fn(async () =>
-      jsonResponse({ ok: true, messages: { matches: [] } }),
-    );
-    await pollSlackSignals("token", "U_SELF", fetchImpl);
+  it("skips archived channels returned by users.conversations", async () => {
+    const fetchImpl = buildFetch({
+      channels: [{ id: "C_ARCHIVED", is_archived: true }],
+      history: {
+        C_ARCHIVED: [
+          {
+            type: "message",
+            user: "U_OTHER",
+            ts: "1.0",
+            text: "<@U_SELF>",
+          },
+        ],
+      },
+    });
+    const out = await pollSlackSignals("token", "U_SELF", fetchImpl);
+    expect(out).toHaveLength(0);
     const urls = (fetchImpl.mock.calls as unknown as Array<[string]>).map(
       (c) => c[0],
     );

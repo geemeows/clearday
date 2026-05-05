@@ -155,7 +155,7 @@ describe("buildAuthorizeUrl (github)", () => {
     // Slack v2 uses `user_scope` for user-token scopes; `scope` (bot) must not
     // be set since v1 requests no bot scopes.
     expect(url.searchParams.get("user_scope")).toBe(
-      "channels:read,groups:read,im:read,mpim:read,search:read,users.profile:write,dnd:write",
+      "channels:read,groups:read,im:read,mpim:read,channels:history,groups:history,im:history,mpim:history,users.profile:write,dnd:write",
     );
     expect(url.searchParams.get("scope")).toBeNull();
     expect(url.searchParams.get("response_type")).toBe("code");

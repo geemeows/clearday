@@ -230,7 +230,9 @@ async function pollOne(
 
   if (account.provider === "slack") {
     if (!account.account_id) {
-      throw new Error("slack account_id missing — cannot run search.messages");
+      throw new Error(
+        "slack account_id missing — cannot scan history for self mentions",
+      );
     }
     const participatedThreads = deps.loadSlackParticipatedThreads
       ? await deps.loadSlackParticipatedThreads()

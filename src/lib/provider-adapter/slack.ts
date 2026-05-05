@@ -2,8 +2,8 @@
 //
 // 1. Webhook event normalization (`normalizeSlackEvent`) — translates a single
 //    `message` / `app_mention` Events API payload into a Signal.
-// 2. Cron-driven polling (`pollSlackSignals`) — calls `search.messages` for
-//    explicit `<@self>` mentions and normalizes the matches into Signals.
+// 2. Cron-driven polling (`pollSlackSignals`) — scans `conversations.history`
+//    over the channels and DMs the user is in (free-plan compatible).
 //
 // Identity rule (shared): one Signal per `(channel, thread_ts || ts)`.
 // Replies fold into the parent row via upsert.
@@ -121,30 +121,36 @@ export function threadKey(channel: string, threadTs: string): string {
   return `${channel}:${threadTs}`;
 }
 
-// --- Polling surface (search.messages + conversations.replies) ------------
+// --- Polling surface (users.conversations + conversations.history) -----
 //
 // The cron orchestrator calls this on every tick for connected Slack accounts.
-// Three queries: explicit `<@self>` mentions and `is:dm` DMs (search.messages),
-// plus per-thread reply pulls via `conversations.replies` for any thread the
-// owner has previously posted in (tracked in `slack_participated_threads`).
-// Identity rule is shared with the webhook path: `(channel, thread_ts || ts)`
-// so a re-poll (or a webhook arriving for the same message) upserts into the
-// same Signal row.
+// Free-plan-compatible: uses only `users.conversations`, `conversations.history`
+// and `conversations.replies` — no `search.messages` (which is paid-only).
+//
+// Per tick:
+//   1. List the user's channels (public/private/mpim) and DMs (im).
+//   2. For each channel: pull `conversations.history` since `now - window` and
+//      emit `mention` Signals for messages containing `<@selfUserId>` (and for
+//      `@here`/`@channel` only when the channel is in the broadcast allowlist).
+//   3. For each DM channel: pull `conversations.history` since `now - window`
+//      and emit `dm` Signals for every non-self, non-bot message.
+//   4. For each participated thread: pull `conversations.replies` and emit a
+//      `thread_reply` Signal for the latest non-self reply.
+//
+// Identity rule is shared with the webhook path: `(channel, thread_ts || ts)`,
+// so a re-poll within the overlap window upserts the same Signal row instead
+// of duplicating it.
 
-export type SlackSearchMatch = {
-  type?: string;
-  user?: string;
-  channel?: { id?: string; name?: string };
-  ts?: string;
-  thread_ts?: string;
-  text?: string;
-  team?: string;
+export type SlackConversation = {
+  id?: string;
+  is_archived?: boolean;
+  is_im?: boolean;
 };
 
-export type SlackSearchResponse = {
+export type SlackConversationsListResponse = {
   ok?: boolean;
   error?: string;
-  messages?: { matches?: SlackSearchMatch[] };
+  channels?: SlackConversation[];
 };
 
 export type SlackReplyMessage = {
@@ -191,11 +197,17 @@ export type SlackPollOptions = {
    *  fetched and any reply not authored by self becomes a thread_reply Signal
    *  on the parent's `(channel, thread_ts)` row. */
   participatedThreads?: ReadonlyArray<SlackParticipatedThread>;
-  /** Channel ids opted in to capture `@here` / `@channel` broadcasts. For
-   *  each, conversations.history is fetched and every broadcast message not
-   *  authored by self becomes a mention Signal. Mirrors the webhook's
-   *  `broadcastAllowlist` gate so polling matches webhook semantics. */
+  /** Channel ids opted in to capture `@here` / `@channel` broadcasts. In other
+   *  channels, broadcast tokens are dropped — direct `<@self>` mentions still
+   *  fire regardless of allowlist. Mirrors the webhook's `broadcastAllowlist`
+   *  gate so polling matches webhook semantics. */
   broadcastChannels?: ReadonlyArray<string>;
+  /** Wall clock for computing the history `oldest` cutoff. Defaults to now. */
+  now?: Date;
+  /** History oldest window in seconds (default 120 = the cron interval).
+   *  Bounds Supabase write volume: every channel scan is capped at the last
+   *  `historyWindowSec` seconds of messages. */
+  historyWindowSec?: number;
 };
 
 export type SlackFetch = (
@@ -214,30 +226,55 @@ export async function pollSlackSignals(
   fetchImpl: SlackFetch,
   options: SlackPollOptions = {},
 ): Promise<Signal[]> {
+  const now = options.now ?? new Date();
+  const windowSec = options.historyWindowSec ?? 120;
+  const oldest = (now.getTime() / 1000 - windowSec).toFixed(6);
+  const broadcastSet = new Set(options.broadcastChannels ?? []);
   const threads = options.participatedThreads ?? [];
-  const broadcastChannels = options.broadcastChannels ?? [];
-  const [mentions, dms, threadReplies, broadcastHistories] = await Promise.all([
-    runSearchQuery(accessToken, `<@${selfUserId}>`, fetchImpl),
-    runSearchQuery(accessToken, "is:dm", fetchImpl),
+
+  const [channels, ims, threadReplies] = await Promise.all([
+    listConversations(
+      accessToken,
+      "public_channel,private_channel,mpim",
+      fetchImpl,
+    ),
+    listConversations(accessToken, "im", fetchImpl),
     Promise.all(
       threads.map((t) =>
         runRepliesQuery(accessToken, t.channel, t.thread_ts, fetchImpl),
       ),
     ),
-    Promise.all(
-      broadcastChannels.map((channel) =>
-        runHistoryQuery(accessToken, channel, fetchImpl),
-      ),
-    ),
   ]);
+
+  const channelHistories = await Promise.all(
+    channels.map((c) => runHistoryQuery(accessToken, c, fetchImpl, oldest)),
+  );
+  const imHistories = await Promise.all(
+    ims.map((c) => runHistoryQuery(accessToken, c, fetchImpl, oldest)),
+  );
+
   const out: Signal[] = [];
-  for (const match of mentions) {
-    const sig = normalizeSearchMatch(match, selfUserId, "mention");
-    if (sig) out.push(sig);
+  for (let i = 0; i < channels.length; i++) {
+    const channel = channels[i];
+    if (!channel) continue;
+    const allowBroadcast = broadcastSet.has(channel);
+    for (const msg of channelHistories[i] ?? []) {
+      const sig = normalizeChannelMessage(
+        channel,
+        msg,
+        selfUserId,
+        allowBroadcast,
+      );
+      if (sig) out.push(sig);
+    }
   }
-  for (const match of dms) {
-    const sig = normalizeSearchMatch(match, selfUserId, "dm");
-    if (sig) out.push(sig);
+  for (let i = 0; i < ims.length; i++) {
+    const channel = ims[i];
+    if (!channel) continue;
+    for (const msg of imHistories[i] ?? []) {
+      const sig = normalizeDmMessage(channel, msg, selfUserId);
+      if (sig) out.push(sig);
+    }
   }
   for (let i = 0; i < threads.length; i++) {
     const sig = normalizeThreadReplies(
@@ -247,24 +284,17 @@ export async function pollSlackSignals(
     );
     if (sig) out.push(sig);
   }
-  for (let i = 0; i < broadcastChannels.length; i++) {
-    const channel = broadcastChannels[i];
-    if (!channel) continue;
-    for (const msg of broadcastHistories[i] ?? []) {
-      const sig = normalizeBroadcastMessage(channel, msg, selfUserId);
-      if (sig) out.push(sig);
-    }
-  }
   return out;
 }
 
-async function runSearchQuery(
+async function listConversations(
   accessToken: string,
-  query: string,
+  types: string,
   fetchImpl: SlackFetch,
-): Promise<SlackSearchMatch[]> {
-  const encoded = encodeURIComponent(query);
-  const url = `https://slack.com/api/search.messages?query=${encoded}&count=100&sort=timestamp&sort_dir=desc`;
+): Promise<string[]> {
+  const url = `https://slack.com/api/users.conversations?types=${encodeURIComponent(
+    types,
+  )}&exclude_archived=true&limit=200`;
   const res = await fetchImpl(url, {
     method: "GET",
     headers: {
@@ -275,11 +305,16 @@ async function runSearchQuery(
   if (!res.ok) {
     throw new SlackPollError(res.status, await safeText(res));
   }
-  const body = (await res.json()) as SlackSearchResponse;
+  const body = (await res.json()) as SlackConversationsListResponse;
   if (!body.ok) {
     throw new SlackPollError(res.status, body.error ?? "unknown");
   }
-  return body.messages?.matches ?? [];
+  const ids: string[] = [];
+  for (const c of body.channels ?? []) {
+    if (c.is_archived) continue;
+    if (c.id) ids.push(c.id);
+  }
+  return ids;
 }
 
 async function runRepliesQuery(
@@ -312,10 +347,12 @@ async function runHistoryQuery(
   accessToken: string,
   channel: string,
   fetchImpl: SlackFetch,
+  oldest?: string,
 ): Promise<SlackHistoryMessage[]> {
+  const oldestParam = oldest ? `&oldest=${encodeURIComponent(oldest)}` : "";
   const url = `https://slack.com/api/conversations.history?channel=${encodeURIComponent(
     channel,
-  )}&limit=100`;
+  )}&limit=100${oldestParam}`;
   const res = await fetchImpl(url, {
     method: "GET",
     headers: {
@@ -333,17 +370,20 @@ async function runHistoryQuery(
   return body.messages ?? [];
 }
 
-function normalizeBroadcastMessage(
+function normalizeChannelMessage(
   channel: string,
   msg: SlackHistoryMessage,
   selfUserId: string,
+  allowBroadcast: boolean,
 ): Signal | null {
   if (!msg.ts || !msg.user) return null;
   if (msg.user === selfUserId) return null;
   if (msg.bot_id) return null;
   if (msg.subtype && msg.subtype !== "thread_broadcast") return null;
   const text = msg.text ?? "";
-  if (!BROADCAST_RE.test(text)) return null;
+  const directMention = text.includes(`<@${selfUserId}>`);
+  const broadcast = allowBroadcast && BROADCAST_RE.test(text);
+  if (!directMention && !broadcast) return null;
 
   const anchorTs = msg.thread_ts ?? msg.ts;
   const teamId = msg.team ?? null;
@@ -359,6 +399,42 @@ function normalizeBroadcastMessage(
     payload: {
       channel,
       channel_type: null,
+      ts: msg.ts,
+      thread_ts: msg.thread_ts ?? null,
+      author: msg.user,
+      text,
+      team: teamId,
+    },
+    requires_action: true,
+    source_created_at: tsToIso(anchorTs),
+  };
+}
+
+function normalizeDmMessage(
+  channel: string,
+  msg: SlackHistoryMessage,
+  selfUserId: string,
+): Signal | null {
+  if (!msg.ts || !msg.user) return null;
+  if (msg.user === selfUserId) return null;
+  if (msg.bot_id) return null;
+  if (msg.subtype && msg.subtype !== "thread_broadcast") return null;
+  const text = msg.text ?? "";
+
+  const anchorTs = msg.thread_ts ?? msg.ts;
+  const teamId = msg.team ?? null;
+  const url = teamId
+    ? `https://app.slack.com/client/${teamId}/${channel}/thread/${channel}-${anchorTs}`
+    : null;
+  return {
+    provider: "slack",
+    kind: "dm",
+    source_id: `${channel}:${anchorTs}`,
+    title: titleFromText(text, "dm"),
+    url,
+    payload: {
+      channel,
+      channel_type: "im",
       ts: msg.ts,
       thread_ts: msg.thread_ts ?? null,
       author: msg.user,
@@ -418,43 +494,6 @@ function compareTs(a: string, b: string): number {
   const nb = Number.parseFloat(b);
   if (!Number.isFinite(na) || !Number.isFinite(nb)) return a.localeCompare(b);
   return na - nb;
-}
-
-function normalizeSearchMatch(
-  match: SlackSearchMatch,
-  selfUserId: string,
-  kind: "mention" | "dm",
-): Signal | null {
-  const channel = match.channel?.id;
-  if (!channel || !match.ts || !match.user) return null;
-  if (match.user === selfUserId) return null;
-  const text = match.text ?? "";
-  if (kind === "mention" && !text.includes(`<@${selfUserId}>`)) return null;
-
-  const anchorTs = match.thread_ts ?? match.ts;
-  const teamId = match.team ?? null;
-  const url = teamId
-    ? `https://app.slack.com/client/${teamId}/${channel}/thread/${channel}-${anchorTs}`
-    : null;
-
-  return {
-    provider: "slack",
-    kind,
-    source_id: `${channel}:${anchorTs}`,
-    title: titleFromText(text, kind),
-    url,
-    payload: {
-      channel,
-      channel_type: kind === "dm" ? "im" : null,
-      ts: match.ts,
-      thread_ts: match.thread_ts ?? null,
-      author: match.user,
-      text,
-      team: teamId,
-    },
-    requires_action: true,
-    source_created_at: tsToIso(anchorTs),
-  };
 }
 
 async function safeText(res: { text: () => Promise<string> }): Promise<string> {

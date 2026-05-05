@@ -469,34 +469,47 @@ describe("runScheduledPoll", () => {
     expect(firstCall[1].headers.authorization).toBe("Bearer atl_oauth_abc");
   });
 
-  it("polls slack search.messages with the stored access_token + account_id and upserts mention + dm Signals", async () => {
+  it("polls slack via users.conversations + conversations.history and upserts mention + dm Signals", async () => {
     const store = makeStore();
     const fetchImpl = vi.fn(async (url: string) => {
-      expect(url).toContain("https://slack.com/api/search.messages");
-      const matches = url.includes("is%3Adm")
-        ? [
-            {
-              type: "message",
-              user: "U_OTHER",
-              channel: { id: "D1" },
-              ts: "1714820500.000100",
-              text: "hey, got a sec?",
-              team: "T1",
-            },
-          ]
-        : [
-            {
-              type: "message",
-              user: "U_OTHER",
-              channel: { id: "C1", name: "general" },
-              ts: "1714820000.000100",
-              text: "<@U_SELF> ping",
-              team: "T1",
-            },
-          ];
-      return new Response(JSON.stringify({ ok: true, messages: { matches } }), {
-        status: 200,
-      });
+      if (url.includes("users.conversations")) {
+        const isIm = /types=im(&|$|%26)/.test(url) || url.includes("=im&");
+        return new Response(
+          JSON.stringify({
+            ok: true,
+            channels: isIm ? [{ id: "D1" }] : [{ id: "C1" }],
+          }),
+          { status: 200 },
+        );
+      }
+      if (url.includes("conversations.history")) {
+        const m = url.match(/channel=([^&]+)/);
+        const ch = m ? decodeURIComponent(m[1]!) : "";
+        const messages =
+          ch === "D1"
+            ? [
+                {
+                  type: "message",
+                  user: "U_OTHER",
+                  ts: "1714820500.000100",
+                  text: "hey, got a sec?",
+                  team: "T1",
+                },
+              ]
+            : [
+                {
+                  type: "message",
+                  user: "U_OTHER",
+                  ts: "1714820000.000100",
+                  text: "<@U_SELF> ping",
+                  team: "T1",
+                },
+              ];
+        return new Response(JSON.stringify({ ok: true, messages }), {
+          status: 200,
+        });
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
     });
     const deps: OrchestratorDeps = {
       loadAccounts: async () => [
@@ -517,10 +530,16 @@ describe("runScheduledPoll", () => {
     const calls = fetchImpl.mock.calls as unknown as Array<
       [string, { headers: Record<string, string> }]
     >;
-    expect(calls).toHaveLength(2);
     for (const [, init] of calls) {
       expect(init.headers.authorization).toBe("Bearer xoxp-abc");
     }
+    const urls = calls.map((c) => c[0]);
+    expect(urls.some((u) => u.includes("users.conversations"))).toBe(true);
+    expect(
+      urls.some(
+        (u) => u.includes("conversations.history") && u.includes("oldest="),
+      ),
+    ).toBe(true);
   });
 
   it("loads slack participated threads and pulls conversations.replies for each", async () => {
@@ -544,10 +563,14 @@ describe("runScheduledPoll", () => {
           { status: 200 },
         );
       }
-      return new Response(
-        JSON.stringify({ ok: true, messages: { matches: [] } }),
-        { status: 200 },
-      );
+      if (url.includes("users.conversations")) {
+        return new Response(JSON.stringify({ ok: true, channels: [] }), {
+          status: 200,
+        });
+      }
+      return new Response(JSON.stringify({ ok: true, messages: [] }), {
+        status: 200,
+      });
     });
     const loadSlackParticipatedThreads = vi.fn(async () => [
       { channel: "C1", thread_ts: "1714820000.000100" },
@@ -585,9 +608,19 @@ describe("runScheduledPoll", () => {
     });
   });
 
-  it("loads the slack broadcast allowlist and pulls conversations.history for each channel", async () => {
+  it("loads the slack broadcast allowlist and emits broadcast mentions only for allowlisted channels", async () => {
     const store = makeStore();
     const fetchImpl = vi.fn(async (url: string) => {
+      if (url.includes("users.conversations")) {
+        const isIm = /types=im(&|$|%26)/.test(url) || url.includes("=im&");
+        return new Response(
+          JSON.stringify({
+            ok: true,
+            channels: isIm ? [] : [{ id: "C_ANNOUNCE" }],
+          }),
+          { status: 200 },
+        );
+      }
       if (url.includes("conversations.history")) {
         return new Response(
           JSON.stringify({
@@ -605,10 +638,7 @@ describe("runScheduledPoll", () => {
           { status: 200 },
         );
       }
-      return new Response(
-        JSON.stringify({ ok: true, messages: { matches: [] } }),
-        { status: 200 },
-      );
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
     });
     const loadSlackBroadcastAllowlist = vi.fn(async () => ["C_ANNOUNCE"]);
     const deps: OrchestratorDeps = {
@@ -628,16 +658,6 @@ describe("runScheduledPoll", () => {
     const reports = await runScheduledPoll(deps);
     expect(reports).toEqual([{ provider: "slack", upserted: 1 }]);
     expect(loadSlackBroadcastAllowlist).toHaveBeenCalledTimes(1);
-    const urls = (fetchImpl.mock.calls as unknown as Array<[string]>).map(
-      (c) => c[0],
-    );
-    expect(
-      urls.some(
-        (u) =>
-          u.includes("conversations.history") &&
-          u.includes(`channel=${encodeURIComponent("C_ANNOUNCE")}`),
-      ),
-    ).toBe(true);
     const upserted = (
       store.upsert.mock.calls as unknown as Array<
         [Array<{ kind: string; source_id: string }>]

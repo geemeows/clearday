@@ -240,7 +240,8 @@ describe("exchangeCode — slack", () => {
           authed_user: {
             id: "U-IGNORED",
             access_token: "xoxp-user-token",
-            scope: "channels:read,groups:read,im:read,mpim:read,search:read",
+            scope:
+              "channels:read,groups:read,im:read,mpim:read,channels:history",
           },
         });
       }
@@ -261,7 +262,7 @@ describe("exchangeCode — slack", () => {
       "groups:read",
       "im:read",
       "mpim:read",
-      "search:read",
+      "channels:history",
     ]);
     expect(record.metadata).toEqual({ team: { id: "T1", name: "Acme" } });
   });
