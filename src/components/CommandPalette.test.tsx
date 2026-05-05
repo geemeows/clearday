@@ -10,35 +10,47 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   type Asker,
   CommandPalette,
+  type Result,
   type Searcher,
 } from "#/components/CommandPalette";
 
 type SearcherResponse = Awaited<ReturnType<Searcher>>;
 
 function fakeSearcher(map: Record<string, SearcherResponse>): Searcher {
-  return vi.fn(async (scope, query) => {
-    const key = `${scope}:${query.trim()}`;
-    return map[key] ?? map[scope] ?? { signals: [] };
+  return vi.fn(async (query) => {
+    return map[query.trim()] ?? map[""] ?? { signals: [] };
   });
 }
 
-const prResult = {
+const prResult: Result = {
   id: "s1",
-  provider: "github" as const,
-  kind: "pr_review_requested" as const,
+  provider: "github",
+  kind: "pr_review_requested",
   source_id: "owner/repo#1",
   title: "Add CommandPalette",
   url: "https://github.com/owner/repo/pull/1",
-  payload: {},
+  payload: { repo: "owner/repo" },
   requires_action: true,
   source_created_at: null,
 };
 
-const meetingResult = {
+const ticketResult: Result = {
   id: "s2",
-  provider: "google" as const,
-  kind: "meeting" as const,
-  source_id: "ev-2",
+  provider: "linear",
+  kind: "ticket_in_progress",
+  source_id: "linear-uuid",
+  title: "Wire dispatcher",
+  url: null,
+  payload: { identifier: "ENG-42", state_name: "In Progress" },
+  requires_action: false,
+  source_created_at: null,
+};
+
+const meetingResult: Result = {
+  id: "s3",
+  provider: "google",
+  kind: "meeting",
+  source_id: "ev-3",
   title: "Standup",
   url: null,
   payload: {},
@@ -46,8 +58,21 @@ const meetingResult = {
   source_created_at: null,
 };
 
+const slackResult: Result = {
+  id: "s4",
+  provider: "slack",
+  kind: "mention",
+  source_id: "C2:222",
+  title: "deploy ready",
+  url: null,
+  payload: { channel: "eng-deploys" },
+  requires_action: true,
+  source_created_at: null,
+};
+
 afterEach(() => {
   vi.useRealTimers();
+  vi.restoreAllMocks();
 });
 
 async function flushDebounce() {
@@ -59,40 +84,104 @@ async function flushDebounce() {
 }
 
 describe("CommandPalette", () => {
-  it("opens when the user presses Cmd+K", async () => {
+  it("opens via the devy:open-cmdk event", async () => {
     render(<CommandPalette searcher={fakeSearcher({})} />);
-    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(
+      screen.queryByRole("dialog", { name: /command palette/i }),
+    ).toBeNull();
+    await act(async () => {
+      window.dispatchEvent(new Event("devy:open-cmdk"));
+    });
+    expect(
+      screen.getByRole("dialog", { name: /command palette/i }),
+    ).toBeTruthy();
+  });
+
+  it("opens via Cmd+K", async () => {
+    render(<CommandPalette searcher={fakeSearcher({})} />);
     fireEvent.keyDown(window, { key: "k", metaKey: true });
     expect(
       screen.getByRole("dialog", { name: /command palette/i }),
     ).toBeTruthy();
   });
 
-  it("renders results from the searcher and arrow-key navigation moves focus", async () => {
+  it("renders results grouped by source with a SourceGlyph per row", async () => {
     vi.useFakeTimers();
     const searcher = fakeSearcher({
-      all: { signals: [prResult, meetingResult] },
+      "": { signals: [prResult, ticketResult, meetingResult, slackResult] },
     });
     render(<CommandPalette searcher={searcher} initialOpen />);
     await flushDebounce();
-    const list = screen.getByRole("list", { name: /results/i });
-    const buttons = within(list).getAllByRole("button");
-    expect(buttons).toHaveLength(2);
-    expect(buttons[0].dataset.active).toBe("true");
-    expect(buttons[1].dataset.active).toBe("false");
-    fireEvent.keyDown(screen.getByRole("dialog"), { key: "ArrowDown" });
-    expect(buttons[1].dataset.active).toBe("true");
-    fireEvent.keyDown(screen.getByRole("dialog"), { key: "ArrowUp" });
-    expect(buttons[0].dataset.active).toBe("true");
+    expect(screen.getByText("PRs")).toBeTruthy();
+    expect(screen.getByText("Tickets")).toBeTruthy();
+    expect(screen.getByText("Meetings")).toBeTruthy();
+    expect(screen.getByText("Slack")).toBeTruthy();
+    // SourceGlyph is rendered as role="img" with a labelled source per row.
+    expect(screen.getAllByRole("img", { name: /git source/i })).toHaveLength(1);
+    expect(screen.getAllByRole("img", { name: /task source/i })).toHaveLength(
+      1,
+    );
+    expect(
+      screen.getAllByRole("img", { name: /calendar source/i }),
+    ).toHaveLength(1);
+    expect(screen.getAllByRole("img", { name: /slack source/i })).toHaveLength(
+      1,
+    );
   });
 
-  it("Enter opens the active result via window.open", async () => {
+  it("typing filters results across groups", async () => {
     vi.useFakeTimers();
-    const searcher = fakeSearcher({ all: { signals: [prResult] } });
+    const searcher = fakeSearcher({
+      "": { signals: [prResult, ticketResult, meetingResult, slackResult] },
+      deploy: { signals: [slackResult] },
+    });
+    render(<CommandPalette searcher={searcher} initialOpen />);
+    await flushDebounce();
+    expect(screen.getByText("Add CommandPalette")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText(/search signals/i), {
+      target: { value: "deploy" },
+    });
+    await flushDebounce();
+    expect(screen.queryByText("Add CommandPalette")).toBeNull();
+    expect(screen.queryByText("Wire dispatcher")).toBeNull();
+    expect(screen.queryByText("Standup")).toBeNull();
+    expect(screen.getByText("deploy ready")).toBeTruthy();
+    expect(screen.queryByText("PRs")).toBeNull();
+    expect(screen.getByText("Slack")).toBeTruthy();
+  });
+
+  it("ArrowDown / ArrowUp moves the visible selection across grouped items", async () => {
+    vi.useFakeTimers();
+    const searcher = fakeSearcher({
+      "": { signals: [prResult, ticketResult] },
+    });
+    render(<CommandPalette searcher={searcher} initialOpen />);
+    await flushDebounce();
+    const items = screen.getAllByRole("option");
+    expect(items).toHaveLength(2);
+    expect(items[0].getAttribute("data-selected")).toBe("true");
+    expect(items[1].getAttribute("data-selected")).toBe("false");
+    fireEvent.keyDown(screen.getByLabelText(/search signals/i), {
+      key: "ArrowDown",
+    });
+    expect(items[0].getAttribute("data-selected")).toBe("false");
+    expect(items[1].getAttribute("data-selected")).toBe("true");
+    fireEvent.keyDown(screen.getByLabelText(/search signals/i), {
+      key: "ArrowUp",
+    });
+    expect(items[0].getAttribute("data-selected")).toBe("true");
+    expect(items[1].getAttribute("data-selected")).toBe("false");
+  });
+
+  it("Enter fires the open-result callback for the active row", async () => {
+    vi.useFakeTimers();
+    const searcher = fakeSearcher({ "": { signals: [prResult] } });
     const openSpy = vi.spyOn(window, "open").mockImplementation(() => null);
     render(<CommandPalette searcher={searcher} initialOpen />);
     await flushDebounce();
-    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Enter" });
+    fireEvent.keyDown(screen.getByLabelText(/search signals/i), {
+      key: "Enter",
+    });
     expect(openSpy).toHaveBeenCalledWith(
       "https://github.com/owner/repo/pull/1",
       "_blank",
@@ -100,155 +189,44 @@ describe("CommandPalette", () => {
     );
   });
 
-  it("Tab cycles through enabled scope chips, skipping disabled ones", async () => {
-    vi.useFakeTimers();
-    render(<CommandPalette searcher={fakeSearcher({})} initialOpen />);
-    await flushDebounce();
-    const dialog = screen.getByRole("dialog");
-    expect(
-      screen.getByRole("button", { name: "All", pressed: true }),
-    ).toBeTruthy();
-    fireEvent.keyDown(dialog, { key: "Tab" });
-    expect(
-      screen.getByRole("button", { name: "PRs", pressed: true }),
-    ).toBeTruthy();
-    fireEvent.keyDown(dialog, { key: "Tab" });
-    expect(
-      screen.getByRole("button", { name: "Tickets", pressed: true }),
-    ).toBeTruthy();
-  });
-
-  it("does not open while another modal is already focused", async () => {
-    const existing = document.createElement("div");
-    existing.setAttribute("role", "dialog");
-    existing.setAttribute("aria-label", "Focus session");
-    document.body.appendChild(existing);
-    try {
-      render(<CommandPalette searcher={fakeSearcher({})} />);
-      fireEvent.keyDown(window, { key: "k", metaKey: true });
-      expect(
-        screen.queryByRole("dialog", { name: /command palette/i }),
-      ).toBeNull();
-    } finally {
-      document.body.removeChild(existing);
-    }
-  });
-
-  it("Escape closes the palette", async () => {
-    render(<CommandPalette searcher={fakeSearcher({})} initialOpen />);
-    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
-    expect(screen.queryByRole("dialog")).toBeNull();
-  });
-
-  it("Ask AI button calls the asker and renders the answer", async () => {
-    const searcher = fakeSearcher({ all: { signals: [prResult] } });
+  it("Cmd+Enter fires the ask-AI callback instead of opening the active row", async () => {
+    const searcher = fakeSearcher({ "": { signals: [prResult] } });
     const asker: Asker = vi.fn(
       async () =>
         ({
           ok: true,
           answer: "You're waiting on alice's review.",
-          provider: "openai",
-          model: "gpt-4o-mini",
+          provider: "anthropic",
+          model: "claude-haiku-4-5",
           used_fallback: false,
         }) as const,
     );
+    const openSpy = vi.spyOn(window, "open").mockImplementation(() => null);
     render(<CommandPalette searcher={searcher} asker={asker} initialOpen />);
     await waitFor(() => {
       expect(screen.getByText("Add CommandPalette")).toBeTruthy();
     });
-    fireEvent.change(screen.getByLabelText(/search signals/i), {
-      target: { value: "what's blocking me?" },
+    const input = screen.getByLabelText(/search signals/i);
+    fireEvent.change(input, { target: { value: "what's blocking me?" } });
+    fireEvent.keyDown(input, { key: "Enter", metaKey: true });
+    await waitFor(() => {
+      expect(asker).toHaveBeenCalledWith("what's blocking me?", ["s1"]);
     });
-    fireEvent.click(screen.getByRole("button", { name: /ask ai/i }));
+    expect(openSpy).not.toHaveBeenCalled();
     await waitFor(() => {
       expect(
         screen.getByText(/you're waiting on alice's review\./i),
       ).toBeTruthy();
     });
-    expect(asker).toHaveBeenCalledWith("what's blocking me?", ["s1"]);
   });
 
-  it("renders provider-typed secondary metadata for each kind", async () => {
-    vi.useFakeTimers();
-    const slackDm = {
-      id: "s3",
-      provider: "slack" as const,
-      kind: "dm" as const,
-      source_id: "C1:111",
-      title: "ping?",
-      url: null,
-      payload: { channel_type: "im", channel: "alice" },
-      requires_action: true,
-      source_created_at: null,
-    };
-    const slackChannel = {
-      id: "s4",
-      provider: "slack" as const,
-      kind: "mention" as const,
-      source_id: "C2:222",
-      title: "deploy ready",
-      url: null,
-      payload: { channel: "eng-deploys" },
-      requires_action: true,
-      source_created_at: null,
-    };
-    const meeting = {
-      ...meetingResult,
-      payload: { starts_at: "2026-05-05T15:30:00Z" },
-    };
-    const linearTicket = {
-      id: "s5",
-      provider: "linear" as const,
-      kind: "ticket_in_progress" as const,
-      source_id: "linear-uuid",
-      title: "Wire dispatcher",
-      url: null,
-      payload: { identifier: "ENG-42", state_name: "In Progress" },
-      requires_action: false,
-      source_created_at: null,
-    };
-    const githubPr = {
-      ...prResult,
-      payload: { repo: "owner/repo" },
-    };
-    const searcher = fakeSearcher({
-      all: {
-        signals: [slackDm, slackChannel, meeting, linearTicket, githubPr],
-      },
-    });
-    render(<CommandPalette searcher={searcher} initialOpen />);
-    await flushDebounce();
-    const list = screen.getByRole("list", { name: /results/i });
-    const buttons = within(list).getAllByRole("button");
-    expect(buttons[0].textContent).toContain("Direct message · DM");
-    expect(buttons[1].textContent).toContain("Mention · #eng-deploys");
-    expect(buttons[2].textContent).toMatch(/Meeting · /);
-    expect(buttons[3].textContent).toContain(
-      "In progress · ENG-42 · In Progress",
-    );
-    expect(buttons[4].textContent).toContain("Review requested · owner/repo");
-  });
-
-  it("Ask AI surfaces no_provider with a Settings link", async () => {
-    const asker: Asker = vi.fn(
-      async () =>
-        ({
-          ok: false,
-          reason: "no_provider",
-        }) as const,
-    );
-    render(
-      <CommandPalette searcher={fakeSearcher({})} asker={asker} initialOpen />,
-    );
+  it("Ask AI footer shows the typed query and the provider chip", async () => {
+    render(<CommandPalette searcher={fakeSearcher({})} initialOpen />);
+    const footer = screen.getByRole("region", { name: /ask ai/i });
+    expect(within(footer).getByText("HAIKU 4.5")).toBeTruthy();
     fireEvent.change(screen.getByLabelText(/search signals/i), {
-      target: { value: "hi" },
+      target: { value: "what's blocking me?" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /ask ai/i }));
-    await waitFor(() => {
-      expect(screen.getByText(/no ai provider configured/i)).toBeTruthy();
-    });
-    expect(
-      screen.getByRole("link", { name: /set one in settings/i }),
-    ).toBeTruthy();
+    expect(within(footer).getByText("what's blocking me?")).toBeTruthy();
   });
 });

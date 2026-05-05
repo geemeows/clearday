@@ -1,20 +1,9 @@
-// Cmd-K command palette. Opens from anywhere via Cmd/Ctrl-K, searches
-// across Signals (PRs / Tickets / Mentions / Meetings), and offers an
-// "Ask AI" footer that routes the typed query to the LLM with the
-// current Signal list as retrieval context.
-//
-// Tracer-bullet scope: tickets stay in the chip row but disabled until
-// the Jira/Linear adapters land (#18). Other scopes are functional.
+// Cmd-K command palette. Opens via Cmd/Ctrl-K or the `devy:open-cmdk` event.
+// Searches across Signals; renders results grouped by source (PRs / Tickets /
+// Meetings / Slack) over shadcn `Dialog` + `Command` (cmdk). Footer carries an
+// "Ask AI" affordance with the typed query and the provider chip.
 
-import {
-  Calendar as CalIcon,
-  ExternalLink,
-  Github,
-  Slack,
-  Sparkles,
-  SquareKanban,
-  Trello,
-} from "lucide-react";
+import { CornerDownLeft, Sparkles } from "lucide-react";
 import {
   type KeyboardEvent as ReactKeyboardEvent,
   useCallback,
@@ -23,34 +12,38 @@ import {
   useRef,
   useState,
 } from "react";
+import { SourceGlyph, type SourceKind } from "#/components/SourceGlyph";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "#/components/ui/command";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "#/components/ui/dialog";
 import { apiFetch } from "#/lib/api-client";
 import type { AskAiResult } from "#/lib/ask-ai-api";
 import { cn } from "#/lib/cn";
-import type { Signal, SignalProvider } from "#/lib/signal";
+import type { Signal } from "#/lib/signal";
 
-export type Scope = "all" | "prs" | "tickets" | "mentions" | "meetings";
+const OPEN_CMDK_EVENT = "devy:open-cmdk";
 
-type ScopeChip = { id: Scope; label: string; enabled: boolean };
+const PROVIDER_LABEL = "HAIKU 4.5";
 
-const SCOPES: ScopeChip[] = [
-  { id: "all", label: "All", enabled: true },
-  { id: "prs", label: "PRs", enabled: true },
-  { id: "tickets", label: "Tickets", enabled: true },
-  { id: "mentions", label: "Mentions", enabled: true },
-  { id: "meetings", label: "Meetings", enabled: true },
-];
+export type Result = Signal & { id: string };
 
-type Result = Signal & { id: string };
-
-export type Searcher = (
-  scope: Scope,
-  query: string,
-) => Promise<{ signals: Result[] }>;
+export type Searcher = (query: string) => Promise<{ signals: Result[] }>;
 
 export type Asker = (q: string, signalIds: string[]) => Promise<AskAiResult>;
 
-const defaultSearcher: Searcher = async (scope, query) => {
-  const params = new URLSearchParams({ filter: scope, limit: "20" });
+const defaultSearcher: Searcher = async (query) => {
+  const params = new URLSearchParams({ filter: "all", limit: "20" });
   if (query.trim()) params.set("q", query.trim());
   return (await apiFetch(`/api/signals?${params.toString()}`)) as {
     signals: Result[];
@@ -62,6 +55,30 @@ const defaultAsker: Asker = async (q, signalIds) =>
     method: "POST",
     body: { q, signal_ids: signalIds },
   })) as AskAiResult;
+
+type GroupId = "prs" | "tickets" | "meetings" | "slack";
+
+type GroupDef = {
+  id: GroupId;
+  heading: string;
+  glyph: SourceKind;
+};
+
+const GROUPS: GroupDef[] = [
+  { id: "prs", heading: "PRs", glyph: "git" },
+  { id: "tickets", heading: "Tickets", glyph: "task" },
+  { id: "meetings", heading: "Meetings", glyph: "cal" },
+  { id: "slack", heading: "Slack", glyph: "slack" },
+];
+
+function groupOf(s: Signal): GroupId | null {
+  if (s.kind === "meeting") return "meetings";
+  if (s.provider === "slack") return "slack";
+  if (s.provider === "github" && s.kind.startsWith("pr_")) return "prs";
+  if (s.provider === "linear" || s.provider === "jira") return "tickets";
+  if (s.kind.startsWith("ticket_")) return "tickets";
+  return null;
+}
 
 export function CommandPalette({
   searcher,
@@ -88,23 +105,21 @@ export function CommandPalette({
       }
     }
     function onOpenEvent() {
-      // Triggered by the sidebar search-trigger pill (`devy:open-cmdk`).
-      // Mirror the keyboard guard so we don't open over an existing modal.
       if (document.querySelector('[role="dialog"]')) return;
       setOpen(true);
     }
     window.addEventListener("keydown", onKeyDown);
-    window.addEventListener("devy:open-cmdk", onOpenEvent);
+    window.addEventListener(OPEN_CMDK_EVENT, onOpenEvent);
     return () => {
       window.removeEventListener("keydown", onKeyDown);
-      window.removeEventListener("devy:open-cmdk", onOpenEvent);
+      window.removeEventListener(OPEN_CMDK_EVENT, onOpenEvent);
     };
   }, []);
 
-  if (!open) return null;
   return (
-    <PaletteModal
-      onClose={() => setOpen(false)}
+    <PaletteDialog
+      open={open}
+      onOpenChange={setOpen}
       searcher={searcher ?? defaultSearcher}
       asker={asker ?? defaultAsker}
     />
@@ -116,31 +131,39 @@ type AnswerState =
   | { kind: "loading" }
   | { kind: "result"; result: AskAiResult };
 
-function PaletteModal({
-  onClose,
+function PaletteDialog({
+  open,
+  onOpenChange,
   searcher,
   asker,
 }: {
-  onClose: () => void;
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
   searcher: Searcher;
   asker: Asker;
 }) {
   const [query, setQuery] = useState("");
-  const [scope, setScope] = useState<Scope>("all");
   const [results, setResults] = useState<Result[]>([]);
-  const [activeIndex, setActiveIndex] = useState(0);
   const [answer, setAnswer] = useState<AnswerState>({ kind: "idle" });
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Debounced live search.
+  // Reset transient state when re-opening so a previous session doesn't leak.
   useEffect(() => {
+    if (!open) {
+      setQuery("");
+      setResults([]);
+      setAnswer({ kind: "idle" });
+    }
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
     let cancelled = false;
     const t = setTimeout(() => {
-      searcher(scope, query)
+      searcher(query)
         .then((body) => {
           if (cancelled) return;
           setResults(body.signals);
-          setActiveIndex(0);
         })
         .catch(() => {
           if (!cancelled) setResults([]);
@@ -150,13 +173,21 @@ function PaletteModal({
       cancelled = true;
       clearTimeout(t);
     };
-  }, [scope, query, searcher]);
+  }, [open, query, searcher]);
 
-  useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
-
-  const enabledScopes = useMemo(() => SCOPES.filter((s) => s.enabled), []);
+  const grouped = useMemo(() => {
+    const buckets: Record<GroupId, Result[]> = {
+      prs: [],
+      tickets: [],
+      meetings: [],
+      slack: [],
+    };
+    for (const r of results) {
+      const g = groupOf(r);
+      if (g) buckets[g].push(r);
+    }
+    return buckets;
+  }, [results]);
 
   const askAi = useCallback(async () => {
     if (!query.trim()) return;
@@ -182,190 +213,140 @@ function PaletteModal({
   const openResult = useCallback(
     (r: Result) => {
       if (r.url) window.open(r.url, "_blank", "noreferrer");
-      onClose();
+      onOpenChange(false);
     },
-    [onClose],
+    [onOpenChange],
   );
 
-  const cycleScope = useCallback(
-    (direction: 1 | -1) => {
-      const idx = enabledScopes.findIndex((s) => s.id === scope);
-      const next =
-        enabledScopes[
-          (idx + direction + enabledScopes.length) % enabledScopes.length
-        ];
-      setScope(next.id);
-    },
-    [enabledScopes, scope],
-  );
-
-  const onKeyDown = useCallback(
-    (e: ReactKeyboardEvent) => {
-      if (e.key === "Escape") {
+  const onCommandKeyDown = useCallback(
+    (e: ReactKeyboardEvent<HTMLDivElement>) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+        // Intercept ⌘↵ so cmdk's own Enter handler — which would dispatch
+        // an onSelect on the active item — doesn't also run. Stopping
+        // immediate propagation belt-and-braces against bubble paths.
         e.preventDefault();
-        onClose();
-        return;
-      }
-      if (e.key === "Tab") {
-        e.preventDefault();
-        cycleScope(e.shiftKey ? -1 : 1);
-        return;
-      }
-      if (e.key === "ArrowDown") {
-        e.preventDefault();
-        setActiveIndex((i) => Math.min(i + 1, Math.max(results.length - 1, 0)));
-        return;
-      }
-      if (e.key === "ArrowUp") {
-        e.preventDefault();
-        setActiveIndex((i) => Math.max(i - 1, 0));
-        return;
-      }
-      if (e.key === "Enter") {
-        if (e.metaKey || e.ctrlKey) {
-          e.preventDefault();
-          void askAi();
-          return;
-        }
-        const target = results[activeIndex];
-        if (target) {
-          e.preventDefault();
-          openResult(target);
-        }
+        e.stopPropagation();
+        e.nativeEvent.stopImmediatePropagation();
+        void askAi();
       }
     },
-    [activeIndex, askAi, cycleScope, onClose, openResult, results],
+    [askAi],
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center pt-24">
-      <button
-        type="button"
-        aria-label="Close command palette"
-        className="absolute inset-0 bg-zinc-900/40"
-        onClick={onClose}
-      />
-      <div
-        role="dialog"
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        showCloseButton={false}
+        className="overflow-hidden p-0 sm:max-w-[640px]"
         aria-label="Command palette"
-        className="relative w-full max-w-xl overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-xl"
-        onKeyDown={onKeyDown}
       >
-        <div className="border-b border-zinc-100 p-3">
-          <input
-            ref={inputRef}
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search PRs, mentions, meetings… (Cmd+Enter to ask AI)"
-            aria-label="Search Signals"
-            className="w-full bg-transparent text-sm outline-none placeholder:text-zinc-400"
-          />
-        </div>
-
-        <nav
-          aria-label="Scopes"
-          className="flex gap-1.5 border-b border-zinc-100 px-3 py-2"
+        <DialogTitle className="sr-only">Command palette</DialogTitle>
+        <DialogDescription className="sr-only">
+          Search PRs, tickets, meetings, and Slack signals.
+        </DialogDescription>
+        <Command
+          shouldFilter={false}
+          onKeyDown={onCommandKeyDown}
+          className="bg-popover"
         >
-          {SCOPES.map((s) => (
-            <button
-              key={s.id}
-              type="button"
-              disabled={!s.enabled}
-              aria-pressed={scope === s.id}
-              onClick={() => s.enabled && setScope(s.id)}
-              className={cn(
-                "rounded-full border px-2.5 py-0.5 text-xs",
-                scope === s.id
-                  ? "border-zinc-900 bg-zinc-900 text-white"
-                  : "border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50",
-                !s.enabled && "cursor-not-allowed opacity-50",
-              )}
-            >
-              {s.label}
-            </button>
-          ))}
-        </nav>
-
-        <ResultsList
-          results={results}
-          activeIndex={activeIndex}
-          onActivate={setActiveIndex}
-          onOpen={openResult}
-        />
-
-        {answer.kind !== "idle" && (
-          <AnswerPanel
-            state={answer}
-            onDismiss={() => setAnswer({ kind: "idle" })}
+          <CommandInput
+            ref={inputRef}
+            value={query}
+            onValueChange={setQuery}
+            placeholder="Search PRs, tickets, meetings, Slack…"
+            aria-label="Search Signals"
           />
-        )}
-
-        <footer className="flex items-center justify-between border-t border-zinc-100 bg-zinc-50 px-3 py-2 text-xs text-zinc-500">
-          <span>↑↓ navigate · ↵ open · Tab scope · Esc close</span>
-          <button
-            type="button"
-            onClick={() => void askAi()}
+          <CommandList className="max-h-[360px]">
+            <CommandEmpty>No matches yet. Try a different query.</CommandEmpty>
+            {GROUPS.map((g) => {
+              const items = grouped[g.id];
+              if (items.length === 0) return null;
+              return (
+                <CommandGroup key={g.id} heading={g.heading}>
+                  {items.map((r) => (
+                    <CommandItem
+                      key={r.id}
+                      value={`${g.id}:${r.id}:${r.title}`}
+                      onSelect={() => openResult(r)}
+                      className="gap-3"
+                    >
+                      <SourceGlyph source={g.glyph} size={28} />
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate font-medium text-foreground">
+                          {r.title}
+                        </div>
+                        <div className="truncate text-xs text-muted-foreground">
+                          {secondaryLabel(r)}
+                        </div>
+                      </div>
+                      <CornerDownLeft
+                        aria-hidden
+                        className="size-3 text-muted-foreground opacity-0 group-data-[selected=true]:opacity-100 data-[selected=true]:opacity-100"
+                      />
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              );
+            })}
+          </CommandList>
+          {answer.kind !== "idle" && (
+            <AnswerPanel
+              state={answer}
+              onDismiss={() => setAnswer({ kind: "idle" })}
+            />
+          )}
+          <AskAiFooter
+            query={query}
             disabled={!query.trim() || answer.kind === "loading"}
-            className="inline-flex items-center gap-1 rounded border border-zinc-200 bg-white px-2 py-1 text-xs text-zinc-700 hover:bg-zinc-100 disabled:opacity-50"
-          >
-            <Sparkles className="h-3 w-3" />
-            Ask AI
-          </button>
-        </footer>
-      </div>
-    </div>
+            onAsk={() => void askAi()}
+          />
+        </Command>
+      </DialogContent>
+    </Dialog>
   );
 }
 
-function ResultsList({
-  results,
-  activeIndex,
-  onActivate,
-  onOpen,
+function AskAiFooter({
+  query,
+  disabled,
+  onAsk,
 }: {
-  results: Result[];
-  activeIndex: number;
-  onActivate: (i: number) => void;
-  onOpen: (r: Result) => void;
+  query: string;
+  disabled: boolean;
+  onAsk: () => void;
 }) {
-  if (results.length === 0) {
-    return (
-      <p className="px-4 py-8 text-center text-sm text-zinc-500">
-        No matches yet. Try a different query.
-      </p>
-    );
-  }
   return (
-    <ul aria-label="Results" className="max-h-80 overflow-y-auto py-1">
-      {results.map((r, i) => (
-        <li key={r.id}>
-          <button
-            type="button"
-            data-active={i === activeIndex}
-            onMouseEnter={() => onActivate(i)}
-            onClick={() => onOpen(r)}
-            className={cn(
-              "flex w-full items-center gap-3 px-3 py-2 text-left text-sm",
-              i === activeIndex ? "bg-zinc-100" : "hover:bg-zinc-50",
-            )}
-          >
-            <ProviderBadge provider={r.provider} />
-            <div className="min-w-0 flex-1">
-              <div className="truncate font-medium text-zinc-900">
-                {r.title}
-              </div>
-              <div className="truncate text-xs text-zinc-500">
-                {[kindLabel(r.kind), secondaryLabel(r)]
-                  .filter(Boolean)
-                  .join(" · ")}
-              </div>
-            </div>
-            {r.url && <ExternalLink className="h-3 w-3 text-zinc-400" />}
-          </button>
-        </li>
-      ))}
-    </ul>
+    <section
+      aria-label="Ask AI"
+      className="flex items-center gap-2 border-t bg-muted/40 px-3 py-2 text-xs text-muted-foreground"
+    >
+      <Sparkles aria-hidden className="size-3.5 text-foreground" />
+      <span className="text-foreground">Ask AI</span>
+      <span className="truncate">
+        {query.trim() ? query : "Type a question and press ⌘↵"}
+      </span>
+      <span className="ml-auto flex items-center gap-2">
+        <kbd className="rounded border bg-background px-1.5 py-0.5 font-mono text-[10px] tracking-wider text-foreground">
+          ⌘↵
+        </kbd>
+        <span
+          data-slot="ai-provider"
+          className={cn(
+            "rounded-full border bg-background px-2 py-0.5 font-mono text-[10px] tracking-wider text-foreground",
+          )}
+        >
+          {PROVIDER_LABEL}
+        </span>
+        <button
+          type="button"
+          onClick={onAsk}
+          disabled={disabled}
+          className="rounded-md border bg-background px-2 py-0.5 text-[11px] text-foreground hover:bg-accent disabled:opacity-50"
+        >
+          Ask
+        </button>
+      </span>
+    </section>
   );
 }
 
@@ -379,26 +360,28 @@ function AnswerPanel({
   return (
     <section
       aria-label="AI answer"
-      className="border-t border-zinc-100 bg-zinc-50 px-3 py-3 text-sm text-zinc-800"
+      className="border-t bg-muted/40 px-3 py-3 text-sm text-foreground"
     >
-      <header className="mb-1 flex items-center justify-between text-xs font-medium uppercase tracking-wider text-zinc-500">
+      <header className="mb-1 flex items-center justify-between text-xs font-medium uppercase tracking-wider text-muted-foreground">
         <span className="inline-flex items-center gap-1">
-          <Sparkles className="h-3 w-3" />
+          <Sparkles className="size-3" />
           Ask AI
         </span>
         <button
           type="button"
           onClick={onDismiss}
-          className="rounded px-1 text-zinc-400 hover:text-zinc-700"
+          className="rounded px-1 text-muted-foreground hover:text-foreground"
         >
           Hide
         </button>
       </header>
-      {state.kind === "loading" && <p className="text-zinc-500">Thinking…</p>}
+      {state.kind === "loading" && (
+        <p className="text-muted-foreground">Thinking…</p>
+      )}
       {state.kind === "result" && state.result.ok && (
         <>
           <p className="whitespace-pre-line">{state.result.answer}</p>
-          <p className="mt-2 text-xs text-zinc-500">
+          <p className="mt-2 text-xs text-muted-foreground">
             {state.result.provider} · {state.result.model}
             {state.result.used_fallback && " · running on fallback model"}
           </p>
@@ -407,9 +390,9 @@ function AnswerPanel({
       {state.kind === "result" &&
         !state.result.ok &&
         state.result.reason === "no_provider" && (
-          <p className="text-zinc-600">
+          <p className="text-muted-foreground">
             No AI provider configured.{" "}
-            <a href="/settings" className="underline hover:text-zinc-900">
+            <a href="/settings" className="underline hover:text-foreground">
               Set one in Settings
             </a>
             .
@@ -418,17 +401,21 @@ function AnswerPanel({
       {state.kind === "result" &&
         !state.result.ok &&
         state.result.reason === "disabled" && (
-          <p className="text-zinc-600">AI is disabled for this account.</p>
+          <p className="text-muted-foreground">
+            AI is disabled for this account.
+          </p>
         )}
       {state.kind === "result" &&
         !state.result.ok &&
         state.result.reason === "budget_reached" && (
-          <p className="text-zinc-600">AI disabled — monthly budget reached.</p>
+          <p className="text-muted-foreground">
+            AI disabled — monthly budget reached.
+          </p>
         )}
       {state.kind === "result" &&
         !state.result.ok &&
         state.result.reason === "error" && (
-          <p className="text-red-700">
+          <p className="text-destructive">
             Couldn't ask AI{state.result.error ? `: ${state.result.error}` : ""}
             .
           </p>
@@ -437,54 +424,33 @@ function AnswerPanel({
   );
 }
 
-function ProviderBadge({ provider }: { provider: SignalProvider }) {
-  const Icon =
-    provider === "github"
-      ? Github
-      : provider === "slack"
-        ? Slack
-        : provider === "linear"
-          ? SquareKanban
-          : provider === "jira"
-            ? Trello
-            : CalIcon;
-  return (
-    <span
-      role="img"
-      aria-label={`Source: ${provider}`}
-      className="flex h-7 w-7 shrink-0 items-center justify-center rounded bg-zinc-100 text-zinc-700"
-    >
-      <Icon className="h-4 w-4" />
-    </span>
-  );
-}
-
 function secondaryLabel(s: Result): string {
+  const kind = kindLabel(s.kind);
   if (s.provider === "slack") {
     const channelType = s.payload?.channel_type as string | undefined;
     const channel = s.payload?.channel as string | undefined;
-    if (channelType === "im") return "DM";
-    return channel ? `#${channel}` : "";
+    const where = channelType === "im" ? "DM" : channel ? `#${channel}` : "";
+    return [kind, where].filter(Boolean).join(" · ");
   }
   if (s.kind === "meeting") {
     const startsAt = s.payload?.starts_at as string | undefined;
-    if (!startsAt) return "";
+    if (!startsAt) return kind;
     const d = new Date(startsAt);
-    if (Number.isNaN(d.getTime())) return "";
-    return d.toLocaleString(undefined, {
+    if (Number.isNaN(d.getTime())) return kind;
+    return `${kind} · ${d.toLocaleString(undefined, {
       weekday: "short",
       hour: "numeric",
       minute: "2-digit",
-    });
+    })}`;
   }
   if (s.provider === "linear" || s.provider === "jira") {
     const identifier =
       (s.payload?.identifier as string | undefined) ?? s.source_id;
     const stateName = (s.payload?.state_name as string | undefined) ?? "";
-    return [identifier, stateName].filter(Boolean).join(" · ");
+    return [kind, identifier, stateName].filter(Boolean).join(" · ");
   }
   const repo = (s.payload?.repo as string | undefined) ?? "";
-  return repo;
+  return [kind, repo].filter(Boolean).join(" · ");
 }
 
 function kindLabel(kind: string): string {
