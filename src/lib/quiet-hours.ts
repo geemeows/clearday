@@ -102,7 +102,12 @@ export function decideDelivery(
   focus: FocusBlockContext,
 ): DeliveryDecision {
   // 1. Per-event matrix gates which channels are eligible for this kind.
-  const matrixForKind = prefs.matrix[signal.kind];
+  // An inbox rule may override the matrix lookup via the `channels` effect;
+  // when present (non-null), it replaces the matrix entry for this Signal.
+  // The per-user `enabledChannels` filter still applies — a rule cannot
+  // re-enable a channel the user disabled globally.
+  const override = signal.alert_channels_override ?? null;
+  const matrixForKind = override ?? prefs.matrix[signal.kind];
   if (!matrixForKind || matrixForKind.length === 0) {
     return { action: "suppress", reason: "no_matrix_channel" };
   }

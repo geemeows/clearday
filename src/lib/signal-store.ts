@@ -94,6 +94,8 @@ export async function upsertSignals(
         values.snoozed_until = application.snoozed_until;
       if (application.tags.length > 0) values.tags = application.tags;
       if (application.priority) values.priority = application.priority;
+      if (application.channels !== null)
+        values.alert_channels_override = application.channels;
     }
     return values;
   });

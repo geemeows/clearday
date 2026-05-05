@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import type { AlertChannel } from "#/lib/alert-dispatcher";
 import { apiFetch } from "#/lib/api-client";
 import { signOut, useAuth } from "#/lib/auth";
 import {
@@ -1774,6 +1775,14 @@ const EFFECT_TYPES: Array<{ id: RuleEffect["type"]; label: string }> = [
   { id: "snooze", label: "Snooze (minutes)" },
   { id: "tag", label: "Tag" },
   { id: "priority", label: "Set priority" },
+  { id: "channels", label: "Set channels" },
+];
+
+const ALERT_CHANNEL_OPTIONS: Array<{ id: AlertChannel; label: string }> = [
+  { id: "slack_dm", label: "Slack DM" },
+  { id: "web_push", label: "Web Push" },
+  { id: "email", label: "Email" },
+  { id: "desktop", label: "Desktop" },
 ];
 
 function emptyRule(): InboxRule {
@@ -2074,7 +2083,8 @@ function RuleRow({
     if (t === "auto_dismiss") next = { type: "auto_dismiss" };
     else if (t === "snooze") next = { type: "snooze", minutes: 60 };
     else if (t === "tag") next = { type: "tag", tag: "" };
-    else next = { type: "priority", value: "high" };
+    else if (t === "priority") next = { type: "priority", value: "high" };
+    else next = { type: "channels", channels: ["slack_dm"] };
     onChange({ effects: [next] });
   };
 
@@ -2302,19 +2312,47 @@ function EffectInputs({
       />
     );
   }
+  if (effect.type === "priority") {
+    return (
+      <select
+        aria-label="Priority value"
+        value={effect.value}
+        onChange={(e) =>
+          onChange({ ...effect, value: e.target.value as "low" | "high" })
+        }
+        disabled={busy}
+        className="mt-2 w-full rounded border border-zinc-200 px-2 py-1"
+      >
+        <option value="high">High</option>
+        <option value="low">Low</option>
+      </select>
+    );
+  }
   return (
-    <select
-      aria-label="Priority value"
-      value={effect.value}
-      onChange={(e) =>
-        onChange({ ...effect, value: e.target.value as "low" | "high" })
-      }
-      disabled={busy}
-      className="mt-2 w-full rounded border border-zinc-200 px-2 py-1"
+    <fieldset
+      aria-label="Channels value"
+      className="mt-2 flex flex-wrap gap-3 text-xs text-zinc-700"
     >
-      <option value="high">High</option>
-      <option value="low">Low</option>
-    </select>
+      {ALERT_CHANNEL_OPTIONS.map((c) => {
+        const checked = effect.channels.includes(c.id);
+        return (
+          <label key={c.id} className="flex items-center gap-1">
+            <input
+              type="checkbox"
+              checked={checked}
+              disabled={busy}
+              onChange={() => {
+                const next = checked
+                  ? effect.channels.filter((x) => x !== c.id)
+                  : [...effect.channels, c.id];
+                onChange({ ...effect, channels: next });
+              }}
+            />
+            {c.label}
+          </label>
+        );
+      })}
+    </fieldset>
   );
 }
 

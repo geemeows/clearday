@@ -185,6 +185,67 @@ describe("applyInboxRules — effects", () => {
     expect(applyInboxRules(makeSignal(), [r]).priority).toBeNull();
   });
 
+  it("channels effect sets channels on the application", () => {
+    const r = makeRule({
+      effects: [{ type: "channels", channels: ["slack_dm", "email"] }],
+    });
+    expect(applyInboxRules(makeSignal(), [r]).channels).toEqual([
+      "slack_dm",
+      "email",
+    ]);
+  });
+
+  it("channels effect dedupes and drops unknown channels", () => {
+    const r = makeRule({
+      effects: [
+        {
+          type: "channels",
+          channels: [
+            "slack_dm",
+            "slack_dm",
+            "bogus" as unknown as "email",
+            "email",
+          ],
+        },
+      ],
+    });
+    expect(applyInboxRules(makeSignal(), [r]).channels).toEqual([
+      "slack_dm",
+      "email",
+    ]);
+  });
+
+  it("higher-priority channels rule wins last", () => {
+    const out = applyInboxRules(
+      makeSignal(),
+      [
+        makeRule({
+          id: "a",
+          priority: 1,
+          effects: [{ type: "channels", channels: ["email"] }],
+        }),
+        makeRule({
+          id: "b",
+          priority: 2,
+          effects: [{ type: "channels", channels: ["web_push"] }],
+        }),
+      ],
+      new Date(),
+    );
+    expect(out.channels).toEqual(["web_push"]);
+  });
+
+  it("channels defaults to null when no rule sets it", () => {
+    expect(applyInboxRules(makeSignal(), []).channels).toBeNull();
+    const r = makeRule({ effects: [{ type: "tag", tag: "x" }] });
+    expect(applyInboxRules(makeSignal(), [r]).channels).toBeNull();
+  });
+
+  it("channels effect with empty list resolves to empty array (not null)", () => {
+    const r = makeRule({ effects: [{ type: "channels", channels: [] }] });
+    expect(applyInboxRules(makeSignal(), [r]).channels).toEqual([]);
+  });
+
   it("tags accumulate without duplicates", () => {
     const out = applyInboxRules(
       makeSignal(),

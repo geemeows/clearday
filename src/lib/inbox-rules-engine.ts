@@ -11,7 +11,15 @@
 // last-write-wins for its own slot (auto_dismiss is sticky once set; snooze
 // uses the longest window seen; tags accumulate).
 
+import type { AlertChannel } from "#/lib/alert-dispatcher";
 import type { Signal, SignalPriority } from "#/lib/signal";
+
+const ALERT_CHANNELS: readonly AlertChannel[] = [
+  "slack_dm",
+  "web_push",
+  "email",
+  "desktop",
+] as const;
 
 export type RulePredicate =
   | { type: "provider"; provider: string }
@@ -23,7 +31,8 @@ export type RuleEffect =
   | { type: "auto_dismiss" }
   | { type: "snooze"; minutes: number }
   | { type: "tag"; tag: string }
-  | { type: "priority"; value: SignalPriority };
+  | { type: "priority"; value: SignalPriority }
+  | { type: "channels"; channels: AlertChannel[] };
 
 export type InboxRule = {
   id: string;
@@ -39,6 +48,7 @@ export type RuleApplication = {
   snoozed_until: string | null;
   tags: string[];
   priority: SignalPriority | null;
+  channels: AlertChannel[] | null;
   matched_rule_ids: string[];
 };
 
@@ -52,6 +62,7 @@ export function applyInboxRules(
     snoozed_until: null,
     tags: [],
     priority: null,
+    channels: null,
     matched_rule_ids: [],
   };
   const ordered = [...rules].sort((a, b) => a.priority - b.priority);
@@ -112,6 +123,19 @@ function applyEffect(e: RuleEffect, result: RuleApplication, now: Date): void {
       // priority order so a higher-priority rule overrides a lower one.
       if (e.value === "low" || e.value === "high") result.priority = e.value;
       break;
+    case "channels": {
+      // Last-write-wins per slot, same vocabulary as priority. An empty list
+      // is meaningful — it means "this rule says fire no channels" — and is
+      // distinguished from null ("no rule fired").
+      if (!Array.isArray(e.channels)) break;
+      const filtered = e.channels.filter((c): c is AlertChannel =>
+        ALERT_CHANNELS.includes(c as AlertChannel),
+      );
+      const deduped: AlertChannel[] = [];
+      for (const c of filtered) if (!deduped.includes(c)) deduped.push(c);
+      result.channels = deduped;
+      break;
+    }
   }
 }
 

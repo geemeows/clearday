@@ -86,6 +86,42 @@ describe("decideDelivery — matrix", () => {
       reason: "no_enabled_channel",
     });
   });
+
+  it("alert_channels_override replaces the matrix lookup for the signal", () => {
+    const result = decideDelivery(
+      { ...baseMention, alert_channels_override: ["email"] },
+      "new",
+      prefs({ enabledChannels: ["slack_dm", "email"] }),
+      new Date("2026-05-04T14:00:00Z"),
+      inactive,
+    );
+    expect(result).toEqual({ action: "deliver", channels: ["email"] });
+  });
+
+  it("alert_channels_override still respects enabledChannels", () => {
+    const result = decideDelivery(
+      { ...baseMention, alert_channels_override: ["email"] },
+      "new",
+      prefs({ enabledChannels: ["slack_dm"] }),
+      new Date("2026-05-04T14:00:00Z"),
+      inactive,
+    );
+    expect(result).toEqual({
+      action: "suppress",
+      reason: "no_enabled_channel",
+    });
+  });
+
+  it("alert_channels_override empty array suppresses (no_matrix_channel)", () => {
+    const result = decideDelivery(
+      { ...baseMention, alert_channels_override: [] },
+      "new",
+      prefs(),
+      new Date("2026-05-04T14:00:00Z"),
+      inactive,
+    );
+    expect(result).toEqual({ action: "suppress", reason: "no_matrix_channel" });
+  });
 });
 
 describe("decideDelivery — focus block", () => {

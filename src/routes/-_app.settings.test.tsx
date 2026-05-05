@@ -611,6 +611,30 @@ describe("InboxRulesPanel", () => {
     });
   });
 
+  it("switches the effect to a channels override and edits the channel set", async () => {
+    const loader = vi.fn(async () => ({ rules: [sampleRule] }));
+    const saver = vi.fn(async (rules: InboxRule[]) => ({ ok: true, rules }));
+    render(<InboxRulesPanel loader={loader} saver={saver} />);
+    await screen.findByLabelText("Rule name");
+    const effectSelect = screen.getByLabelText(/effect type/i);
+    fireEvent.change(effectSelect, { target: { value: "channels" } });
+    await waitFor(() => expect(saver).toHaveBeenCalled());
+    const seeded = saver.mock.calls.at(-1)?.[0] as InboxRule[];
+    expect(seeded[0].effects[0]).toEqual({
+      type: "channels",
+      channels: ["slack_dm"],
+    });
+    const emailToggle = await screen.findByLabelText(/email/i);
+    fireEvent.click(emailToggle);
+    await waitFor(() => {
+      const last = saver.mock.calls.at(-1)?.[0] as InboxRule[];
+      expect(last[0].effects[0]).toEqual({
+        type: "channels",
+        channels: ["slack_dm", "email"],
+      });
+    });
+  });
+
   it("reorders rules via the move buttons", async () => {
     const r1 = { ...sampleRule, id: "a", name: "A", priority: 1 };
     const r2 = { ...sampleRule, id: "b", name: "B", priority: 2 };

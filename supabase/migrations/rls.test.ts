@@ -49,6 +49,11 @@ const signalPrioritySql = readFileSync(
   "utf8",
 );
 
+const signalChannelsOverrideSql = readFileSync(
+  resolve(__dirname, "0019_signal_alert_channels_override.sql"),
+  "utf8",
+);
+
 describe("0001_init.sql contents", () => {
   it("declares the (provider, kind, source_id) unique constraint on signals", () => {
     expect(migrationSql).toMatch(
@@ -112,6 +117,14 @@ describe("0018_signal_priority.sql contents", () => {
     expect(signalPrioritySql).toMatch(/check\s*\(\s*priority is null/i);
     expect(signalPrioritySql).toContain("'low'");
     expect(signalPrioritySql).toContain("'high'");
+  });
+});
+
+describe("0019_signal_alert_channels_override.sql contents", () => {
+  it("adds signals.alert_channels_override as a nullable text[] column", () => {
+    expect(signalChannelsOverrideSql).toMatch(
+      /alter table public\.signals\s+add column if not exists alert_channels_override text\[\]/i,
+    );
   });
 });
 

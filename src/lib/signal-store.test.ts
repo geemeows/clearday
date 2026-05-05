@@ -231,6 +231,25 @@ describe("upsertSignal — inbox rules", () => {
     expect(values).not.toHaveProperty("snoozed_until");
     expect(values).not.toHaveProperty("tags");
     expect(values).not.toHaveProperty("priority");
+    expect(values).not.toHaveProperty("alert_channels_override");
+  });
+
+  it("channels rule sets alert_channels_override column", async () => {
+    const { client, spies } = makeClient({});
+    await upsertSignal(client, sample, {
+      rules: [
+        {
+          id: "r-channels",
+          name: "x",
+          enabled: true,
+          priority: 1,
+          predicates: [{ type: "kind", kind: "pr_review_requested" }],
+          effects: [{ type: "channels", channels: ["email", "web_push"] }],
+        },
+      ],
+    });
+    const values = spies.upsert.mock.calls[0][0][0];
+    expect(values.alert_channels_override).toEqual(["email", "web_push"]);
   });
 
   it("priority rule sets priority column", async () => {
