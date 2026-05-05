@@ -32,7 +32,11 @@ export type TokenRecord = {
 
 export type FetchLike = (
   input: string,
-  init?: { method: string; headers: Record<string, string>; body: string },
+  init?: {
+    method: string;
+    headers: Record<string, string>;
+    body?: string;
+  },
 ) => Promise<{
   ok: boolean;
   status: number;
@@ -239,15 +243,50 @@ async function exchangeGithub(
       body.error_description || body.error || "github exchange failed",
     );
   }
+  const accountId = await fetchGithubAccountId(body.access_token, fetchImpl);
   return {
     provider: "github",
-    account_id: null,
+    account_id: accountId,
     access_token: body.access_token,
     refresh_token: body.refresh_token ?? null,
     expires_at: expiresAtFrom(body.expires_in),
     scopes: parseScope(body.scope, ","),
     metadata: {},
   };
+}
+
+async function fetchGithubAccountId(
+  accessToken: string,
+  fetchImpl: FetchLike,
+): Promise<string> {
+  const res = await fetchImpl("https://api.github.com/user", {
+    method: "GET",
+    headers: {
+      authorization: `Bearer ${accessToken}`,
+      accept: "application/vnd.github+json",
+      "user-agent": "clearday-auth-proxy",
+    },
+  });
+  if (!res.ok) {
+    throw new ExchangeError(
+      "github",
+      res.status,
+      `github /user failed: ${await safeText(res)}`,
+    );
+  }
+  const body = (await res.json()) as { id?: number; login?: string };
+  if (typeof body.id !== "number") {
+    throw new ExchangeError("github", res.status, "github /user missing id");
+  }
+  return String(body.id);
+}
+
+async function safeText(res: { text: () => Promise<string> }): Promise<string> {
+  try {
+    return await res.text();
+  } catch {
+    return "<unreadable>";
+  }
 }
 
 async function exchangeGoogle(

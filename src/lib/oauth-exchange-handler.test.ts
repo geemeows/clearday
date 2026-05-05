@@ -40,9 +40,12 @@ describe("handleOAuthExchange", () => {
       env.STATE_HMAC_SECRET,
       1000,
     );
-    const fetchImpl: FetchLike = vi.fn(async () =>
-      okJson({ access_token: "ghu_x", scope: "repo" }),
-    );
+    const fetchImpl: FetchLike = vi.fn(async (url) => {
+      if (url === "https://github.com/login/oauth/access_token") {
+        return okJson({ access_token: "ghu_x", scope: "repo" });
+      }
+      return okJson({ id: 7, login: "octo" });
+    });
     const persisted: TokenRecord[] = [];
     const persist: PersistTokens = async (r) => {
       persisted.push(r);
@@ -55,10 +58,11 @@ describe("handleOAuthExchange", () => {
     );
     expect(res.status).toBe(302);
     expect(res.headers.get("location")).toBe("/settings?connected=github");
-    expect(fetchImpl).toHaveBeenCalledOnce();
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
     expect(persisted).toHaveLength(1);
     expect(persisted[0].provider).toBe("github");
     expect(persisted[0].access_token).toBe("ghu_x");
+    expect(persisted[0].account_id).toBe("7");
   });
 
   it("returns 400 when state is missing", async () => {
