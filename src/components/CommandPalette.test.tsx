@@ -152,6 +152,67 @@ describe("CommandPalette", () => {
     expect(asker).toHaveBeenCalledWith("what's blocking me?", ["s1"]);
   });
 
+  it("renders provider-typed secondary metadata for each kind", async () => {
+    vi.useFakeTimers();
+    const slackDm = {
+      id: "s3",
+      provider: "slack" as const,
+      kind: "dm" as const,
+      source_id: "C1:111",
+      title: "ping?",
+      url: null,
+      payload: { channel_type: "im", channel: "alice" },
+      requires_action: true,
+      source_created_at: null,
+    };
+    const slackChannel = {
+      id: "s4",
+      provider: "slack" as const,
+      kind: "mention" as const,
+      source_id: "C2:222",
+      title: "deploy ready",
+      url: null,
+      payload: { channel: "eng-deploys" },
+      requires_action: true,
+      source_created_at: null,
+    };
+    const meeting = {
+      ...meetingResult,
+      payload: { starts_at: "2026-05-05T15:30:00Z" },
+    };
+    const linearTicket = {
+      id: "s5",
+      provider: "linear" as const,
+      kind: "ticket_in_progress" as const,
+      source_id: "linear-uuid",
+      title: "Wire dispatcher",
+      url: null,
+      payload: { identifier: "ENG-42", state_name: "In Progress" },
+      requires_action: false,
+      source_created_at: null,
+    };
+    const githubPr = {
+      ...prResult,
+      payload: { repo: "owner/repo" },
+    };
+    const searcher = fakeSearcher({
+      all: {
+        signals: [slackDm, slackChannel, meeting, linearTicket, githubPr],
+      },
+    });
+    render(<CommandPalette searcher={searcher} initialOpen />);
+    await flushDebounce();
+    const list = screen.getByRole("list", { name: /results/i });
+    const buttons = within(list).getAllByRole("button");
+    expect(buttons[0].textContent).toContain("Direct message · DM");
+    expect(buttons[1].textContent).toContain("Mention · #eng-deploys");
+    expect(buttons[2].textContent).toMatch(/Meeting · /);
+    expect(buttons[3].textContent).toContain(
+      "In progress · ENG-42 · In Progress",
+    );
+    expect(buttons[4].textContent).toContain("Review requested · owner/repo");
+  });
+
   it("Ask AI surfaces no_provider with a Settings link", async () => {
     const asker: Asker = vi.fn(
       async () =>

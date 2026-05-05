@@ -341,7 +341,9 @@ function ResultsList({
                 {r.title}
               </div>
               <div className="truncate text-xs text-zinc-500">
-                {kindLabel(r.kind)}
+                {[kindLabel(r.kind), secondaryLabel(r)]
+                  .filter(Boolean)
+                  .join(" · ")}
               </div>
             </div>
             {r.url && <ExternalLink className="h-3 w-3 text-zinc-400" />}
@@ -440,6 +442,34 @@ function ProviderBadge({ provider }: { provider: SignalProvider }) {
       <Icon className="h-4 w-4" />
     </span>
   );
+}
+
+function secondaryLabel(s: Result): string {
+  if (s.provider === "slack") {
+    const channelType = s.payload?.channel_type as string | undefined;
+    const channel = s.payload?.channel as string | undefined;
+    if (channelType === "im") return "DM";
+    return channel ? `#${channel}` : "";
+  }
+  if (s.kind === "meeting") {
+    const startsAt = s.payload?.starts_at as string | undefined;
+    if (!startsAt) return "";
+    const d = new Date(startsAt);
+    if (Number.isNaN(d.getTime())) return "";
+    return d.toLocaleString(undefined, {
+      weekday: "short",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  }
+  if (s.provider === "linear" || s.provider === "jira") {
+    const identifier =
+      (s.payload?.identifier as string | undefined) ?? s.source_id;
+    const stateName = (s.payload?.state_name as string | undefined) ?? "";
+    return [identifier, stateName].filter(Boolean).join(" · ");
+  }
+  const repo = (s.payload?.repo as string | undefined) ?? "";
+  return repo;
 }
 
 function kindLabel(kind: string): string {
