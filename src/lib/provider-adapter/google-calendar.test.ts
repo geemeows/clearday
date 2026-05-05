@@ -130,6 +130,38 @@ describe("normalize", () => {
     const sig = normalize({ ...baseEvent, summary: undefined });
     expect(sig?.title).toBe("(untitled meeting)");
   });
+
+  it("stamps payload.is_focus for native focusTime events even without a video link", () => {
+    const sig = normalize({
+      ...baseEvent,
+      summary: "Deep work",
+      eventType: "focusTime",
+      hangoutLink: undefined,
+      description: "no link",
+      location: "",
+    });
+    expect(sig).not.toBeNull();
+    expect(sig?.payload.is_focus).toBe(true);
+    expect(sig?.payload.video_link).toBeNull();
+  });
+
+  it("stamps payload.is_focus for clearday-created focus events via extendedProperties", () => {
+    const sig = normalize({
+      ...baseEvent,
+      summary: "Focus",
+      hangoutLink: undefined,
+      description: "",
+      location: "",
+      extendedProperties: { private: { clearday_focus: "1" } },
+    });
+    expect(sig).not.toBeNull();
+    expect(sig?.payload.is_focus).toBe(true);
+  });
+
+  it("does not stamp is_focus on regular meetings", () => {
+    const sig = normalize(baseEvent);
+    expect(sig?.payload.is_focus).toBeUndefined();
+  });
 });
 
 describe("parseLinkedItems", () => {

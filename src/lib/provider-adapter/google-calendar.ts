@@ -42,6 +42,14 @@ export type GoogleCalendarEvent = {
   conferenceData?: {
     entryPoints?: Array<{ entryPointType?: string; uri?: string }>;
   };
+  // Native Google "Focus time" events (created via the Calendar UI) come back
+  // with eventType === "focusTime"; events created by clearday's
+  // focus-session module carry extendedProperties.private.clearday_focus.
+  eventType?: string;
+  extendedProperties?: {
+    private?: Record<string, string | undefined>;
+    shared?: Record<string, string | undefined>;
+  };
 };
 
 export type GoogleCalendarResponse = {
@@ -102,8 +110,12 @@ export function normalize(event: GoogleCalendarEvent): Signal | null {
     return null;
   }
 
+  const isFocus = isFocusEvent(event);
   const videoLink = pickVideoLink(event);
-  if (!videoLink) return null;
+  // Focus blocks don't need a video link — they're solo time, not meetings.
+  // Surfacing them as Signals lets alert-glue suppress noisy alerts during
+  // focus and lets the calendar UI mark the block exactly.
+  if (!videoLink && !isFocus) return null;
 
   const linkedItems = parseLinkedItems(event.description ?? "");
 
@@ -120,10 +132,16 @@ export function normalize(event: GoogleCalendarEvent): Signal | null {
       response_status: responseStatus,
       organizer: event.organizer?.email ?? null,
       linked_items: linkedItems,
+      ...(isFocus ? { is_focus: true } : {}),
     },
     requires_action: false,
     source_created_at: event.start.dateTime,
   };
+}
+
+function isFocusEvent(event: GoogleCalendarEvent): boolean {
+  if (event.eventType === "focusTime") return true;
+  return event.extendedProperties?.private?.clearday_focus === "1";
 }
 
 function selfResponseStatus(event: GoogleCalendarEvent): string {

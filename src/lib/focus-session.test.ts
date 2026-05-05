@@ -59,6 +59,9 @@ describe("startFocusSession", () => {
       new Date(fixedNow.getTime() + 60 * 60 * 1000).toISOString(),
     );
     expect(calBody.transparency).toBe("opaque");
+    // Tagged so the google-calendar adapter can mark the resulting Signal
+    // with payload.is_focus exactly (not via a title heuristic).
+    expect(calBody.extendedProperties?.private?.clearday_focus).toBe("1");
 
     const status = calls.find((c) => c.url.endsWith("users.profile.set"));
     const statusBody = JSON.parse(status?.init.body as string);

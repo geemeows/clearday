@@ -89,6 +89,10 @@ async function writeCalendarEvent(
         end: { dateTime: end.toISOString() },
         transparency: "opaque",
         visibility: "private",
+        // Stamp a private extendedProperty so the google-calendar adapter can
+        // mark the resulting Signal with payload.is_focus = true exactly,
+        // instead of falling back to a title heuristic.
+        extendedProperties: { private: { clearday_focus: "1" } },
       }),
     });
     if (!res.ok) {

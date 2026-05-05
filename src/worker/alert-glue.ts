@@ -178,8 +178,10 @@ async function loadNotificationPrefs(
 async function loadFocusContext(service: Service): Promise<FocusBlockContext> {
   const nowIso = new Date().toISOString();
   // Calendar focus events become regular meeting Signals; we mark them with
-  // payload.is_focus when ingesting (or the title contains "focus"). For v1,
-  // we look for any active meeting Signal with starts_at <= now < ends_at.
+  // payload.is_focus when ingesting (focusTime eventType or
+  // extendedProperties.private.clearday_focus from focus-session) and fall
+  // back to a "focus" title regex for events created elsewhere. For v1, we
+  // look for any active meeting Signal with starts_at <= now < ends_at.
   const { data, error } = await service
     .from("signals")
     .select("payload, title")
