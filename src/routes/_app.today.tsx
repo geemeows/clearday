@@ -30,6 +30,7 @@ import {
   type WeekStats,
 } from "#/lib/today-cards";
 import { filterMeetingsToToday } from "#/lib/today-window";
+import { useAutoRefresh } from "#/lib/use-auto-refresh";
 
 export const Route = createFileRoute("/_app/today")({
   component: TodayPage,
@@ -41,23 +42,22 @@ function TodayPage() {
   const [now, setNow] = useState<Date>(() => new Date());
   const [activeAlertId, setActiveAlertId] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    apiFetch("/api/signals?filter=meetings")
-      .then((body) => {
-        if (cancelled) return;
-        const list = (body as { signals: StoredSignal[] }).signals;
-        setMeetings(list);
-        setError(null);
-      })
-      .catch((e) => {
-        if (cancelled) return;
-        setError(e instanceof Error ? e.message : "failed to load");
-      });
-    return () => {
-      cancelled = true;
-    };
+  const reloadMeetings = useCallback(async () => {
+    try {
+      const body = (await apiFetch("/api/signals?filter=meetings")) as {
+        signals: StoredSignal[];
+      };
+      setMeetings(body.signals);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "failed to load");
+    }
   }, []);
+
+  useEffect(() => {
+    reloadMeetings();
+  }, [reloadMeetings]);
+  useAutoRefresh(reloadMeetings);
 
   // Tick once per minute so the countdown stays fresh and the 10-min alert
   // window is checked each minute.
@@ -545,22 +545,20 @@ export function InboxPreviewCard({
   const [signals, setSignals] = useState<StoredSignal[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    loader()
-      .then((list) => {
-        if (cancelled) return;
-        setSignals(list);
-        setError(null);
-      })
-      .catch((e) => {
-        if (cancelled) return;
-        setError(e instanceof Error ? e.message : "failed to load");
-      });
-    return () => {
-      cancelled = true;
-    };
+  const reload = useCallback(async () => {
+    try {
+      const list = await loader();
+      setSignals(list);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "failed to load");
+    }
   }, [loader]);
+
+  useEffect(() => {
+    reload();
+  }, [reload]);
+  useAutoRefresh(reload);
 
   const preview = useMemo(
     () => (signals ? pickInboxPreview(signals, limit) : []),

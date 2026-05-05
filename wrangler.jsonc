@@ -14,9 +14,11 @@
     "AUTH_PROXY_URL": "https://auth.clearday.geemeows.com"
   },
   "triggers": {
-    // Provider-sync cron: every 2 minutes the orchestrator polls each
-    // connected provider (github, google calendar) and upserts new Signals.
-    "crons": ["*/2 * * * *"]
+    // Provider-sync cron: every minute the orchestrator polls each
+    // connected provider (github, google calendar, slack) and upserts new
+    // Signals. The Slack history window (`historyWindowSec`, default 120s)
+    // intentionally overlaps the cron interval — idempotent upsert dedupes.
+    "crons": ["*/1 * * * *"]
   }
   // Secrets (set via `wrangler secret put`):
   //   STATE_HMAC_SECRET, SUPABASE_SERVICE_ROLE_KEY,

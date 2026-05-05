@@ -14,6 +14,7 @@ import { apiFetch } from "#/lib/api-client";
 import { cn } from "#/lib/cn";
 import type { Signal, SignalKind, SignalProvider } from "#/lib/signal";
 import { filterMeetingsToToday } from "#/lib/today-window";
+import { useAutoRefresh } from "#/lib/use-auto-refresh";
 
 export const Route = createFileRoute("/_app/inbox")({
   component: InboxPage,
@@ -65,6 +66,11 @@ function InboxPage() {
   useEffect(() => {
     reload(filter, showSnoozed);
   }, [filter, showSnoozed, reload]);
+
+  const refresh = useCallback(() => {
+    reload(filter, showSnoozed);
+  }, [filter, showSnoozed, reload]);
+  useAutoRefresh(refresh);
 
   const dismiss = useCallback(
     async (id: string) => {
