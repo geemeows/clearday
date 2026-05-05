@@ -6,7 +6,12 @@
 // kickoff to a new OAuth target — the authorize-URL builder reads the rest
 // from this entry. Scopes start narrow; widen by feature issue when needed.
 
-export type AuthorizeProvider = "github" | "google" | "slack" | "linear";
+export type AuthorizeProvider =
+  | "github"
+  | "google"
+  | "slack"
+  | "linear"
+  | "jira";
 
 export type AuthorizeProviderConfig = {
   authorizeUrl: string;
@@ -55,6 +60,23 @@ export const AUTHORIZE_PROVIDERS: Record<
     // authorization rather than only on the first consent — keeps the cron
     // refresh path live across re-connects.
     extraParams: {
+      prompt: "consent",
+    },
+  },
+  jira: {
+    authorizeUrl: "https://auth.atlassian.com/authorize",
+    // v1 read-only ingest of assigned issues across all accessible Atlassian
+    // sites. `offline_access` is what makes Atlassian return a `refresh_token`
+    // — without it the cron refresh path can't keep tokens fresh.
+    scopes: ["read:jira-user", "read:jira-work", "offline_access"],
+    scopeSeparator: " ",
+    scopeParam: "scope",
+    // `audience=api.atlassian.com` is required for the 3LO flow against the
+    // Jira REST API; `prompt=consent` matches google/linear so re-connects
+    // re-issue the refresh_token rather than only returning it on first
+    // consent.
+    extraParams: {
+      audience: "api.atlassian.com",
       prompt: "consent",
     },
   },

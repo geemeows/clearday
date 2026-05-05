@@ -384,27 +384,36 @@ describe("exchangeCode — jira", () => {
     JIRA_CLIENT_SECRET: "atl-secret",
   };
 
-  it("posts a JSON body to atlassian's token endpoint and normalizes the response", async () => {
+  it("posts a JSON body to atlassian's token endpoint, calls /me, and normalizes the response", async () => {
     const fetchImpl: FetchLike = async (url, init) => {
-      expect(url).toBe("https://auth.atlassian.com/oauth/token");
-      expect(init?.headers["content-type"]).toBe("application/json");
-      const body = JSON.parse(init?.body ?? "{}") as Record<string, unknown>;
-      expect(body.client_id).toBe("atl-id");
-      expect(body.client_secret).toBe("atl-secret");
-      expect(body.code).toBe("c");
-      expect(body.grant_type).toBe("authorization_code");
-      expect(body.redirect_uri).toBe("https://auth.example.com/callback/jira");
-      return okJson({
-        access_token: "atl_access",
-        refresh_token: "atl_rt",
-        expires_in: 3600,
-        scope: "read:jira-work offline_access",
-      });
+      if (url === "https://auth.atlassian.com/oauth/token") {
+        expect(init?.headers["content-type"]).toBe("application/json");
+        const body = JSON.parse(init?.body ?? "{}") as Record<string, unknown>;
+        expect(body.client_id).toBe("atl-id");
+        expect(body.client_secret).toBe("atl-secret");
+        expect(body.code).toBe("c");
+        expect(body.grant_type).toBe("authorization_code");
+        expect(body.redirect_uri).toBe(
+          "https://auth.example.com/callback/jira",
+        );
+        return okJson({
+          access_token: "atl_access",
+          refresh_token: "atl_rt",
+          expires_in: 3600,
+          scope: "read:jira-work offline_access",
+        });
+      }
+      if (url === "https://api.atlassian.com/me") {
+        expect(init?.headers.authorization).toBe("Bearer atl_access");
+        return okJson({ account_id: "557058:abc-123", email: "u@x" });
+      }
+      throw new Error(`unexpected url: ${url}`);
     };
     const record = await exchangeCode("jira", "c", jiraEnv, fetchImpl);
     expect(record.provider).toBe("jira");
     expect(record.access_token).toBe("atl_access");
     expect(record.refresh_token).toBe("atl_rt");
+    expect(record.account_id).toBe("557058:abc-123");
     expect(record.scopes).toEqual(["read:jira-work", "offline_access"]);
     expect(record.expires_at).not.toBeNull();
   });
@@ -419,6 +428,26 @@ describe("exchangeCode — jira", () => {
   it("throws when jira returns an error body", async () => {
     const fetchImpl: FetchLike = async () =>
       okJson({ error: "invalid_grant" }, 400);
+    await expect(exchangeCode("jira", "c", jiraEnv, fetchImpl)).rejects.toThrow(
+      ExchangeError,
+    );
+  });
+
+  it("throws when jira /me is missing account_id", async () => {
+    const fetchImpl: FetchLike = async (url) => {
+      if (url === "https://auth.atlassian.com/oauth/token") {
+        return okJson({
+          access_token: "atl_access",
+          refresh_token: "atl_rt",
+          expires_in: 3600,
+          scope: "read:jira-work",
+        });
+      }
+      if (url === "https://api.atlassian.com/me") {
+        return okJson({ email: "u@x" });
+      }
+      throw new Error(`unexpected url: ${url}`);
+    };
     await expect(exchangeCode("jira", "c", jiraEnv, fetchImpl)).rejects.toThrow(
       ExchangeError,
     );

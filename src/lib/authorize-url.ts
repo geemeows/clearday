@@ -19,6 +19,7 @@ export type AuthorizeEnv = {
   GOOGLE_CLIENT_ID?: string;
   SLACK_CLIENT_ID?: string;
   LINEAR_CLIENT_ID?: string;
+  JIRA_CLIENT_ID?: string;
   STATE_HMAC_SECRET: string;
   /** The auth-proxy's own public URL, used to derive the redirect_uri. */
   AUTH_PROXY_URL: string;
@@ -94,6 +95,8 @@ function clientIdFor(
       return env.SLACK_CLIENT_ID;
     case "linear":
       return env.LINEAR_CLIENT_ID;
+    case "jira":
+      return env.JIRA_CLIENT_ID;
   }
 }
 

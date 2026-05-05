@@ -579,15 +579,41 @@ async function exchangeJira(
       body.error_description || body.error || "jira exchange failed",
     );
   }
+  const accountId = await fetchJiraAccountId(body.access_token, fetchImpl);
   return {
     provider: "jira",
-    account_id: null,
+    account_id: accountId,
     access_token: body.access_token,
     refresh_token: body.refresh_token ?? null,
     expires_at: expiresAtFrom(body.expires_in),
     scopes: parseScope(body.scope, " "),
     metadata: {},
   };
+}
+
+async function fetchJiraAccountId(
+  accessToken: string,
+  fetchImpl: FetchLike,
+): Promise<string> {
+  const res = await fetchImpl("https://api.atlassian.com/me", {
+    method: "GET",
+    headers: {
+      authorization: `Bearer ${accessToken}`,
+      accept: "application/json",
+    },
+  });
+  if (!res.ok) {
+    throw new ExchangeError(
+      "jira",
+      res.status,
+      `jira /me failed: ${await safeText(res)}`,
+    );
+  }
+  const body = (await res.json()) as { account_id?: unknown };
+  if (typeof body.account_id !== "string" || !body.account_id) {
+    throw new ExchangeError("jira", res.status, "jira /me missing account_id");
+  }
+  return body.account_id;
 }
 
 function expiresAtFrom(expiresIn: number | undefined): string | null {

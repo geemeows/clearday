@@ -7,6 +7,7 @@ const env: AuthorizeEnv = {
   GOOGLE_CLIENT_ID: "go-client-id",
   SLACK_CLIENT_ID: "sl-client-id",
   LINEAR_CLIENT_ID: "lin-client-id",
+  JIRA_CLIENT_ID: "atl-client-id",
   STATE_HMAC_SECRET: "test-secret",
   AUTH_PROXY_URL: "https://auth.example.com",
 };
@@ -199,6 +200,42 @@ describe("buildAuthorizeUrl (github)", () => {
       "linear",
       "https://owner.example.com",
       { ...env, LINEAR_CLIENT_ID: undefined },
+      1000,
+    );
+    expect(out).toEqual({ ok: false, error: "missing_client_id" });
+  });
+
+  it("builds the jira authorize URL with audience, read scopes, offline_access, and prompt=consent", async () => {
+    const out = await buildAuthorizeUrl(
+      "jira",
+      "https://owner.example.com",
+      env,
+      1000,
+      () => "fixed-nonce",
+    );
+    if (!out.ok) throw new Error(`expected ok, got ${out.error}`);
+    const url = new URL(out.url);
+    expect(url.origin + url.pathname).toBe(
+      "https://auth.atlassian.com/authorize",
+    );
+    expect(url.searchParams.get("client_id")).toBe("atl-client-id");
+    expect(url.searchParams.get("redirect_uri")).toBe(
+      "https://auth.example.com/callback/jira",
+    );
+    expect(url.searchParams.get("scope")).toBe(
+      "read:jira-user read:jira-work offline_access",
+    );
+    expect(url.searchParams.get("audience")).toBe("api.atlassian.com");
+    expect(url.searchParams.get("prompt")).toBe("consent");
+    expect(url.searchParams.get("response_type")).toBe("code");
+    expect(url.searchParams.get("state")).toBeTruthy();
+  });
+
+  it("errors when the project jira client_id is not configured", async () => {
+    const out = await buildAuthorizeUrl(
+      "jira",
+      "https://owner.example.com",
+      { ...env, JIRA_CLIENT_ID: undefined },
       1000,
     );
     expect(out).toEqual({ ok: false, error: "missing_client_id" });
