@@ -6,7 +6,7 @@
 // kickoff to a new OAuth target — the authorize-URL builder reads the rest
 // from this entry. Scopes start narrow; widen by feature issue when needed.
 
-export type AuthorizeProvider = "github" | "google";
+export type AuthorizeProvider = "github" | "google" | "slack";
 
 export type AuthorizeProviderConfig = {
   authorizeUrl: string;
@@ -42,6 +42,24 @@ export const AUTHORIZE_PROVIDERS: Record<
       access_type: "offline",
       prompt: "consent",
     },
+  },
+  slack: {
+    authorizeUrl: "https://slack.com/oauth/v2/authorize",
+    // User-token scopes for read-only Slack ingest. Bot-token scopes are not
+    // requested in v1 — added per feature issue when needed (e.g. chat:write
+    // for #19's quick-reply).
+    scopes: [
+      "channels:read",
+      "groups:read",
+      "im:read",
+      "mpim:read",
+      "search:read",
+    ],
+    scopeSeparator: ",",
+    // Slack's v2 endpoint uses `user_scope` for user-token scopes (and `scope`
+    // for bot-token scopes — unused in v1).
+    scopeParam: "user_scope",
+    extraParams: {},
   },
 };
 

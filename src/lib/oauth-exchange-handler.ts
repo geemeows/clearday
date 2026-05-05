@@ -64,7 +64,7 @@ export async function handleOAuthExchange(
     refresh_token: payload.refresh_token ?? null,
     expires_at: unixToIso(payload.expires_at ?? null),
     scopes: parseScope(payload.scope),
-    metadata: {},
+    metadata: payload.metadata ?? {},
   };
   await deps.persist(record);
   return new Response(null, { status: 302, headers: { location: base } });

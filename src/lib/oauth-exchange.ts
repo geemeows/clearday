@@ -404,30 +404,66 @@ async function exchangeSlack(
   const body = (await res.json()) as {
     ok?: boolean;
     error?: string;
-    access_token?: string;
-    scope?: string;
     team?: { id?: string; name?: string };
     authed_user?: { id?: string; access_token?: string; scope?: string };
   };
-  if (!res.ok || body.ok === false || !body.access_token) {
+  if (!res.ok || body.ok === false) {
     throw new ExchangeError(
       "slack",
       res.status,
       body.error || "slack exchange failed",
     );
   }
+  // v1 only requests user-token scopes, so the user token (xoxp-...) lives
+  // under `authed_user.access_token` — the top-level `access_token` is the bot
+  // token and only present when bot scopes are requested.
+  const userToken = body.authed_user?.access_token;
+  if (!userToken) {
+    throw new ExchangeError(
+      "slack",
+      res.status,
+      "slack response missing authed_user.access_token",
+    );
+  }
+  const accountId = await fetchSlackAccountId(userToken, fetchImpl);
   return {
     provider: "slack",
-    account_id: body.authed_user?.id ?? null,
-    access_token: body.access_token,
+    account_id: accountId,
+    access_token: userToken,
     refresh_token: null,
     expires_at: null,
-    scopes: parseScope(body.scope, ","),
+    scopes: parseScope(body.authed_user?.scope, ","),
     metadata: {
       team: body.team ?? null,
-      authed_user: body.authed_user ?? null,
     },
   };
+}
+
+async function fetchSlackAccountId(
+  userToken: string,
+  fetchImpl: FetchLike,
+): Promise<string> {
+  const res = await fetchImpl("https://slack.com/api/auth.test", {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${userToken}`,
+      "content-type": "application/x-www-form-urlencoded",
+    },
+    body: "",
+  });
+  const body = (await res.json()) as {
+    ok?: boolean;
+    error?: string;
+    user_id?: string;
+  };
+  if (!res.ok || body.ok === false || !body.user_id) {
+    throw new ExchangeError(
+      "slack",
+      res.status,
+      body.error || "slack auth.test failed",
+    );
+  }
+  return body.user_id;
 }
 
 async function exchangeLinear(

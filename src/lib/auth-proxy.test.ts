@@ -323,6 +323,80 @@ describe("handleAuthProxyRequest /start", () => {
   });
 });
 
+describe("handleAuthProxyRequest /start (slack)", () => {
+  it("302s to the slack authorize URL with project client_id and user_scope", async () => {
+    const res = await handleAuthProxyRequest(
+      new Request(
+        "https://auth.example.com/start/slack?backend=https://owner.example.com",
+      ),
+      env,
+      { fetch: vi.fn() as unknown as FetchLike },
+      1000,
+    );
+    expect(res.status).toBe(302);
+    const location = new URL(res.headers.get("location") ?? "");
+    expect(location.origin + location.pathname).toBe(
+      "https://slack.com/oauth/v2/authorize",
+    );
+    expect(location.searchParams.get("client_id")).toBe("sl-id");
+    expect(location.searchParams.get("redirect_uri")).toBe(
+      "https://auth.example.com/callback/slack",
+    );
+    expect(location.searchParams.get("user_scope")).toContain("channels:read");
+    expect(location.searchParams.get("scope")).toBeNull();
+    expect(location.searchParams.get("state")).toBeTruthy();
+  });
+});
+
+describe("handleAuthProxyRequest /callback (slack)", () => {
+  const slackFetch: FetchLike = async (url) => {
+    if (url === "https://slack.com/api/oauth.v2.access") {
+      return okJson({
+        ok: true,
+        team: { id: "T123", name: "Acme" },
+        authed_user: {
+          access_token: "xoxp-user-token",
+          scope: "channels:read,im:read",
+        },
+      });
+    }
+    if (url === "https://slack.com/api/auth.test") {
+      return okJson({ ok: true, user_id: "U999", team_id: "T123" });
+    }
+    throw new Error(`unexpected url: ${url}`);
+  };
+
+  it("verifies state, exchanges code, and 302s with an envelope carrying the user token, account_id from auth.test, team metadata, and no refresh_token", async () => {
+    const state = await signState(
+      { userBackendUrl: "https://owner.example.com", nonce: "nslack" },
+      env.STATE_HMAC_SECRET,
+      1000,
+    );
+    const res = await handleAuthProxyRequest(
+      callbackUrl("slack", { code: "abc", state }),
+      env,
+      { fetch: slackFetch },
+      1000,
+    );
+    expect(res.status).toBe(302);
+    const location = new URL(res.headers.get("location") ?? "");
+    expect(location.origin + location.pathname).toBe(
+      "https://owner.example.com/oauth/exchange",
+    );
+    const envelope = location.searchParams.get("envelope") ?? "";
+    const verified = await verifyEnvelope(envelope, keys.publicKey, 1000);
+    if (!verified.ok) throw new Error(`expected ok, got ${verified.reason}`);
+    expect(verified.payload.provider).toBe("slack");
+    expect(verified.payload.access_token).toBe("xoxp-user-token");
+    expect(verified.payload.account_id).toBe("U999");
+    expect(verified.payload.refresh_token).toBeNull();
+    expect(verified.payload.expires_at).toBeNull();
+    expect(verified.payload.metadata).toEqual({
+      team: { id: "T123", name: "Acme" },
+    });
+  });
+});
+
 describe("handleAuthProxyRequest /callback (google)", () => {
   // {"sub":"110001"} base64url-encoded.
   const googleIdToken = "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiIxMTAwMDEifQ.sig";

@@ -156,6 +156,7 @@ async function handleCallback(
     expires_at: expiresAtToUnix(record.expires_at),
     scope: record.scopes.join(","),
     account_id: record.account_id ?? "",
+    metadata: record.metadata,
     backendUrl,
   };
   const envelope = await signEnvelope(payload, keys, { now });

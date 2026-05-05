@@ -28,6 +28,12 @@ export type EnvelopePayload = {
   scope?: string;
   /** Required on success envelopes; omitted when `error` is set. */
   account_id?: string;
+  /**
+   * Provider-specific opaque blob persisted into `provider_accounts.metadata`.
+   * Slack uses this for `team.id` (workspace handle); GitHub/Google leave it
+   * empty. Optional so error envelopes and existing payloads round-trip.
+   */
+  metadata?: Record<string, unknown>;
   backendUrl: string;
   return_to?: string | null;
   /** Set on error envelopes (provider denial or exchange failure). */

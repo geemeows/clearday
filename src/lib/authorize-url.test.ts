@@ -5,6 +5,7 @@ import { verifyState } from "#/lib/oauth-state";
 const env: AuthorizeEnv = {
   GITHUB_CLIENT_ID: "gh-client-id",
   GOOGLE_CLIENT_ID: "go-client-id",
+  SLACK_CLIENT_ID: "sl-client-id",
   STATE_HMAC_SECRET: "test-secret",
   AUTH_PROXY_URL: "https://auth.example.com",
 };
@@ -127,6 +128,43 @@ describe("buildAuthorizeUrl (github)", () => {
       "github",
       "https://owner.example.com",
       { ...env, GITHUB_CLIENT_ID: undefined },
+      1000,
+    );
+    expect(out).toEqual({ ok: false, error: "missing_client_id" });
+  });
+
+  it("builds the slack authorize URL with user_scope (not scope) and comma-joined read scopes", async () => {
+    const out = await buildAuthorizeUrl(
+      "slack",
+      "https://owner.example.com",
+      env,
+      1000,
+      () => "fixed-nonce",
+    );
+    if (!out.ok) throw new Error(`expected ok, got ${out.error}`);
+    const url = new URL(out.url);
+    expect(url.origin + url.pathname).toBe(
+      "https://slack.com/oauth/v2/authorize",
+    );
+    expect(url.searchParams.get("client_id")).toBe("sl-client-id");
+    expect(url.searchParams.get("redirect_uri")).toBe(
+      "https://auth.example.com/callback/slack",
+    );
+    // Slack v2 uses `user_scope` for user-token scopes; `scope` (bot) must not
+    // be set since v1 requests no bot scopes.
+    expect(url.searchParams.get("user_scope")).toBe(
+      "channels:read,groups:read,im:read,mpim:read,search:read",
+    );
+    expect(url.searchParams.get("scope")).toBeNull();
+    expect(url.searchParams.get("response_type")).toBe("code");
+    expect(url.searchParams.get("state")).toBeTruthy();
+  });
+
+  it("errors when the project slack client_id is not configured", async () => {
+    const out = await buildAuthorizeUrl(
+      "slack",
+      "https://owner.example.com",
+      { ...env, SLACK_CLIENT_ID: undefined },
       1000,
     );
     expect(out).toEqual({ ok: false, error: "missing_client_id" });

@@ -59,6 +59,35 @@ describe("handleOAuthExchange", () => {
     expect(persisted[0].scopes).toEqual(["repo", "read:user"]);
   });
 
+  it("persists the envelope's metadata blob into the TokenRecord (e.g. slack team.id)", async () => {
+    const envelope = await signEnvelope(
+      {
+        provider: "slack",
+        access_token: "xoxp-user",
+        refresh_token: null,
+        expires_at: null,
+        scope: "channels:read,im:read",
+        account_id: "U1",
+        backendUrl: "https://owner.example.com",
+        metadata: { team: { id: "T1", name: "Acme" } },
+      },
+      keys,
+      { now: 1000 },
+    );
+    const persisted: TokenRecord[] = [];
+    const persist: PersistTokens = async (r) => {
+      persisted.push(r);
+    };
+    const res = await handleOAuthExchange(
+      requestFor(envelope),
+      env,
+      { persist },
+      1000,
+    );
+    expect(res.status).toBe(302);
+    expect(persisted[0].metadata).toEqual({ team: { id: "T1", name: "Acme" } });
+  });
+
   it("redirects to envelope's return_to when supplied", async () => {
     const envelope = await signEnvelope(
       {
