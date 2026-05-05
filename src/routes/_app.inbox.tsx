@@ -13,6 +13,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiFetch } from "#/lib/api-client";
 import { cn } from "#/lib/cn";
 import type { Signal, SignalKind, SignalProvider } from "#/lib/signal";
+import { filterMeetingsToToday } from "#/lib/today-window";
 
 export const Route = createFileRoute("/_app/inbox")({
   component: InboxPage,
@@ -99,11 +100,10 @@ function InboxPage() {
     });
   }, []);
 
-  // Meetings filter shows today only — the cron ingests a 30-day window so
-  // the Calendar view can render Week/Month, but the Inbox is for "what's
-  // happening now/next" and a month of meetings drowns out everything else.
-  const visibleSignals =
-    filter === "meetings" && signals ? filterToToday(signals) : signals;
+  // The cron ingests a 30-day window so Calendar can render Week/Month, but
+  // the Inbox is for "what's happening now/next". Always restrict meetings
+  // (on any tab) to today; non-meeting signals are unaffected.
+  const visibleSignals = signals ? filterMeetingsToToday(signals) : signals;
 
   return (
     <InboxView
@@ -1072,26 +1072,6 @@ function formatSnoozeReturn(iso: string | null | undefined): string {
     weekday: "short",
     hour: "numeric",
     minute: "2-digit",
-  });
-}
-
-function filterToToday(signals: StoredSignal[]): StoredSignal[] {
-  const now = new Date();
-  const start = new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate(),
-  ).getTime();
-  const end = start + 24 * 60 * 60 * 1000;
-  return signals.filter((s) => {
-    const startsAt =
-      typeof s.payload?.starts_at === "string"
-        ? Date.parse(s.payload.starts_at)
-        : s.source_created_at
-          ? Date.parse(s.source_created_at)
-          : Number.NaN;
-    if (Number.isNaN(startsAt)) return true;
-    return startsAt >= start && startsAt < end;
   });
 }
 

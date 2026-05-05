@@ -29,6 +29,7 @@ import {
   pickTodaySchedule,
   type WeekStats,
 } from "#/lib/today-cards";
+import { filterMeetingsToToday } from "#/lib/today-window";
 
 export const Route = createFileRoute("/_app/today")({
   component: TodayPage,
@@ -531,7 +532,7 @@ const defaultInboxLoader: InboxLoader = async () => {
   const body = (await apiFetch("/api/signals?filter=all")) as {
     signals: StoredSignal[];
   };
-  return body.signals;
+  return filterMeetingsToToday(body.signals);
 };
 
 export function InboxPreviewCard({
