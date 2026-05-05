@@ -167,6 +167,19 @@ export function pickFocusBlocks(events: MeetingEvent[]): MeetingEvent[] {
   return events.filter((e) => e.isFocus);
 }
 
+/** Currently-running focus block, if any (start <= now < end). */
+export function pickActiveFocus(
+  events: MeetingEvent[],
+  now: Date,
+): MeetingEvent | null {
+  const t = now.getTime();
+  for (const e of events) {
+    if (!e.isFocus) continue;
+    if (e.startsAt.getTime() <= t && e.endsAt.getTime() > t) return e;
+  }
+  return null;
+}
+
 function detectFocus(signal: StoredSignal): boolean {
   if (signal.payload?.is_focus === true) return true;
   const title = signal.title?.toLowerCase() ?? "";

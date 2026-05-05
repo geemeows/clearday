@@ -5,10 +5,16 @@
 // outcomes are surfaced so a partial success doesn't read as a failure.
 
 import { Moon } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { apiFetch } from "#/lib/api-client";
+import {
+  type MeetingEvent,
+  pickActiveFocus,
+  toMeetingEvents,
+} from "#/lib/calendar-view";
 import { cn } from "#/lib/cn";
 import type { FocusStartResult } from "#/lib/focus-session";
+import type { StoredSignal } from "#/lib/next-up";
 
 const PRESETS = [25, 60, 90];
 
@@ -17,20 +23,71 @@ export type FocusStarter = (params: {
   message?: string;
 }) => Promise<FocusStartResult>;
 
+export type MeetingsLoader = () => Promise<StoredSignal[]>;
+
 const defaultStarter: FocusStarter = async (params) =>
   (await apiFetch("/api/focus", {
     method: "POST",
     body: params,
   })) as FocusStartResult;
 
-export function FocusButton({ starter }: { starter?: FocusStarter } = {}) {
+const defaultMeetingsLoader: MeetingsLoader = async () => {
+  const body = (await apiFetch("/api/signals?filter=meetings")) as {
+    signals: StoredSignal[];
+  };
+  return body.signals;
+};
+
+export function FocusButton({
+  starter,
+  meetingsLoader,
+  now,
+}: {
+  starter?: FocusStarter;
+  meetingsLoader?: MeetingsLoader;
+  now?: Date;
+} = {}) {
   const [open, setOpen] = useState(false);
   const [duration, setDuration] = useState<number>(60);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
+  const [tick, setTick] = useState<Date>(() => now ?? new Date());
+  const [activeFocus, setActiveFocus] = useState<MeetingEvent | null>(null);
 
   const start = starter ?? defaultStarter;
+  const loadMeetings = meetingsLoader ?? defaultMeetingsLoader;
+
+  useEffect(() => {
+    let cancelled = false;
+    const refresh = async () => {
+      try {
+        const signals = await loadMeetings();
+        if (cancelled) return;
+        const events = toMeetingEvents(signals);
+        setActiveFocus(pickActiveFocus(events, now ?? new Date()));
+      } catch {
+        if (cancelled) return;
+        setActiveFocus(null);
+      }
+    };
+    refresh();
+    const t = setInterval(() => {
+      setTick(new Date());
+      refresh();
+    }, 60_000);
+    return () => {
+      cancelled = true;
+      clearInterval(t);
+    };
+  }, [loadMeetings, now]);
+
+  // Drop active focus the moment its end-time passes locally without waiting
+  // for the next refresh.
+  useEffect(() => {
+    if (!activeFocus) return;
+    if (activeFocus.endsAt.getTime() <= tick.getTime()) setActiveFocus(null);
+  }, [activeFocus, tick]);
 
   const submit = useCallback(async () => {
     if (!Number.isFinite(duration) || duration <= 0) {
@@ -59,6 +116,21 @@ export function FocusButton({ starter }: { starter?: FocusStarter } = {}) {
   }, [duration, message, start]);
 
   if (!open) {
+    if (activeFocus) {
+      return (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="flex items-center gap-2 rounded border border-violet-300 bg-violet-50 px-3 py-1.5 text-sm font-medium text-violet-900 hover:bg-violet-100"
+          aria-label="Start focus session"
+          aria-pressed="true"
+          data-focus-active="true"
+        >
+          <Moon className="h-4 w-4" />
+          Focusing until {formatEndTime(activeFocus.endsAt)}
+        </button>
+      );
+    }
     return (
       <button
         type="button"
@@ -164,4 +236,8 @@ function summarize(r: FocusStartResult): string {
 
 function reasonOf(o: { ok: false; error: string } | { ok: true }): string {
   return o.ok ? "" : o.error;
+}
+
+function formatEndTime(d: Date): string {
+  return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }

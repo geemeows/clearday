@@ -5,6 +5,7 @@ import {
   eventsForDay,
   findConflicts,
   type MeetingEvent,
+  pickActiveFocus,
   pickFocusBlocks,
   pickNextConflict,
   toMeetingEvent,
@@ -229,5 +230,48 @@ describe("pickFocusBlocks", () => {
       "Standup",
     );
     expect(pickFocusBlocks([a, b])).toEqual([a]);
+  });
+});
+
+describe("pickActiveFocus", () => {
+  it("returns the focus block currently in progress", () => {
+    const focus = ev(
+      "f",
+      "2026-05-04T13:00:00.000Z",
+      "2026-05-04T15:00:00.000Z",
+      "Focus block",
+    );
+    const standup = ev(
+      "s",
+      "2026-05-04T13:30:00.000Z",
+      "2026-05-04T13:45:00.000Z",
+      "Standup",
+    );
+    const now = new Date("2026-05-04T13:30:00.000Z");
+    expect(pickActiveFocus([focus, standup], now)).toBe(focus);
+  });
+
+  it("returns null when no focus block is active", () => {
+    const focus = ev(
+      "f",
+      "2026-05-04T13:00:00.000Z",
+      "2026-05-04T15:00:00.000Z",
+      "Focus block",
+    );
+    const after = new Date("2026-05-04T16:00:00.000Z");
+    const before = new Date("2026-05-04T12:00:00.000Z");
+    expect(pickActiveFocus([focus], after)).toBeNull();
+    expect(pickActiveFocus([focus], before)).toBeNull();
+  });
+
+  it("ignores non-focus meetings even when in progress", () => {
+    const standup = ev(
+      "s",
+      "2026-05-04T13:00:00.000Z",
+      "2026-05-04T13:30:00.000Z",
+      "Standup",
+    );
+    const now = new Date("2026-05-04T13:15:00.000Z");
+    expect(pickActiveFocus([standup], now)).toBeNull();
   });
 });
