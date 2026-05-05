@@ -134,7 +134,7 @@ describe("BriefingCard", () => {
 
   it("renders the briefing text and provider/model attribution on success", async () => {
     const generator = vi.fn(async () => okResult);
-    render(<BriefingCard generator={generator} date="2026-05-04" />);
+    render(<BriefingCard generator={generator} />);
     await waitFor(() => screen.getByText(/Lead with the design review/));
     expect(screen.getByText(/openai · gpt-4o-mini/)).toBeTruthy();
     expect(generator).toHaveBeenCalledWith(false);
@@ -147,7 +147,7 @@ describe("BriefingCard", () => {
         reason: "no_provider",
       }),
     );
-    render(<BriefingCard generator={generator} date="2026-05-04" />);
+    render(<BriefingCard generator={generator} />);
     await waitFor(() => screen.getByText(/No AI provider configured/));
     const link = screen.getByRole("link", { name: /AI provider/i });
     expect(link.getAttribute("href")).toBe("/settings");
@@ -160,7 +160,7 @@ describe("BriefingCard", () => {
         used_fallback: true,
       }),
     );
-    render(<BriefingCard generator={generator} date="2026-05-04" />);
+    render(<BriefingCard generator={generator} />);
     await waitFor(() => screen.getByText(/running on fallback model/));
   });
 
@@ -171,7 +171,7 @@ describe("BriefingCard", () => {
         reason: "budget_reached",
       }),
     );
-    render(<BriefingCard generator={generator} date="2026-05-04" />);
+    render(<BriefingCard generator={generator} />);
     await waitFor(() => screen.getByText(/monthly budget reached/i));
   });
 
@@ -180,7 +180,7 @@ describe("BriefingCard", () => {
       .fn<(force: boolean) => Promise<BriefingResult>>()
       .mockResolvedValueOnce(okResult)
       .mockResolvedValueOnce({ ok: false, reason: "regenerate_limit" });
-    render(<BriefingCard generator={generator} date="2026-05-04" />);
+    render(<BriefingCard generator={generator} />);
     await waitFor(() => screen.getByText(/Lead with the design review/));
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: /regenerate/i }));
@@ -195,7 +195,7 @@ describe("BriefingCard", () => {
       .fn<(force: boolean) => Promise<BriefingResult>>()
       .mockResolvedValueOnce(okResult)
       .mockResolvedValueOnce({ ...okResult, text: "Refreshed briefing." });
-    render(<BriefingCard generator={generator} date="2026-05-04" />);
+    render(<BriefingCard generator={generator} />);
     await waitFor(() => screen.getByText(/Lead with the design review/));
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: /regenerate/i }));

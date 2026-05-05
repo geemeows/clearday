@@ -256,27 +256,20 @@ export function NextUpCard({
 
 type Generator = (force: boolean) => Promise<BriefingResult>;
 
-export function BriefingCard({
-  generator,
-  date,
-}: {
-  generator?: Generator;
-  date?: string;
-} = {}) {
+export function BriefingCard({ generator }: { generator?: Generator } = {}) {
   const [result, setResult] = useState<BriefingResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [regenWarning, setRegenWarning] = useState<string | null>(null);
 
-  const localDate = date ?? localDateString(new Date());
   const gen = useMemo<Generator>(
     () =>
       generator ??
       ((force: boolean) =>
         apiFetch("/api/briefing/generate", {
           method: "POST",
-          body: { date: localDate, force },
+          body: { force },
         }) as Promise<BriefingResult>),
-    [generator, localDate],
+    [generator],
   );
 
   useEffect(() => {
@@ -421,13 +414,6 @@ function BriefingFallback({
       {busy && " Retrying…"}
     </p>
   );
-}
-
-function localDateString(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
 }
 
 function MeetingAlertToast({

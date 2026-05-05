@@ -1427,6 +1427,16 @@ function briefingDeps(service: SupabaseService, env: WorkerEnv): BriefingDeps {
         Awaited<ReturnType<BriefingDeps["loadSignals"]>>[number]
       >;
     },
+    loadTimezone: async () => {
+      const { data, error } = await service
+        .from("user_preferences")
+        .select("timezone")
+        .eq("id", true)
+        .maybeSingle();
+      if (error) throw new Error(error.message);
+      const tz = (data as { timezone?: string | null } | null)?.timezone;
+      return typeof tz === "string" && tz.length > 0 ? tz : null;
+    },
   };
 }
 

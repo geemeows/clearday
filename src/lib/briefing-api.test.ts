@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import type { AiSettingsRow } from "#/lib/ai-settings-api";
-import { handleBriefingGenerate, runBriefingTick } from "#/lib/briefing-api";
+import {
+  handleBriefingGenerate,
+  localDateForTimezone,
+  runBriefingTick,
+} from "#/lib/briefing-api";
 import { encryptSecret } from "#/lib/llm-crypto";
 import type { BriefingCacheEntry } from "#/lib/morning-briefing";
 
@@ -73,7 +77,7 @@ async function configuredRow(): Promise<AiSettingsRow> {
 }
 
 describe("handleBriefingGenerate", () => {
-  it("rejects invalid date input", async () => {
+  it("rejects malformed date input", async () => {
     const out = await handleBriefingGenerate(
       { date: "not-a-date" },
       {
@@ -86,6 +90,49 @@ describe("handleBriefingGenerate", () => {
       },
     );
     expect(out).toMatchObject({ ok: false, reason: "error" });
+  });
+
+  it("derives the local date from the user's timezone when body.date is omitted", async () => {
+    const row = await configuredRow();
+    const fetchMock = okFetch("Briefing.");
+    const cache = memCacheStore();
+    const out = await handleBriefingGenerate(
+      {},
+      {
+        aiStore: memAiStore(row),
+        cacheStore: cache,
+        loadSignals: async () => [],
+        usageStore: fakeUsageStore(),
+        keySecret: KEY_SECRET,
+        fetch: fetchMock,
+        // 2026-05-05 02:00 UTC == 2026-05-04 19:00 in LA — the local
+        // date the server should pick is 2026-05-04, not the UTC date.
+        now: () => new Date("2026-05-05T02:00:00.000Z"),
+        loadTimezone: async () => "America/Los_Angeles",
+      },
+    );
+    expect(out).toMatchObject({ ok: true, cached: false });
+    expect(cache.current?.date).toBe("2026-05-04");
+  });
+
+  it("falls back to UTC date when no timezone is configured", async () => {
+    const row = await configuredRow();
+    const fetchMock = okFetch("Briefing.");
+    const cache = memCacheStore();
+    await handleBriefingGenerate(
+      {},
+      {
+        aiStore: memAiStore(row),
+        cacheStore: cache,
+        loadSignals: async () => [],
+        usageStore: fakeUsageStore(),
+        keySecret: KEY_SECRET,
+        fetch: fetchMock,
+        now: () => new Date("2026-05-05T02:00:00.000Z"),
+        loadTimezone: async () => null,
+      },
+    );
+    expect(cache.current?.date).toBe("2026-05-05");
   });
 
   it("returns no_provider when AI settings are not configured", async () => {
@@ -246,6 +293,29 @@ describe("runBriefingTick", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("uses the user's timezone to compute the date in the cache key", async () => {
+    const row = await configuredRow();
+    const fetchMock = okFetch("Briefing.");
+    const cache = memCacheStore();
+    const out = await runBriefingTick({
+      aiStore: memAiStore(row),
+      cacheStore: cache,
+      loadSignals: async () => [],
+      usageStore: fakeUsageStore(),
+      keySecret: KEY_SECRET,
+      fetch: fetchMock,
+      // 13:00 UTC = 22:00 in Tokyo on the same UTC day; date should be 2026-05-04.
+      now: () => new Date("2026-05-04T13:00:00.000Z"),
+      loadTimezone: async () => "Asia/Tokyo",
+    });
+    expect(out).toEqual({
+      kind: "generated",
+      date: "2026-05-04",
+      cached: false,
+    });
+    expect(cache.current?.date).toBe("2026-05-04");
+  });
+
   it("maps an ai_disabled row to skipped/disabled", async () => {
     const row = { ...(await configuredRow()), ai_disabled: true };
     const fetchMock = okFetch();
@@ -260,5 +330,29 @@ describe("runBriefingTick", () => {
     });
     expect(out).toEqual({ kind: "skipped", reason: "disabled" });
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("localDateForTimezone", () => {
+  const lateNight = new Date("2026-05-05T02:00:00.000Z");
+
+  it("returns the UTC date when tz is null", () => {
+    expect(localDateForTimezone(lateNight, null)).toBe("2026-05-05");
+  });
+
+  it("rolls back a day for west-of-UTC timezones at the right offset", () => {
+    expect(localDateForTimezone(lateNight, "America/Los_Angeles")).toBe(
+      "2026-05-04",
+    );
+  });
+
+  it("rolls forward for east-of-UTC timezones past midnight", () => {
+    // 14:00 UTC → 23:00 in Tokyo (same day), 00:00 next day in Auckland in winter.
+    const t = new Date("2026-05-04T14:00:00.000Z");
+    expect(localDateForTimezone(t, "Asia/Tokyo")).toBe("2026-05-04");
+  });
+
+  it("falls back to UTC when the timezone identifier is unknown", () => {
+    expect(localDateForTimezone(lateNight, "Not/Real")).toBe("2026-05-05");
   });
 });

@@ -3,12 +3,18 @@
 // it can be tested without spinning up the Worker.
 //
 // Wire shape:
-//   POST /api/briefing/generate { date: 'YYYY-MM-DD', force?: boolean }
+//   POST /api/briefing/generate { date?: 'YYYY-MM-DD', force?: boolean }
 //   → BriefingResult (see morning-briefing.ts)
+//
+// `date` is optional: when omitted (or null), the server derives today's
+// local-day string from the user's stored IANA timezone in
+// `user_preferences.timezone`, falling back to UTC when that's unset or
+// unrecognized. Clients should omit it so a misconfigured browser clock
+// doesn't shift the cache key.
 //
 // Also exposes `runBriefingTick` — the morning cron entrypoint that pre-warms
 // today's briefing so it's ready when the user opens the SPA. Idempotent: a
-// cached entry for the current UTC date short-circuits the LLM call.
+// cached entry for the current local date short-circuits the LLM call.
 
 import type { UsageStore } from "#/lib/ai-budget-meter";
 import type { AiSettingsRow, AiSettingsStore } from "#/lib/ai-settings-api";
@@ -29,14 +35,30 @@ export type BriefingDeps = {
   keySecret: string;
   fetch: typeof fetch;
   now?: () => Date;
+  /**
+   * Returns the user's IANA timezone (e.g. "America/Los_Angeles"). Used to
+   * compute today's local-day string when the request body omits `date`.
+   * Optional — callers without the seam fall back to UTC.
+   */
+  loadTimezone?: () => Promise<string | null>;
 };
 
 export async function handleBriefingGenerate(
   body: { date?: unknown; force?: unknown },
   deps: BriefingDeps,
 ): Promise<BriefingResult> {
-  if (typeof body.date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(body.date)) {
-    return { ok: false, reason: "error", error: "date (YYYY-MM-DD) required" };
+  let date: string;
+  if (body.date === undefined || body.date === null) {
+    const now = deps.now?.() ?? new Date();
+    const tz = (await deps.loadTimezone?.()) ?? null;
+    date = localDateForTimezone(now, tz);
+  } else if (
+    typeof body.date === "string" &&
+    /^\d{4}-\d{2}-\d{2}$/.test(body.date)
+  ) {
+    date = body.date;
+  } else {
+    return { ok: false, reason: "error", error: "date must be YYYY-MM-DD" };
   }
   const force = !!body.force;
 
@@ -48,7 +70,7 @@ export async function handleBriefingGenerate(
 
   const signals = await deps.loadSignals();
   return generateBriefing({
-    date: body.date,
+    date,
     force,
     signals,
     settings,
@@ -88,7 +110,8 @@ export async function runBriefingTick(
   const settings = await aiSettingsFromRow(row, deps.keySecret);
   if (!settings) return { kind: "skipped", reason: "no_provider" };
 
-  const date = utcDateString(now);
+  const tz = (await deps.loadTimezone?.()) ?? null;
+  const date = localDateForTimezone(now, tz);
   const signals = await deps.loadSignals();
   const result = await generateBriefing({
     date,
@@ -119,6 +142,27 @@ function utcDateString(d: Date): string {
   const m = String(d.getUTCMonth() + 1).padStart(2, "0");
   const day = String(d.getUTCDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
+}
+
+/**
+ * Returns the calendar date in the given IANA timezone as `YYYY-MM-DD`. When
+ * `tz` is null or unrecognized by the runtime, falls back to UTC. Exported
+ * for tests; used by both the on-demand handler and the cron tick.
+ */
+export function localDateForTimezone(now: Date, tz: string | null): string {
+  if (!tz) return utcDateString(now);
+  try {
+    // en-CA renders as YYYY-MM-DD which round-trips into our cache key.
+    const fmt = new Intl.DateTimeFormat("en-CA", {
+      timeZone: tz,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    });
+    return fmt.format(now);
+  } catch {
+    return utcDateString(now);
+  }
 }
 
 async function aiSettingsFromRow(row: AiSettingsRow | null, keySecret: string) {
