@@ -118,6 +118,22 @@ describe("CommandPalette", () => {
     ).toBeTruthy();
   });
 
+  it("does not open while another modal is already focused", async () => {
+    const existing = document.createElement("div");
+    existing.setAttribute("role", "dialog");
+    existing.setAttribute("aria-label", "Focus session");
+    document.body.appendChild(existing);
+    try {
+      render(<CommandPalette searcher={fakeSearcher({})} />);
+      fireEvent.keyDown(window, { key: "k", metaKey: true });
+      expect(
+        screen.queryByRole("dialog", { name: /command palette/i }),
+      ).toBeNull();
+    } finally {
+      document.body.removeChild(existing);
+    }
+  });
+
   it("Escape closes the palette", async () => {
     render(<CommandPalette searcher={fakeSearcher({})} initialOpen />);
     fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });

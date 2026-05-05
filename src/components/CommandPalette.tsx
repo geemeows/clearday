@@ -79,7 +79,12 @@ export function CommandPalette({
       const mod = e.metaKey || e.ctrlKey;
       if (mod && (e.key === "k" || e.key === "K")) {
         e.preventDefault();
-        setOpen((v) => !v);
+        setOpen((v) => {
+          if (v) return false;
+          // Don't steal focus from an already-open modal (e.g. Focus session dialog).
+          if (document.querySelector('[role="dialog"]')) return false;
+          return true;
+        });
       }
     }
     window.addEventListener("keydown", onKeyDown);
