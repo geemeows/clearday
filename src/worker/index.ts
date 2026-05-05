@@ -455,7 +455,14 @@ export default {
       /^\/api\/providers\/([^/]+)\/connect-url$/,
     );
     if (connectMatch && request.method === "GET") {
-      const out = buildConnectUrl(connectMatch[1], env.AUTH_PROXY_URL ?? null);
+      const host =
+        request.headers.get("x-forwarded-host") ?? request.headers.get("host");
+      const userBackendUrl = host ? `https://${host}` : null;
+      const out = buildConnectUrl(
+        connectMatch[1],
+        env.AUTH_PROXY_URL ?? null,
+        userBackendUrl,
+      );
       if (!out.ok) return json({ ok: false, error: out.error }, 400);
       return json({ ok: true, url: out.url });
     }

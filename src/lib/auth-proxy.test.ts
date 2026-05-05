@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 import { handleAuthProxyRequest } from "#/lib/auth-proxy";
 import { signState } from "#/lib/oauth-state";
 
-const env = { STATE_HMAC_SECRET: "test-secret" };
+const env = {
+  STATE_HMAC_SECRET: "test-secret",
+  AUTH_PROXY_URL: "https://auth.example.com",
+  GITHUB_CLIENT_ID: "gh-client-id",
+};
 
 const callbackUrl = (provider: string, params: Record<string, string>) => {
   const u = new URL(`https://auth.example.com/callback/${provider}`);
@@ -120,12 +124,68 @@ describe("handleAuthProxyRequest", () => {
     expect(await res.text()).toMatch(/https/);
   });
 
-  it("returns 404 for non-callback paths", async () => {
+  it("returns 404 for non-callback / non-start paths", async () => {
     const res = await handleAuthProxyRequest(
       new Request("https://auth.example.com/health"),
       env,
       1000,
     );
     expect(res.status).toBe(404);
+  });
+});
+
+describe("handleAuthProxyRequest /start", () => {
+  it("302s to the github authorize URL with project client_id and signed state", async () => {
+    const res = await handleAuthProxyRequest(
+      new Request(
+        "https://auth.example.com/start/github?backend=https://owner.example.com",
+      ),
+      env,
+      1000,
+    );
+    expect(res.status).toBe(302);
+    const location = new URL(res.headers.get("location") ?? "");
+    expect(location.origin + location.pathname).toBe(
+      "https://github.com/login/oauth/authorize",
+    );
+    expect(location.searchParams.get("client_id")).toBe("gh-client-id");
+    expect(location.searchParams.get("redirect_uri")).toBe(
+      "https://auth.example.com/callback/github",
+    );
+    expect(location.searchParams.get("state")).toBeTruthy();
+  });
+
+  it("400s when backend query param is missing", async () => {
+    const res = await handleAuthProxyRequest(
+      new Request("https://auth.example.com/start/github"),
+      env,
+      1000,
+    );
+    expect(res.status).toBe(400);
+    expect(await res.text()).toMatch(/missing_backend/);
+  });
+
+  it("400s when backend is not https", async () => {
+    const res = await handleAuthProxyRequest(
+      new Request(
+        "https://auth.example.com/start/github?backend=http://owner.example.com",
+      ),
+      env,
+      1000,
+    );
+    expect(res.status).toBe(400);
+    expect(await res.text()).toMatch(/non_https_backend/);
+  });
+
+  it("400s when provider is not in the scope table", async () => {
+    const res = await handleAuthProxyRequest(
+      new Request(
+        "https://auth.example.com/start/google?backend=https://owner.example.com",
+      ),
+      env,
+      1000,
+    );
+    expect(res.status).toBe(400);
+    expect(await res.text()).toMatch(/unknown_provider/);
   });
 });

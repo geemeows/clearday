@@ -72,4 +72,16 @@ describe("buildConnectUrl", () => {
     const out = buildConnectUrl("github", null);
     expect(out.ok).toBe(false);
   });
+
+  it("appends the user-Worker URL as ?backend= when supplied", () => {
+    const out = buildConnectUrl(
+      "github",
+      "https://auth.example.com",
+      "https://owner.example.com",
+    );
+    expect(out).toEqual({
+      ok: true,
+      url: "https://auth.example.com/start/github?backend=https%3A%2F%2Fowner.example.com",
+    });
+  });
 });

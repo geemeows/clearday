@@ -46,6 +46,7 @@ const ALLOWED_PROVIDERS = ["github", "slack", "google", "linear", "jira"];
 export function buildConnectUrl(
   provider: string,
   authProxyUrl: string | null,
+  userBackendUrl: string | null = null,
 ): { ok: true; url: string } | { ok: false; error: string } {
   if (!ALLOWED_PROVIDERS.includes(provider)) {
     return { ok: false, error: "unknown provider" };
@@ -53,8 +54,9 @@ export function buildConnectUrl(
   if (!authProxyUrl) {
     return { ok: false, error: "auth-proxy not configured" };
   }
-  return {
-    ok: true,
-    url: `${authProxyUrl.replace(/\/$/, "")}/start/${provider}`,
-  };
+  const base = `${authProxyUrl.replace(/\/$/, "")}/start/${provider}`;
+  if (!userBackendUrl) return { ok: true, url: base };
+  const url = new URL(base);
+  url.searchParams.set("backend", userBackendUrl);
+  return { ok: true, url: url.toString() };
 }
