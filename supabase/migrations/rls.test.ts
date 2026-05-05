@@ -24,6 +24,11 @@ const migrationSql = readFileSync(
   "utf8",
 );
 
+const unreadBumpSql = readFileSync(
+  resolve(__dirname, "0014_signals_unread_count_bump.sql"),
+  "utf8",
+);
+
 describe("0001_init.sql contents", () => {
   it("declares the (provider, kind, source_id) unique constraint on signals", () => {
     expect(migrationSql).toMatch(
@@ -53,6 +58,23 @@ describe("0001_init.sql contents", () => {
   });
 });
 
+describe("0014_signals_unread_count_bump.sql contents", () => {
+  it("declares a before-update row trigger on public.signals", () => {
+    expect(unreadBumpSql).toMatch(
+      /create trigger signals_bump_unread_count\s+before update on public\.signals\s+for each row/i,
+    );
+  });
+
+  it("bumps unread_count when title/url/payload/requires_action changes", () => {
+    for (const col of ["title", "url", "payload", "requires_action"]) {
+      expect(unreadBumpSql).toContain(`new.${col} is distinct from old.${col}`);
+    }
+    expect(unreadBumpSql).toMatch(
+      /new\.unread_count\s*:=\s*old\.unread_count\s*\+\s*1/,
+    );
+  });
+});
+
 const dbDescribe = DATABASE_URL ? describe : describe.skip;
 
 dbDescribe("RLS integration", () => {
@@ -79,6 +101,7 @@ dbDescribe("RLS integration", () => {
       $$;
     `);
     await client.query(migrationSql);
+    await client.query(unreadBumpSql);
     await client.query(
       "update public.app_settings set allowed_email = 'owner@example.com'",
     );
@@ -106,5 +129,66 @@ dbDescribe("RLS integration", () => {
     );
     const { rows } = await client.query("select public.is_allowed_user() as ok");
     expect(rows[0].ok).toBe(true);
+  });
+
+  // Use the allowed-email JWT for the trigger tests so RLS permits inserts.
+  async function asAllowed(): Promise<void> {
+    await client.query(
+      "select set_config('request.jwt.claims', $1, true)",
+      [JSON.stringify({ email: "owner@example.com" })],
+    );
+  }
+
+  async function insertSignal(sourceId: string): Promise<string> {
+    const { rows } = await client.query(
+      `insert into public.signals
+       (provider, kind, source_id, title, url, payload, requires_action, source_created_at)
+       values ('github','pr_review_requested',$1,'t','https://x','{"a":1}'::jsonb,true,now())
+       returning id, unread_count`,
+      [sourceId],
+    );
+    return rows[0].id;
+  }
+
+  it("bumps unread_count when poll content changes", async () => {
+    if (!pg) return;
+    await asAllowed();
+    const id = await insertSignal("repo#1");
+    await client.query("update public.signals set title = 'new title' where id = $1", [id]);
+    const { rows } = await client.query(
+      "select unread_count from public.signals where id = $1",
+      [id],
+    );
+    expect(rows[0].unread_count).toBe(1);
+  });
+
+  it("does not bump unread_count when poll re-upsert is a no-op", async () => {
+    if (!pg) return;
+    await asAllowed();
+    const id = await insertSignal("repo#2");
+    await client.query(
+      "update public.signals set updated_at = now() where id = $1",
+      [id],
+    );
+    const { rows } = await client.query(
+      "select unread_count from public.signals where id = $1",
+      [id],
+    );
+    expect(rows[0].unread_count).toBe(0);
+  });
+
+  it("does not bump unread_count on dismiss", async () => {
+    if (!pg) return;
+    await asAllowed();
+    const id = await insertSignal("repo#3");
+    await client.query(
+      "update public.signals set dismissed_at = now() where id = $1",
+      [id],
+    );
+    const { rows } = await client.query(
+      "select unread_count from public.signals where id = $1",
+      [id],
+    );
+    expect(rows[0].unread_count).toBe(0);
   });
 });
