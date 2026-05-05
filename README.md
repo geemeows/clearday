@@ -9,6 +9,18 @@ See `CONTEXT.md` for the domain model and `docs/adr/` for architectural
 decisions — in particular ADR-0003 for the current OAuth flow (which
 supersedes the original ADR-0001 sketch).
 
+## Self-hosting
+
+Clearday is designed to be self-hosted. Two supported paths: use the
+project-run auth-proxy (no OAuth app registration needed) or run your own
+(full control). Step-by-step setup — Supabase, Worker secrets, Cloudflare
+deploy, first login, troubleshooting — is in
+[`docs/self-host.md`](docs/self-host.md).
+
+The remaining sections below describe the OAuth flow and project-maintainer
+ops; self-hosters can read them for context but only need to follow the
+self-hosting guide.
+
 ## OAuth via the shared auth-proxy
 
 Clearday-the-project registers one OAuth app per provider against
