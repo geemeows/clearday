@@ -257,17 +257,27 @@ export function ProvidersStep({
 
   useEffect(() => {
     let cancelled = false;
-    load()
-      .then((body) => {
-        if (cancelled) return;
-        setSources(body.sources);
-      })
-      .catch((e) => {
-        if (cancelled) return;
-        setError(e instanceof Error ? e.message : "failed to load");
-      });
+    const refresh = () => {
+      load()
+        .then((body) => {
+          if (cancelled) return;
+          setSources(body.sources);
+        })
+        .catch((e) => {
+          if (cancelled) return;
+          setError(e instanceof Error ? e.message : "failed to load");
+        });
+    };
+    refresh();
+    // Re-fetch when the wizard tab regains visibility, so connection
+    // status updates after the user returns from the OAuth popup.
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") refresh();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
     return () => {
       cancelled = true;
+      document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [load]);
 

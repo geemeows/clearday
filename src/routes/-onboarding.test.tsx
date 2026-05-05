@@ -157,6 +157,23 @@ describe("ProvidersStep", () => {
     );
   });
 
+  it("re-fetches sources when the tab becomes visible again", async () => {
+    const loader = vi.fn(async () => ({
+      sources: [{ provider: "github", status: "disconnected" as const }],
+    }));
+    render(<ProvidersStep loader={loader} />);
+    await waitFor(() => expect(loader).toHaveBeenCalledTimes(1));
+
+    // Simulate the user returning from an OAuth popup.
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      get: () => "visible",
+    });
+    document.dispatchEvent(new Event("visibilitychange"));
+
+    await waitFor(() => expect(loader).toHaveBeenCalledTimes(2));
+  });
+
   it("shows an error if connect-url fails", async () => {
     const loader = vi.fn(async () => ({ sources: [] as never[] }));
     const connectUrl = vi.fn(async () => ({
