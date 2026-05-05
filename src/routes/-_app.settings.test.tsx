@@ -900,7 +900,38 @@ describe("EmailDigestPanel", () => {
       to_email: "to@example.com",
       hour_utc: 8,
       api_key: "re_real",
+      transport: "resend",
     });
+  });
+
+  it("forwards the Postmark transport selection on Save", async () => {
+    const loader = vi.fn(async () => baseView);
+    const saver = vi.fn(
+      async (
+        body: Record<string, unknown>,
+      ): Promise<
+        { ok: true; settings: typeof baseView } | { ok: false; error: string }
+      > => ({
+        ok: true,
+        settings: {
+          ...baseView,
+          transport: (body.transport as typeof baseView.transport) ?? "resend",
+        },
+      }),
+    );
+    render(<EmailDigestPanel loader={loader} saver={saver} />);
+    const select = (await screen.findByLabelText(
+      /^transport$/i,
+    )) as unknown as HTMLSelectElement;
+    fireEvent.change(select, { target: { value: "postmark" } });
+    fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
+    await waitFor(() => expect(saver).toHaveBeenCalled());
+    expect((saver.mock.calls[0][0] as { transport?: string }).transport).toBe(
+      "postmark",
+    );
+    expect(
+      (await screen.findByLabelText(/postmark api key/i)) as HTMLInputElement,
+    ).toBeTruthy();
   });
 
   it("disables Send test until an api_key is configured", async () => {

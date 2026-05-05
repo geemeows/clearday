@@ -435,3 +435,140 @@ describe("runEmailDigestTick", () => {
     expect(loadSignals).toHaveBeenCalledWith("2026-05-03T00:00:00.000Z");
   });
 });
+
+describe("Postmark transport", () => {
+  it("rejects an unknown transport in putEmailDigestSettings", async () => {
+    const out = await putEmailDigestSettings(
+      { transport: "smtp" },
+      { store: memStore(), keySecret: KEY_SECRET },
+    );
+    expect(out).toMatchObject({ ok: false });
+  });
+
+  it("persists transport=postmark and surfaces it on the view", async () => {
+    const store = memStore();
+    const out = await putEmailDigestSettings(
+      {
+        transport: "postmark",
+        api_key: "pm_token",
+        from_email: "from@example.com",
+        to_email: "to@example.com",
+      },
+      { store, keySecret: KEY_SECRET },
+    );
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    expect(out.settings.transport).toBe("postmark");
+    expect(store.current()?.transport).toBe("postmark");
+  });
+
+  it("sends the test email via Postmark with the server token header", async () => {
+    const store = memStore();
+    await putEmailDigestSettings(
+      {
+        transport: "postmark",
+        api_key: "pm_token_123",
+        from_email: "Clearday <noreply@example.com>",
+        to_email: "owner@example.com",
+      },
+      { store, keySecret: KEY_SECRET },
+    );
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ MessageID: "abc" }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    ) as unknown as typeof fetch;
+    const out = await sendEmailDigestTest({
+      store,
+      keySecret: KEY_SECRET,
+      fetch: fetchMock,
+      loadSignals: async () => [],
+    });
+    expect(out).toEqual({ ok: true });
+    const [url, init] = (
+      fetchMock as unknown as { mock: { calls: unknown[][] } }
+    ).mock.calls[0];
+    expect(url).toBe("https://api.postmarkapp.com/email");
+    const headers = (init as RequestInit).headers as Record<string, string>;
+    expect(headers["X-Postmark-Server-Token"]).toBe("pm_token_123");
+    const body = JSON.parse((init as RequestInit).body as string);
+    expect(body.From).toBe("Clearday <noreply@example.com>");
+    expect(body.To).toBe("owner@example.com");
+    expect(body.Subject).toContain("test message");
+    expect(body.MessageStream).toBe("outbound");
+    expect(body.TextBody).toContain(
+      "Postmark transport is configured correctly",
+    );
+  });
+
+  it("surfaces upstream Postmark errors with the Message field", async () => {
+    const store = memStore();
+    await putEmailDigestSettings(
+      {
+        transport: "postmark",
+        api_key: "pm_bad",
+        from_email: "from@example.com",
+        to_email: "to@example.com",
+      },
+      { store, keySecret: KEY_SECRET },
+    );
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            ErrorCode: 10,
+            Message: "Bad or missing API token",
+          }),
+          {
+            status: 422,
+            headers: { "content-type": "application/json" },
+          },
+        ),
+    ) as unknown as typeof fetch;
+    const out = await sendEmailDigestTest({
+      store,
+      keySecret: KEY_SECRET,
+      fetch: fetchMock,
+      loadSignals: async () => [],
+    });
+    expect(out).toMatchObject({ ok: false });
+    if (out.ok) return;
+    expect(out.error).toContain("422");
+    expect(out.error).toContain("Bad or missing API token");
+  });
+
+  it("runEmailDigestTick routes to Postmark when the row's transport is postmark", async () => {
+    const store = memStore({
+      enabled: true,
+      transport: "postmark",
+      from_email: "from@example.com",
+      to_email: "to@example.com",
+      hour_utc: 13,
+    });
+    await putEmailDigestSettings(
+      { api_key: "pm_real" },
+      { store, keySecret: KEY_SECRET },
+    );
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ MessageID: "abc" }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    ) as unknown as typeof fetch;
+    const out = await runEmailDigestTick({
+      store,
+      keySecret: KEY_SECRET,
+      fetch: fetchMock,
+      loadSignals: async () => [],
+      now: () => new Date("2026-05-04T15:00:00.000Z"),
+    });
+    expect(out.kind).toBe("sent");
+    const [url] = (fetchMock as unknown as { mock: { calls: unknown[][] } })
+      .mock.calls[0];
+    expect(url).toBe("https://api.postmarkapp.com/email");
+    expect(store.current()?.last_sent_date).toBe("2026-05-04");
+  });
+});

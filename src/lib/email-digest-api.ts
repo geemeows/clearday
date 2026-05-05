@@ -1,21 +1,31 @@
 // Email digest — fourth alert channel as a periodic morning summary of new
-// Signals since the last digest. The user supplies a Resend API key and a
-// from / to address; Clearday never operates a shared mailer.
+// Signals since the last digest. The user supplies an API key + from / to
+// address for one of the supported HTTP-based transports (Resend, Postmark);
+// Clearday never operates a shared mailer.
 //
 // This module is the single seam every email-digest call site goes through:
 //   - getEmailDigestSettings / putEmailDigestSettings  (Settings panel)
 //   - sendEmailDigestTest                               ("Send test email")
 //   - runEmailDigestTick                                (daily cron)
 //
-// Render + Resend transport are co-located here for v1; SMTP transport and
-// per-Signal email-channel routing through the alert-dispatcher are deferred.
+// True SMTP (nodemailer-style) is not implementable on Cloudflare Workers
+// (no raw TCP), so the second transport is Postmark — same BYO-key shape as
+// Resend, different wire format. Per-Signal email-channel routing through
+// the alert-dispatcher is owned by `alert-channel/email.ts`.
 
 import { decryptSecret, encryptSecret } from "#/lib/llm-crypto";
 import type { StoredSignal } from "#/lib/signal";
 
+export type EmailTransport = "resend" | "postmark";
+
+export const EMAIL_TRANSPORTS: readonly EmailTransport[] = [
+  "resend",
+  "postmark",
+];
+
 export type EmailDigestRow = {
   enabled?: boolean;
-  transport?: "resend";
+  transport?: EmailTransport;
   api_key?: string | null;
   from_email?: string | null;
   to_email?: string | null;
@@ -30,7 +40,7 @@ export type EmailDigestStore = {
 
 export type EmailDigestSettingsView = {
   enabled: boolean;
-  transport: "resend";
+  transport: EmailTransport;
   has_api_key: boolean;
   from_email: string | null;
   to_email: string | null;
@@ -40,6 +50,7 @@ export type EmailDigestSettingsView = {
 
 export type EmailDigestPutBody = {
   enabled?: unknown;
+  transport?: unknown;
   api_key?: unknown;
   from_email?: unknown;
   to_email?: unknown;
@@ -111,7 +122,18 @@ export async function putEmailDigestSettings(
     }
     patch.api_key = await encryptSecret(body.api_key, deps.keySecret);
   }
-  patch.transport = "resend";
+  if (body.transport !== undefined) {
+    if (
+      typeof body.transport !== "string" ||
+      !EMAIL_TRANSPORTS.includes(body.transport as EmailTransport)
+    ) {
+      return {
+        ok: false,
+        error: `transport must be one of ${EMAIL_TRANSPORTS.join(", ")}`,
+      };
+    }
+    patch.transport = body.transport as EmailTransport;
+  }
   const saved = await deps.store.save(patch);
   return { ok: true, settings: toView(saved) };
 }
@@ -129,9 +151,10 @@ export async function sendEmailDigestTest(
     sinceIso: null,
     now,
     isTest: true,
+    transport: ready.transport,
   });
   try {
-    await sendViaResend({
+    await sendViaTransport(ready.transport, {
       apiKey: ready.apiKey,
       from: ready.from,
       to: ready.to,
@@ -184,10 +207,16 @@ export async function runEmailDigestTick(
     ? `${row.last_sent_date}T00:00:00.000Z`
     : new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
   const signals = await deps.loadSignals(sinceIso);
-  const message = renderDigest({ signals, sinceIso, now, isTest: false });
+  const message = renderDigest({
+    signals,
+    sinceIso,
+    now,
+    isTest: false,
+    transport: ready.transport,
+  });
 
   try {
-    await sendViaResend({
+    await sendViaTransport(ready.transport, {
       apiKey: ready.apiKey,
       from: ready.from,
       to: ready.to,
@@ -218,6 +247,7 @@ export type RenderArgs = {
   sinceIso: string | null;
   now: Date;
   isTest: boolean;
+  transport?: EmailTransport;
 };
 
 export type DigestMessage = {
@@ -227,15 +257,15 @@ export type DigestMessage = {
 };
 
 export function renderDigest(args: RenderArgs): DigestMessage {
-  const { signals, now, isTest } = args;
+  const { signals, now, isTest, transport = "resend" } = args;
   const date = utcDateString(now);
   const grouped = groupByKind(signals);
 
   if (isTest) {
     return {
       subject: `Clearday digest — test message (${date})`,
-      html: testHtml(date),
-      text: testText(date),
+      html: testHtml(date, transport),
+      text: testText(date, transport),
     };
   }
 
@@ -343,12 +373,16 @@ function digestHtml(
   return parts.join("");
 }
 
-function testText(date: string): string {
-  return `Clearday digest — test message\n\nIf you're seeing this, your Resend transport is configured correctly. Sent at ${date}.`;
+function transportLabel(transport: EmailTransport): string {
+  return transport === "postmark" ? "Postmark" : "Resend";
 }
 
-function testHtml(date: string): string {
-  return `<h1 style="font-family:sans-serif;font-size:18px">Clearday digest — test message</h1><p style="font-family:sans-serif">If you're seeing this, your Resend transport is configured correctly. Sent at ${escapeHtml(date)}.</p>`;
+function testText(date: string, transport: EmailTransport): string {
+  return `Clearday digest — test message\n\nIf you're seeing this, your ${transportLabel(transport)} transport is configured correctly. Sent at ${date}.`;
+}
+
+function testHtml(date: string, transport: EmailTransport): string {
+  return `<h1 style="font-family:sans-serif;font-size:18px">Clearday digest — test message</h1><p style="font-family:sans-serif">If you're seeing this, your ${transportLabel(transport)} transport is configured correctly. Sent at ${escapeHtml(date)}.</p>`;
 }
 
 function escapeHtml(s: string): string {
@@ -360,10 +394,10 @@ function escapeAttr(s: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Resend transport
+// Transports
 // ---------------------------------------------------------------------------
 
-type ResendSendArgs = {
+type SendArgs = {
   apiKey: string;
   from: string;
   to: string;
@@ -371,7 +405,15 @@ type ResendSendArgs = {
   fetch: typeof fetch;
 };
 
-async function sendViaResend(args: ResendSendArgs): Promise<void> {
+async function sendViaTransport(
+  transport: EmailTransport,
+  args: SendArgs,
+): Promise<void> {
+  if (transport === "postmark") return sendViaPostmark(args);
+  return sendViaResend(args);
+}
+
+async function sendViaResend(args: SendArgs): Promise<void> {
   const res = await args.fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {
@@ -400,12 +442,52 @@ async function sendViaResend(args: ResendSendArgs): Promise<void> {
   }
 }
 
+async function sendViaPostmark(args: SendArgs): Promise<void> {
+  const res = await args.fetch("https://api.postmarkapp.com/email", {
+    method: "POST",
+    headers: {
+      "X-Postmark-Server-Token": args.apiKey,
+      accept: "application/json",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      From: args.from,
+      To: args.to,
+      Subject: args.message.subject,
+      HtmlBody: args.message.html,
+      TextBody: args.message.text,
+      MessageStream: "outbound",
+    }),
+  });
+  if (!res.ok) {
+    let detail = "";
+    try {
+      const body = (await res.json()) as {
+        Message?: string;
+        ErrorCode?: number;
+      };
+      detail = body.Message ?? "";
+    } catch {
+      detail = await res.text().catch(() => "");
+    }
+    throw new Error(
+      `postmark HTTP ${res.status}${detail ? `: ${detail}` : ""}`.trim(),
+    );
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
 type ReadyToSend =
-  | { ok: true; apiKey: string; from: string; to: string }
+  | {
+      ok: true;
+      apiKey: string;
+      from: string;
+      to: string;
+      transport: EmailTransport;
+    }
   | { ok: false; error: string };
 
 async function readyToSend(
@@ -426,13 +508,14 @@ async function readyToSend(
     apiKey,
     from: row.from_email,
     to: row.to_email,
+    transport: row.transport ?? "resend",
   };
 }
 
 function toView(row: EmailDigestRow): EmailDigestSettingsView {
   return {
     enabled: !!row.enabled,
-    transport: "resend",
+    transport: row.transport ?? "resend",
     has_api_key: typeof row.api_key === "string" && row.api_key.length > 0,
     from_email: row.from_email ?? null,
     to_email: row.to_email ?? null,

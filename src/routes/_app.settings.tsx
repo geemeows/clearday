@@ -2451,9 +2451,11 @@ function EffectInputs({
   );
 }
 
+type EmailTransport = "resend" | "postmark";
+
 type EmailDigestSettingsView = {
   enabled: boolean;
-  transport: "resend";
+  transport: EmailTransport;
   has_api_key: boolean;
   from_email: string | null;
   to_email: string | null;
@@ -2463,6 +2465,7 @@ type EmailDigestSettingsView = {
 
 type EmailDigestPutBody = {
   enabled?: boolean;
+  transport?: EmailTransport;
   api_key?: string;
   from_email?: string | null;
   to_email?: string | null;
@@ -2487,11 +2490,18 @@ export function EmailDigestPanel({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
-  const [draft, setDraft] = useState({
+  const [draft, setDraft] = useState<{
+    api_key: string;
+    from_email: string;
+    to_email: string;
+    hour_utc: number;
+    transport: EmailTransport;
+  }>({
     api_key: "",
     from_email: "",
     to_email: "",
     hour_utc: 13,
+    transport: "resend",
   });
 
   const load = useMemo(
@@ -2534,6 +2544,7 @@ export function EmailDigestPanel({
           from_email: v.from_email ?? "",
           to_email: v.to_email ?? "",
           hour_utc: v.hour_utc,
+          transport: v.transport,
         }));
       })
       .catch((e) => {
@@ -2554,6 +2565,7 @@ export function EmailDigestPanel({
         from_email: draft.from_email.trim() || null,
         to_email: draft.to_email.trim() || null,
         hour_utc: draft.hour_utc,
+        transport: draft.transport,
       };
       if (draft.api_key.trim().length > 0) body.api_key = draft.api_key.trim();
       const out = await save(body);
@@ -2608,8 +2620,8 @@ export function EmailDigestPanel({
     >
       <h2 className="text-base font-semibold text-zinc-900">Email digest</h2>
       <p className="mt-1 text-sm text-zinc-500">
-        Daily morning email summarizing new Signals. Bring your own Resend API
-        key — Clearday never operates a shared mailer.
+        Daily morning email summarizing new Signals. Bring your own Resend or
+        Postmark API key — Clearday never operates a shared mailer.
       </p>
 
       {error && (
@@ -2640,6 +2652,30 @@ export function EmailDigestPanel({
               </span>
             </span>
           </label>
+
+          <div>
+            <label
+              htmlFor="email-digest-transport"
+              className="block text-xs uppercase tracking-wide text-zinc-500"
+            >
+              Transport
+            </label>
+            <select
+              id="email-digest-transport"
+              value={draft.transport}
+              onChange={(e) =>
+                setDraft((d) => ({
+                  ...d,
+                  transport: e.target.value as EmailTransport,
+                }))
+              }
+              disabled={busy}
+              className="mt-1 w-full rounded border border-zinc-200 px-2 py-1"
+            >
+              <option value="resend">Resend</option>
+              <option value="postmark">Postmark</option>
+            </select>
+          </div>
 
           <div>
             <label
@@ -2713,12 +2749,18 @@ export function EmailDigestPanel({
               htmlFor="email-digest-key"
               className="block text-xs uppercase tracking-wide text-zinc-500"
             >
-              Resend API key
+              {draft.transport === "postmark" ? "Postmark" : "Resend"} API key
             </label>
             <input
               id="email-digest-key"
               type="password"
-              placeholder={view.has_api_key ? "•••••• (already set)" : "re_..."}
+              placeholder={
+                view.has_api_key
+                  ? "•••••• (already set)"
+                  : draft.transport === "postmark"
+                    ? "Postmark server token"
+                    : "re_..."
+              }
               value={draft.api_key}
               onChange={(e) =>
                 setDraft((d) => ({ ...d, api_key: e.target.value }))
@@ -2727,7 +2769,8 @@ export function EmailDigestPanel({
               className="mt-1 w-full rounded border border-zinc-200 px-2 py-1"
             />
             <p className="mt-1 text-xs text-zinc-500">
-              Stored encrypted at rest; the key is only sent to Resend.
+              Stored encrypted at rest; the key is only sent to{" "}
+              {draft.transport === "postmark" ? "Postmark" : "Resend"}.
             </p>
           </div>
 
