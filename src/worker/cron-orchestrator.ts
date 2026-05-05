@@ -75,6 +75,14 @@ export type OrchestratorDeps = {
    * upsertSignal writes are unmodified.
    */
   loadInboxRules?: () => Promise<InboxRule[]>;
+  /**
+   * Loads `slack_participated_threads` rows so the slack poll can pull
+   * `conversations.replies` for each. Optional — when absent, the slack
+   * poll only fires the mention + DM queries.
+   */
+  loadSlackParticipatedThreads?: () => Promise<
+    Array<{ channel: string; thread_ts: string }>
+  >;
 };
 
 export type OrchestratorReport = {
@@ -198,10 +206,14 @@ async function pollOne(
     if (!account.account_id) {
       throw new Error("slack account_id missing — cannot run search.messages");
     }
+    const participatedThreads = deps.loadSlackParticipatedThreads
+      ? await deps.loadSlackParticipatedThreads()
+      : undefined;
     const signals = await pollSlackSignals(
       account.access_token,
       account.account_id,
       async (url, init) => deps.fetch(url, init),
+      participatedThreads ? { participatedThreads } : {},
     );
     await upsertSignals(deps.store, signals, { rules });
     return signals.length;

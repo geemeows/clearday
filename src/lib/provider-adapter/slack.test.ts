@@ -319,6 +319,141 @@ describe("pollSlackSignals", () => {
     expect(out).toHaveLength(0);
   });
 
+  it("calls conversations.replies for each participated thread and emits thread_reply Signals for non-self replies", async () => {
+    const fetchImpl = vi.fn(async (url: string) => {
+      if (url.includes("conversations.replies")) {
+        return jsonResponse({
+          ok: true,
+          messages: [
+            {
+              type: "message",
+              user: "U_SELF",
+              ts: "1714820000.000100",
+              thread_ts: "1714820000.000100",
+              text: "I'll look into this",
+              team: "T1",
+            },
+            {
+              type: "message",
+              user: "U_OTHER",
+              ts: "1714820500.000200",
+              thread_ts: "1714820000.000100",
+              text: "thanks!",
+              team: "T1",
+            },
+          ],
+        });
+      }
+      return jsonResponse({ ok: true, messages: { matches: [] } });
+    });
+    const out = await pollSlackSignals("token", "U_SELF", fetchImpl, {
+      participatedThreads: [{ channel: "C1", thread_ts: "1714820000.000100" }],
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+    const repliesCall = (fetchImpl.mock.calls as unknown as Array<[string]>)
+      .map((c) => c[0])
+      .find((u) => u.includes("conversations.replies"));
+    expect(repliesCall).toBeDefined();
+    expect(repliesCall).toContain(`channel=${encodeURIComponent("C1")}`);
+    expect(repliesCall).toContain(
+      `ts=${encodeURIComponent("1714820000.000100")}`,
+    );
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({
+      provider: "slack",
+      kind: "thread_reply",
+      source_id: "C1:1714820000.000100",
+      requires_action: false,
+    });
+    expect(out[0]?.payload).toMatchObject({
+      channel: "C1",
+      author: "U_OTHER",
+      thread_ts: "1714820000.000100",
+      text: "thanks!",
+    });
+  });
+
+  it("drops thread replies authored by self and the parent message itself", async () => {
+    const fetchImpl = vi.fn(async (url: string) => {
+      if (url.includes("conversations.replies")) {
+        return jsonResponse({
+          ok: true,
+          messages: [
+            {
+              type: "message",
+              user: "U_SELF",
+              ts: "1714820000.000100",
+              thread_ts: "1714820000.000100",
+              text: "parent",
+            },
+            {
+              type: "message",
+              user: "U_SELF",
+              ts: "1714820500.000200",
+              thread_ts: "1714820000.000100",
+              text: "self reply",
+            },
+          ],
+        });
+      }
+      return jsonResponse({ ok: true, messages: { matches: [] } });
+    });
+    const out = await pollSlackSignals("token", "U_SELF", fetchImpl, {
+      participatedThreads: [{ channel: "C1", thread_ts: "1714820000.000100" }],
+    });
+    expect(out).toHaveLength(0);
+  });
+
+  it("picks the latest non-self reply when a thread has many", async () => {
+    const fetchImpl = vi.fn(async (url: string) => {
+      if (url.includes("conversations.replies")) {
+        return jsonResponse({
+          ok: true,
+          messages: [
+            {
+              type: "message",
+              user: "U_OTHER",
+              ts: "1714820100.000200",
+              thread_ts: "1714820000.000100",
+              text: "first reply",
+            },
+            {
+              type: "message",
+              user: "U_OTHER",
+              ts: "1714820900.000300",
+              thread_ts: "1714820000.000100",
+              text: "newest reply",
+            },
+            {
+              type: "message",
+              user: "U_OTHER",
+              ts: "1714820500.000400",
+              thread_ts: "1714820000.000100",
+              text: "middle reply",
+            },
+          ],
+        });
+      }
+      return jsonResponse({ ok: true, messages: { matches: [] } });
+    });
+    const out = await pollSlackSignals("token", "U_SELF", fetchImpl, {
+      participatedThreads: [{ channel: "C1", thread_ts: "1714820000.000100" }],
+    });
+    expect(out).toHaveLength(1);
+    expect(out[0]?.title).toBe("newest reply");
+  });
+
+  it("does not call conversations.replies when no participated threads are supplied", async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse({ ok: true, messages: { matches: [] } }),
+    );
+    await pollSlackSignals("token", "U_SELF", fetchImpl);
+    const urls = (fetchImpl.mock.calls as unknown as Array<[string]>).map(
+      (c) => c[0],
+    );
+    expect(urls.every((u) => !u.includes("conversations.replies"))).toBe(true);
+  });
+
   it("throws on non-2xx HTTP", async () => {
     const fetchImpl = vi.fn(async () =>
       jsonResponse({ error: "ratelimited" }, 429),

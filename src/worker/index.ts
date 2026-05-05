@@ -648,6 +648,16 @@ export default {
     ctx.waitUntil(
       runScheduledPoll({
         loadInboxRules: () => loadInboxRulesFromService(service),
+        loadSlackParticipatedThreads: async () => {
+          const { data, error } = await service
+            .from("slack_participated_threads")
+            .select("channel, thread_ts");
+          if (error) throw new Error(error.message);
+          return (data ?? []) as Array<{
+            channel: string;
+            thread_ts: string;
+          }>;
+        },
         loadAccounts: async () => {
           const { data, error } = await service
             .from("provider_accounts")
