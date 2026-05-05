@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { buildPushNotification, notificationClickUrl } from "#/lib/sw-handlers";
 
@@ -39,4 +41,47 @@ describe("notificationClickUrl", () => {
     expect(notificationClickUrl(undefined)).toBe("/");
     expect(notificationClickUrl({})).toBe("/");
   });
+});
+
+describe("public/sw.js parity with canonical helpers", () => {
+  const swSource = readFileSync(resolve(process.cwd(), "public/sw.js"), "utf8");
+  const swExports = new Function(
+    `${swSource}\nreturn { buildPushNotification, notificationClickUrl };`,
+  )() as {
+    buildPushNotification: typeof buildPushNotification;
+    notificationClickUrl: typeof notificationClickUrl;
+  };
+
+  const pushCases: Array<Parameters<typeof buildPushNotification>[0]> = [
+    null,
+    {},
+    { title: "PR review requested", body: "Review me", url: "/inbox?id=sig-1" },
+    { title: "  ", body: "" },
+    { title: "Only title" },
+    { url: "/today" },
+  ];
+
+  for (const input of pushCases) {
+    it(`buildPushNotification matches canonical for ${JSON.stringify(input)}`, () => {
+      expect(swExports.buildPushNotification(input)).toEqual(
+        buildPushNotification(input),
+      );
+    });
+  }
+
+  const clickCases = [
+    null,
+    undefined,
+    {},
+    { url: "/inbox?id=abc" },
+    { url: "/" },
+  ];
+
+  for (const input of clickCases) {
+    it(`notificationClickUrl matches canonical for ${JSON.stringify(input)}`, () => {
+      expect(swExports.notificationClickUrl(input)).toBe(
+        notificationClickUrl(input),
+      );
+    });
+  }
 });
