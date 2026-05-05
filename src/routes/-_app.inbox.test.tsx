@@ -12,6 +12,7 @@ import {
   InboxView,
   PrReviewActions,
   SlackReplyComposer,
+  SlackThreadContext,
 } from "#/routes/_app.inbox";
 
 const sample = (
@@ -628,6 +629,65 @@ describe("SlackReplyComposer", () => {
     expect(submit).toHaveBeenCalledWith(
       expect.objectContaining({ signal_id: "sig-slack-1" }),
     );
+  });
+});
+
+describe("SlackThreadContext", () => {
+  it("renders thread messages with author names and a (you) marker for self", async () => {
+    const load = vi.fn(async () => ({
+      ok: true as const,
+      messages: [
+        {
+          ts: "100",
+          user_id: "U001SELF",
+          user_name: "geemeows",
+          text: "starting a thread",
+          is_self: true,
+        },
+        {
+          ts: "200",
+          user_id: "U001OTHER",
+          user_name: "Other Person",
+          text: "thanks",
+          is_self: false,
+        },
+      ],
+    }));
+    render(<SlackThreadContext channel="C1" thread_ts="100" load={load} />);
+    await screen.findByText("starting a thread");
+    expect(load).toHaveBeenCalledWith({ channel: "C1", thread_ts: "100" });
+    expect(screen.getByText("geemeows")).toBeTruthy();
+    expect(screen.getByText("(you)")).toBeTruthy();
+    expect(screen.getByText("Other Person")).toBeTruthy();
+    expect(screen.getByText("thanks")).toBeTruthy();
+  });
+
+  it("falls back to <@id> when the user couldn't be resolved", async () => {
+    const load = vi.fn(async () => ({
+      ok: true as const,
+      messages: [
+        {
+          ts: "100",
+          user_id: "U999",
+          user_name: null,
+          text: "hi",
+          is_self: false,
+        },
+      ],
+    }));
+    render(<SlackThreadContext channel="C1" thread_ts="100" load={load} />);
+    await screen.findByText("hi");
+    expect(screen.getByText("<@U999>")).toBeTruthy();
+  });
+
+  it("surfaces a load error", async () => {
+    const load = vi.fn(async () => ({
+      ok: false as const,
+      error: "missing_scope",
+    }));
+    render(<SlackThreadContext channel="C1" thread_ts="100" load={load} />);
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toMatch(/missing_scope/);
   });
 });
 

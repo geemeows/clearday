@@ -81,6 +81,7 @@ import { runDueRollups } from "#/lib/signal-rollup";
 import { dismissSignal, markSignalReplied } from "#/lib/signal-store";
 import { listSlackChannels } from "#/lib/slack-channels";
 import { postSlackReply } from "#/lib/slack-reply";
+import { loadSlackThread } from "#/lib/slack-thread";
 import {
   DEFAULT_THEME,
   getTheme,
@@ -205,6 +206,10 @@ export default {
 
     if (url.pathname === "/api/slack/reply" && request.method === "POST") {
       return handlePostSlackReply(request, service);
+    }
+
+    if (url.pathname === "/api/slack/thread" && request.method === "GET") {
+      return handleGetSlackThread(url, service);
     }
 
     if (url.pathname === "/api/calendar/decline" && request.method === "POST") {
@@ -1109,6 +1114,43 @@ async function handlePostSlackReply(
       );
     }
   }
+  return json(out, out.ok ? 200 : 400);
+}
+
+async function handleGetSlackThread(
+  url: URL,
+  service: SupabaseService,
+): Promise<Response> {
+  const channel = url.searchParams.get("channel") ?? "";
+  const thread_ts = url.searchParams.get("thread_ts") ?? "";
+  if (!channel || !thread_ts) {
+    return json(
+      {
+        ok: false,
+        error: "channel and thread_ts required",
+        reason: "invalid_input",
+      },
+      400,
+    );
+  }
+  const { data, error } = await service
+    .from("provider_accounts")
+    .select("access_token, account_id")
+    .eq("provider", "slack")
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  const row =
+    (data as {
+      access_token: string | null;
+      account_id: string | null;
+    } | null) ?? null;
+  const token = row?.access_token ?? null;
+  const selfUserId = row?.account_id ?? null;
+  const out = await loadSlackThread(
+    { channel, thread_ts },
+    { token, fetch: (i, init) => fetch(i, init) },
+    selfUserId,
+  );
   return json(out, out.ok ? 200 : 400);
 }
 
