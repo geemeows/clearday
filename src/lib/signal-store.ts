@@ -17,7 +17,7 @@ import type {
 type SupabaseLike = {
   from: (table: string) => {
     upsert: (
-      values: Record<string, unknown>,
+      values: Record<string, unknown> | Record<string, unknown>[],
       options: { onConflict: string },
     ) => Promise<{ error: { message: string } | null }>;
     select: (cols: string) => SelectChain;
@@ -61,34 +61,46 @@ export async function upsertSignal(
   signal: Signal,
   options: UpsertSignalOptions = {},
 ): Promise<void> {
+  await upsertSignals(client, [signal], options);
+}
+
+export async function upsertSignals(
+  client: SupabaseLike,
+  signals: Signal[],
+  options: UpsertSignalOptions = {},
+): Promise<void> {
+  if (signals.length === 0) return;
   const now = options.now ?? new Date();
   const nowIso = now.toISOString();
-  const application = options.rules
-    ? applyInboxRules(signal, options.rules, now)
-    : null;
 
-  const values: Record<string, unknown> = {
-    provider: signal.provider,
-    kind: signal.kind,
-    source_id: signal.source_id,
-    title: signal.title,
-    url: signal.url,
-    payload: signal.payload,
-    requires_action: signal.requires_action,
-    source_created_at: signal.source_created_at,
-    updated_at: nowIso,
-  };
-  if (application) {
-    if (application.dismissed) values.dismissed_at = nowIso;
-    if (application.snoozed_until)
-      values.snoozed_until = application.snoozed_until;
-    if (application.tags.length > 0) values.tags = application.tags;
-    if (application.priority) values.priority = application.priority;
-  }
+  const rows = signals.map((signal) => {
+    const application = options.rules
+      ? applyInboxRules(signal, options.rules, now)
+      : null;
+    const values: Record<string, unknown> = {
+      provider: signal.provider,
+      kind: signal.kind,
+      source_id: signal.source_id,
+      title: signal.title,
+      url: signal.url,
+      payload: signal.payload,
+      requires_action: signal.requires_action,
+      source_created_at: signal.source_created_at,
+      updated_at: nowIso,
+    };
+    if (application) {
+      if (application.dismissed) values.dismissed_at = nowIso;
+      if (application.snoozed_until)
+        values.snoozed_until = application.snoozed_until;
+      if (application.tags.length > 0) values.tags = application.tags;
+      if (application.priority) values.priority = application.priority;
+    }
+    return values;
+  });
 
   const { error } = await client
     .from("signals")
-    .upsert(values, { onConflict: "provider,kind,source_id" });
+    .upsert(rows, { onConflict: "provider,kind,source_id" });
   if (error) throw new Error(`signal upsert failed: ${error.message}`);
 }
 

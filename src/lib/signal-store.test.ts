@@ -81,8 +81,9 @@ describe("upsertSignal", () => {
     const { client, spies } = makeClient({});
     await upsertSignal(client, sample);
     expect(spies.upsert).toHaveBeenCalledTimes(1);
-    const [values, opts] = spies.upsert.mock.calls[0];
+    const [rows, opts] = spies.upsert.mock.calls[0];
     expect(opts).toEqual({ onConflict: "provider,kind,source_id" });
+    const values = rows[0];
     expect(values).toMatchObject({
       provider: "github",
       kind: "pr_review_requested",
@@ -101,7 +102,7 @@ describe("upsertSignal", () => {
     await upsertSignal(client, sample);
     await upsertSignal(client, { ...sample, title: "renamed" });
     expect(spies.upsert).toHaveBeenCalledTimes(2);
-    const second = spies.upsert.mock.calls[1][0];
+    const second = spies.upsert.mock.calls[1][0][0];
     expect(second.title).toBe("renamed");
     expect(second.source_id).toBe(sample.source_id);
   });
@@ -187,7 +188,7 @@ describe("upsertSignal — inbox rules", () => {
         },
       ],
     });
-    const values = spies.upsert.mock.calls[0][0];
+    const values = spies.upsert.mock.calls[0][0][0];
     expect(values.dismissed_at).toBe("2026-05-04T12:00:00.000Z");
   });
 
@@ -207,7 +208,7 @@ describe("upsertSignal — inbox rules", () => {
         },
       ],
     });
-    const values = spies.upsert.mock.calls[0][0];
+    const values = spies.upsert.mock.calls[0][0][0];
     expect(values.snoozed_until).toBe("2026-05-04T13:00:00.000Z");
   });
 
@@ -225,7 +226,7 @@ describe("upsertSignal — inbox rules", () => {
         },
       ],
     });
-    const values = spies.upsert.mock.calls[0][0];
+    const values = spies.upsert.mock.calls[0][0][0];
     expect(values).not.toHaveProperty("dismissed_at");
     expect(values).not.toHaveProperty("snoozed_until");
     expect(values).not.toHaveProperty("tags");
@@ -246,7 +247,7 @@ describe("upsertSignal — inbox rules", () => {
         },
       ],
     });
-    const values = spies.upsert.mock.calls[0][0];
+    const values = spies.upsert.mock.calls[0][0][0];
     expect(values.priority).toBe("high");
   });
 });

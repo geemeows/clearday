@@ -20,7 +20,7 @@ import { pollCalendarSignals } from "#/lib/provider-adapter/google-calendar";
 import { pollJiraSignals } from "#/lib/provider-adapter/jira";
 import { pollLinearSignals } from "#/lib/provider-adapter/linear";
 import type { SupabaseLike } from "#/lib/signal-store";
-import { upsertSignal } from "#/lib/signal-store";
+import { upsertSignals } from "#/lib/signal-store";
 
 export type ProviderAccountRow = {
   provider: string;
@@ -149,7 +149,7 @@ async function pollOne(
       account.access_token,
       async (url, init) => deps.fetch(url, init),
     );
-    for (const sig of signals) await upsertSignal(deps.store, sig, { rules });
+    await upsertSignals(deps.store, signals, { rules });
     return signals.length;
   }
 
@@ -164,7 +164,7 @@ async function pollOne(
       async (url, init) => deps.fetch(url, init),
       deps.now?.(),
     );
-    for (const sig of signals) await upsertSignal(deps.store, sig, { rules });
+    await upsertSignals(deps.store, signals, { rules });
     return signals.length;
   }
 
@@ -177,7 +177,7 @@ async function pollOne(
     const signals = await pollLinearSignals(accessToken, async (url, init) =>
       deps.fetch(url, init),
     );
-    for (const sig of signals) await upsertSignal(deps.store, sig, { rules });
+    await upsertSignals(deps.store, signals, { rules });
     return signals.length;
   }
 
@@ -186,7 +186,7 @@ async function pollOne(
     const signals = await pollJiraSignals(accessToken, async (url, init) =>
       deps.fetch(url, init),
     );
-    for (const sig of signals) await upsertSignal(deps.store, sig, { rules });
+    await upsertSignals(deps.store, signals, { rules });
     return signals.length;
   }
 
