@@ -35,6 +35,7 @@ type ViewMode = "day" | "week" | "month";
 function CalendarPage() {
   const [signals, setSignals] = useState<StoredSignal[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [now, setNow] = useState<Date>(() => new Date());
 
   useEffect(() => {
     let cancelled = false;
@@ -53,12 +54,24 @@ function CalendarPage() {
     };
   }, []);
 
+  // Tick once a minute so the live-event ring, "Next: …" countdown, and
+  // FocusBlocks "upcoming" filter stay fresh without a page reload.
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 60_000);
+    return () => clearInterval(t);
+  }, []);
+
   const events = useMemo(
     () => (signals ? toMeetingEvents(signals) : []),
     [signals],
   );
   return (
-    <CalendarView events={events} loading={signals == null} error={error} />
+    <CalendarView
+      events={events}
+      now={now}
+      loading={signals == null}
+      error={error}
+    />
   );
 }
 
