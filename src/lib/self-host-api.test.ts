@@ -16,8 +16,6 @@ const FULL_ENV: SelfHostEnv = {
   STATE_HMAC_SECRET: "hmac",
   AUTH_PROXY_URL: "https://auth.example.com",
   AI_KEY_SECRET: "ai",
-  GITHUB_CLIENT_ID: "gh-id",
-  GITHUB_CLIENT_SECRET: "gh-secret",
   GOOGLE_CLIENT_ID: "g-id",
   GOOGLE_CLIENT_SECRET: "g-secret",
   SLACK_CLIENT_ID: "s-id",
@@ -46,7 +44,7 @@ describe("getSelfHostInfo", () => {
     expect(serialized).not.toContain("anon");
     expect(serialized).not.toContain("service");
     expect(serialized).not.toContain("hmac");
-    expect(serialized).not.toContain("gh-secret");
+    expect(serialized).not.toContain("g-secret");
   });
 
   it("flags missing required env vars as not present", () => {

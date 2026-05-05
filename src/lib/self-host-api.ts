@@ -19,8 +19,6 @@ export const REQUIRED_ENV_VARS = [
 ] as const;
 
 export const OPTIONAL_ENV_VARS = [
-  "GITHUB_CLIENT_ID",
-  "GITHUB_CLIENT_SECRET",
   "GOOGLE_CLIENT_ID",
   "GOOGLE_CLIENT_SECRET",
   "SLACK_CLIENT_ID",
