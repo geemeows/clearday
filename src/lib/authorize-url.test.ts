@@ -86,7 +86,7 @@ describe("buildAuthorizeUrl (github)", () => {
       "https://auth.example.com/callback/google",
     );
     expect(url.searchParams.get("scope")).toContain(
-      "https://www.googleapis.com/auth/calendar.readonly",
+      "https://www.googleapis.com/auth/calendar.events",
     );
     expect(url.searchParams.get("scope")).toContain("openid");
     expect(url.searchParams.get("access_type")).toBe("offline");
@@ -155,7 +155,7 @@ describe("buildAuthorizeUrl (github)", () => {
     // Slack v2 uses `user_scope` for user-token scopes; `scope` (bot) must not
     // be set since v1 requests no bot scopes.
     expect(url.searchParams.get("user_scope")).toBe(
-      "channels:read,groups:read,im:read,mpim:read,search:read",
+      "channels:read,groups:read,im:read,mpim:read,search:read,users.profile:write,dnd:write",
     );
     expect(url.searchParams.get("scope")).toBeNull();
     expect(url.searchParams.get("response_type")).toBe("code");

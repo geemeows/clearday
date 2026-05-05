@@ -156,8 +156,8 @@ describe("handleSlackWebhook", () => {
     );
     expect(outcome.kind).toBe("stored");
     expect(store.upsert).toHaveBeenCalledTimes(1);
-    const written = store.upsert.mock.calls[0][0] as { kind: string };
-    expect(written.kind).toBe("dm");
+    const rows = store.upsert.mock.calls[0][0] as Array<{ kind: string }>;
+    expect(rows[0].kind).toBe("dm");
   });
 
   it("ignores events that don't normalize to a Signal", async () => {
@@ -433,8 +433,8 @@ describe("handleSlackWebhook", () => {
       "C1",
       "1714820000.000100",
     );
-    const written = store.upsert.mock.calls[0][0] as { kind: string };
-    expect(written.kind).toBe("thread_reply");
+    const rows = store.upsert.mock.calls[0][0] as Array<{ kind: string }>;
+    expect(rows[0].kind).toBe("thread_reply");
   });
 
   it("drops thread replies in unparticipated threads", async () => {
