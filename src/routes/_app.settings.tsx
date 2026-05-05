@@ -71,6 +71,7 @@ function SettingsPage() {
       <NotificationMatrixPanel />
       <QuietHoursPanel />
       <FocusBlockPanel />
+      <FocusDefaultsPanel />
       <AiProviderPanel />
       <AiSafeguardsPanel />
       <InboxRulesPanel />
@@ -1072,12 +1073,14 @@ type PreferencesView = {
   notification_matrix: Record<string, string[]>;
   quiet_hours_v2: Record<string, unknown>;
   focus_block: Record<string, unknown>;
+  focus_defaults: Record<string, unknown>;
 };
 
 type PreferencesPatch = {
   notification_matrix?: Record<string, string[]>;
   quiet_hours_v2?: Record<string, unknown>;
   focus_block?: Record<string, unknown>;
+  focus_defaults?: Record<string, unknown>;
 };
 
 function defaultPrefsLoader(): Promise<PreferencesView> {
@@ -1520,6 +1523,106 @@ export function FocusBlockPanel({
             <span className="text-zinc-500">min</span>
           </label>
         </div>
+      )}
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Focus session defaults (issue #10). Stored on `user_preferences.focus_defaults`
+// and threaded into `startFocusSession` via the worker's `/api/focus` route. v1
+// covers the Slack status emoji; other knobs (default duration, default message)
+// can layer onto the same row when they're needed.
+// ---------------------------------------------------------------------------
+
+const DEFAULT_FOCUS_STATUS_EMOJI = ":no_bell:";
+
+function readFocusEmoji(raw: Record<string, unknown>): string {
+  const v = raw.status_emoji;
+  return typeof v === "string" ? v : DEFAULT_FOCUS_STATUS_EMOJI;
+}
+
+export function FocusDefaultsPanel({
+  loader,
+  saver,
+}: {
+  loader?: () => Promise<PreferencesView>;
+  saver?: (patch: PreferencesPatch) => Promise<PreferencesView>;
+} = {}) {
+  const [emoji, setEmoji] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const load = useMemo(() => loader ?? defaultPrefsLoader, [loader]);
+  const save = useMemo(() => saver ?? defaultPrefsSaver, [saver]);
+
+  useEffect(() => {
+    let cancelled = false;
+    load()
+      .then((view) => {
+        if (cancelled) return;
+        setEmoji(readFocusEmoji(view.focus_defaults ?? {}));
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        setError(e instanceof Error ? e.message : "failed to load");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [load]);
+
+  const persist = useCallback(async () => {
+    if (emoji == null) return;
+    const trimmed = emoji.trim() || DEFAULT_FOCUS_STATUS_EMOJI;
+    setBusy(true);
+    try {
+      await save({ focus_defaults: { status_emoji: trimmed } });
+      setEmoji(trimmed);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "save failed");
+    } finally {
+      setBusy(false);
+    }
+  }, [emoji, save]);
+
+  return (
+    <section
+      aria-label="Focus session defaults"
+      className="mt-8 rounded border border-zinc-200 bg-white p-5"
+    >
+      <h2 className="text-base font-semibold text-zinc-900">Focus defaults</h2>
+      <p className="mt-1 text-sm text-zinc-500">
+        Slack status emoji applied while a focus session is active. Use any
+        Slack-supported shortcode (e.g. <code>:no_bell:</code>,{" "}
+        <code>:headphones:</code>).
+      </p>
+
+      {error && (
+        <p className="mt-3 rounded border border-red-200 bg-red-50 p-2 text-sm text-red-700">
+          {error}
+        </p>
+      )}
+
+      {emoji == null && !error && (
+        <p className="mt-3 text-sm text-zinc-500">Loading…</p>
+      )}
+
+      {emoji != null && (
+        <label className="mt-4 flex items-center gap-3 text-sm">
+          <span className="text-zinc-500">Slack status emoji</span>
+          <input
+            type="text"
+            aria-label="Slack status emoji"
+            value={emoji}
+            placeholder={DEFAULT_FOCUS_STATUS_EMOJI}
+            onChange={(e) => setEmoji(e.target.value)}
+            onBlur={() => persist()}
+            disabled={busy}
+            className="w-40 rounded border border-zinc-200 px-2 py-1 font-mono"
+          />
+        </label>
       )}
     </section>
   );

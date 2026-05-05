@@ -16,6 +16,7 @@ import {
   DataPrivacyPanel,
   EmailDigestPanel,
   FocusBlockPanel,
+  FocusDefaultsPanel,
   IntegrationsPanel,
   NotificationMatrixPanel,
   NotificationsPanel,
@@ -372,6 +373,7 @@ const basePrefs = {
     allow_mentions: true,
     allow_imminent_meeting_minutes: 5,
   },
+  focus_defaults: {},
 };
 
 describe("NotificationMatrixPanel", () => {
@@ -425,6 +427,48 @@ describe("FocusBlockPanel", () => {
           focus_block: expect.objectContaining({ allow_mentions: false }),
         }),
       ),
+    );
+  });
+});
+
+describe("FocusDefaultsPanel", () => {
+  it("loads the current emoji default and persists an edited value on blur", async () => {
+    const saver = vi.fn(async () => basePrefs);
+    render(
+      <FocusDefaultsPanel
+        loader={async () => ({
+          ...basePrefs,
+          focus_defaults: { status_emoji: ":headphones:" },
+        })}
+        saver={saver}
+      />,
+    );
+    const input = (await screen.findByLabelText(
+      /slack status emoji/i,
+    )) as HTMLInputElement;
+    expect(input.value).toBe(":headphones:");
+    fireEvent.change(input, { target: { value: ":coffee:" } });
+    fireEvent.blur(input);
+    await waitFor(() =>
+      expect(saver).toHaveBeenCalledWith({
+        focus_defaults: { status_emoji: ":coffee:" },
+      }),
+    );
+  });
+
+  it("falls back to :no_bell: when the emoji is left empty", async () => {
+    const saver = vi.fn(async () => basePrefs);
+    render(<FocusDefaultsPanel loader={async () => basePrefs} saver={saver} />);
+    const input = (await screen.findByLabelText(
+      /slack status emoji/i,
+    )) as HTMLInputElement;
+    expect(input.value).toBe(":no_bell:");
+    fireEvent.change(input, { target: { value: "   " } });
+    fireEvent.blur(input);
+    await waitFor(() =>
+      expect(saver).toHaveBeenCalledWith({
+        focus_defaults: { status_emoji: ":no_bell:" },
+      }),
     );
   });
 });

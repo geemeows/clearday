@@ -139,6 +139,39 @@ describe("startFocusSession", () => {
     }
   });
 
+  it("uses the injected statusEmoji on the Slack profile call", async () => {
+    const { fn, calls } = recordingFetch((url) => {
+      if (url.includes("calendar/v3")) return jsonResponse(200, { id: "e" });
+      return jsonResponse(200, { ok: true });
+    });
+    await startFocusSession(
+      { duration_minutes: 30 },
+      {
+        tokens: { google: "g", slack: "s" },
+        fetch: fn,
+        now: () => fixedNow,
+        statusEmoji: ":headphones:",
+      },
+    );
+    const status = calls.find((c) => c.url.endsWith("users.profile.set"));
+    const body = JSON.parse(status?.init.body as string);
+    expect(body.profile.status_emoji).toBe(":headphones:");
+  });
+
+  it("falls back to :no_bell: when no statusEmoji is provided", async () => {
+    const { fn, calls } = recordingFetch((url) => {
+      if (url.includes("calendar/v3")) return jsonResponse(200, { id: "e" });
+      return jsonResponse(200, { ok: true });
+    });
+    await startFocusSession(
+      { duration_minutes: 30 },
+      { tokens: { google: "g", slack: "s" }, fetch: fn, now: () => fixedNow },
+    );
+    const status = calls.find((c) => c.url.endsWith("users.profile.set"));
+    const body = JSON.parse(status?.init.body as string);
+    expect(body.profile.status_emoji).toBe(":no_bell:");
+  });
+
   it("rejects non-positive durations", async () => {
     await expect(
       startFocusSession(

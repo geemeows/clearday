@@ -777,13 +777,14 @@ const KNOWN_CHANNELS: AlertChannel[] = [
 ];
 
 const PREFERENCES_COLUMNS =
-  "alert_channels, notification_matrix, quiet_hours_v2, focus_block";
+  "alert_channels, notification_matrix, quiet_hours_v2, focus_block, focus_defaults";
 
 type PreferencesPutBody = {
   alert_channels?: unknown;
   notification_matrix?: unknown;
   quiet_hours_v2?: unknown;
   focus_block?: unknown;
+  focus_defaults?: unknown;
 };
 
 async function loadFullPreferences(service: SupabaseService): Promise<{
@@ -791,6 +792,7 @@ async function loadFullPreferences(service: SupabaseService): Promise<{
   notification_matrix: Record<string, string[]>;
   quiet_hours_v2: Record<string, unknown>;
   focus_block: Record<string, unknown>;
+  focus_defaults: Record<string, unknown>;
 }> {
   const { data, error } = await service
     .from("user_preferences")
@@ -803,6 +805,7 @@ async function loadFullPreferences(service: SupabaseService): Promise<{
     notification_matrix?: Record<string, string[]>;
     quiet_hours_v2?: Record<string, unknown>;
     focus_block?: Record<string, unknown>;
+    focus_defaults?: Record<string, unknown>;
   };
   return {
     alert_channels: (row.alert_channels ?? []).filter((c) =>
@@ -811,6 +814,7 @@ async function loadFullPreferences(service: SupabaseService): Promise<{
     notification_matrix: row.notification_matrix ?? {},
     quiet_hours_v2: row.quiet_hours_v2 ?? {},
     focus_block: row.focus_block ?? {},
+    focus_defaults: row.focus_defaults ?? {},
   };
 }
 
@@ -846,6 +850,16 @@ async function handlePreferencesPut(
       return json({ error: "focus_block must be an object" }, 400);
     }
     patch.focus_block = body.focus_block;
+  }
+  if (body.focus_defaults !== undefined) {
+    if (
+      typeof body.focus_defaults !== "object" ||
+      body.focus_defaults === null ||
+      Array.isArray(body.focus_defaults)
+    ) {
+      return json({ error: "focus_defaults must be an object" }, 400);
+    }
+    patch.focus_defaults = body.focus_defaults;
   }
   const { error } = await service
     .from("user_preferences")
@@ -945,9 +959,14 @@ async function handleStartFocus(
       : undefined;
 
   const tokens = await loadFocusTokens(service);
+  const defaults = await loadFocusDefaults(service);
   const result = await startFocusSession(
     { duration_minutes: duration, message },
-    { tokens, fetch: (i, init) => fetch(i, init) },
+    {
+      tokens,
+      fetch: (i, init) => fetch(i, init),
+      statusEmoji: defaults.status_emoji,
+    },
   );
   return json(result);
 }
@@ -1019,6 +1038,23 @@ async function handlePostSlackReply(
     { token, fetch: (i, init) => fetch(i, init) },
   );
   return json(out, out.ok ? 200 : 400);
+}
+
+async function loadFocusDefaults(
+  service: SupabaseService,
+): Promise<{ status_emoji?: string }> {
+  const { data, error } = await service
+    .from("user_preferences")
+    .select("focus_defaults")
+    .eq("id", true)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  const raw = (data as { focus_defaults?: unknown } | null)?.focus_defaults;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const emoji = (raw as { status_emoji?: unknown }).status_emoji;
+  return typeof emoji === "string" && emoji.trim().length > 0
+    ? { status_emoji: emoji.trim() }
+    : {};
 }
 
 async function loadFocusTokens(
