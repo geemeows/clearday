@@ -12,10 +12,12 @@ import { apiFetch } from "#/lib/api-client";
 import {
   type Conflict,
   type DayBucket,
+  eventsByMonthGrid,
   eventsByWeekDay,
   eventsForDay,
   localDayStart,
   type MeetingEvent,
+  type MonthCell,
   pickFocusBlocks,
   pickNextConflict,
   toMeetingEvents,
@@ -28,7 +30,7 @@ export const Route = createFileRoute("/_app/calendar")({
   component: CalendarPage,
 });
 
-type ViewMode = "day" | "week";
+type ViewMode = "day" | "week" | "month";
 
 function CalendarPage() {
   const [signals, setSignals] = useState<StoredSignal[] | null>(null);
@@ -85,6 +87,10 @@ export function CalendarView({
     () => eventsByWeekDay(events, weekStartFor(anchor)),
     [events, anchor],
   );
+  const monthCells = useMemo<MonthCell[]>(
+    () => eventsByMonthGrid(events, anchor),
+    [events, anchor],
+  );
   const allWeekEvents = useMemo(
     () => weekBuckets.flatMap((b) => b.events),
     [weekBuckets],
@@ -103,15 +109,16 @@ export function CalendarView({
     [todayEvents, now],
   );
 
-  const stepDays = mode === "day" ? 1 : 7;
   const goPrev = () => {
     const d = new Date(anchor);
-    d.setDate(d.getDate() - stepDays);
+    if (mode === "month") d.setMonth(d.getMonth() - 1);
+    else d.setDate(d.getDate() - (mode === "day" ? 1 : 7));
     setAnchor(d);
   };
   const goNext = () => {
     const d = new Date(anchor);
-    d.setDate(d.getDate() + stepDays);
+    if (mode === "month") d.setMonth(d.getMonth() + 1);
+    else d.setDate(d.getDate() + (mode === "day" ? 1 : 7));
     setAnchor(d);
   };
   const goToday = () => setAnchor(localDayStart(now));
@@ -126,6 +133,9 @@ export function CalendarView({
           </ViewTab>
           <ViewTab active={mode === "week"} onClick={() => setMode("week")}>
             Week
+          </ViewTab>
+          <ViewTab active={mode === "month"} onClick={() => setMode("month")}>
+            Month
           </ViewTab>
         </div>
         <div className="ml-auto flex items-center gap-1">
@@ -168,10 +178,10 @@ export function CalendarView({
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_320px]">
         <div>
-          {mode === "day" ? (
-            <DayGrid bucket={todayBucket} now={now} />
-          ) : (
-            <WeekGrid buckets={weekBuckets} now={now} />
+          {mode === "day" && <DayGrid bucket={todayBucket} now={now} />}
+          {mode === "week" && <WeekGrid buckets={weekBuckets} now={now} />}
+          {mode === "month" && (
+            <MonthGrid cells={monthCells} anchor={anchor} now={now} />
           )}
         </div>
         <aside className="space-y-4">
@@ -261,6 +271,78 @@ function WeekGrid({ buckets, now }: { buckets: DayBucket[]; now: Date }) {
         </li>
       ))}
     </ul>
+  );
+}
+
+function MonthGrid({
+  cells,
+  anchor,
+  now,
+}: {
+  cells: MonthCell[];
+  anchor: Date;
+  now: Date;
+}) {
+  const todayKey = localDayStart(now).toDateString();
+  const weekdayHeaders = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  return (
+    <section aria-label="Month grid">
+      <ul className="grid grid-cols-7 gap-px text-xs font-medium uppercase tracking-wider text-zinc-500">
+        {weekdayHeaders.map((w) => (
+          <li key={w} className="px-2 py-1">
+            {w}
+          </li>
+        ))}
+      </ul>
+      <ul className="grid grid-cols-7 gap-px overflow-hidden rounded border border-zinc-200 bg-zinc-200">
+        {cells.map((c) => {
+          const isToday = c.day.toDateString() === todayKey;
+          const focusCount = c.events.filter((e) => e.isFocus).length;
+          return (
+            <li
+              key={c.day.toISOString()}
+              aria-label={`${c.day.toLocaleDateString(undefined, {
+                month: "short",
+                day: "numeric",
+              })}${c.events.length > 0 ? ` — ${c.events.length} events` : ""}`}
+              className={cn(
+                "min-h-[80px] bg-white p-1.5",
+                !c.inMonth && "bg-zinc-50 text-zinc-400",
+              )}
+            >
+              <div className="flex items-center justify-between">
+                <span
+                  className={cn(
+                    "text-xs",
+                    isToday &&
+                      "inline-flex h-5 w-5 items-center justify-center rounded-full bg-zinc-900 text-white",
+                  )}
+                >
+                  {c.day.getDate()}
+                </span>
+                {c.events.length > 0 && (
+                  <span className="rounded bg-zinc-100 px-1.5 text-[10px] font-medium text-zinc-700">
+                    {c.events.length}
+                  </span>
+                )}
+              </div>
+              {focusCount > 0 && (
+                <div className="mt-1 inline-flex items-center gap-1 rounded bg-violet-100 px-1 text-[10px] text-violet-800">
+                  <Focus className="h-2.5 w-2.5" />
+                  {focusCount}
+                </div>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+      <p className="sr-only">
+        {anchor.toLocaleDateString(undefined, {
+          month: "long",
+          year: "numeric",
+        })}
+      </p>
+    </section>
   );
 }
 
@@ -479,6 +561,12 @@ function anchorLabel(anchor: Date, mode: ViewMode): string {
       weekday: "long",
       month: "long",
       day: "numeric",
+      year: "numeric",
+    });
+  }
+  if (mode === "month") {
+    return anchor.toLocaleDateString(undefined, {
+      month: "long",
       year: "numeric",
     });
   }

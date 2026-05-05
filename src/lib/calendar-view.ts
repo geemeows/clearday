@@ -99,6 +99,34 @@ export function eventsByWeekDay(
   return buckets;
 }
 
+/**
+ * 6×7 = 42-cell month grid starting on the Sunday of the week containing
+ * the 1st of `anchor`'s month. Always 42 cells so the grid layout is
+ * stable regardless of where the month starts; the `inMonth` flag marks
+ * cells that fall outside the anchor's month so the UI can dim them.
+ */
+export type MonthCell = DayBucket & { inMonth: boolean };
+
+export function eventsByMonthGrid(
+  events: MeetingEvent[],
+  anchor: Date,
+): MonthCell[] {
+  const monthStart = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
+  const monthIndex = monthStart.getMonth();
+  const start = weekStartFor(monthStart);
+  const cells: MonthCell[] = [];
+  for (let i = 0; i < 42; i += 1) {
+    const day = new Date(start);
+    day.setDate(start.getDate() + i);
+    cells.push({
+      day,
+      events: eventsForDay(events, day),
+      inMonth: day.getMonth() === monthIndex,
+    });
+  }
+  return cells;
+}
+
 export type Conflict = { a: MeetingEvent; b: MeetingEvent };
 
 /**

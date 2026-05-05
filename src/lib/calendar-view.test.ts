@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  eventsByMonthGrid,
   eventsByWeekDay,
   eventsForDay,
   findConflicts,
@@ -133,6 +134,33 @@ describe("eventsForDay / eventsByWeekDay", () => {
     expect(buckets[1].events.map((e) => e.signal.id)).toEqual(["mon"]);
     expect(buckets[2].events.map((e) => e.signal.id)).toEqual(["tue"]);
     expect(buckets[3].events.map((e) => e.signal.id)).toEqual(["wed"]);
+  });
+});
+
+describe("eventsByMonthGrid", () => {
+  it("returns 42 cells starting on Sunday and flags out-of-month days", () => {
+    // May 2026: 1st is Friday. Grid starts Sun Apr 26, ends Sat Jun 6.
+    const anchor = new Date(2026, 4, 4);
+    const events = [
+      ev("a", "2026-05-04T13:00:00.000Z", "2026-05-04T14:00:00.000Z"),
+      ev("b", "2026-05-04T15:00:00.000Z", "2026-05-04T15:30:00.000Z"),
+      ev("c", "2026-04-28T13:00:00.000Z", "2026-04-28T14:00:00.000Z"),
+    ];
+    const cells = eventsByMonthGrid(events, anchor);
+    expect(cells).toHaveLength(42);
+    expect(cells[0].day.getDay()).toBe(0);
+    // Sun Apr 26 is out-of-month, May 4 (Mon, cell index 8) is in-month.
+    expect(cells[0].inMonth).toBe(false);
+    const may4 = cells.find(
+      (c) => c.day.toDateString() === anchor.toDateString(),
+    );
+    expect(may4?.inMonth).toBe(true);
+    expect(may4?.events.map((e) => e.signal.id).sort()).toEqual(["a", "b"]);
+    const apr28 = cells.find(
+      (c) => c.day.toDateString() === new Date(2026, 3, 28).toDateString(),
+    );
+    expect(apr28?.inMonth).toBe(false);
+    expect(apr28?.events.map((e) => e.signal.id)).toEqual(["c"]);
   });
 });
 

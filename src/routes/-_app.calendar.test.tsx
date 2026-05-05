@@ -125,6 +125,24 @@ describe("CalendarView", () => {
     );
   });
 
+  it("switches to month view, renders 42 cells, and steps by month", () => {
+    const now = new Date("2026-05-04T11:00:00.000Z");
+    const events = [
+      ev("a", "2026-05-04T13:00:00.000Z", "2026-05-04T13:30:00.000Z"),
+    ];
+    render(<CalendarView events={events} now={now} />);
+    fireEvent.click(screen.getByRole("tab", { name: "Month" }));
+    const grid = screen.getByLabelText("Month grid");
+    expect(within(grid).getAllByRole("listitem").length).toBeGreaterThanOrEqual(
+      42,
+    );
+    // Anchor label switches to month + year.
+    expect(screen.getAllByText(/May 2026/).length).toBeGreaterThan(0);
+    // Next steps to next month.
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    expect(screen.getAllByText(/June 2026/).length).toBeGreaterThan(0);
+  });
+
   it("renders an empty state when there are no events on the day", () => {
     const now = new Date("2026-05-04T11:00:00.000Z");
     render(<CalendarView events={[]} now={now} />);
