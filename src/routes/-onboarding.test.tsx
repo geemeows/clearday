@@ -170,4 +170,55 @@ describe("SlackAllowlistPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: /save/i }));
     await waitFor(() => expect(saver).toHaveBeenCalledWith(["C0001", "C0002"]));
   });
+
+  it("merges Slack-suggested channel IDs into the textarea without duplicating existing rows", async () => {
+    const loader = vi.fn(async () => ({ channels: ["C0001"] }));
+    const suggestionsLoader = vi.fn(async () => ({
+      ok: true as const,
+      channels: [
+        { id: "C0001", name: "general", is_private: false },
+        { id: "C0002", name: "leads", is_private: true },
+      ],
+    }));
+    render(
+      <SlackAllowlistPanel
+        loader={loader}
+        suggestionsLoader={suggestionsLoader}
+      />,
+    );
+    const ta = (await screen.findByLabelText(
+      /slack channel allowlist/i,
+    )) as HTMLTextAreaElement;
+    expect(ta.value).toBe("C0001");
+    fireEvent.click(
+      screen.getByRole("button", { name: /suggest from slack/i }),
+    );
+    await waitFor(() => expect(ta.value).toBe("C0001\nC0002"));
+    expect(suggestionsLoader).toHaveBeenCalledOnce();
+  });
+
+  it("surfaces the error when Slack suggestions fail and leaves the textarea untouched", async () => {
+    const loader = vi.fn(async () => ({ channels: ["C0001"] }));
+    const suggestionsLoader = vi.fn(async () => ({
+      ok: false as const,
+      error: "slack not connected",
+      needs_reauth: true,
+    }));
+    render(
+      <SlackAllowlistPanel
+        loader={loader}
+        suggestionsLoader={suggestionsLoader}
+      />,
+    );
+    const ta = (await screen.findByLabelText(
+      /slack channel allowlist/i,
+    )) as HTMLTextAreaElement;
+    fireEvent.click(
+      screen.getByRole("button", { name: /suggest from slack/i }),
+    );
+    await waitFor(() =>
+      expect(screen.getByText(/slack not connected/i)).toBeTruthy(),
+    );
+    expect(ta.value).toBe("C0001");
+  });
 });

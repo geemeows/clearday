@@ -349,13 +349,20 @@ export function ProvidersStep({
 type AllowlistView = { channels: string[] };
 type AllowlistLoader = () => Promise<AllowlistView>;
 type AllowlistSaver = (channels: string[]) => Promise<AllowlistView>;
+type SlackChannelSuggestion = { id: string; name: string; is_private: boolean };
+type SuggestionsLoader = () => Promise<
+  | { ok: true; channels: SlackChannelSuggestion[] }
+  | { ok: false; error: string; needs_reauth?: boolean }
+>;
 
 export function SlackAllowlistPanel({
   loader,
   saver,
+  suggestionsLoader,
 }: {
   loader?: AllowlistLoader;
   saver?: AllowlistSaver;
+  suggestionsLoader?: SuggestionsLoader;
 } = {}) {
   const [draft, setDraft] = useState<string | null>(null);
   const [saved, setSaved] = useState<string[] | null>(null);
@@ -378,6 +385,12 @@ export function SlackAllowlistPanel({
           body: { channels },
         }) as Promise<AllowlistView>),
     [saver],
+  );
+  const loadSuggestions = useMemo(
+    () =>
+      suggestionsLoader ??
+      (() => apiFetch("/api/slack/channels") as ReturnType<SuggestionsLoader>),
+    [suggestionsLoader],
   );
 
   useEffect(() => {
@@ -416,6 +429,38 @@ export function SlackAllowlistPanel({
       setBusy(false);
     }
   }, [draft, save]);
+
+  const onSuggest = useCallback(async () => {
+    if (draft == null) return;
+    setBusy(true);
+    setStatus(null);
+    setError(null);
+    try {
+      const out = await loadSuggestions();
+      if (!out.ok) {
+        setError(out.error || "could not load Slack channels");
+        return;
+      }
+      const existing = draft
+        .split("\n")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      const merged = [...existing];
+      for (const ch of out.channels) {
+        if (!merged.includes(ch.id)) merged.push(ch.id);
+      }
+      setDraft(merged.join("\n"));
+      setStatus(
+        out.channels.length === 0
+          ? "No channels found"
+          : `Added ${out.channels.length} from Slack`,
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "suggest failed");
+    } finally {
+      setBusy(false);
+    }
+  }, [draft, loadSuggestions]);
 
   return (
     <div>
@@ -457,6 +502,14 @@ export function SlackAllowlistPanel({
               className="rounded border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50 disabled:opacity-50"
             >
               Save
+            </button>
+            <button
+              type="button"
+              onClick={onSuggest}
+              disabled={busy}
+              className="rounded border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50 disabled:opacity-50"
+            >
+              Suggest from Slack
             </button>
             {saved && (
               <span className="text-xs text-zinc-500">

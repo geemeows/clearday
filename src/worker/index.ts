@@ -71,6 +71,7 @@ import {
 } from "#/lib/self-host-api";
 import type { StoredSignal } from "#/lib/signal";
 import { runDueRollups } from "#/lib/signal-rollup";
+import { listSlackChannels } from "#/lib/slack-channels";
 import { postSlackReply } from "#/lib/slack-reply";
 import { handleSlackWebhook } from "#/lib/slack-webhook";
 import {
@@ -525,6 +526,22 @@ export default {
       );
       if (!out.ok) return json({ ok: false, error: out.error }, 400);
       return json({ ok: true, provider: out.provider });
+    }
+
+    if (url.pathname === "/api/slack/channels" && request.method === "GET") {
+      const { data, error } = await service
+        .from("provider_accounts")
+        .select("access_token")
+        .eq("provider", "slack")
+        .maybeSingle();
+      if (error) return json({ ok: false, error: error.message }, 500);
+      const token =
+        (data as { access_token: string | null } | null)?.access_token ?? null;
+      const out = await listSlackChannels({
+        token,
+        fetch: (i, init) => fetch(i, init),
+      });
+      return json(out, out.ok ? 200 : 400);
     }
 
     if (url.pathname === "/api/slack/allowlist") {
