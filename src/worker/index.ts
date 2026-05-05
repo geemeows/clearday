@@ -94,6 +94,7 @@ import {
 import {
   type DeviceView,
   listDevices,
+  renameDevice,
   subscribe,
   unsubscribe,
   type WebPushSubscriptionStore,
@@ -394,6 +395,22 @@ export default {
     if (pushUnsubMatch && request.method === "DELETE") {
       const out = await unsubscribe(pushUnsubMatch[1], webPushStore(service));
       return json(out);
+    }
+    if (pushUnsubMatch && request.method === "PATCH") {
+      let body: unknown;
+      try {
+        body = await request.json();
+      } catch {
+        return json({ ok: false, error: "invalid json" }, 400);
+      }
+      const out = await renameDevice(
+        pushUnsubMatch[1],
+        body as Parameters<typeof renameDevice>[1],
+        webPushStore(service),
+      );
+      if (!out.ok)
+        return json({ ok: false, error: out.error }, out.status ?? 400);
+      return json({ ok: true, device: out.device });
     }
 
     if (url.pathname === "/api/email-digest") {
@@ -1843,6 +1860,16 @@ function webPushStore(service: SupabaseService): WebPushSubscriptionStore {
         .select("id");
       if (error) throw new Error(error.message);
       return { removed: (data ?? []).length > 0 };
+    },
+    rename: async (id, label) => {
+      const { data, error } = await service
+        .from("web_push_subscriptions")
+        .update({ device_label: label })
+        .eq("id", id)
+        .select("id, endpoint, device_label, last_delivered_at, created_at")
+        .maybeSingle();
+      if (error) throw new Error(error.message);
+      return { device: (data ?? null) as DeviceView | null };
     },
   };
 }

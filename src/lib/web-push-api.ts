@@ -23,7 +23,10 @@ export type WebPushSubscriptionStore = {
     device_label?: string | null;
   }) => Promise<DeviceView>;
   remove: (id: string) => Promise<{ removed: boolean }>;
+  rename: (id: string, label: string) => Promise<{ device: DeviceView | null }>;
 };
+
+export const MAX_DEVICE_LABEL_LENGTH = 64;
 
 export type SubscribeBody = {
   endpoint?: unknown;
@@ -88,6 +91,40 @@ export async function listDevices(
   store: WebPushSubscriptionStore,
 ): Promise<{ devices: DeviceView[] }> {
   return { devices: await store.list() };
+}
+
+export type RenameBody = { device_label?: unknown };
+
+export type RenameResult =
+  | { ok: true; device: DeviceView }
+  | { ok: false; error: string; status?: number };
+
+export async function renameDevice(
+  id: string,
+  body: RenameBody,
+  store: WebPushSubscriptionStore,
+): Promise<RenameResult> {
+  if (!body || typeof body !== "object") {
+    return { ok: false, error: "body must be an object" };
+  }
+  if (typeof body.device_label !== "string") {
+    return { ok: false, error: "device_label must be a string" };
+  }
+  const label = body.device_label.trim();
+  if (label.length === 0) {
+    return { ok: false, error: "device_label must not be empty" };
+  }
+  if (label.length > MAX_DEVICE_LABEL_LENGTH) {
+    return {
+      ok: false,
+      error: `device_label must be at most ${MAX_DEVICE_LABEL_LENGTH} characters`,
+    };
+  }
+  const result = await store.rename(id, label);
+  if (!result.device) {
+    return { ok: false, error: "device not found", status: 404 };
+  }
+  return { ok: true, device: result.device };
 }
 
 /**

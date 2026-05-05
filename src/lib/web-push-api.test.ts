@@ -3,6 +3,7 @@ import {
   type DeviceView,
   deriveDeviceLabel,
   listDevices,
+  renameDevice,
   subscribe,
   unsubscribe,
   type WebPushSubscriptionStore,
@@ -34,6 +35,12 @@ function memoryStore(initial: DeviceView[] = []): WebPushSubscriptionStore {
       const before = devices.length;
       devices = devices.filter((d) => d.id !== id);
       return { removed: devices.length < before };
+    },
+    rename: async (id, label) => {
+      const target = devices.find((d) => d.id === id);
+      if (!target) return { device: null };
+      target.device_label = label;
+      return { device: target };
     },
   };
 }
@@ -121,9 +128,58 @@ describe("unsubscribe", () => {
       list: async () => [],
       upsert: async () => ({}) as DeviceView,
       remove,
+      rename: async () => ({ device: null }),
     });
     expect(result).toEqual({ ok: true, removed: true });
     expect(remove).toHaveBeenCalledWith("dev-1");
+  });
+});
+
+describe("renameDevice", () => {
+  it("trims and persists a new label", async () => {
+    const store = memoryStore();
+    await subscribe(
+      {
+        endpoint: "https://x/1",
+        keys: { p256dh: "p", auth: "a" },
+        user_agent: "Mozilla/5.0 (Macintosh) Chrome/130",
+      },
+      store,
+    );
+    const list1 = await listDevices(store);
+    const id = list1.devices[0].id;
+    const result = await renameDevice(
+      id,
+      { device_label: "  My Mac  " },
+      store,
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.device.device_label).toBe("My Mac");
+  });
+
+  it("rejects empty / non-string / oversize labels", async () => {
+    const store = memoryStore();
+    expect((await renameDevice("dev-1", { device_label: "" }, store)).ok).toBe(
+      false,
+    );
+    expect(
+      (await renameDevice("dev-1", { device_label: "   " }, store)).ok,
+    ).toBe(false);
+    expect((await renameDevice("dev-1", {}, store)).ok).toBe(false);
+    const tooLong = "x".repeat(65);
+    expect(
+      (await renameDevice("dev-1", { device_label: tooLong }, store)).ok,
+    ).toBe(false);
+  });
+
+  it("returns 404-style error when the device is missing", async () => {
+    const store = memoryStore();
+    const result = await renameDevice("nope", { device_label: "Other" }, store);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.status).toBe(404);
+      expect(result.error).toBe("device not found");
+    }
   });
 });
 

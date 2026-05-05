@@ -716,6 +716,42 @@ describe("WebPushDevicesPanel", () => {
     expect(button.disabled).toBe(true);
   });
 
+  it("renames a device through the renamer", async () => {
+    const loader = vi.fn(async () => ({ devices: [sample] }));
+    const renamer = vi.fn(async (id: string, label: string) => ({
+      ...sample,
+      id,
+      device_label: label,
+    }));
+    render(<WebPushDevicesPanel loader={loader} renamer={renamer} />);
+    fireEvent.click(await screen.findByRole("button", { name: /rename/i }));
+    const input = (await screen.findByLabelText(
+      /device label/i,
+    )) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "Work laptop" } });
+    fireEvent.click(screen.getByRole("button", { name: /save/i }));
+    await waitFor(() =>
+      expect(renamer).toHaveBeenCalledWith("dev-1", "Work laptop"),
+    );
+    expect(await screen.findByText(/work laptop/i)).toBeTruthy();
+  });
+
+  it("rejects an empty rename without calling the renamer", async () => {
+    const loader = vi.fn(async () => ({ devices: [sample] }));
+    const renamer = vi.fn();
+    render(<WebPushDevicesPanel loader={loader} renamer={renamer} />);
+    fireEvent.click(await screen.findByRole("button", { name: /rename/i }));
+    const input = (await screen.findByLabelText(
+      /device label/i,
+    )) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "   " } });
+    fireEvent.click(screen.getByRole("button", { name: /save/i }));
+    await waitFor(() =>
+      expect(screen.getByText(/must not be empty/i)).toBeTruthy(),
+    );
+    expect(renamer).not.toHaveBeenCalled();
+  });
+
   it("hides the banner and enables register when VAPID is configured", async () => {
     const loader = vi.fn(async () => ({ devices: [] }));
     const vapidLoader = vi.fn(async () => ({ publicKey: "pk-abc" }));

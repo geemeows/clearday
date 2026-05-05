@@ -259,17 +259,21 @@ export function WebPushDevicesPanel({
   remover,
   register,
   vapidLoader,
+  renamer,
 }: {
   loader?: () => Promise<{ devices: DeviceView[] }>;
   remover?: (id: string) => Promise<void>;
   register?: RegisterFn;
   vapidLoader?: () => Promise<{ publicKey: string | null }>;
+  renamer?: (id: string, label: string) => Promise<DeviceView>;
 } = {}) {
   const [devices, setDevices] = useState<DeviceView[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [vapidConfigured, setVapidConfigured] = useState<boolean | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draftLabel, setDraftLabel] = useState("");
 
   const load = useMemo(
     () =>
@@ -291,6 +295,20 @@ export function WebPushDevicesPanel({
   const reg = useMemo(
     () => register ?? (() => registerThisDevice()),
     [register],
+  );
+  const rename = useMemo(
+    () =>
+      renamer ??
+      (async (id: string, label: string) => {
+        const body = (await apiFetch(`/api/push/subscriptions/${id}`, {
+          method: "PATCH",
+          body: { device_label: label },
+        })) as { ok: boolean; device?: DeviceView; error?: string };
+        if (!body.ok || !body.device)
+          throw new Error(body.error ?? "rename failed");
+        return body.device;
+      }),
+    [renamer],
   );
   const loadVapid = useMemo(
     () =>
@@ -370,6 +388,31 @@ export function WebPushDevicesPanel({
     [remove],
   );
 
+  const onRenameSubmit = useCallback(
+    async (id: string) => {
+      const label = draftLabel.trim();
+      if (label.length === 0) {
+        setError("device_label must not be empty");
+        return;
+      }
+      setBusy(true);
+      try {
+        const updated = await rename(id, label);
+        setDevices(
+          (current) => current?.map((d) => (d.id === id ? updated : d)) ?? null,
+        );
+        setError(null);
+        setEditingId(null);
+        setDraftLabel("");
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "rename failed");
+      } finally {
+        setBusy(false);
+      }
+    },
+    [draftLabel, rename],
+  );
+
   return (
     <section
       aria-label="Push devices"
@@ -423,24 +466,76 @@ export function WebPushDevicesPanel({
               key={d.id}
               className="flex items-center justify-between py-2 text-sm"
             >
-              <span>
-                <strong className="font-medium">
-                  {d.device_label ?? "Unknown device"}
-                </strong>
-                <span className="ml-2 text-zinc-500">
-                  {d.last_delivered_at
-                    ? `Last delivered ${formatRelative(d.last_delivered_at)}`
-                    : "Never delivered"}
-                </span>
-              </span>
-              <button
-                type="button"
-                onClick={() => onRemove(d.id)}
-                disabled={busy}
-                className="text-xs text-zinc-500 underline hover:text-zinc-700 disabled:opacity-50"
-              >
-                Remove
-              </button>
+              {editingId === d.id ? (
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    onRenameSubmit(d.id);
+                  }}
+                  className="flex flex-1 items-center gap-2"
+                >
+                  <input
+                    type="text"
+                    aria-label="Device label"
+                    value={draftLabel}
+                    onChange={(e) => setDraftLabel(e.target.value)}
+                    maxLength={64}
+                    className="flex-1 rounded border border-zinc-200 px-2 py-1 text-sm"
+                  />
+                  <button
+                    type="submit"
+                    disabled={busy}
+                    className="text-xs text-zinc-700 underline hover:text-zinc-900 disabled:opacity-50"
+                  >
+                    Save
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingId(null);
+                      setDraftLabel("");
+                    }}
+                    disabled={busy}
+                    className="text-xs text-zinc-500 underline hover:text-zinc-700 disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                </form>
+              ) : (
+                <>
+                  <span>
+                    <strong className="font-medium">
+                      {d.device_label ?? "Unknown device"}
+                    </strong>
+                    <span className="ml-2 text-zinc-500">
+                      {d.last_delivered_at
+                        ? `Last delivered ${formatRelative(d.last_delivered_at)}`
+                        : "Never delivered"}
+                    </span>
+                  </span>
+                  <span className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingId(d.id);
+                        setDraftLabel(d.device_label ?? "");
+                      }}
+                      disabled={busy}
+                      className="text-xs text-zinc-500 underline hover:text-zinc-700 disabled:opacity-50"
+                    >
+                      Rename
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onRemove(d.id)}
+                      disabled={busy}
+                      className="text-xs text-zinc-500 underline hover:text-zinc-700 disabled:opacity-50"
+                    >
+                      Remove
+                    </button>
+                  </span>
+                </>
+              )}
             </li>
           ))}
         </ul>
