@@ -61,11 +61,12 @@ describe("getSelfHostInfo", () => {
     expect(b.worker_version).toBe(DEFAULT_WORKER_VERSION);
   });
 
-  it("surfaces worker_url, supabase_url, auth_proxy_url verbatim", () => {
+  it("surfaces worker_url, supabase_url, auth_proxy_url, allowed_email verbatim", () => {
     const info = getSelfHostInfo(FULL_ENV, "https://worker.example.com");
     expect(info.worker_url).toBe("https://worker.example.com");
     expect(info.supabase_url).toBe(FULL_ENV.SUPABASE_URL);
     expect(info.auth_proxy_url).toBe(FULL_ENV.AUTH_PROXY_URL);
+    expect(info.allowed_email).toBe(FULL_ENV.ALLOWED_EMAIL);
   });
 });
 

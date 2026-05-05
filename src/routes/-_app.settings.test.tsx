@@ -20,8 +20,6 @@ import {
   type RetentionView,
 } from "#/lib/data-privacy-api";
 import type { IntegrationView } from "#/lib/integrations-api";
-import { PROFILE_UPDATED_EVENT } from "#/lib/profile-api";
-import type { HealthCheckResult, SelfHostInfo } from "#/lib/self-host-api";
 import type { StoredSignal } from "#/lib/signal";
 import { THEME_UPDATED_EVENT, type ThemeView } from "#/lib/theme-api";
 import {
@@ -35,11 +33,9 @@ import {
   IntegrationsPanel,
   NotificationMatrixPanel,
   NotificationsPanel,
-  ProfilePanel,
   QuietHoursPanel,
   SETTINGS_TABS,
   SectionHead,
-  SelfHostPanel,
   Route as SettingsLayoutRoute,
   ThemePanel,
   WebPushDevicesPanel,
@@ -1114,70 +1110,6 @@ describe("EmailDigestPanel", () => {
   });
 });
 
-describe("ProfilePanel", () => {
-  const view = {
-    display_name: "Devy",
-    timezone: "Europe/Paris",
-    locale: "en-US",
-    avatar_url: null,
-  };
-
-  it("loads the profile and prefills the inputs", async () => {
-    const loader = vi.fn(async () => view);
-    render(<ProfilePanel loader={loader} />);
-    const nameInput = (await screen.findByLabelText(
-      /display name/i,
-    )) as HTMLInputElement;
-    expect(nameInput.value).toBe("Devy");
-    expect(loader).toHaveBeenCalledTimes(1);
-  });
-
-  it("saves edits and dispatches the profile-updated event", async () => {
-    const loader = vi.fn(async () => view);
-    const saver = vi.fn(async (patch: { display_name?: string | null }) => ({
-      ok: true as const,
-      profile: { ...view, display_name: patch.display_name ?? null },
-    }));
-    const onUpdate = vi.fn();
-    window.addEventListener(PROFILE_UPDATED_EVENT, onUpdate);
-    try {
-      render(<ProfilePanel loader={loader} saver={saver} />);
-      const nameInput = (await screen.findByLabelText(
-        /display name/i,
-      )) as HTMLInputElement;
-      fireEvent.change(nameInput, { target: { value: "New Name" } });
-      fireEvent.click(screen.getByRole("button", { name: /save/i }));
-      await waitFor(() => expect(saver).toHaveBeenCalled());
-      expect(saver).toHaveBeenCalledWith({
-        display_name: "New Name",
-        timezone: "Europe/Paris",
-        locale: "en-US",
-        avatar_url: null,
-      });
-      await waitFor(() =>
-        expect(screen.getByRole("status").textContent).toMatch(/saved/i),
-      );
-      expect(onUpdate).toHaveBeenCalled();
-    } finally {
-      window.removeEventListener(PROFILE_UPDATED_EVENT, onUpdate);
-    }
-  });
-
-  it("surfaces a validation error from the saver", async () => {
-    const loader = vi.fn(async () => view);
-    const saver = vi.fn(async () => ({
-      ok: false as const,
-      error: "display_name must be at most 200 characters",
-    }));
-    render(<ProfilePanel loader={loader} saver={saver} />);
-    await screen.findByLabelText(/display name/i);
-    fireEvent.click(screen.getByRole("button", { name: /save/i }));
-    await waitFor(() =>
-      expect(screen.getByText(/at most 200 characters/i)).toBeTruthy(),
-    );
-  });
-});
-
 describe("ThemePanel", () => {
   const initial: ThemeView = {
     theme: "system",
@@ -1412,96 +1344,6 @@ describe("DataPrivacyPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: /confirm purge/i }));
     await waitFor(() =>
       expect(screen.getByRole("alert").textContent).toMatch(/confirmation/i),
-    );
-  });
-});
-
-describe("SelfHostPanel", () => {
-  const baseInfo: SelfHostInfo = {
-    worker_url: "https://worker.example.com",
-    supabase_url: "https://abc.supabase.co",
-    auth_proxy_url: "https://auth.example.com",
-    worker_version: "abc1234",
-    env_vars: [
-      { name: "ALLOWED_EMAIL", required: true, present: true },
-      { name: "AI_KEY_SECRET", required: true, present: false },
-      { name: "VAPID_PUBLIC_KEY", required: false, present: true },
-    ],
-  };
-
-  it("renders deployment URLs and the worker version after load", async () => {
-    const loader = vi.fn(async () => baseInfo);
-    render(<SelfHostPanel loader={loader} />);
-    await screen.findByText("https://worker.example.com");
-    expect(screen.getByText("https://abc.supabase.co")).toBeTruthy();
-    expect(screen.getByText("https://auth.example.com")).toBeTruthy();
-    expect(screen.getByText("abc1234")).toBeTruthy();
-    expect(loader).toHaveBeenCalledTimes(1);
-  });
-
-  it("shows env-var presence (set/unset) without leaking values", async () => {
-    const loader = vi.fn(async () => baseInfo);
-    render(<SelfHostPanel loader={loader} />);
-    expect(
-      (await screen.findByLabelText(/ALLOWED_EMAIL set/)).textContent,
-    ).toBe("set");
-    expect(screen.getByLabelText(/AI_KEY_SECRET unset/).textContent).toBe(
-      "unset",
-    );
-    expect(screen.getByLabelText(/VAPID_PUBLIC_KEY set/).textContent).toBe(
-      "set",
-    );
-  });
-
-  it("runs the health check and renders the per-check result", async () => {
-    const loader = vi.fn(async () => baseInfo);
-    const result: HealthCheckResult = {
-      ok: false,
-      checks: [
-        { name: "env:ALLOWED_EMAIL", ok: true },
-        {
-          name: "env:AI_KEY_SECRET",
-          ok: false,
-          detail: "missing required env var",
-        },
-        { name: "supabase", ok: true },
-      ],
-    };
-    const healthRunner = vi.fn(async () => result);
-    render(<SelfHostPanel loader={loader} healthRunner={healthRunner} />);
-    fireEvent.click(
-      await screen.findByRole("button", { name: /run health check/i }),
-    );
-    await waitFor(() => expect(healthRunner).toHaveBeenCalledTimes(1));
-    const status = await screen.findByRole("status", {
-      name: /health check result/i,
-    });
-    expect(status.textContent).toMatch(/some checks failed/i);
-    expect(status.textContent).toMatch(/env:AI_KEY_SECRET/);
-    expect(status.textContent).toMatch(/missing required env var/);
-  });
-
-  it("surfaces a load error from the loader", async () => {
-    const loader = vi.fn(async () => {
-      throw new Error("network down");
-    });
-    render(<SelfHostPanel loader={loader} />);
-    await waitFor(() =>
-      expect(screen.getByRole("alert").textContent).toMatch(/network down/),
-    );
-  });
-
-  it("surfaces a thrown health-check error inline", async () => {
-    const loader = vi.fn(async () => baseInfo);
-    const healthRunner = vi.fn(async () => {
-      throw new Error("502 bad gateway");
-    });
-    render(<SelfHostPanel loader={loader} healthRunner={healthRunner} />);
-    fireEvent.click(
-      await screen.findByRole("button", { name: /run health check/i }),
-    );
-    await waitFor(() =>
-      expect(screen.getByRole("alert").textContent).toMatch(/502/),
     );
   });
 });

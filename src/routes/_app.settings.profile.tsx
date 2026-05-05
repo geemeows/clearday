@@ -1,10 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { SectionHead } from "#/routes/_app.settings";
+import { ProfilePanel } from "#/components/ProfilePanel";
 
 export const Route = createFileRoute("/_app/settings/profile")({
   component: ProfileRoute,
 });
 
 function ProfileRoute() {
-  return <SectionHead title="Profile" comingInIssue={44} />;
+  return <ProfilePanel />;
 }
