@@ -114,6 +114,13 @@ export type SlackWebhookDeps = {
     channel: string,
     threadTs: string,
   ) => Promise<boolean>;
+  /**
+   * Stamps `provider_accounts.last_webhook_received_at = now()` so the
+   * Sources rail can surface webhook freshness. Called once per verified
+   * event_callback (not on url_verification challenges). Best-effort —
+   * errors are swallowed so a DB blip can't make Slack retry the event.
+   */
+  recordWebhookReceived?: () => Promise<void>;
   now?: () => number;
 };
 
@@ -156,6 +163,16 @@ export async function handleSlackWebhook(
 
   if (envelope.type !== "event_callback" || !envelope.event) {
     return { kind: "ignored", reason: "non_event_callback" };
+  }
+
+  if (deps.recordWebhookReceived) {
+    try {
+      await deps.recordWebhookReceived();
+    } catch {
+      // best-effort: a stamp failure must not bubble up to Slack as a
+      // webhook error. Sources rail just won't tick the timestamp forward
+      // until the next successful event.
+    }
   }
 
   const selfUserId = await deps.loadSelfUserId();

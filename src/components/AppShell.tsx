@@ -58,11 +58,17 @@ type SourceStatus = "ok" | "rate_limited" | "auth_failed" | "neutral";
 type ApiSource = {
   provider: string;
   status: "connected" | "disconnected" | "rate_limited" | "auth_failed";
+  last_webhook_at?: string | null;
+};
+
+type SourceMeta = {
+  status: SourceStatus;
+  lastWebhookAt: string | null;
 };
 
 export function AppShell() {
   const path = useRouterState({ select: (s) => s.location.pathname });
-  const statuses = useSourceStatuses();
+  const sourceMeta = useSourceStatuses();
 
   return (
     <div className="flex min-h-screen bg-zinc-50 text-zinc-900">
@@ -103,19 +109,28 @@ export function AppShell() {
           <SectionTitle>Sources</SectionTitle>
           <ul className="mt-1 space-y-0.5">
             {SOURCES.map((s) => {
-              const status = statuses[s.id] ?? "neutral";
+              const meta = sourceMeta[s.id] ?? {
+                status: "neutral" as SourceStatus,
+                lastWebhookAt: null,
+              };
+              const tooltip = sourceTooltip(s.label, meta);
               return (
                 <li
                   key={s.id}
                   className="flex items-center gap-2 rounded px-2 py-1.5 text-sm text-zinc-600"
+                  title={tooltip}
                 >
                   <s.icon className="h-4 w-4" />
                   <span className="flex-1">{s.label}</span>
                   <output
-                    aria-label={`${s.label} status: ${statusLabel(status)}`}
+                    aria-label={`${s.label} status: ${statusLabel(meta.status)}`}
                     data-source={s.id}
-                    data-status={status}
-                    className={cn("h-2 w-2 rounded-full", dotClass(status))}
+                    data-status={meta.status}
+                    data-last-webhook-at={meta.lastWebhookAt ?? ""}
+                    className={cn(
+                      "h-2 w-2 rounded-full",
+                      dotClass(meta.status),
+                    )}
                   />
                 </li>
               );
@@ -194,20 +209,23 @@ export function UserMenu({
   );
 }
 
-function useSourceStatuses(): Record<string, SourceStatus> {
-  const [statuses, setStatuses] = useState<Record<string, SourceStatus>>({});
+function useSourceStatuses(): Record<string, SourceMeta> {
+  const [meta, setMeta] = useState<Record<string, SourceMeta>>({});
   useEffect(() => {
     let cancelled = false;
     apiFetch("/api/sources")
       .then((body) => {
         if (cancelled) return;
         const sources = (body as { sources: ApiSource[] }).sources;
-        const next: Record<string, SourceStatus> = {};
+        const next: Record<string, SourceMeta> = {};
         for (const id of Object.keys(SOURCE_PROVIDER)) {
           const match = sources.find((s) => s.provider === SOURCE_PROVIDER[id]);
-          next[id] = mapStatus(match?.status);
+          next[id] = {
+            status: mapStatus(match?.status),
+            lastWebhookAt: match?.last_webhook_at ?? null,
+          };
         }
-        setStatuses(next);
+        setMeta(next);
       })
       .catch(() => {
         // Leave dots neutral on auth/network failure.
@@ -216,7 +234,13 @@ function useSourceStatuses(): Record<string, SourceStatus> {
       cancelled = true;
     };
   }, []);
-  return statuses;
+  return meta;
+}
+
+function sourceTooltip(label: string, meta: SourceMeta): string | undefined {
+  const status = statusLabel(meta.status);
+  if (!meta.lastWebhookAt) return `${label}: ${status}`;
+  return `${label}: ${status} · last webhook ${meta.lastWebhookAt}`;
 }
 
 function mapStatus(api: ApiSource["status"] | undefined): SourceStatus {

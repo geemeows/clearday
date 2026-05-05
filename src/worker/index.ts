@@ -175,6 +175,13 @@ export default {
         onStored: async (signal) => {
           await dispatchUpsertedSignal(signal, service, dispatcher);
         },
+        recordWebhookReceived: async () => {
+          const { error } = await service
+            .from("provider_accounts")
+            .update({ last_webhook_received_at: new Date().toISOString() })
+            .eq("provider", "slack");
+          if (error) throw new Error(error.message);
+        },
       });
       if (outcome.kind === "challenge") {
         return new Response(outcome.challenge, {
@@ -223,13 +230,16 @@ export default {
       return handleSources(async () => {
         const { data, error } = await service
           .from("provider_accounts")
-          .select("provider, account_id, updated_at, status");
+          .select(
+            "provider, account_id, updated_at, status, last_webhook_received_at",
+          );
         if (error) throw new Error(error.message);
         return (data ?? []) as Array<{
           provider: string;
           account_id: string | null;
           updated_at: string | null;
           status: string | null;
+          last_webhook_received_at: string | null;
         }>;
       });
     }

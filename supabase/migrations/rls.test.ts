@@ -39,6 +39,11 @@ const slackParticipatedSql = readFileSync(
   "utf8",
 );
 
+const webhookReceivedSql = readFileSync(
+  resolve(__dirname, "0017_provider_accounts_webhook_received.sql"),
+  "utf8",
+);
+
 describe("0001_init.sql contents", () => {
   it("declares the (provider, kind, source_id) unique constraint on signals", () => {
     expect(migrationSql).toMatch(
@@ -80,6 +85,14 @@ describe("0015_provider_accounts_status.sql contents", () => {
       expect(providerStatusSql).toContain(`'${v}'`);
     }
     expect(providerStatusSql).toMatch(/check\s*\(\s*status in/i);
+  });
+});
+
+describe("0017_provider_accounts_webhook_received.sql contents", () => {
+  it("adds provider_accounts.last_webhook_received_at as a nullable timestamptz", () => {
+    expect(webhookReceivedSql).toMatch(
+      /alter table public\.provider_accounts\s+add column if not exists last_webhook_received_at timestamptz null/i,
+    );
   });
 });
 

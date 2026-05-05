@@ -498,6 +498,101 @@ describe("handleSlackWebhook", () => {
     expect(outcome).toEqual({ kind: "ignored", reason: "not_actionable" });
   });
 
+  it("calls recordWebhookReceived once per verified event_callback", async () => {
+    const ts = "1714820000";
+    const body = JSON.stringify({
+      type: "event_callback",
+      team_id: "T1",
+      event: {
+        type: "message",
+        channel_type: "im",
+        channel: "D1",
+        user: "U_OTHER",
+        ts: "1714820000.000100",
+        text: "ping",
+      },
+    });
+    const sig = await sign(SECRET, ts, body);
+    const store = makeStore();
+    const recordWebhookReceived = vi.fn(async () => undefined);
+    await handleSlackWebhook(makeRequest({ ts, signature: sig, body }), {
+      signingSecret: SECRET,
+      store: store.client,
+      loadAllowlist: async () => [],
+      loadSelfUserId: async () => "U_SELF",
+      recordWebhookReceived,
+      now: () => 1714820010,
+    });
+    expect(recordWebhookReceived).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not call recordWebhookReceived on url_verification challenges", async () => {
+    const ts = "1714820000";
+    const body = JSON.stringify({ type: "url_verification", challenge: "abc" });
+    const sig = await sign(SECRET, ts, body);
+    const store = makeStore();
+    const recordWebhookReceived = vi.fn(async () => undefined);
+    await handleSlackWebhook(makeRequest({ ts, signature: sig, body }), {
+      signingSecret: SECRET,
+      store: store.client,
+      loadAllowlist: async () => [],
+      loadSelfUserId: async () => "U_SELF",
+      recordWebhookReceived,
+      now: () => 1714820010,
+    });
+    expect(recordWebhookReceived).not.toHaveBeenCalled();
+  });
+
+  it("does not call recordWebhookReceived when the signature is bad", async () => {
+    const ts = "1714820000";
+    const body = JSON.stringify({ type: "url_verification", challenge: "x" });
+    const store = makeStore();
+    const recordWebhookReceived = vi.fn(async () => undefined);
+    await handleSlackWebhook(makeRequest({ ts, signature: "v0=wrong", body }), {
+      signingSecret: SECRET,
+      store: store.client,
+      loadAllowlist: async () => [],
+      loadSelfUserId: async () => "U_SELF",
+      recordWebhookReceived,
+      now: () => 1714820010,
+    });
+    expect(recordWebhookReceived).not.toHaveBeenCalled();
+  });
+
+  it("swallows recordWebhookReceived errors so the webhook does not fail", async () => {
+    const ts = "1714820000";
+    const body = JSON.stringify({
+      type: "event_callback",
+      team_id: "T1",
+      event: {
+        type: "message",
+        channel_type: "im",
+        channel: "D1",
+        user: "U_OTHER",
+        ts: "1714820000.000100",
+        text: "ping",
+      },
+    });
+    const sig = await sign(SECRET, ts, body);
+    const store = makeStore();
+    const recordWebhookReceived = vi.fn(async () => {
+      throw new Error("db down");
+    });
+    const outcome = await handleSlackWebhook(
+      makeRequest({ ts, signature: sig, body }),
+      {
+        signingSecret: SECRET,
+        store: store.client,
+        loadAllowlist: async () => [],
+        loadSelfUserId: async () => "U_SELF",
+        recordWebhookReceived,
+        now: () => 1714820010,
+      },
+    );
+    // Signal still upserts; webhook stamping is best-effort.
+    expect(outcome.kind).toBe("stored");
+  });
+
   it("upsert is idempotent across resent events (same source_id)", async () => {
     const ts1 = "1714820010";
     const ts2 = "1714820020";

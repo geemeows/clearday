@@ -76,6 +76,7 @@ export type SourceStatusRow = {
   account_id: string | null;
   updated_at: string | null;
   status: string | null;
+  last_webhook_received_at?: string | null;
 };
 
 export type SourceHealth =
@@ -89,6 +90,7 @@ export type SourceStatus = {
   status: SourceHealth;
   account_id: string | null;
   updated_at: string | null;
+  last_webhook_at: string | null;
 };
 
 export async function handleSources(
@@ -103,6 +105,7 @@ export async function handleSources(
       status: rowStatus(row),
       account_id: row?.account_id ?? null,
       updated_at: row?.updated_at ?? null,
+      last_webhook_at: row?.last_webhook_received_at ?? null,
     };
   });
   return json({ sources });
