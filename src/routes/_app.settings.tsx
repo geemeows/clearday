@@ -66,6 +66,7 @@ function SettingsPage() {
       <DataPrivacyPanel />
       <SelfHostPanel />
       <NotificationsPanel />
+      <InstallPwaPanel />
       <WebPushDevicesPanel />
       <EmailDigestPanel />
       <NotificationMatrixPanel />
@@ -443,6 +444,96 @@ export function WebPushDevicesPanel({
           ))}
         </ul>
       )}
+    </section>
+  );
+}
+
+type InstallPromptEvent = Event & {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
+};
+
+export function InstallPwaPanel() {
+  const [prompt, setPrompt] = useState<InstallPromptEvent | null>(null);
+  const [installed, setInstalled] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onBeforeInstallPrompt = (e: Event) => {
+      e.preventDefault();
+      setPrompt(e as InstallPromptEvent);
+    };
+    const onInstalled = () => {
+      setInstalled(true);
+      setPrompt(null);
+    };
+    window.addEventListener("beforeinstallprompt", onBeforeInstallPrompt);
+    window.addEventListener("appinstalled", onInstalled);
+    return () => {
+      window.removeEventListener("beforeinstallprompt", onBeforeInstallPrompt);
+      window.removeEventListener("appinstalled", onInstalled);
+    };
+  }, []);
+
+  const onInstall = useCallback(async () => {
+    if (!prompt) return;
+    setBusy(true);
+    try {
+      await prompt.prompt();
+      const choice = await prompt.userChoice;
+      if (choice.outcome === "accepted") {
+        setStatus("Install accepted.");
+      } else {
+        setStatus("Install dismissed.");
+      }
+      setPrompt(null);
+    } finally {
+      setBusy(false);
+    }
+  }, [prompt]);
+
+  if (installed) {
+    return (
+      <section
+        aria-label="Install Clearday"
+        className="mt-8 rounded border border-zinc-200 bg-white p-5"
+      >
+        <h2 className="text-base font-semibold text-zinc-900">
+          Install Clearday
+        </h2>
+        <p className="mt-1 text-sm text-zinc-500">Clearday is installed.</p>
+      </section>
+    );
+  }
+
+  if (!prompt && !status) return null;
+
+  return (
+    <section
+      aria-label="Install Clearday"
+      className="mt-8 rounded border border-zinc-200 bg-white p-5"
+    >
+      <h2 className="text-base font-semibold text-zinc-900">
+        Install Clearday
+      </h2>
+      <p className="mt-1 text-sm text-zinc-500">
+        Add Clearday to your dock or home screen for an app-like experience.
+      </p>
+      <div className="mt-4 flex items-center gap-3">
+        {prompt && (
+          <button
+            type="button"
+            onClick={onInstall}
+            disabled={busy}
+            className="rounded border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50 disabled:opacity-50"
+          >
+            Install Clearday
+          </button>
+        )}
+        {status && <output className="text-sm text-zinc-600">{status}</output>}
+      </div>
     </section>
   );
 }

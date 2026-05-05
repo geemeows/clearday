@@ -17,6 +17,7 @@ import {
   EmailDigestPanel,
   FocusBlockPanel,
   FocusDefaultsPanel,
+  InstallPwaPanel,
   IntegrationsPanel,
   NotificationMatrixPanel,
   NotificationsPanel,
@@ -701,6 +702,53 @@ describe("WebPushDevicesPanel", () => {
     })) as HTMLButtonElement;
     expect(button.disabled).toBe(false);
     expect(screen.queryByText(/VAPID not configured/i)).toBeNull();
+  });
+});
+
+describe("InstallPwaPanel", () => {
+  function fireBeforeInstallPrompt(opts: {
+    prompt: () => Promise<void>;
+    outcome: "accepted" | "dismissed";
+  }): Event {
+    const e = new Event("beforeinstallprompt");
+    Object.assign(e, {
+      prompt: opts.prompt,
+      userChoice: Promise.resolve({ outcome: opts.outcome }),
+    });
+    window.dispatchEvent(e);
+    return e;
+  }
+
+  it("renders nothing until beforeinstallprompt fires", () => {
+    const { container } = render(<InstallPwaPanel />);
+    expect(container.querySelector("section")).toBeNull();
+  });
+
+  it("shows the install button after beforeinstallprompt and triggers prompt on click", async () => {
+    const promptFn = vi.fn(async () => {});
+    render(<InstallPwaPanel />);
+    fireBeforeInstallPrompt({ prompt: promptFn, outcome: "accepted" });
+    fireEvent.click(
+      await screen.findByRole("button", { name: /install clearday/i }),
+    );
+    await waitFor(() => expect(promptFn).toHaveBeenCalled());
+    expect(await screen.findByText(/install accepted/i)).toBeTruthy();
+  });
+
+  it("surfaces a dismissed outcome and hides the section afterwards", async () => {
+    const promptFn = vi.fn(async () => {});
+    render(<InstallPwaPanel />);
+    fireBeforeInstallPrompt({ prompt: promptFn, outcome: "dismissed" });
+    fireEvent.click(
+      await screen.findByRole("button", { name: /install clearday/i }),
+    );
+    expect(await screen.findByText(/install dismissed/i)).toBeTruthy();
+  });
+
+  it("renders an installed state when appinstalled fires", async () => {
+    render(<InstallPwaPanel />);
+    window.dispatchEvent(new Event("appinstalled"));
+    expect(await screen.findByText(/clearday is installed/i)).toBeTruthy();
   });
 });
 
