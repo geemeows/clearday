@@ -142,6 +142,55 @@ describe("dispatchWebPush", () => {
     expect(report.errors).toEqual({ broken: "push HTTP 500" });
   });
 
+  it("encrypts the payload per subscription when buildPayload is provided", async () => {
+    const vapid = await vapidConfig();
+    const uaPair = await crypto.subtle.generateKey(
+      { name: "ECDH", namedCurve: "P-256" },
+      true,
+      ["deriveBits"],
+    );
+    const uaPubRaw = new Uint8Array(
+      await crypto.subtle.exportKey("raw", uaPair.publicKey),
+    );
+    const authBytes = crypto.getRandomValues(new Uint8Array(16));
+
+    const fetchImpl = vi.fn(
+      async (_url: string | URL | Request, _init?: RequestInit) =>
+        new Response(null, { status: 201 }),
+    );
+    const deps: WebPushDispatcherDeps = {
+      vapid,
+      loadSubscriptions: async () => [
+        {
+          id: "dev-1",
+          endpoint: "https://fcm.googleapis.com/fcm/send/abc",
+          p256dh: b64urlEncode(uaPubRaw),
+          auth: b64urlEncode(authBytes),
+        },
+      ],
+      removeSubscription: vi.fn(async () => {}),
+      stampDelivered: vi.fn(async () => {}),
+      fetch: fetchImpl as unknown as typeof fetch,
+      buildPayload: () => ({
+        title: "Review me",
+        body: "https://x/1",
+        url: "https://x/1",
+      }),
+    };
+
+    await dispatchWebPush(signal, deps);
+
+    const init = fetchImpl.mock.calls[0][1] as RequestInit | undefined;
+    const headers = init?.headers as Record<string, string>;
+    expect(headers["content-encoding"]).toBe("aes128gcm");
+    expect(headers["content-type"]).toBe("application/octet-stream");
+    expect(init?.body).toBeInstanceOf(Uint8Array);
+    const body = init?.body as Uint8Array;
+    expect(headers["content-length"]).toBe(String(body.length));
+    expect(body[20]).toBe(65);
+    expect(body.length).toBeGreaterThan(86 + 16);
+  });
+
   it("returns empty report when there are no subscriptions", async () => {
     const vapid = await vapidConfig();
     const deps: WebPushDispatcherDeps = {

@@ -2,12 +2,14 @@
 // subscription, signs each request with VAPID, and prunes subscriptions the
 // push service has rejected as gone (HTTP 404 / 410).
 //
-// V1 sends *tickle* notifications (empty body) — the Service Worker shows a
-// generic notification on push. Encrypted aes128gcm payloads (RFC 8291) are
-// a follow-up; the wire shape here already accommodates them since `send`
-// sets Content-Encoding only when a body is provided.
+// When `buildPayload` is provided, the dispatcher derives a payload per Signal
+// (title / body / url) and ships an aes128gcm-encrypted body per RFC 8291. The
+// SW reads `event.data.json()` and renders the title verbatim. When omitted,
+// the dispatcher falls back to a tickle (empty body) and the SW shows a
+// generic "New Clearday signal" notification — the same v1 behavior.
 
 import type { StoredSignal } from "#/lib/signal";
+import { encryptWebPushPayload } from "#/lib/web-push-encrypt";
 import { signVapidAuth, type VapidConfig } from "#/lib/web-push-vapid";
 
 export type WebPushSubscription = {
@@ -17,6 +19,12 @@ export type WebPushSubscription = {
   auth: string;
 };
 
+export type WebPushPayload = {
+  title?: string;
+  body?: string;
+  url?: string;
+};
+
 export type WebPushDispatcherDeps = {
   vapid: VapidConfig;
   loadSubscriptions: () => Promise<WebPushSubscription[]>;
@@ -24,6 +32,8 @@ export type WebPushDispatcherDeps = {
   stampDelivered: (ids: string[], at: Date) => Promise<void>;
   fetch: typeof fetch;
   now?: () => Date;
+  /** Derive the per-Signal payload to encrypt. Omit for tickle (empty body). */
+  buildPayload?: (signal: StoredSignal) => WebPushPayload | null;
 };
 
 export type DispatchReport = {
@@ -33,7 +43,7 @@ export type DispatchReport = {
 };
 
 export async function dispatchWebPush(
-  _signal: StoredSignal,
+  signal: StoredSignal,
   deps: WebPushDispatcherDeps,
 ): Promise<DispatchReport> {
   const subs = await deps.loadSubscriptions();
@@ -42,17 +52,31 @@ export async function dispatchWebPush(
   const pruned: string[] = [];
   const errors: Record<string, string> = {};
 
+  const payload = deps.buildPayload?.(signal) ?? null;
+  const plaintext = payload ? JSON.stringify(payload) : null;
+
   for (const sub of subs) {
     try {
       const { authorization } = await signVapidAuth(sub.endpoint, deps.vapid, {
         now,
       });
+      const headers: Record<string, string> = { authorization, ttl: "60" };
+      let body: BodyInit | undefined;
+      if (plaintext !== null) {
+        const ciphertext = await encryptWebPushPayload(
+          plaintext,
+          sub.p256dh,
+          sub.auth,
+        );
+        headers["content-encoding"] = "aes128gcm";
+        headers["content-type"] = "application/octet-stream";
+        headers["content-length"] = String(ciphertext.length);
+        body = ciphertext as BodyInit;
+      }
       const res = await deps.fetch(sub.endpoint, {
         method: "POST",
-        headers: {
-          authorization,
-          ttl: "60",
-        },
+        headers,
+        body,
       });
       if (res.status === 404 || res.status === 410) {
         await deps.removeSubscription(sub.id);

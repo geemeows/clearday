@@ -5,7 +5,7 @@
 
 import { sendEmailAlert } from "#/lib/alert-channel/email";
 import { sendSlackDm } from "#/lib/alert-channel/slack-dm";
-import { sendWebPush } from "#/lib/alert-channel/web-push";
+import { buildWebPushPayload, sendWebPush } from "#/lib/alert-channel/web-push";
 import type {
   AlertChannel,
   AlertThreshold,
@@ -116,6 +116,7 @@ export function buildDispatcherDeps(
               await sendWebPush(signal, {
                 vapid,
                 fetch: fetchImpl,
+                buildPayload: buildWebPushPayload,
                 loadSubscriptions: async () => {
                   const { data, error } = await service
                     .from("web_push_subscriptions")

@@ -8,7 +8,17 @@ import type { StoredSignal } from "#/lib/signal";
 import {
   dispatchWebPush,
   type WebPushDispatcherDeps,
+  type WebPushPayload,
 } from "#/lib/web-push-dispatcher";
+
+export function buildWebPushPayload(signal: StoredSignal): WebPushPayload {
+  const title = signal.title?.trim() || "New Clearday signal";
+  return {
+    title,
+    body: signal.url || undefined,
+    url: signal.url || undefined,
+  };
+}
 
 export async function sendWebPush(
   signal: StoredSignal,
