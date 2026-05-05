@@ -22,6 +22,8 @@ beforeAll(async () => {
     GOOGLE_CLIENT_SECRET: "go-secret",
     SLACK_CLIENT_ID: "sl-id",
     SLACK_CLIENT_SECRET: "sl-secret",
+    LINEAR_CLIENT_ID: "lin-id",
+    LINEAR_CLIENT_SECRET: "lin-secret",
     ENVELOPE_PRIVATE_KEY: keys.privateKey,
     ENVELOPE_PUBLIC_KEY: keys.publicKey,
   };
@@ -394,6 +396,75 @@ describe("handleAuthProxyRequest /callback (slack)", () => {
     expect(verified.payload.metadata).toEqual({
       team: { id: "T123", name: "Acme" },
     });
+  });
+});
+
+describe("handleAuthProxyRequest /start (linear)", () => {
+  it("302s to the linear authorize URL with project client_id, read scope, and prompt=consent", async () => {
+    const res = await handleAuthProxyRequest(
+      new Request(
+        "https://auth.example.com/start/linear?backend=https://owner.example.com",
+      ),
+      env,
+      { fetch: vi.fn() as unknown as FetchLike },
+      1000,
+    );
+    expect(res.status).toBe(302);
+    const location = new URL(res.headers.get("location") ?? "");
+    expect(location.origin + location.pathname).toBe(
+      "https://linear.app/oauth/authorize",
+    );
+    expect(location.searchParams.get("client_id")).toBe("lin-id");
+    expect(location.searchParams.get("redirect_uri")).toBe(
+      "https://auth.example.com/callback/linear",
+    );
+    expect(location.searchParams.get("scope")).toBe("read");
+    expect(location.searchParams.get("prompt")).toBe("consent");
+    expect(location.searchParams.get("state")).toBeTruthy();
+  });
+});
+
+describe("handleAuthProxyRequest /callback (linear)", () => {
+  const linearFetch: FetchLike = async (url) => {
+    if (url === "https://api.linear.app/oauth/token") {
+      return okJson({
+        access_token: "lin_oauth_xyz",
+        refresh_token: "lin_rt_xyz",
+        expires_in: 3600,
+        scope: "read",
+      });
+    }
+    if (url === "https://api.linear.app/graphql") {
+      return okJson({ data: { viewer: { id: "linear_user_uuid" } } });
+    }
+    throw new Error(`unexpected url: ${url}`);
+  };
+
+  it("verifies state, exchanges code, and 302s with an envelope carrying the access_token, refresh_token, and viewer-derived account_id", async () => {
+    const state = await signState(
+      { userBackendUrl: "https://owner.example.com", nonce: "nlin" },
+      env.STATE_HMAC_SECRET,
+      1000,
+    );
+    const res = await handleAuthProxyRequest(
+      callbackUrl("linear", { code: "abc", state }),
+      env,
+      { fetch: linearFetch },
+      1000,
+    );
+    expect(res.status).toBe(302);
+    const location = new URL(res.headers.get("location") ?? "");
+    expect(location.origin + location.pathname).toBe(
+      "https://owner.example.com/oauth/exchange",
+    );
+    const envelope = location.searchParams.get("envelope") ?? "";
+    const verified = await verifyEnvelope(envelope, keys.publicKey, 1000);
+    if (!verified.ok) throw new Error(`expected ok, got ${verified.reason}`);
+    expect(verified.payload.provider).toBe("linear");
+    expect(verified.payload.access_token).toBe("lin_oauth_xyz");
+    expect(verified.payload.refresh_token).toBe("lin_rt_xyz");
+    expect(verified.payload.account_id).toBe("linear_user_uuid");
+    expect(typeof verified.payload.expires_at).toBe("number");
   });
 });
 

@@ -18,6 +18,7 @@ export type AuthorizeEnv = {
   GITHUB_CLIENT_ID?: string;
   GOOGLE_CLIENT_ID?: string;
   SLACK_CLIENT_ID?: string;
+  LINEAR_CLIENT_ID?: string;
   STATE_HMAC_SECRET: string;
   /** The auth-proxy's own public URL, used to derive the redirect_uri. */
   AUTH_PROXY_URL: string;
@@ -91,6 +92,8 @@ function clientIdFor(
       return env.GOOGLE_CLIENT_ID;
     case "slack":
       return env.SLACK_CLIENT_ID;
+    case "linear":
+      return env.LINEAR_CLIENT_ID;
   }
 }
 

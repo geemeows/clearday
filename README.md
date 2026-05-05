@@ -55,6 +55,7 @@ or widening a scope is a one-line change there.
 | GitHub | `https://github.com/login/oauth/authorize` | `read:user repo` |
 | Google | `https://accounts.google.com/o/oauth2/v2/auth` (with `access_type=offline&prompt=consent`) | `openid https://www.googleapis.com/auth/calendar.readonly` |
 | Slack  | `https://slack.com/oauth/v2/authorize` | user_scope: `channels:read,groups:read,im:read,mpim:read,search:read` |
+| Linear | `https://linear.app/oauth/authorize` (with `prompt=consent`) | `read` |
 
 ### Required wrangler vars
 
@@ -69,6 +70,7 @@ or widening a scope is a one-line change there.
 - `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`
 - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`
 - `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET`
+- `LINEAR_CLIENT_ID`, `LINEAR_CLIENT_SECRET` (optional — only required if Linear is wired into a deployment)
 
 **Per-user Worker** (what self-hosters configure):
 

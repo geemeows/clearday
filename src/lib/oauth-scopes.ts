@@ -6,7 +6,7 @@
 // kickoff to a new OAuth target — the authorize-URL builder reads the rest
 // from this entry. Scopes start narrow; widen by feature issue when needed.
 
-export type AuthorizeProvider = "github" | "google" | "slack";
+export type AuthorizeProvider = "github" | "google" | "slack" | "linear";
 
 export type AuthorizeProviderConfig = {
   authorizeUrl: string;
@@ -40,6 +40,21 @@ export const AUTHORIZE_PROVIDERS: Record<
     // consents to a previously-authorized app otherwise).
     extraParams: {
       access_type: "offline",
+      prompt: "consent",
+    },
+  },
+  linear: {
+    authorizeUrl: "https://linear.app/oauth/authorize",
+    // `read` is sufficient for the v1 cron-polled `viewer.assignedIssues`
+    // ingest. Write actions (state transitions, comments) widen this per
+    // feature issue.
+    scopes: ["read"],
+    scopeSeparator: ",",
+    scopeParam: "scope",
+    // `prompt=consent` forces Linear to re-issue a refresh_token on every
+    // authorization rather than only on the first consent — keeps the cron
+    // refresh path live across re-connects.
+    extraParams: {
       prompt: "consent",
     },
   },

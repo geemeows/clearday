@@ -310,27 +310,37 @@ describe("exchangeCode — linear", () => {
     LINEAR_CLIENT_SECRET: "lin-secret",
   };
 
-  it("posts code+secret to linear's token endpoint and normalizes the response", async () => {
+  it("posts code+secret to linear's token endpoint, derives account_id from viewer, and normalizes the response", async () => {
     const fetchImpl: FetchLike = async (url, init) => {
-      expect(url).toBe("https://api.linear.app/oauth/token");
-      const params = new URLSearchParams(init?.body ?? "");
-      expect(params.get("client_id")).toBe("lin-id");
-      expect(params.get("client_secret")).toBe("lin-secret");
-      expect(params.get("code")).toBe("c");
-      expect(params.get("grant_type")).toBe("authorization_code");
-      expect(params.get("redirect_uri")).toBe(
-        "https://auth.example.com/callback/linear",
-      );
-      return okJson({
-        access_token: "lin_oauth_abc",
-        refresh_token: "lin_rt",
-        expires_in: 3600,
-        scope: "read,write",
-      });
+      if (url === "https://api.linear.app/oauth/token") {
+        const params = new URLSearchParams(init?.body ?? "");
+        expect(params.get("client_id")).toBe("lin-id");
+        expect(params.get("client_secret")).toBe("lin-secret");
+        expect(params.get("code")).toBe("c");
+        expect(params.get("grant_type")).toBe("authorization_code");
+        expect(params.get("redirect_uri")).toBe(
+          "https://auth.example.com/callback/linear",
+        );
+        return okJson({
+          access_token: "lin_oauth_abc",
+          refresh_token: "lin_rt",
+          expires_in: 3600,
+          scope: "read,write",
+        });
+      }
+      if (url === "https://api.linear.app/graphql") {
+        expect(init?.method).toBe("POST");
+        expect(init?.headers?.authorization).toBe("Bearer lin_oauth_abc");
+        expect(init?.headers?.["content-type"]).toBe("application/json");
+        expect(init?.body).toBe(JSON.stringify({ query: "{ viewer { id } }" }));
+        return okJson({ data: { viewer: { id: "user_uuid_42" } } });
+      }
+      throw new Error(`unexpected url: ${url}`);
     };
     const record = await exchangeCode("linear", "c", linearEnv, fetchImpl);
     expect(record.provider).toBe("linear");
     expect(record.access_token).toBe("lin_oauth_abc");
+    expect(record.account_id).toBe("user_uuid_42");
     expect(record.refresh_token).toBe("lin_rt");
     expect(record.scopes).toEqual(["read", "write"]);
     expect(record.expires_at).not.toBeNull();
@@ -349,6 +359,21 @@ describe("exchangeCode — linear", () => {
     await expect(
       exchangeCode("linear", "c", linearEnv, fetchImpl),
     ).rejects.toThrow(ExchangeError);
+  });
+
+  it("throws when the viewer query returns no id", async () => {
+    const fetchImpl: FetchLike = async (url) => {
+      if (url === "https://api.linear.app/oauth/token") {
+        return okJson({ access_token: "lin_x", scope: "read" });
+      }
+      if (url === "https://api.linear.app/graphql") {
+        return okJson({ data: { viewer: null } });
+      }
+      throw new Error(`unexpected url: ${url}`);
+    };
+    await expect(
+      exchangeCode("linear", "c", linearEnv, fetchImpl),
+    ).rejects.toThrow(/missing id/);
   });
 });
 

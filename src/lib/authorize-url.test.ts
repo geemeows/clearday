@@ -6,6 +6,7 @@ const env: AuthorizeEnv = {
   GITHUB_CLIENT_ID: "gh-client-id",
   GOOGLE_CLIENT_ID: "go-client-id",
   SLACK_CLIENT_ID: "sl-client-id",
+  LINEAR_CLIENT_ID: "lin-client-id",
   STATE_HMAC_SECRET: "test-secret",
   AUTH_PROXY_URL: "https://auth.example.com",
 };
@@ -165,6 +166,39 @@ describe("buildAuthorizeUrl (github)", () => {
       "slack",
       "https://owner.example.com",
       { ...env, SLACK_CLIENT_ID: undefined },
+      1000,
+    );
+    expect(out).toEqual({ ok: false, error: "missing_client_id" });
+  });
+
+  it("builds the linear authorize URL with read scope and prompt=consent", async () => {
+    const out = await buildAuthorizeUrl(
+      "linear",
+      "https://owner.example.com",
+      env,
+      1000,
+      () => "fixed-nonce",
+    );
+    if (!out.ok) throw new Error(`expected ok, got ${out.error}`);
+    const url = new URL(out.url);
+    expect(url.origin + url.pathname).toBe(
+      "https://linear.app/oauth/authorize",
+    );
+    expect(url.searchParams.get("client_id")).toBe("lin-client-id");
+    expect(url.searchParams.get("redirect_uri")).toBe(
+      "https://auth.example.com/callback/linear",
+    );
+    expect(url.searchParams.get("scope")).toBe("read");
+    expect(url.searchParams.get("prompt")).toBe("consent");
+    expect(url.searchParams.get("response_type")).toBe("code");
+    expect(url.searchParams.get("state")).toBeTruthy();
+  });
+
+  it("errors when the project linear client_id is not configured", async () => {
+    const out = await buildAuthorizeUrl(
+      "linear",
+      "https://owner.example.com",
+      { ...env, LINEAR_CLIENT_ID: undefined },
       1000,
     );
     expect(out).toEqual({ ok: false, error: "missing_client_id" });
