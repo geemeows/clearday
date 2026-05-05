@@ -325,22 +325,29 @@ export function BriefingCard({ generator }: { generator?: Generator } = {}) {
       aria-label="Morning briefing"
       className="mt-6 rounded border border-zinc-200 bg-white p-5"
     >
-      <header className="flex items-center justify-between">
+      <header className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-zinc-500">
           <Sparkles className="h-4 w-4" />
           Morning briefing
         </div>
-        {result?.ok && (
-          <button
-            type="button"
-            onClick={regenerate}
-            disabled={busy}
-            className="inline-flex items-center gap-1 rounded border border-zinc-200 px-2.5 py-1 text-xs text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
-          >
-            <RefreshCw className="h-3 w-3" />
-            Regenerate
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {result?.ok && result.used_fallback && (
+            <span className="inline-flex items-center rounded border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800">
+              Running on fallback model
+            </span>
+          )}
+          {result?.ok && (
+            <button
+              type="button"
+              onClick={regenerate}
+              disabled={busy}
+              className="inline-flex items-center gap-1 rounded border border-zinc-200 px-2.5 py-1 text-xs text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
+            >
+              <RefreshCw className="h-3 w-3" />
+              Regenerate
+            </button>
+          )}
+        </div>
       </header>
       <div className="mt-3 text-sm text-zinc-800">
         {busy && !result && (
@@ -351,7 +358,6 @@ export function BriefingCard({ generator }: { generator?: Generator } = {}) {
             <p className="whitespace-pre-line">{result.text}</p>
             <p className="mt-3 text-xs text-zinc-500">
               {result.provider} · {result.model}
-              {result.used_fallback && " · running on fallback model"}
               {result.cached && " · cached for today"}
             </p>
             {regenWarning && (

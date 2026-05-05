@@ -161,7 +161,7 @@ describe("BriefingCard", () => {
       }),
     );
     render(<BriefingCard generator={generator} />);
-    await waitFor(() => screen.getByText(/running on fallback model/));
+    await waitFor(() => screen.getByText(/running on fallback model/i));
   });
 
   it("shows the budget-reached message when refused", async () => {
