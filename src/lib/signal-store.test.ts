@@ -3,6 +3,7 @@ import type { Signal, StoredSignal } from "#/lib/signal";
 import {
   dismissSignal,
   listSignals,
+  markSignalReplied,
   type SupabaseLike,
   upsertSignal,
 } from "#/lib/signal-store";
@@ -255,5 +256,26 @@ describe("dismissSignal", () => {
     expect(spies.update).toHaveBeenCalledTimes(1);
     expect(spies.update.mock.calls[0][0]).toHaveProperty("dismissed_at");
     expect(spies.eq).toHaveBeenCalledWith("id", "abc-123");
+  });
+});
+
+describe("markSignalReplied", () => {
+  it("flips requires_action to false on the matching id", async () => {
+    const { client, spies } = makeClient({});
+    await markSignalReplied(client, "sig-1");
+    expect(spies.update).toHaveBeenCalledTimes(1);
+    const patch = spies.update.mock.calls[0][0];
+    expect(patch).toMatchObject({ requires_action: false });
+    expect(patch).toHaveProperty("updated_at");
+    expect(spies.eq).toHaveBeenCalledWith("id", "sig-1");
+  });
+
+  it("throws when the update reports an error", async () => {
+    const { client } = makeClient({
+      updateResult: { error: { message: "rls denied" } },
+    });
+    await expect(markSignalReplied(client, "sig-2")).rejects.toThrow(
+      "signal mark replied failed: rls denied",
+    );
   });
 });

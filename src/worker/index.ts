@@ -75,6 +75,7 @@ import {
 } from "#/lib/self-host-api";
 import type { StoredSignal } from "#/lib/signal";
 import { runDueRollups } from "#/lib/signal-rollup";
+import { markSignalReplied } from "#/lib/signal-store";
 import { listSlackChannels } from "#/lib/slack-channels";
 import { postSlackReply } from "#/lib/slack-reply";
 import { handleSlackWebhook } from "#/lib/slack-webhook";
@@ -980,6 +981,7 @@ async function handleSubmitPrReview(
     number?: unknown;
     event?: unknown;
     body?: unknown;
+    signal_id?: unknown;
   };
   try {
     body = (await request.json()) as typeof body;
@@ -990,6 +992,10 @@ async function handleSubmitPrReview(
   const number = Number(body.number);
   const event = body.event as PrReviewEvent;
   const message = typeof body.body === "string" ? body.body : undefined;
+  const signalId =
+    typeof body.signal_id === "string" && body.signal_id.length > 0
+      ? body.signal_id
+      : null;
 
   const { data, error } = await service
     .from("provider_accounts")
@@ -1004,6 +1010,9 @@ async function handleSubmitPrReview(
     { repo, number, event, body: message },
     { token, fetch: (i, init) => fetch(i, init) },
   );
+  if (out.ok && signalId) {
+    await markSignalReplied(service, signalId);
+  }
   return json(out, out.ok ? 200 : 400);
 }
 
@@ -1011,7 +1020,12 @@ async function handlePostSlackReply(
   request: Request,
   service: SupabaseService,
 ): Promise<Response> {
-  let body: { channel?: unknown; text?: unknown; thread_ts?: unknown };
+  let body: {
+    channel?: unknown;
+    text?: unknown;
+    thread_ts?: unknown;
+    signal_id?: unknown;
+  };
   try {
     body = (await request.json()) as typeof body;
   } catch {
@@ -1023,6 +1037,10 @@ async function handlePostSlackReply(
     typeof body.thread_ts === "string" && body.thread_ts.length > 0
       ? body.thread_ts
       : undefined;
+  const signalId =
+    typeof body.signal_id === "string" && body.signal_id.length > 0
+      ? body.signal_id
+      : null;
 
   const { data, error } = await service
     .from("provider_accounts")
@@ -1037,6 +1055,9 @@ async function handlePostSlackReply(
     { channel, text, thread_ts },
     { token, fetch: (i, init) => fetch(i, init) },
   );
+  if (out.ok && signalId) {
+    await markSignalReplied(service, signalId);
+  }
   return json(out, out.ok ? 200 : 400);
 }
 

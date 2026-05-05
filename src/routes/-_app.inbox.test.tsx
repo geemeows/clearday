@@ -381,6 +381,23 @@ describe("PrReviewActions", () => {
       expect(openUrl).toHaveBeenCalledWith("https://example.test/oauth/github"),
     );
   });
+
+  it("forwards signal_id when provided so the worker can flip requires_action", async () => {
+    const submit = vi.fn(async () => ({ ok: true }));
+    render(
+      <PrReviewActions
+        repo="o/r"
+        number={9}
+        signalId="sig-pr-1"
+        submit={submit}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /approve/i }));
+    await waitFor(() => expect(submit).toHaveBeenCalled());
+    expect(submit).toHaveBeenCalledWith(
+      expect.objectContaining({ signal_id: "sig-pr-1" }),
+    );
+  });
 });
 
 describe("SlackReplyComposer", () => {
@@ -471,6 +488,25 @@ describe("SlackReplyComposer", () => {
     );
     await waitFor(() =>
       expect(openUrl).toHaveBeenCalledWith("https://example.test/oauth/slack"),
+    );
+  });
+
+  it("forwards signal_id when provided so the worker can flip requires_action", async () => {
+    const submit = vi.fn(async () => ({ ok: true }));
+    render(
+      <SlackReplyComposer
+        channel="C1"
+        signalId="sig-slack-1"
+        submit={submit}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText("Slack reply"), {
+      target: { value: "thx" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
+    await waitFor(() => expect(submit).toHaveBeenCalled());
+    expect(submit).toHaveBeenCalledWith(
+      expect.objectContaining({ signal_id: "sig-slack-1" }),
     );
   });
 });

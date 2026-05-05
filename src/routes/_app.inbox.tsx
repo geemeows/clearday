@@ -438,6 +438,7 @@ type PrReviewSubmit = (params: {
   number: number;
   event: PrReviewEvent;
   body?: string;
+  signal_id?: string;
 }) => Promise<{ ok: boolean; error?: string; needs_reauth?: boolean }>;
 
 const defaultPrReviewSubmit: PrReviewSubmit = async (params) =>
@@ -570,7 +571,13 @@ export function PrReviewActions({
     setStatus(null);
     if (signalId) onReplyStart?.(signalId);
     try {
-      const out = await submit({ repo, number, event, body: body.trim() });
+      const out = await submit({
+        repo,
+        number,
+        event,
+        body: body.trim(),
+        signal_id: signalId,
+      });
       if (out.ok) {
         setStatus({ kind: "ok", event });
         setBody("");
@@ -729,6 +736,7 @@ type SlackReplySubmit = (params: {
   channel: string;
   text: string;
   thread_ts?: string;
+  signal_id?: string;
 }) => Promise<{ ok: boolean; error?: string; needs_reauth?: boolean }>;
 
 const defaultSlackReplySubmit: SlackReplySubmit = async (params) =>
@@ -821,7 +829,12 @@ export function SlackReplyComposer({
     setStatus(null);
     if (signalId) onReplyStart?.(signalId);
     try {
-      const out = await submit({ channel, text: text.trim(), thread_ts });
+      const out = await submit({
+        channel,
+        text: text.trim(),
+        thread_ts,
+        signal_id: signalId,
+      });
       if (out.ok) {
         setStatus({ kind: "ok" });
         setText("");

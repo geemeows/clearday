@@ -143,4 +143,23 @@ export async function dismissSignal(
   if (error) throw new Error(`signal dismiss failed: ${error.message}`);
 }
 
+/**
+ * Flip `requires_action` to false on the matching Signal so the optimistic
+ * "Replied" state in the inbox survives a reload. Used by the PR-review and
+ * Slack-reply HTTP handlers after a successful upstream send.
+ */
+export async function markSignalReplied(
+  client: SupabaseLike,
+  id: string,
+): Promise<void> {
+  const { error } = await client
+    .from("signals")
+    .update({
+      requires_action: false,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id);
+  if (error) throw new Error(`signal mark replied failed: ${error.message}`);
+}
+
 export type { SupabaseLike };
