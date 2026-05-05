@@ -39,9 +39,14 @@ function makeRequest(opts: {
 }
 
 function makeStore() {
-  const upsert = vi.fn(async (_values: Record<string, unknown>) => ({
-    error: null,
-  }));
+  const upsert = vi.fn(
+    async (
+      _values: Record<string, unknown> | Record<string, unknown>[],
+      _options: { onConflict: string },
+    ) => ({
+      error: null,
+    }),
+  );
   return {
     upsert,
     client: {
