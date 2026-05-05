@@ -124,6 +124,7 @@ export default {
         service,
         (i, init) => fetch(i, init),
         vapidFromEnv(env),
+        env.AI_KEY_SECRET ?? null,
       );
       const outcome = await handleSlackWebhook(request, {
         signingSecret: env.SLACK_SIGNING_SECRET,
@@ -609,6 +610,7 @@ export default {
       service,
       fetchImpl,
       vapidFromEnv(env),
+      env.AI_KEY_SECRET ?? null,
     );
     ctx.waitUntil(
       runMeetingAlertTick({

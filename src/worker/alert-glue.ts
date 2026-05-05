@@ -3,6 +3,7 @@
 // active focus block) and turns idempotency / queue inserts into the
 // dispatcher's `alreadyRecorded` / `enqueueDelivery` contracts.
 
+import { sendEmailAlert } from "#/lib/alert-channel/email";
 import { sendSlackDm } from "#/lib/alert-channel/slack-dm";
 import { sendWebPush } from "#/lib/alert-channel/web-push";
 import type {
@@ -11,6 +12,8 @@ import type {
   DispatcherDeps,
 } from "#/lib/alert-dispatcher";
 import { dispatchAlert } from "#/lib/alert-dispatcher";
+import type { EmailDigestRow } from "#/lib/email-digest-api";
+import { decryptSecret } from "#/lib/llm-crypto";
 import {
   DEFAULT_FOCUS_BLOCK,
   DEFAULT_MATRIX,
@@ -38,6 +41,7 @@ export function buildDispatcherDeps(
   service: Service,
   fetchImpl: typeof fetch,
   vapid?: VapidConfig | null,
+  emailKeySecret?: string | null,
 ): DispatcherDeps {
   return {
     loadPreferences: () => loadNotificationPrefs(service),
@@ -82,6 +86,29 @@ export function buildDispatcherDeps(
           fetch: fetchImpl,
         });
       },
+      ...(emailKeySecret
+        ? {
+            email: async (signal: StoredSignal) => {
+              const { data, error } = await service
+                .from("user_preferences")
+                .select("email_digest")
+                .eq("id", true)
+                .maybeSingle();
+              if (error) throw new Error(error.message);
+              const row = (data?.email_digest as EmailDigestRow | null) ?? null;
+              if (!row?.api_key || !row?.from_email || !row?.to_email) {
+                throw new Error("email channel not configured");
+              }
+              const apiKey = await decryptSecret(row.api_key, emailKeySecret);
+              await sendEmailAlert(signal, {
+                apiKey,
+                from: row.from_email,
+                to: row.to_email,
+                fetch: fetchImpl,
+              });
+            },
+          }
+        : {}),
       ...(vapid
         ? {
             web_push: async (signal: StoredSignal) => {
