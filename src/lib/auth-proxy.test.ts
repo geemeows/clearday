@@ -31,6 +31,25 @@ describe("handleAuthProxyRequest", () => {
     expect(location.searchParams.get("state")).toBe(state);
   });
 
+  it.each([
+    "linear",
+    "jira",
+  ])("redirects %s callbacks to <userBackendUrl>/oauth/exchange", async (provider) => {
+    const state = await signState(
+      { userBackendUrl: "https://owner.example.com", nonce: `n-${provider}` },
+      env.STATE_HMAC_SECRET,
+      1000,
+    );
+    const res = await handleAuthProxyRequest(
+      callbackUrl(provider, { code: "abc", state }),
+      env,
+      1000,
+    );
+    expect(res.status).toBe(302);
+    const location = new URL(res.headers.get("location") ?? "");
+    expect(location.searchParams.get("provider")).toBe(provider);
+  });
+
   it("rejects unknown providers with 400", async () => {
     const state = await signState(
       { userBackendUrl: "https://owner.example.com", nonce: "n2" },

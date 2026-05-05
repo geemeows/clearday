@@ -9,7 +9,13 @@ export type AuthProxyEnv = {
   STATE_HMAC_SECRET: string;
 };
 
-const KNOWN_PROVIDERS = new Set(["github", "google", "slack"]);
+const KNOWN_PROVIDERS = new Set([
+  "github",
+  "google",
+  "slack",
+  "linear",
+  "jira",
+]);
 const TEXT_HEADERS = { "content-type": "text/plain; charset=utf-8" };
 
 export async function handleAuthProxyRequest(
