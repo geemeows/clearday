@@ -1,17 +1,20 @@
-// Email per-Signal alert channel. Posts a single-Signal email via the Resend
-// transport already configured for the email digest, reusing its api_key /
-// from_email / to_email so users only configure email once.
+// Email per-Signal alert channel. Posts a single-Signal email via the same
+// transport (Resend or Postmark) already configured for the email digest,
+// reusing its api_key / from_email / to_email / transport so users only
+// configure email once.
 //
 // The dispatcher fan-out passes a `(signal) => Promise<void>` sender; this
 // module renders a single-Signal email and throws on transport failure so
 // the dispatcher records the error against this channel.
 
+import type { EmailTransport } from "#/lib/email-digest-api";
 import type { StoredSignal } from "#/lib/signal";
 
 export type EmailAlertDeps = {
   apiKey: string;
   from: string;
   to: string;
+  transport?: EmailTransport;
   fetch: typeof fetch;
 };
 
@@ -20,6 +23,18 @@ export async function sendEmailAlert(
   deps: EmailAlertDeps,
 ): Promise<void> {
   const message = formatAlertEmail(signal);
+  const transport: EmailTransport = deps.transport ?? "resend";
+  if (transport === "postmark") {
+    await sendViaPostmark(deps, message);
+    return;
+  }
+  await sendViaResend(deps, message);
+}
+
+async function sendViaResend(
+  deps: EmailAlertDeps,
+  message: AlertEmail,
+): Promise<void> {
   const res = await deps.fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {
@@ -45,6 +60,41 @@ export async function sendEmailAlert(
     }
     throw new Error(
       `resend HTTP ${res.status}${detail ? `: ${detail}` : ""}`.trim(),
+    );
+  }
+}
+
+async function sendViaPostmark(
+  deps: EmailAlertDeps,
+  message: AlertEmail,
+): Promise<void> {
+  const res = await deps.fetch("https://api.postmarkapp.com/email", {
+    method: "POST",
+    headers: {
+      "X-Postmark-Server-Token": deps.apiKey,
+      accept: "application/json",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      From: deps.from,
+      To: deps.to,
+      Subject: message.subject,
+      HtmlBody: message.html,
+      TextBody: message.text,
+      MessageStream: "outbound",
+    }),
+  });
+  if (!res.ok) {
+    const raw = await res.text().catch(() => "");
+    let detail = "";
+    try {
+      const body = JSON.parse(raw) as { Message?: string };
+      detail = body.Message ?? "";
+    } catch {
+      detail = raw;
+    }
+    throw new Error(
+      `postmark HTTP ${res.status}${detail ? `: ${detail}` : ""}`.trim(),
     );
   }
 }

@@ -104,6 +104,7 @@ export function buildDispatcherDeps(
                 apiKey,
                 from: row.from_email,
                 to: row.to_email,
+                transport: row.transport ?? "resend",
                 fetch: fetchImpl,
               });
             },

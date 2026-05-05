@@ -124,4 +124,61 @@ describe("sendEmailAlert", () => {
       }),
     ).rejects.toThrow(/resend HTTP 502.*upstream_oops/);
   });
+
+  it("POSTs to Postmark with PascalCase body when transport is postmark", async () => {
+    const fetchMock = vi.fn(
+      async (
+        _url: string | URL | Request,
+        _init?: RequestInit,
+      ): Promise<Response> =>
+        new Response("{}", {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    );
+    await sendEmailAlert(meeting, {
+      apiKey: "pm_test",
+      from: "alerts@example.com",
+      to: "owner@example.com",
+      transport: "postmark",
+      fetch: fetchMock as unknown as typeof fetch,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("https://api.postmarkapp.com/email");
+    const headers = init?.headers as Record<string, string>;
+    expect(headers["X-Postmark-Server-Token"]).toBe("pm_test");
+    expect(headers.authorization).toBeUndefined();
+    const body = JSON.parse((init?.body as string) ?? "{}");
+    expect(body).toMatchObject({
+      From: "alerts@example.com",
+      To: "owner@example.com",
+      Subject: "Meeting starts in 10 min: Standup",
+      MessageStream: "outbound",
+    });
+    expect(body.HtmlBody).toContain("Standup");
+    expect(body.TextBody).toContain("Standup");
+  });
+
+  it("surfaces Postmark error Message field when the API rejects the send", async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({ ErrorCode: 300, Message: "Invalid 'From' address" }),
+          {
+            status: 422,
+            headers: { "content-type": "application/json" },
+          },
+        ),
+    );
+    await expect(
+      sendEmailAlert(meeting, {
+        apiKey: "pm_bad",
+        from: "alerts@example.com",
+        to: "owner@example.com",
+        transport: "postmark",
+        fetch: fetchMock as unknown as typeof fetch,
+      }),
+    ).rejects.toThrow(/postmark HTTP 422.*Invalid 'From' address/);
+  });
 });
