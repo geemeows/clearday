@@ -5,6 +5,10 @@
 // Wire shape:
 //   POST /api/briefing/generate { date: 'YYYY-MM-DD', force?: boolean }
 //   → BriefingResult (see morning-briefing.ts)
+//
+// Also exposes `runBriefingTick` — the morning cron entrypoint that pre-warms
+// today's briefing so it's ready when the user opens the SPA. Idempotent: a
+// cached entry for the current UTC date short-circuits the LLM call.
 
 import type { UsageStore } from "#/lib/ai-budget-meter";
 import type { AiSettingsRow, AiSettingsStore } from "#/lib/ai-settings-api";
@@ -53,6 +57,68 @@ export async function handleBriefingGenerate(
     fetch: deps.fetch,
     now: deps.now,
   });
+}
+
+// ---------------------------------------------------------------------------
+// Cron tick — pre-warms today's briefing so the first SPA visit is instant.
+// ---------------------------------------------------------------------------
+
+const DEFAULT_BRIEFING_HOUR_UTC = 6;
+
+export type BriefingTickDeps = BriefingDeps & {
+  hourUtc?: number;
+};
+
+export type BriefingTickResult =
+  | { kind: "generated"; date: string; cached: boolean }
+  | {
+      kind: "skipped";
+      reason: "not_due" | "no_provider" | "disabled" | "budget_reached";
+    }
+  | { kind: "error"; error: string };
+
+export async function runBriefingTick(
+  deps: BriefingTickDeps,
+): Promise<BriefingTickResult> {
+  const now = deps.now?.() ?? new Date();
+  const hour = deps.hourUtc ?? DEFAULT_BRIEFING_HOUR_UTC;
+  if (now.getUTCHours() < hour) return { kind: "skipped", reason: "not_due" };
+
+  const row = await deps.aiStore.load();
+  const settings = await aiSettingsFromRow(row, deps.keySecret);
+  if (!settings) return { kind: "skipped", reason: "no_provider" };
+
+  const date = utcDateString(now);
+  const signals = await deps.loadSignals();
+  const result = await generateBriefing({
+    date,
+    force: false,
+    signals,
+    settings,
+    cacheStore: deps.cacheStore,
+    usageStore: deps.usageStore,
+    fetch: deps.fetch,
+    now: deps.now,
+  });
+
+  if (result.ok) {
+    return { kind: "generated", date, cached: result.cached };
+  }
+  if (
+    result.reason === "no_provider" ||
+    result.reason === "disabled" ||
+    result.reason === "budget_reached"
+  ) {
+    return { kind: "skipped", reason: result.reason };
+  }
+  return { kind: "error", error: result.error ?? "unknown error" };
+}
+
+function utcDateString(d: Date): string {
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 async function aiSettingsFromRow(row: AiSettingsRow | null, keySecret: string) {

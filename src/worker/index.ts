@@ -12,7 +12,11 @@ import { sendSlackDm } from "#/lib/alert-channel/slack-dm";
 import type { AlertChannel } from "#/lib/alert-dispatcher";
 import { runAlertQueueDrain } from "#/lib/alert-queue-drain";
 import { type AskAiDeps, handleAskAi } from "#/lib/ask-ai-api";
-import { type BriefingDeps, handleBriefingGenerate } from "#/lib/briefing-api";
+import {
+  type BriefingDeps,
+  handleBriefingGenerate,
+  runBriefingTick,
+} from "#/lib/briefing-api";
 import {
   type ExportDeps,
   exportData,
@@ -696,6 +700,22 @@ export default {
         })
         .catch((err) => {
           console.error("[cron] email-digest failed", err);
+        }),
+    );
+
+    ctx.waitUntil(
+      runBriefingTick(briefingDeps(service, env))
+        .then((report) => {
+          if (report.kind === "generated") {
+            console.log(
+              `[cron] briefing ${report.date}: ${report.cached ? "cache hit" : "generated"}`,
+            );
+          } else if (report.kind === "error") {
+            console.warn(`[cron] briefing: ${report.error}`);
+          }
+        })
+        .catch((err) => {
+          console.error("[cron] briefing tick failed", err);
         }),
     );
 

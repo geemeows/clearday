@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { AiSettingsRow } from "#/lib/ai-settings-api";
-import { handleBriefingGenerate } from "#/lib/briefing-api";
+import { handleBriefingGenerate, runBriefingTick } from "#/lib/briefing-api";
 import { encryptSecret } from "#/lib/llm-crypto";
 import type { BriefingCacheEntry } from "#/lib/morning-briefing";
 
@@ -152,5 +152,113 @@ describe("handleBriefingGenerate", () => {
     const second = await handleBriefingGenerate({ date: "2026-05-04" }, deps);
     expect(second).toMatchObject({ ok: true, cached: true });
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("runBriefingTick", () => {
+  it("skips before the configured morning hour", async () => {
+    const fetchMock = okFetch();
+    const out = await runBriefingTick({
+      aiStore: memAiStore(await configuredRow()),
+      cacheStore: memCacheStore(),
+      loadSignals: async () => [],
+      usageStore: fakeUsageStore(),
+      keySecret: KEY_SECRET,
+      fetch: fetchMock,
+      now: () => new Date("2026-05-04T03:00:00.000Z"),
+    });
+    expect(out).toEqual({ kind: "skipped", reason: "not_due" });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("skips with no_provider when AI settings are missing", async () => {
+    const out = await runBriefingTick({
+      aiStore: memAiStore(null),
+      cacheStore: memCacheStore(),
+      loadSignals: async () => [],
+      usageStore: fakeUsageStore(),
+      keySecret: KEY_SECRET,
+      fetch: okFetch(),
+      now: () => new Date("2026-05-04T08:00:00.000Z"),
+    });
+    expect(out).toEqual({ kind: "skipped", reason: "no_provider" });
+  });
+
+  it("generates today's briefing when due and not yet cached", async () => {
+    const row = await configuredRow();
+    const fetchMock = okFetch("Standup at 10:30.");
+    const cache = memCacheStore();
+    const out = await runBriefingTick({
+      aiStore: memAiStore(row),
+      cacheStore: cache,
+      loadSignals: async () => [],
+      usageStore: fakeUsageStore(),
+      keySecret: KEY_SECRET,
+      fetch: fetchMock,
+      now: () => new Date("2026-05-04T08:00:00.000Z"),
+    });
+    expect(out).toEqual({
+      kind: "generated",
+      date: "2026-05-04",
+      cached: false,
+    });
+    expect(cache.current?.date).toBe("2026-05-04");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("is idempotent: a second tick the same day hits the cache", async () => {
+    const row = await configuredRow();
+    const fetchMock = okFetch();
+    const cache = memCacheStore();
+    const deps = {
+      aiStore: memAiStore(row),
+      cacheStore: cache,
+      loadSignals: async () => [],
+      usageStore: fakeUsageStore(),
+      keySecret: KEY_SECRET,
+      fetch: fetchMock,
+      now: () => new Date("2026-05-04T08:00:00.000Z"),
+    };
+    await runBriefingTick(deps);
+    const second = await runBriefingTick(deps);
+    expect(second).toEqual({
+      kind: "generated",
+      date: "2026-05-04",
+      cached: true,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("respects a custom hourUtc", async () => {
+    const row = await configuredRow();
+    const fetchMock = okFetch();
+    const out = await runBriefingTick({
+      aiStore: memAiStore(row),
+      cacheStore: memCacheStore(),
+      loadSignals: async () => [],
+      usageStore: fakeUsageStore(),
+      keySecret: KEY_SECRET,
+      fetch: fetchMock,
+      hourUtc: 12,
+      now: () => new Date("2026-05-04T08:00:00.000Z"),
+    });
+    expect(out).toEqual({ kind: "skipped", reason: "not_due" });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("maps an ai_disabled row to skipped/disabled", async () => {
+    const row = { ...(await configuredRow()), ai_disabled: true };
+    const fetchMock = okFetch();
+    const out = await runBriefingTick({
+      aiStore: memAiStore(row),
+      cacheStore: memCacheStore(),
+      loadSignals: async () => [],
+      usageStore: fakeUsageStore(),
+      keySecret: KEY_SECRET,
+      fetch: fetchMock,
+      now: () => new Date("2026-05-04T08:00:00.000Z"),
+    });
+    expect(out).toEqual({ kind: "skipped", reason: "disabled" });
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
