@@ -3,6 +3,7 @@ import type { AiSettingsRow } from "#/lib/ai-settings-api";
 import {
   handleBriefingGenerate,
   localDateForTimezone,
+  localHourForTimezone,
   runBriefingTick,
 } from "#/lib/briefing-api";
 import { encryptSecret } from "#/lib/llm-crypto";
@@ -276,7 +277,7 @@ describe("runBriefingTick", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it("respects a custom hourUtc", async () => {
+  it("respects a custom hour", async () => {
     const row = await configuredRow();
     const fetchMock = okFetch();
     const out = await runBriefingTick({
@@ -286,8 +287,51 @@ describe("runBriefingTick", () => {
       usageStore: fakeUsageStore(),
       keySecret: KEY_SECRET,
       fetch: fetchMock,
-      hourUtc: 12,
+      hour: 12,
       now: () => new Date("2026-05-04T08:00:00.000Z"),
+    });
+    expect(out).toEqual({ kind: "skipped", reason: "not_due" });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("gates fire-time on the user's local hour, not UTC", async () => {
+    // 03:00 UTC = 12:00 in Tokyo. UTC-hour gate would skip this tick
+    // (3 < 6); the local-hour gate must fire it (Tokyo 12 >= 6).
+    const row = await configuredRow();
+    const fetchMock = okFetch("Briefing.");
+    const out = await runBriefingTick({
+      aiStore: memAiStore(row),
+      cacheStore: memCacheStore(),
+      loadSignals: async () => [],
+      usageStore: fakeUsageStore(),
+      keySecret: KEY_SECRET,
+      fetch: fetchMock,
+      now: () => new Date("2026-05-04T03:00:00.000Z"),
+      loadTimezone: async () => "Asia/Tokyo",
+    });
+    expect(out).toEqual({
+      kind: "generated",
+      date: "2026-05-04",
+      cached: false,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("skips when the user's local clock has not yet reached morning", async () => {
+    // 13:00 UTC = 06:00 in LA (PDT = UTC-7); with hour=8 the LA clock is
+    // still pre-morning so the tick should skip, even though UTC is past 8.
+    const row = await configuredRow();
+    const fetchMock = okFetch();
+    const out = await runBriefingTick({
+      aiStore: memAiStore(row),
+      cacheStore: memCacheStore(),
+      loadSignals: async () => [],
+      usageStore: fakeUsageStore(),
+      keySecret: KEY_SECRET,
+      fetch: fetchMock,
+      hour: 8,
+      now: () => new Date("2026-05-04T13:00:00.000Z"),
+      loadTimezone: async () => "America/Los_Angeles",
     });
     expect(out).toEqual({ kind: "skipped", reason: "not_due" });
     expect(fetchMock).not.toHaveBeenCalled();
@@ -354,5 +398,27 @@ describe("localDateForTimezone", () => {
 
   it("falls back to UTC when the timezone identifier is unknown", () => {
     expect(localDateForTimezone(lateNight, "Not/Real")).toBe("2026-05-05");
+  });
+});
+
+describe("localHourForTimezone", () => {
+  const noonUtc = new Date("2026-05-04T12:00:00.000Z");
+
+  it("returns the UTC hour when tz is null", () => {
+    expect(localHourForTimezone(noonUtc, null)).toBe(12);
+  });
+
+  it("rolls back for west-of-UTC timezones", () => {
+    // 12:00 UTC = 05:00 in LA (PDT, UTC-7).
+    expect(localHourForTimezone(noonUtc, "America/Los_Angeles")).toBe(5);
+  });
+
+  it("rolls forward for east-of-UTC timezones", () => {
+    // 12:00 UTC = 21:00 in Tokyo.
+    expect(localHourForTimezone(noonUtc, "Asia/Tokyo")).toBe(21);
+  });
+
+  it("falls back to UTC when the timezone identifier is unknown", () => {
+    expect(localHourForTimezone(noonUtc, "Not/Real")).toBe(12);
   });
 });

@@ -85,10 +85,15 @@ export async function handleBriefingGenerate(
 // Cron tick — pre-warms today's briefing so the first SPA visit is instant.
 // ---------------------------------------------------------------------------
 
-const DEFAULT_BRIEFING_HOUR_UTC = 6;
+const DEFAULT_BRIEFING_HOUR = 6;
 
 export type BriefingTickDeps = BriefingDeps & {
-  hourUtc?: number;
+  /**
+   * Hour of day (0-23) at which the morning briefing becomes due. Evaluated
+   * in the user's IANA timezone (from `loadTimezone`); falls back to UTC when
+   * no timezone is plumbed. Defaults to 6 (local 6am).
+   */
+  hour?: number;
 };
 
 export type BriefingTickResult =
@@ -103,14 +108,16 @@ export async function runBriefingTick(
   deps: BriefingTickDeps,
 ): Promise<BriefingTickResult> {
   const now = deps.now?.() ?? new Date();
-  const hour = deps.hourUtc ?? DEFAULT_BRIEFING_HOUR_UTC;
-  if (now.getUTCHours() < hour) return { kind: "skipped", reason: "not_due" };
+  const tz = (await deps.loadTimezone?.()) ?? null;
+  const hour = deps.hour ?? DEFAULT_BRIEFING_HOUR;
+  if (localHourForTimezone(now, tz) < hour) {
+    return { kind: "skipped", reason: "not_due" };
+  }
 
   const row = await deps.aiStore.load();
   const settings = await aiSettingsFromRow(row, deps.keySecret);
   if (!settings) return { kind: "skipped", reason: "no_provider" };
 
-  const tz = (await deps.loadTimezone?.()) ?? null;
   const date = localDateForTimezone(now, tz);
   const signals = await deps.loadSignals();
   const result = await generateBriefing({
@@ -162,6 +169,27 @@ export function localDateForTimezone(now: Date, tz: string | null): string {
     return fmt.format(now);
   } catch {
     return utcDateString(now);
+  }
+}
+
+/**
+ * Returns the hour of day (0-23) in the given IANA timezone. Falls back to
+ * UTC when `tz` is null or unrecognized by the runtime. Used by the cron
+ * tick to gate the morning fire-time on the user's local clock so a user
+ * in Tokyo gets their briefing at local 6am, not UTC 6am.
+ */
+export function localHourForTimezone(now: Date, tz: string | null): number {
+  if (!tz) return now.getUTCHours();
+  try {
+    const fmt = new Intl.DateTimeFormat("en-GB", {
+      timeZone: tz,
+      hour: "2-digit",
+      hour12: false,
+    });
+    const parsed = Number.parseInt(fmt.format(now), 10);
+    return Number.isFinite(parsed) ? parsed : now.getUTCHours();
+  } catch {
+    return now.getUTCHours();
   }
 }
 
