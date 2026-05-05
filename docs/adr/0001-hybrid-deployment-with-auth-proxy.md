@@ -1,5 +1,11 @@
 # Hybrid deployment with a project-run auth proxy
 
+> **Note:** the OAuth handoff sketched here ("proxy 302-redirects the code
+> to the backend, which performs the token exchange") is superseded by
+> ADR-0003. The proxy now performs the exchange itself and forwards a
+> short-lived Ed25519-signed envelope. The deployment-shape rationale below
+> (self-hosted user-Workers + one shared stateless Worker) still stands.
+
 Clearday is open source and self-hosted (each user runs their own Supabase
 project + Cloudflare Worker holding their own integration tokens), but the
 project also operates one piece of shared infrastructure: a stateless
