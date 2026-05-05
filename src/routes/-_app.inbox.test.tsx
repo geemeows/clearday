@@ -124,6 +124,36 @@ describe("InboxView", () => {
     );
     expect(screen.getByLabelText("Signal detail")).toBeTruthy();
   });
+
+  it("dims the row and shows a Replied pill for ids in repliedIds", () => {
+    render(
+      <InboxView
+        filter="all"
+        onFilterChange={() => {}}
+        signals={[sample({ id: "abc" })]}
+        error={null}
+        onDismiss={() => {}}
+        repliedIds={new Set(["abc"])}
+      />,
+    );
+    expect(screen.getByText("Replied")).toBeTruthy();
+    const row = screen.getByText("Add cron orchestrator").closest("li");
+    expect(row?.className).toMatch(/opacity-60/);
+  });
+
+  it("does not show a Replied pill when the id is not in repliedIds", () => {
+    render(
+      <InboxView
+        filter="all"
+        onFilterChange={() => {}}
+        signals={[sample({ id: "abc" })]}
+        error={null}
+        onDismiss={() => {}}
+        repliedIds={new Set()}
+      />,
+    );
+    expect(screen.queryByText("Replied")).toBeNull();
+  });
 });
 
 describe("InboxDetailPane", () => {
@@ -524,5 +554,119 @@ describe("Draft with AI", () => {
       />,
     );
     expect(screen.queryByRole("button", { name: /draft with ai/i })).toBeNull();
+  });
+});
+
+describe("Optimistic reply UI", () => {
+  it("PR review: fires onReplyStart immediately and not onReplyRollback on success", async () => {
+    const onReplyStart = vi.fn();
+    const onReplyRollback = vi.fn();
+    render(
+      <PrReviewActions
+        repo="o/r"
+        number={1}
+        signalId="sig-pr"
+        submit={async () => ({ ok: true })}
+        onReplyStart={onReplyStart}
+        onReplyRollback={onReplyRollback}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /approve/i }));
+    expect(onReplyStart).toHaveBeenCalledWith("sig-pr");
+    await waitFor(() => screen.getByRole("status"));
+    expect(onReplyRollback).not.toHaveBeenCalled();
+  });
+
+  it("PR review: rolls back on submit failure", async () => {
+    const onReplyStart = vi.fn();
+    const onReplyRollback = vi.fn();
+    render(
+      <PrReviewActions
+        repo="o/r"
+        number={1}
+        signalId="sig-pr"
+        submit={async () => ({ ok: false, error: "nope" })}
+        onReplyStart={onReplyStart}
+        onReplyRollback={onReplyRollback}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /approve/i }));
+    await waitFor(() => expect(onReplyRollback).toHaveBeenCalledWith("sig-pr"));
+    expect(onReplyStart).toHaveBeenCalledWith("sig-pr");
+  });
+
+  it("PR review: rolls back when submit throws", async () => {
+    const onReplyRollback = vi.fn();
+    render(
+      <PrReviewActions
+        repo="o/r"
+        number={1}
+        signalId="sig-pr"
+        submit={async () => {
+          throw new Error("boom");
+        }}
+        onReplyRollback={onReplyRollback}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /approve/i }));
+    await waitFor(() => expect(onReplyRollback).toHaveBeenCalledWith("sig-pr"));
+  });
+
+  it("Slack reply: fires onReplyStart and not onReplyRollback on success", async () => {
+    const onReplyStart = vi.fn();
+    const onReplyRollback = vi.fn();
+    render(
+      <SlackReplyComposer
+        channel="C1"
+        signalId="sig-slack"
+        submit={async () => ({ ok: true })}
+        onReplyStart={onReplyStart}
+        onReplyRollback={onReplyRollback}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText("Slack reply"), {
+      target: { value: "on it" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
+    expect(onReplyStart).toHaveBeenCalledWith("sig-slack");
+    await waitFor(() => screen.getByRole("status"));
+    expect(onReplyRollback).not.toHaveBeenCalled();
+  });
+
+  it("Slack reply: rolls back on submit failure", async () => {
+    const onReplyRollback = vi.fn();
+    render(
+      <SlackReplyComposer
+        channel="C1"
+        signalId="sig-slack"
+        submit={async () => ({ ok: false, error: "nope" })}
+        onReplyRollback={onReplyRollback}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText("Slack reply"), {
+      target: { value: "on it" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
+    await waitFor(() =>
+      expect(onReplyRollback).toHaveBeenCalledWith("sig-slack"),
+    );
+  });
+
+  it("does not fire callbacks when no signalId is provided", async () => {
+    const onReplyStart = vi.fn();
+    const onReplyRollback = vi.fn();
+    render(
+      <PrReviewActions
+        repo="o/r"
+        number={1}
+        submit={async () => ({ ok: false, error: "nope" })}
+        onReplyStart={onReplyStart}
+        onReplyRollback={onReplyRollback}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /approve/i }));
+    await waitFor(() => screen.getByRole("alert"));
+    expect(onReplyStart).not.toHaveBeenCalled();
+    expect(onReplyRollback).not.toHaveBeenCalled();
   });
 });

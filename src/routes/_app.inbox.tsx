@@ -35,6 +35,7 @@ function InboxPage() {
   const [signals, setSignals] = useState<StoredSignal[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [repliedIds, setRepliedIds] = useState<Set<string>>(() => new Set());
 
   const reload = useCallback(async (current: Filter) => {
     try {
@@ -56,11 +57,35 @@ function InboxPage() {
     async (id: string) => {
       setSignals((current) => current?.filter((s) => s.id !== id) ?? null);
       setSelectedId((prev) => (prev === id ? null : prev));
+      setRepliedIds((prev) => {
+        if (!prev.has(id)) return prev;
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
       await apiFetch(`/api/signals/${id}/dismiss`, { method: "POST" });
       reload(filter);
     },
     [filter, reload],
   );
+
+  const handleReplyStart = useCallback((id: string) => {
+    setRepliedIds((prev) => {
+      if (prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
+  }, []);
+
+  const handleReplyRollback = useCallback((id: string) => {
+    setRepliedIds((prev) => {
+      if (!prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+  }, []);
 
   return (
     <InboxView
@@ -71,6 +96,9 @@ function InboxPage() {
       onDismiss={dismiss}
       selectedId={selectedId}
       onSelect={setSelectedId}
+      repliedIds={repliedIds}
+      onReplyStart={handleReplyStart}
+      onReplyRollback={handleReplyRollback}
     />
   );
 }
@@ -83,6 +111,9 @@ export function InboxView({
   onDismiss,
   selectedId = null,
   onSelect,
+  repliedIds,
+  onReplyStart,
+  onReplyRollback,
 }: {
   filter: Filter;
   onFilterChange: (f: Filter) => void;
@@ -91,6 +122,9 @@ export function InboxView({
   onDismiss: (id: string) => void;
   selectedId?: string | null;
   onSelect?: (id: string | null) => void;
+  repliedIds?: ReadonlySet<string>;
+  onReplyStart?: (id: string) => void;
+  onReplyRollback?: (id: string) => void;
 }) {
   const selected = useMemo(
     () => signals?.find((s) => s.id === selectedId) ?? null,
@@ -145,53 +179,66 @@ export function InboxView({
       {signals && signals.length > 0 && (
         <div className="mt-4 flex flex-col gap-4 lg:flex-row">
           <ul className="flex-1 divide-y divide-zinc-200 rounded border border-zinc-200 bg-white">
-            {signals.map((s) => (
-              <li
-                key={s.id}
-                className={cn(
-                  "flex items-center gap-3 px-4 py-3",
-                  selectedId === s.id && "bg-zinc-50",
-                )}
-              >
-                <ProviderBadge provider={s.provider} />
-                <button
-                  type="button"
-                  onClick={() => onSelect?.(s.id)}
-                  className="min-w-0 flex-1 text-left"
+            {signals.map((s) => {
+              const replied = repliedIds?.has(s.id) ?? false;
+              return (
+                <li
+                  key={s.id}
+                  className={cn(
+                    "flex items-center gap-3 px-4 py-3",
+                    selectedId === s.id && "bg-zinc-50",
+                    replied && "opacity-60",
+                  )}
                 >
-                  <div className="truncate text-sm font-medium text-zinc-900">
-                    {s.title}
-                  </div>
-                  <div className="truncate text-xs text-zinc-500">
-                    {kindLabel(s.kind)} · {secondaryLabel(s)}
-                  </div>
-                </button>
-                {s.url && (
-                  <a
-                    href={s.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-1 rounded border border-zinc-200 px-2 py-1 text-xs text-zinc-700 hover:bg-zinc-50"
+                  <ProviderBadge provider={s.provider} />
+                  <button
+                    type="button"
+                    onClick={() => onSelect?.(s.id)}
+                    className="min-w-0 flex-1 text-left"
                   >
-                    <ExternalLink className="h-3 w-3" />
-                    Open
-                  </a>
-                )}
-                <button
-                  type="button"
-                  onClick={() => onDismiss(s.id)}
-                  className="rounded border border-zinc-200 px-2 py-1 text-xs text-zinc-700 hover:bg-zinc-50"
-                >
-                  Dismiss
-                </button>
-              </li>
-            ))}
+                    <div className="flex items-center gap-2">
+                      <div className="truncate text-sm font-medium text-zinc-900">
+                        {s.title}
+                      </div>
+                      {replied && (
+                        <span className="shrink-0 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-emerald-700">
+                          Replied
+                        </span>
+                      )}
+                    </div>
+                    <div className="truncate text-xs text-zinc-500">
+                      {kindLabel(s.kind)} · {secondaryLabel(s)}
+                    </div>
+                  </button>
+                  {s.url && (
+                    <a
+                      href={s.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1 rounded border border-zinc-200 px-2 py-1 text-xs text-zinc-700 hover:bg-zinc-50"
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                      Open
+                    </a>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => onDismiss(s.id)}
+                    className="rounded border border-zinc-200 px-2 py-1 text-xs text-zinc-700 hover:bg-zinc-50"
+                  >
+                    Dismiss
+                  </button>
+                </li>
+              );
+            })}
           </ul>
           {selected && (
             <InboxDetailPane
               signal={selected}
               onClose={() => onSelect?.(null)}
               onDismiss={onDismiss}
+              onReplyStart={onReplyStart}
+              onReplyRollback={onReplyRollback}
             />
           )}
         </div>
@@ -204,10 +251,14 @@ export function InboxDetailPane({
   signal,
   onClose,
   onDismiss,
+  onReplyStart,
+  onReplyRollback,
 }: {
   signal: StoredSignal;
   onClose: () => void;
   onDismiss: (id: string) => void;
+  onReplyStart?: (id: string) => void;
+  onReplyRollback?: (id: string) => void;
 }) {
   return (
     <aside
@@ -233,7 +284,11 @@ export function InboxDetailPane({
       <h2 className="mt-3 text-base font-semibold text-zinc-900">
         {signal.title}
       </h2>
-      <DetailBody signal={signal} />
+      <DetailBody
+        signal={signal}
+        onReplyStart={onReplyStart}
+        onReplyRollback={onReplyRollback}
+      />
       <div className="mt-5 flex flex-wrap gap-2">
         {signal.url && (
           <a
@@ -258,10 +313,32 @@ export function InboxDetailPane({
   );
 }
 
-function DetailBody({ signal }: { signal: StoredSignal }) {
+function DetailBody({
+  signal,
+  onReplyStart,
+  onReplyRollback,
+}: {
+  signal: StoredSignal;
+  onReplyStart?: (id: string) => void;
+  onReplyRollback?: (id: string) => void;
+}) {
   const group = kindGroup(signal.kind);
-  if (group === "pr") return <PrBody signal={signal} />;
-  if (group === "slack") return <SlackBody signal={signal} />;
+  if (group === "pr")
+    return (
+      <PrBody
+        signal={signal}
+        onReplyStart={onReplyStart}
+        onReplyRollback={onReplyRollback}
+      />
+    );
+  if (group === "slack")
+    return (
+      <SlackBody
+        signal={signal}
+        onReplyStart={onReplyStart}
+        onReplyRollback={onReplyRollback}
+      />
+    );
   if (group === "ticket") return <TicketBody signal={signal} />;
   return <MeetingBody signal={signal} />;
 }
@@ -301,7 +378,15 @@ function TicketBody({ signal }: { signal: StoredSignal }) {
   );
 }
 
-function PrBody({ signal }: { signal: StoredSignal }) {
+function PrBody({
+  signal,
+  onReplyStart,
+  onReplyRollback,
+}: {
+  signal: StoredSignal;
+  onReplyStart?: (id: string) => void;
+  onReplyRollback?: (id: string) => void;
+}) {
   const repo = signal.payload?.repo as string | undefined;
   const number = signal.payload?.number as number | undefined;
   const author = signal.payload?.author as string | undefined;
@@ -334,7 +419,13 @@ function PrBody({ signal }: { signal: StoredSignal }) {
         </dd>
       </dl>
       {repo && typeof number === "number" && !draft && (
-        <PrReviewActions repo={repo} number={number} signalId={signal.id} />
+        <PrReviewActions
+          repo={repo}
+          number={number}
+          signalId={signal.id}
+          onReplyStart={onReplyStart}
+          onReplyRollback={onReplyRollback}
+        />
       )}
     </div>
   );
@@ -403,6 +494,8 @@ export function PrReviewActions({
   requestDraft = defaultDraftRequest,
   requestConnectUrl = defaultRequestConnectUrl,
   openUrl = defaultOpenUrl,
+  onReplyStart,
+  onReplyRollback,
 }: {
   repo: string;
   number: number;
@@ -411,6 +504,8 @@ export function PrReviewActions({
   requestDraft?: DraftRequest;
   requestConnectUrl?: RequestConnectUrl;
   openUrl?: OpenUrl;
+  onReplyStart?: (id: string) => void;
+  onReplyRollback?: (id: string) => void;
 }) {
   const [body, setBody] = useState("");
   const [pending, setPending] = useState<PrReviewEvent | null>(null);
@@ -473,12 +568,14 @@ export function PrReviewActions({
   const run = async (event: PrReviewEvent) => {
     setPending(event);
     setStatus(null);
+    if (signalId) onReplyStart?.(signalId);
     try {
       const out = await submit({ repo, number, event, body: body.trim() });
       if (out.ok) {
         setStatus({ kind: "ok", event });
         setBody("");
       } else {
+        if (signalId) onReplyRollback?.(signalId);
         setStatus({
           kind: "error",
           message: out.error ?? "review failed",
@@ -486,6 +583,7 @@ export function PrReviewActions({
         });
       }
     } catch (e) {
+      if (signalId) onReplyRollback?.(signalId);
       setStatus({
         kind: "error",
         message: e instanceof Error ? e.message : "review failed",
@@ -576,7 +674,15 @@ export function PrReviewActions({
   );
 }
 
-function SlackBody({ signal }: { signal: StoredSignal }) {
+function SlackBody({
+  signal,
+  onReplyStart,
+  onReplyRollback,
+}: {
+  signal: StoredSignal;
+  onReplyStart?: (id: string) => void;
+  onReplyRollback?: (id: string) => void;
+}) {
   const channel = signal.payload?.channel as string | undefined;
   const channelType = signal.payload?.channel_type as string | undefined;
   const author = signal.payload?.author as string | undefined;
@@ -611,6 +717,8 @@ function SlackBody({ signal }: { signal: StoredSignal }) {
           channel={channel}
           thread_ts={threadTs ?? ts}
           signalId={signal.id}
+          onReplyStart={onReplyStart}
+          onReplyRollback={onReplyRollback}
         />
       )}
     </div>
@@ -637,6 +745,8 @@ export function SlackReplyComposer({
   requestDraft = defaultDraftRequest,
   requestConnectUrl = defaultRequestConnectUrl,
   openUrl = defaultOpenUrl,
+  onReplyStart,
+  onReplyRollback,
 }: {
   channel: string;
   thread_ts?: string;
@@ -645,6 +755,8 @@ export function SlackReplyComposer({
   requestDraft?: DraftRequest;
   requestConnectUrl?: RequestConnectUrl;
   openUrl?: OpenUrl;
+  onReplyStart?: (id: string) => void;
+  onReplyRollback?: (id: string) => void;
 }) {
   const [text, setText] = useState("");
   const [pending, setPending] = useState(false);
@@ -707,12 +819,14 @@ export function SlackReplyComposer({
   const send = async () => {
     setPending(true);
     setStatus(null);
+    if (signalId) onReplyStart?.(signalId);
     try {
       const out = await submit({ channel, text: text.trim(), thread_ts });
       if (out.ok) {
         setStatus({ kind: "ok" });
         setText("");
       } else {
+        if (signalId) onReplyRollback?.(signalId);
         setStatus({
           kind: "error",
           message: out.error ?? "reply failed",
@@ -720,6 +834,7 @@ export function SlackReplyComposer({
         });
       }
     } catch (e) {
+      if (signalId) onReplyRollback?.(signalId);
       setStatus({
         kind: "error",
         message: e instanceof Error ? e.message : "reply failed",
