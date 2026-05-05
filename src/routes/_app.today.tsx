@@ -786,7 +786,7 @@ export function WeekStatsCard({
         <dl className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Stat label="PRs reviewed" value={stats.prsReviewed} />
           <Stat label="Tickets shipped" value={stats.ticketsShipped} />
-          <Stat label="Mentions handled" value={stats.mentionsHandled} />
+          <Stat label="Focus hours" value={stats.focusHours} />
           <Stat label="Meetings" value={stats.meetingsAttended} />
         </dl>
       )}

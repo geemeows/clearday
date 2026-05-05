@@ -214,24 +214,47 @@ describe("computeWeekStats", () => {
     expect(out.ticketsShipped).toBe(1);
   });
 
-  it("counts mention/dm/thread_reply rows dismissed in window", () => {
-    const mention = (id: string, dismissed: string | null): StoredSignal => ({
+  it("sums focus-meeting durations (hours, 1dp) for in-window starts", () => {
+    const focus = (
+      id: string,
+      startsAt: string,
+      endsAt: string,
+      isFocus: boolean,
+    ): StoredSignal => ({
       id,
-      provider: "slack",
-      kind: "mention",
+      provider: "google",
+      kind: "meeting",
       source_id: id,
-      title: `m${id}`,
+      title: `f${id}`,
       url: null,
-      payload: {},
-      requires_action: true,
-      source_created_at: outOfWindow,
-      dismissed_at: dismissed,
+      payload: {
+        starts_at: startsAt,
+        ends_at: endsAt,
+        ...(isFocus ? { is_focus: true } : {}),
+      },
+      requires_action: false,
+      source_created_at: startsAt,
+      dismissed_at: null,
     });
     const out = computeWeekStats(
-      [mention("1", inWindow), mention("2", null), mention("3", outOfWindow)],
+      [
+        // 90-minute focus block in window → 1.5h
+        focus("1", inWindow, "2026-05-02T10:30:00.000Z", true),
+        // 1-hour focus block in window → 1.0h (total 2.5h)
+        focus(
+          "2",
+          "2026-05-03T08:00:00.000Z",
+          "2026-05-03T09:00:00.000Z",
+          true,
+        ),
+        // out-of-window focus block → ignored
+        focus("3", outOfWindow, "2026-04-20T10:00:00.000Z", true),
+        // non-focus meeting → ignored for focus hours but counted in meetings
+        focus("4", inWindow, "2026-05-02T10:00:00.000Z", false),
+      ],
       now,
     );
-    expect(out.mentionsHandled).toBe(1);
+    expect(out.focusHours).toBe(2.5);
   });
 
   it("counts meetings whose start is in the window", () => {
@@ -258,7 +281,7 @@ describe("computeWeekStats", () => {
     expect(computeWeekStats([], now)).toEqual({
       prsReviewed: 0,
       ticketsShipped: 0,
-      mentionsHandled: 0,
+      focusHours: 0,
       meetingsAttended: 0,
     });
   });

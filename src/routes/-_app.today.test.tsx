@@ -387,7 +387,7 @@ describe("WeekStatsCard", () => {
     expect(map["PRs reviewed"]).toBe("1");
     expect(map["Tickets shipped"]).toBe("1");
     expect(map.Meetings).toBe("1");
-    expect(map["Mentions handled"]).toBe("0");
+    expect(map["Focus hours"]).toBe("0");
   });
 
   it("passes a 7-day-ago ISO `since` to the loader", async () => {

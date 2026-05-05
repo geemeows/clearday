@@ -18,7 +18,6 @@ const TICKET_KINDS: SignalKind[] = [
 ];
 
 const PR_REVIEW_KIND: SignalKind = "pr_review_requested";
-const MENTION_KINDS: SignalKind[] = ["dm", "mention", "thread_reply"];
 const MEETING_KIND: SignalKind = "meeting";
 
 // Sort priority: in-progress first, then in-review, blocked, then assigned.
@@ -91,7 +90,7 @@ export function pickInProgressTickets(
 export type WeekStats = {
   prsReviewed: number;
   ticketsShipped: number;
-  mentionsHandled: number;
+  focusHours: number;
   meetingsAttended: number;
 };
 
@@ -103,7 +102,8 @@ export type WeekStats = {
  * - PRs reviewed = `pr_review_requested` rows that are no longer actionable
  *   (dismissed or `requires_action=false` after being acted on).
  * - Tickets shipped = ticket-kind rows dismissed within the window.
- * - Mentions handled = Slack mention/dm/thread-reply rows dismissed in window.
+ * - Focus hours = sum of meeting durations (hours, rounded to 1 decimal) for
+ *   meeting rows where `payload.is_focus === true` whose start is in window.
  * - Meetings attended = meeting rows whose start is in [now-7d, now].
  */
 export function computeWeekStats(
@@ -120,7 +120,7 @@ export function computeWeekStats(
 
   let prsReviewed = 0;
   let ticketsShipped = 0;
-  let mentionsHandled = 0;
+  let focusMs = 0;
   let meetingsAttended = 0;
 
   for (const s of signals) {
@@ -133,15 +133,20 @@ export function computeWeekStats(
       if (s.dismissed_at && inWindow(s.dismissed_at)) ticketsShipped += 1;
       continue;
     }
-    if ((MENTION_KINDS as readonly string[]).includes(s.kind)) {
-      if (s.dismissed_at && inWindow(s.dismissed_at)) mentionsHandled += 1;
-      continue;
-    }
     if (s.kind === MEETING_KIND) {
       const startsAt = (s.payload?.starts_at as string | undefined) ?? null;
       if (inWindow(startsAt)) meetingsAttended += 1;
+      if (s.payload?.is_focus === true && inWindow(startsAt)) {
+        const endsAtRaw = s.payload?.ends_at as string | undefined;
+        const startMs = startsAt ? Date.parse(startsAt) : Number.NaN;
+        const endMs = endsAtRaw ? Date.parse(endsAtRaw) : Number.NaN;
+        if (!Number.isNaN(startMs) && !Number.isNaN(endMs) && endMs > startMs) {
+          focusMs += endMs - startMs;
+        }
+      }
     }
   }
 
-  return { prsReviewed, ticketsShipped, mentionsHandled, meetingsAttended };
+  const focusHours = Math.round((focusMs / 3_600_000) * 10) / 10;
+  return { prsReviewed, ticketsShipped, focusHours, meetingsAttended };
 }
