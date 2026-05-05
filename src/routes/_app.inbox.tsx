@@ -795,6 +795,7 @@ function SlackBody({
       {channel && (
         <SlackReplyComposer
           channel={channel}
+          channelName={channelName}
           thread_ts={threadTs ?? ts}
           signalId={signal.id}
           onReplyStart={onReplyStart}
@@ -820,6 +821,7 @@ const defaultSlackReplySubmit: SlackReplySubmit = async (params) =>
 
 export function SlackReplyComposer({
   channel,
+  channelName,
   thread_ts,
   signalId,
   submit = defaultSlackReplySubmit,
@@ -830,6 +832,7 @@ export function SlackReplyComposer({
   onReplyRollback,
 }: {
   channel: string;
+  channelName?: string;
   thread_ts?: string;
   signalId?: string;
   submit?: SlackReplySubmit;
@@ -839,6 +842,7 @@ export function SlackReplyComposer({
   onReplyStart?: (id: string) => void;
   onReplyRollback?: (id: string) => void;
 }) {
+  const channelLabel = channelName ?? channel;
   const [text, setText] = useState("");
   const [pending, setPending] = useState(false);
   const [drafting, setDrafting] = useState(false);
@@ -946,7 +950,7 @@ export function SlackReplyComposer({
         placeholder={
           effectiveThreadTs
             ? "Reply in thread…"
-            : `Send a message to #${channel}`
+            : `Send a message to #${channelLabel}`
         }
         aria-label="Slack reply"
         rows={3}
@@ -960,7 +964,7 @@ export function SlackReplyComposer({
             onChange={(e) => setAsNewMessage(e.target.checked)}
             className="h-3.5 w-3.5"
           />
-          Send as a new message in #{channel} (don't reply in thread)
+          Send as a new message in #{channelLabel} (don't reply in thread)
         </label>
       )}
       <div className="flex flex-wrap gap-2">
