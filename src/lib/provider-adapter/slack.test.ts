@@ -553,6 +553,73 @@ describe("pollSlackSignals", () => {
     expect(urls.every((u) => !u.includes("conversations.history"))).toBe(true);
   });
 
+  it("resolves author user-ids to display names via users.info and attaches author_name", async () => {
+    const fetchImpl = vi.fn(async (url: string) => {
+      if (url.includes("users.conversations")) {
+        const isIm = /types=im(&|$)/.test(url);
+        return jsonResponse({
+          ok: true,
+          channels: isIm ? [{ id: "D1" }] : [],
+        });
+      }
+      if (url.includes("conversations.history")) {
+        return jsonResponse({
+          ok: true,
+          messages: [
+            {
+              type: "message",
+              user: "U_OTHER",
+              ts: "1.0",
+              text: "hi",
+            },
+          ],
+        });
+      }
+      if (url.includes("users.info")) {
+        expect(url).toContain(`user=${encodeURIComponent("U_OTHER")}`);
+        return jsonResponse({
+          ok: true,
+          user: {
+            real_name: "Babyyy McUser",
+            profile: { display_name: "babyyy" },
+          },
+        });
+      }
+      return jsonResponse({ ok: true });
+    });
+    const out = await pollSlackSignals("token", "U_SELF", fetchImpl);
+    expect(out).toHaveLength(1);
+    expect(out[0]?.payload.author_name).toBe("babyyy");
+  });
+
+  it("falls back to <@id> rendering when users.info fails (best-effort)", async () => {
+    const fetchImpl = vi.fn(async (url: string) => {
+      if (url.includes("users.conversations")) {
+        const isIm = /types=im(&|$)/.test(url);
+        return jsonResponse({
+          ok: true,
+          channels: isIm ? [{ id: "D1" }] : [],
+        });
+      }
+      if (url.includes("conversations.history")) {
+        return jsonResponse({
+          ok: true,
+          messages: [
+            { type: "message", user: "U_OTHER", ts: "1.0", text: "hi" },
+          ],
+        });
+      }
+      if (url.includes("users.info")) {
+        return jsonResponse({ ok: false, error: "user_not_found" });
+      }
+      return jsonResponse({ ok: true });
+    });
+    const out = await pollSlackSignals("token", "U_SELF", fetchImpl);
+    expect(out).toHaveLength(1);
+    expect(out[0]?.payload.author_name).toBeUndefined();
+    expect(out[0]?.payload.author).toBe("U_OTHER");
+  });
+
   it("throws on non-2xx HTTP", async () => {
     const fetchImpl = vi.fn(async () =>
       jsonResponse({ error: "ratelimited" }, 429),

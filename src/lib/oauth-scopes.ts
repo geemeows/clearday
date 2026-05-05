@@ -94,8 +94,10 @@ export const AUTHORIZE_PROVIDERS: Record<
       "groups:history",
       "im:history",
       "mpim:history",
+      "users:read",
       "users.profile:write",
       "dnd:write",
+      "chat:write",
     ],
     scopeSeparator: ",",
     // Slack's v2 endpoint uses `user_scope` for user-token scopes (and `scope`

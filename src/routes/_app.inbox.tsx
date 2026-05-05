@@ -750,6 +750,7 @@ function SlackBody({
   const channel = signal.payload?.channel as string | undefined;
   const channelType = signal.payload?.channel_type as string | undefined;
   const author = signal.payload?.author as string | undefined;
+  const authorName = signal.payload?.author_name as string | undefined;
   const text = signal.payload?.text as string | undefined;
   const ts = signal.payload?.ts as string | undefined;
   const threadTs = signal.payload?.thread_ts as string | undefined;
@@ -767,7 +768,9 @@ function SlackBody({
         {author && (
           <>
             <dt className="text-zinc-500">From</dt>
-            <dd className="text-zinc-900">{`<@${author}>`}</dd>
+            <dd className="text-zinc-900">
+              {authorName ? authorName : `<@${author}>`}
+            </dd>
           </>
         )}
       </dl>
@@ -1153,8 +1156,14 @@ function secondaryLabel(s: StoredSignal): string {
     const channelType = s.payload?.channel_type as string | undefined;
     const channel = s.payload?.channel as string | undefined;
     const author = s.payload?.author as string | undefined;
+    const authorName = s.payload?.author_name as string | undefined;
     const where = channelType === "im" ? "DM" : channel ? `#${channel}` : "";
-    return [where, author && `from <@${author}>`].filter(Boolean).join(" · ");
+    const fromLabel = authorName
+      ? `from ${authorName}`
+      : author
+        ? `from <@${author}>`
+        : "";
+    return [where, fromLabel].filter(Boolean).join(" · ");
   }
   if (s.kind === "meeting") {
     const startsAt = s.payload?.starts_at as string | undefined;

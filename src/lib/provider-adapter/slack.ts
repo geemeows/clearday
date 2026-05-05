@@ -284,7 +284,77 @@ export async function pollSlackSignals(
     );
     if (sig) out.push(sig);
   }
+
+  // Resolve author user-ids to display names so the UI can render "from Alice"
+  // instead of "from <@U0B1JJ9UQ67>". `users.info` is one call per unique
+  // author per tick — bounded by signal volume, not channel volume.
+  const authorIds = new Set<string>();
+  for (const sig of out) {
+    const author = sig.payload.author;
+    if (typeof author === "string" && author) authorIds.add(author);
+  }
+  if (authorIds.size > 0) {
+    const names = await resolveUserNames(accessToken, authorIds, fetchImpl);
+    for (const sig of out) {
+      const author = sig.payload.author;
+      if (typeof author === "string" && names.has(author)) {
+        sig.payload.author_name = names.get(author);
+      }
+    }
+  }
   return out;
+}
+
+async function resolveUserNames(
+  accessToken: string,
+  ids: ReadonlySet<string>,
+  fetchImpl: SlackFetch,
+): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  await Promise.all(
+    [...ids].map(async (id) => {
+      try {
+        const name = await runUsersInfo(accessToken, id, fetchImpl);
+        if (name) out.set(id, name);
+      } catch {
+        // users.info is best-effort — a missing name falls back to the raw
+        // `<@id>` rendering rather than failing the whole poll.
+      }
+    }),
+  );
+  return out;
+}
+
+async function runUsersInfo(
+  accessToken: string,
+  userId: string,
+  fetchImpl: SlackFetch,
+): Promise<string | null> {
+  const url = `https://slack.com/api/users.info?user=${encodeURIComponent(userId)}`;
+  const res = await fetchImpl(url, {
+    method: "GET",
+    headers: {
+      authorization: `Bearer ${accessToken}`,
+      accept: "application/json",
+    },
+  });
+  if (!res.ok) return null;
+  const body = (await res.json()) as {
+    ok?: boolean;
+    user?: {
+      real_name?: string;
+      name?: string;
+      profile?: { display_name?: string; real_name?: string };
+    };
+  };
+  if (!body.ok || !body.user) return null;
+  return (
+    body.user.profile?.display_name ||
+    body.user.profile?.real_name ||
+    body.user.real_name ||
+    body.user.name ||
+    null
+  );
 }
 
 async function listConversations(
