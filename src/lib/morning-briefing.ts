@@ -129,6 +129,16 @@ const SYSTEM_PROMPT =
   "thing. Do not list every item; group similar items. Do not use bullet " +
   "lists or markdown. Refer to the user as 'you'.";
 
+// Per-bucket caps. The loader pulls the latest 200 undismissed Signals; a
+// comms-heavy day can blow past that with one bucket alone (e.g. 200 mentions
+// drowning out the meetings the user actually needs to lead with). Cap each
+// bucket and surface the dropped count so the model still knows the overall
+// shape of the day.
+const MEETING_MAX = 8;
+const PR_REVIEW_MAX = 10;
+const PR_AUTHORED_MAX = 8;
+const MENTION_MAX = 12;
+
 export function buildBriefingPrompt(
   signals: StoredSignal[],
   date: string,
@@ -164,22 +174,47 @@ export function buildBriefingPrompt(
   sections.push(`Date: ${date}`);
   sections.push(`Local time: ${formatTime(now)}`);
   sections.push("");
-  sections.push(`Meetings today (${meetings.length}):`);
-  sections.push(meetings.length > 0 ? meetings.join("\n") : "- (none)");
+  appendBucket(sections, "Meetings today", meetings, MEETING_MAX);
   sections.push("");
-  sections.push(`PRs awaiting your review (${prsToReview.length}):`);
-  sections.push(prsToReview.length > 0 ? prsToReview.join("\n") : "- (none)");
+  appendBucket(
+    sections,
+    "PRs awaiting your review",
+    prsToReview,
+    PR_REVIEW_MAX,
+  );
   sections.push("");
-  sections.push(`Your open / assigned PRs (${prsAuthored.length}):`);
-  sections.push(prsAuthored.length > 0 ? prsAuthored.join("\n") : "- (none)");
+  appendBucket(
+    sections,
+    "Your open / assigned PRs",
+    prsAuthored,
+    PR_AUTHORED_MAX,
+  );
   sections.push("");
-  sections.push(`New mentions / DMs (${mentions.length}):`);
-  sections.push(mentions.length > 0 ? mentions.join("\n") : "- (none)");
+  appendBucket(sections, "New mentions / DMs", mentions, MENTION_MAX);
 
   return [
     { role: "system", content: SYSTEM_PROMPT },
     { role: "user", content: sections.join("\n") },
   ];
+}
+
+function appendBucket(
+  out: string[],
+  label: string,
+  rows: string[],
+  max: number,
+): void {
+  out.push(`${label} (${rows.length}):`);
+  if (rows.length === 0) {
+    out.push("- (none)");
+    return;
+  }
+  if (rows.length <= max) {
+    out.push(rows.join("\n"));
+    return;
+  }
+  out.push(rows.slice(0, max).join("\n"));
+  out.push(`- (+${rows.length - max} more not shown)`);
 }
 
 function formatTime(d: Date): string {

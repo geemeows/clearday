@@ -133,6 +133,39 @@ describe("buildBriefingPrompt", () => {
     expect(messages[1].content).toContain("- (none)");
   });
 
+  it("caps each bucket and surfaces the dropped count", () => {
+    const mentions: StoredSignal[] = [];
+    for (let i = 0; i < 20; i++) {
+      mentions.push(prSignal("mention", `mention-${i}`));
+    }
+    const meetings: StoredSignal[] = [];
+    for (let i = 0; i < 12; i++) {
+      // Spread across today so all 12 land in the bucket.
+      const hour = String(7 + i).padStart(2, "0");
+      meetings.push(
+        meetingSignal(`meeting-${i}`, `2026-05-04T${hour}:00:00.000Z`),
+      );
+    }
+    const messages = buildBriefingPrompt(
+      [...meetings, ...mentions],
+      "2026-05-04",
+      new Date("2026-05-04T07:00:00.000Z"),
+    );
+    const userContent = messages[1].content;
+    // Counts reflect the full bucket size, not the truncated render.
+    expect(userContent).toContain("Meetings today (12)");
+    expect(userContent).toContain("New mentions / DMs (20)");
+    // First N rendered, overflow tally appended.
+    expect(userContent).toContain("meeting-0");
+    expect(userContent).toContain("meeting-7");
+    expect(userContent).not.toContain("meeting-8");
+    expect(userContent).toContain("(+4 more not shown)");
+    expect(userContent).toContain("mention-0");
+    expect(userContent).toContain("mention-11");
+    expect(userContent).not.toContain("mention-12");
+    expect(userContent).toContain("(+8 more not shown)");
+  });
+
   it("excludes dismissed signals", () => {
     const dismissed = {
       ...prSignal("pr_review_requested", "stale PR"),
