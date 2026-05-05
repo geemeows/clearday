@@ -76,4 +76,46 @@ describe("deriveSourceStatus", () => {
       }),
     ).toBe("ok");
   });
+
+  it("uses lastPolledAt for slack when present", () => {
+    const recent = new Date(NOW - 60 * 60 * 1000).toISOString();
+    const staleWebhook = new Date(
+      NOW - STALE_WEBHOOK_THRESHOLD_MS - 1,
+    ).toISOString();
+    expect(
+      deriveSourceStatus({
+        providerId: "slack",
+        apiStatus: "connected",
+        lastWebhookAt: staleWebhook,
+        lastPolledAt: recent,
+        now: NOW,
+      }),
+    ).toBe("ok");
+  });
+
+  it("returns stale for slack when lastPolledAt is older than 24h", () => {
+    const stale = new Date(NOW - STALE_WEBHOOK_THRESHOLD_MS - 1).toISOString();
+    expect(
+      deriveSourceStatus({
+        providerId: "slack",
+        apiStatus: "connected",
+        lastWebhookAt: null,
+        lastPolledAt: stale,
+        now: NOW,
+      }),
+    ).toBe("stale");
+  });
+
+  it("falls back to lastWebhookAt when lastPolledAt is missing", () => {
+    const recent = new Date(NOW - 60 * 60 * 1000).toISOString();
+    expect(
+      deriveSourceStatus({
+        providerId: "slack",
+        apiStatus: "connected",
+        lastWebhookAt: recent,
+        lastPolledAt: null,
+        now: NOW,
+      }),
+    ).toBe("ok");
+  });
 });

@@ -54,6 +54,11 @@ const signalChannelsOverrideSql = readFileSync(
   "utf8",
 );
 
+const lastPolledSql = readFileSync(
+  resolve(__dirname, "0020_provider_accounts_last_polled.sql"),
+  "utf8",
+);
+
 describe("0001_init.sql contents", () => {
   it("declares the (provider, kind, source_id) unique constraint on signals", () => {
     expect(migrationSql).toMatch(
@@ -102,6 +107,14 @@ describe("0017_provider_accounts_webhook_received.sql contents", () => {
   it("adds provider_accounts.last_webhook_received_at as a nullable timestamptz", () => {
     expect(webhookReceivedSql).toMatch(
       /alter table public\.provider_accounts\s+add column if not exists last_webhook_received_at timestamptz null/i,
+    );
+  });
+});
+
+describe("0020_provider_accounts_last_polled.sql contents", () => {
+  it("adds provider_accounts.last_polled_at as a nullable timestamptz", () => {
+    expect(lastPolledSql).toMatch(
+      /alter table public\.provider_accounts\s+add column if not exists last_polled_at timestamptz null/i,
     );
   });
 });

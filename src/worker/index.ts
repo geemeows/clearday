@@ -237,7 +237,7 @@ export default {
         const { data, error } = await service
           .from("provider_accounts")
           .select(
-            "provider, account_id, updated_at, status, last_webhook_received_at",
+            "provider, account_id, updated_at, status, last_webhook_received_at, last_polled_at",
           );
         if (error) throw new Error(error.message);
         return (data ?? []) as Array<{
@@ -246,6 +246,7 @@ export default {
           updated_at: string | null;
           status: string | null;
           last_webhook_received_at: string | null;
+          last_polled_at: string | null;
         }>;
       });
     }
@@ -695,6 +696,13 @@ export default {
           const { error } = await service
             .from("provider_accounts")
             .update({ status, updated_at: new Date().toISOString() })
+            .eq("provider", provider);
+          if (error) throw new Error(error.message);
+        },
+        saveLastPolledAt: async (provider) => {
+          const { error } = await service
+            .from("provider_accounts")
+            .update({ last_polled_at: new Date().toISOString() })
             .eq("provider", provider);
           if (error) throw new Error(error.message);
         },

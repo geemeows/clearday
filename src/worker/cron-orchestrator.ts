@@ -61,6 +61,12 @@ export type OrchestratorDeps = {
     provider: string,
     status: ProviderHealthStatus,
   ) => Promise<void>;
+  /**
+   * Stamp `provider_accounts.last_polled_at = now()` after a successful poll.
+   * Drives the Sources rail's freshness indicator (replaces the legacy
+   * webhook-received timestamp for slack now that it's polled).
+   */
+  saveLastPolledAt?: (provider: string) => Promise<void>;
   /** Supabase write client for signal upserts (service-role in cron context). */
   store: SupabaseLike;
   /** HTTP fetch wrapper, injected for tests. */
@@ -104,6 +110,7 @@ export async function runScheduledPoll(
     try {
       const upserted = await pollOne(account, deps, rules);
       const persisted = await persistStatus(deps, account.provider, "ok");
+      await persistLastPolledAt(deps, account.provider);
       reports.push({
         provider: account.provider,
         upserted,
@@ -146,6 +153,18 @@ async function persistStatus(
     // Health writes are best-effort; surfacing one provider's poll outcome
     // must never mask the real provider error or block the next provider.
     return false;
+  }
+}
+
+async function persistLastPolledAt(
+  deps: OrchestratorDeps,
+  provider: string,
+): Promise<void> {
+  if (!deps.saveLastPolledAt) return;
+  try {
+    await deps.saveLastPolledAt(provider);
+  } catch {
+    // Best-effort, same rationale as persistStatus.
   }
 }
 

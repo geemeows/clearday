@@ -203,6 +203,76 @@ describe("runScheduledPoll", () => {
     expect(reports[0].error).toBe("no access_token");
   });
 
+  it("stamps last_polled_at after a successful poll", async () => {
+    const store = makeStore();
+    const saveLastPolledAt = vi.fn(async () => {});
+    const fetchImpl = vi.fn(
+      async () => new Response(JSON.stringify({ items: [] }), { status: 200 }),
+    );
+    const deps: OrchestratorDeps = {
+      loadAccounts: async () => [
+        {
+          provider: "github",
+          access_token: "ghu_abc",
+          refresh_token: null,
+          expires_at: null,
+        },
+      ],
+      saveLastPolledAt,
+      store: store.client,
+      fetch: fetchImpl as unknown as typeof fetch,
+    };
+    await runScheduledPoll(deps);
+    expect(saveLastPolledAt).toHaveBeenCalledWith("github");
+  });
+
+  it("does not stamp last_polled_at when the poll throws", async () => {
+    const store = makeStore();
+    const saveLastPolledAt = vi.fn(async () => {});
+    const fetchImpl = vi.fn(async () => new Response("nope", { status: 401 }));
+    const deps: OrchestratorDeps = {
+      loadAccounts: async () => [
+        {
+          provider: "github",
+          access_token: "ghu_abc",
+          refresh_token: null,
+          expires_at: null,
+        },
+      ],
+      saveLastPolledAt,
+      store: store.client,
+      fetch: fetchImpl as unknown as typeof fetch,
+    };
+    await runScheduledPoll(deps);
+    expect(saveLastPolledAt).not.toHaveBeenCalled();
+  });
+
+  it("swallows saveLastPolledAt errors so they never mask the poll outcome", async () => {
+    const store = makeStore();
+    const saveLastPolledAt = vi.fn(async () => {
+      throw new Error("db down");
+    });
+    const fetchImpl = vi.fn(
+      async () => new Response(JSON.stringify({ items: [] }), { status: 200 }),
+    );
+    const deps: OrchestratorDeps = {
+      loadAccounts: async () => [
+        {
+          provider: "github",
+          access_token: "ghu_abc",
+          refresh_token: null,
+          expires_at: null,
+        },
+      ],
+      saveLastPolledAt,
+      store: store.client,
+      fetch: fetchImpl as unknown as typeof fetch,
+    };
+    const reports = await runScheduledPoll(deps);
+    expect(reports[0].provider).toBe("github");
+    expect(reports[0].error).toBeUndefined();
+  });
+
   it("swallows saveProviderStatus errors so they never mask the poll outcome", async () => {
     const store = makeStore();
     const saveProviderStatus = vi.fn(async () => {

@@ -62,11 +62,13 @@ type ApiSource = {
   provider: string;
   status: ApiSourceStatus;
   last_webhook_at?: string | null;
+  last_polled_at?: string | null;
 };
 
 type SourceMeta = {
   status: SourceStatus;
   lastWebhookAt: string | null;
+  lastPolledAt: string | null;
 };
 
 export function AppShell() {
@@ -115,6 +117,7 @@ export function AppShell() {
               const meta = sourceMeta[s.id] ?? {
                 status: "neutral" as SourceStatus,
                 lastWebhookAt: null,
+                lastPolledAt: null,
               };
               const tooltip = sourceTooltip(s.label, meta);
               return (
@@ -130,6 +133,7 @@ export function AppShell() {
                     data-source={s.id}
                     data-status={meta.status}
                     data-last-webhook-at={meta.lastWebhookAt ?? ""}
+                    data-last-polled-at={meta.lastPolledAt ?? ""}
                     className={cn(
                       "h-2 w-2 rounded-full",
                       dotClass(meta.status),
@@ -225,14 +229,17 @@ function useSourceStatuses(): Record<string, SourceMeta> {
         for (const id of Object.keys(SOURCE_PROVIDER)) {
           const match = sources.find((s) => s.provider === SOURCE_PROVIDER[id]);
           const lastWebhookAt = match?.last_webhook_at ?? null;
+          const lastPolledAt = match?.last_polled_at ?? null;
           next[id] = {
             status: deriveSourceStatus({
               providerId: id,
               apiStatus: match?.status,
               lastWebhookAt,
+              lastPolledAt,
               now,
             }),
             lastWebhookAt,
+            lastPolledAt,
           };
         }
         setMeta(next);
@@ -249,8 +256,13 @@ function useSourceStatuses(): Record<string, SourceMeta> {
 
 function sourceTooltip(label: string, meta: SourceMeta): string | undefined {
   const status = statusLabel(meta.status);
-  if (!meta.lastWebhookAt) return `${label}: ${status}`;
-  return `${label}: ${status} · last webhook ${meta.lastWebhookAt}`;
+  if (meta.lastPolledAt) {
+    return `${label}: ${status} · last poll ${meta.lastPolledAt}`;
+  }
+  if (meta.lastWebhookAt) {
+    return `${label}: ${status} · last webhook ${meta.lastWebhookAt}`;
+  }
+  return `${label}: ${status}`;
 }
 
 function statusLabel(status: SourceStatus): string {
@@ -258,7 +270,7 @@ function statusLabel(status: SourceStatus): string {
     case "ok":
       return "connected";
     case "stale":
-      return "no recent webhook";
+      return "no recent activity";
     case "rate_limited":
       return "rate-limited";
     case "auth_failed":
