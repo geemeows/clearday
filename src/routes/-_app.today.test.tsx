@@ -356,18 +356,19 @@ describe("WeekStatsCard", () => {
             source_created_at: "2026-04-20T09:00:00.000Z",
             dismissed_at: "2026-05-02T09:00:00.000Z",
           },
-          // Meeting attended
+          // Inbox-zeroed day: actionable mention received + dismissed on
+          // 2026-05-03 with no carry-over.
           {
-            id: "m1",
-            provider: "google",
-            kind: "meeting",
-            source_id: "m1",
-            title: "Standup",
+            id: "z1",
+            provider: "slack",
+            kind: "mention",
+            source_id: "z1",
+            title: "@you",
             url: null,
-            payload: { starts_at: "2026-05-03T10:00:00.000Z" },
-            requires_action: false,
-            source_created_at: "2026-05-03T10:00:00.000Z",
-            dismissed_at: null,
+            payload: {},
+            requires_action: true,
+            source_created_at: "2026-05-03T08:00:00.000Z",
+            dismissed_at: "2026-05-03T20:00:00.000Z",
           },
         ] as StoredSignal[],
     );
@@ -386,7 +387,7 @@ describe("WeekStatsCard", () => {
     });
     expect(map["PRs reviewed"]).toBe("1");
     expect(map["Tickets shipped"]).toBe("1");
-    expect(map.Meetings).toBe("1");
+    expect(map["Inbox zeroed days"]).toBe("1");
     expect(map["Focus hours"]).toBe("0");
   });
 

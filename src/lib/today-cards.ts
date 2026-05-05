@@ -91,8 +91,10 @@ export type WeekStats = {
   prsReviewed: number;
   ticketsShipped: number;
   focusHours: number;
-  meetingsAttended: number;
+  inboxZeroedDays: number;
 };
+
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Aggregate counts over the rolling 7-day window ending at `now`. Caller is
@@ -104,13 +106,15 @@ export type WeekStats = {
  * - Tickets shipped = ticket-kind rows dismissed within the window.
  * - Focus hours = sum of meeting durations (hours, rounded to 1 decimal) for
  *   meeting rows where `payload.is_focus === true` whose start is in window.
- * - Meetings attended = meeting rows whose start is in [now-7d, now].
+ * - Inbox-zeroed days = count of completed UTC days in the last 7 where the
+ *   user received at least one actionable Signal AND every actionable Signal
+ *   created on or before end-of-day was dismissed by end-of-day.
  */
 export function computeWeekStats(
   signals: StoredSignal[],
   now: Date,
 ): WeekStats {
-  const weekAgo = now.getTime() - 7 * 24 * 60 * 60 * 1000;
+  const weekAgo = now.getTime() - 7 * DAY_MS;
   const inWindow = (iso: string | null | undefined): boolean => {
     if (!iso) return false;
     const t = Date.parse(iso);
@@ -121,7 +125,6 @@ export function computeWeekStats(
   let prsReviewed = 0;
   let ticketsShipped = 0;
   let focusMs = 0;
-  let meetingsAttended = 0;
 
   for (const s of signals) {
     if (s.kind === PR_REVIEW_KIND) {
@@ -133,10 +136,9 @@ export function computeWeekStats(
       if (s.dismissed_at && inWindow(s.dismissed_at)) ticketsShipped += 1;
       continue;
     }
-    if (s.kind === MEETING_KIND) {
+    if (s.kind === MEETING_KIND && s.payload?.is_focus === true) {
       const startsAt = (s.payload?.starts_at as string | undefined) ?? null;
-      if (inWindow(startsAt)) meetingsAttended += 1;
-      if (s.payload?.is_focus === true && inWindow(startsAt)) {
+      if (inWindow(startsAt)) {
         const endsAtRaw = s.payload?.ends_at as string | undefined;
         const startMs = startsAt ? Date.parse(startsAt) : Number.NaN;
         const endMs = endsAtRaw ? Date.parse(endsAtRaw) : Number.NaN;
@@ -148,5 +150,33 @@ export function computeWeekStats(
   }
 
   const focusHours = Math.round((focusMs / 3_600_000) * 10) / 10;
-  return { prsReviewed, ticketsShipped, focusHours, meetingsAttended };
+  const inboxZeroedDays = countInboxZeroedDays(signals, now);
+  return { prsReviewed, ticketsShipped, focusHours, inboxZeroedDays };
+}
+
+function countInboxZeroedDays(signals: StoredSignal[], now: Date): number {
+  const todayUtcStart = Math.floor(now.getTime() / DAY_MS) * DAY_MS;
+  let count = 0;
+  for (let i = 1; i <= 7; i++) {
+    const dayStart = todayUtcStart - i * DAY_MS;
+    const dayEnd = dayStart + DAY_MS - 1;
+    let receivedToday = false;
+    let unhandledCarry = false;
+    for (const s of signals) {
+      if (!s.requires_action) continue;
+      const created = s.source_created_at
+        ? Date.parse(s.source_created_at)
+        : Number.NaN;
+      if (Number.isNaN(created) || created > dayEnd) continue;
+      if (created >= dayStart) receivedToday = true;
+      const dismissed = s.dismissed_at
+        ? Date.parse(s.dismissed_at)
+        : Number.NaN;
+      if (Number.isNaN(dismissed) || dismissed > dayEnd) {
+        unhandledCarry = true;
+      }
+    }
+    if (receivedToday && !unhandledCarry) count += 1;
+  }
+  return count;
 }

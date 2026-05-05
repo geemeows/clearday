@@ -787,7 +787,7 @@ export function WeekStatsCard({
           <Stat label="PRs reviewed" value={stats.prsReviewed} />
           <Stat label="Tickets shipped" value={stats.ticketsShipped} />
           <Stat label="Focus hours" value={stats.focusHours} />
-          <Stat label="Meetings" value={stats.meetingsAttended} />
+          <Stat label="Inbox zeroed days" value={stats.inboxZeroedDays} />
         </dl>
       )}
     </article>

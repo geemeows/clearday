@@ -257,24 +257,65 @@ describe("computeWeekStats", () => {
     expect(out.focusHours).toBe(2.5);
   });
 
-  it("counts meetings whose start is in the window", () => {
-    const meeting = (id: string, startsAt: string): StoredSignal => ({
+  it("counts inbox-zeroed days from actionable signals received and dismissed by end-of-day", () => {
+    const actionable = (
+      id: string,
+      createdAt: string,
+      dismissedAt: string | null,
+    ): StoredSignal => ({
       id,
-      provider: "google",
-      kind: "meeting",
+      provider: "github",
+      kind: "pr_review_requested",
       source_id: id,
-      title: `m${id}`,
+      title: `PR ${id}`,
       url: null,
-      payload: { starts_at: startsAt },
-      requires_action: false,
-      source_created_at: startsAt,
-      dismissed_at: null,
+      payload: {},
+      requires_action: true,
+      source_created_at: createdAt,
+      dismissed_at: dismissedAt,
     });
+    // now = 2026-05-04T12:00 UTC; completed days evaluated: 2026-05-03 .. 2026-04-27.
     const out = computeWeekStats(
-      [meeting("1", inWindow), meeting("2", outOfWindow)],
+      [
+        // Received + dismissed same day → 2026-05-03 zeroed.
+        actionable("a", "2026-05-03T08:00:00.000Z", "2026-05-03T20:00:00.000Z"),
+        // Received + dismissed same day → 2026-05-02 zeroed.
+        actionable("b", "2026-05-02T08:00:00.000Z", "2026-05-02T18:00:00.000Z"),
+        // Received but not dismissed → 2026-05-01 NOT zeroed (carry-over also taints later days).
+        actionable("c", "2026-05-01T08:00:00.000Z", null),
+      ],
       now,
     );
-    expect(out.meetingsAttended).toBe(1);
+    // 'c' is unhandled and present from 2026-05-01 onward, so days 05-01..05-03
+    // are tainted by carry-over. 2026-04-30..2026-04-27 had no actionable
+    // signals received, so they don't count either. Net = 0.
+    expect(out.inboxZeroedDays).toBe(0);
+  });
+
+  it("counts a day as zeroed when all actionable signals received that day are dismissed and nothing carries over", () => {
+    const actionable = (
+      id: string,
+      createdAt: string,
+      dismissedAt: string | null,
+    ): StoredSignal => ({
+      id,
+      provider: "github",
+      kind: "pr_review_requested",
+      source_id: id,
+      title: `PR ${id}`,
+      url: null,
+      payload: {},
+      requires_action: true,
+      source_created_at: createdAt,
+      dismissed_at: dismissedAt,
+    });
+    const out = computeWeekStats(
+      [actionable("a", "2026-05-03T08:00:00.000Z", "2026-05-03T20:00:00.000Z")],
+      now,
+    );
+    // 2026-05-03 received+dismissed → zeroed (count=1). Other days had no
+    // received signals, so they don't count.
+    expect(out.inboxZeroedDays).toBe(1);
   });
 
   it("returns zeros for an empty list", () => {
@@ -282,7 +323,7 @@ describe("computeWeekStats", () => {
       prsReviewed: 0,
       ticketsShipped: 0,
       focusHours: 0,
-      meetingsAttended: 0,
+      inboxZeroedDays: 0,
     });
   });
 });
