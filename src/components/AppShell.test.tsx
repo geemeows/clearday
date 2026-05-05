@@ -57,9 +57,8 @@ describe("AppShell sidebar", () => {
     }
     const dots = sources.querySelectorAll('[data-status="neutral"]');
     expect(dots.length).toBe(5);
-    // No webhook timestamp known yet -> empty data-last-webhook-at attr.
     for (const dot of Array.from(dots)) {
-      expect(dot.getAttribute("data-last-webhook-at")).toBe("");
+      expect(dot.getAttribute("data-last-polled-at")).toBe("");
     }
   });
 

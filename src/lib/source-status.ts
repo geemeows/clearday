@@ -1,10 +1,6 @@
 // Derives the displayed status of a Source rail row from the
 // /api/sources payload. Slack gets an extra "stale" check: connected but
-// no successful poll (or webhook, while that surface is still in place)
-// landed within `STALE_WEBHOOK_THRESHOLD_MS`. Slack moved off webhooks
-// onto cron polling (#6), so `lastPolledAt` is the canonical source;
-// `lastWebhookAt` is consulted as a fallback until the legacy webhook
-// surface is removed.
+// no successful poll landed within `STALE_POLL_THRESHOLD_MS`.
 
 export type SourceStatus =
   | "ok"
@@ -19,7 +15,7 @@ export type ApiSourceStatus =
   | "rate_limited"
   | "auth_failed";
 
-export const STALE_WEBHOOK_THRESHOLD_MS = 24 * 60 * 60 * 1000;
+export const STALE_POLL_THRESHOLD_MS = 24 * 60 * 60 * 1000;
 
 export function mapApiStatus(api: ApiSourceStatus | undefined): SourceStatus {
   switch (api) {
@@ -37,15 +33,13 @@ export function mapApiStatus(api: ApiSourceStatus | undefined): SourceStatus {
 export function deriveSourceStatus(input: {
   providerId: string;
   apiStatus: ApiSourceStatus | undefined;
-  lastWebhookAt: string | null;
-  lastPolledAt?: string | null;
+  lastPolledAt: string | null;
   now: number;
 }): SourceStatus {
   const base = mapApiStatus(input.apiStatus);
   if (input.providerId !== "slack" || base !== "ok") return base;
-  const stamp = input.lastPolledAt ?? input.lastWebhookAt;
-  if (!stamp) return base;
-  const ts = Date.parse(stamp);
+  if (!input.lastPolledAt) return base;
+  const ts = Date.parse(input.lastPolledAt);
   if (Number.isNaN(ts)) return base;
-  return input.now - ts > STALE_WEBHOOK_THRESHOLD_MS ? "stale" : base;
+  return input.now - ts > STALE_POLL_THRESHOLD_MS ? "stale" : base;
 }

@@ -14,7 +14,6 @@ export type WorkerEnv = {
   GOOGLE_CLIENT_SECRET: string;
   SLACK_CLIENT_ID: string;
   SLACK_CLIENT_SECRET: string;
-  SLACK_SIGNING_SECRET: string;
   LINEAR_CLIENT_ID?: string;
   LINEAR_CLIENT_SECRET?: string;
   JIRA_CLIENT_ID?: string;

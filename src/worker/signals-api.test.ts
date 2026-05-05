@@ -229,26 +229,6 @@ describe("handleSources", () => {
     expect(slack?.status).toBe("auth_failed");
   });
 
-  it("surfaces last_webhook_received_at as last_webhook_at on the source row", async () => {
-    const res = await handleSources(async () => [
-      {
-        provider: "slack",
-        account_id: "U1",
-        updated_at: "2026-05-01T00:00:00Z",
-        status: "ok",
-        last_webhook_received_at: "2026-05-01T12:34:56Z",
-      },
-    ]);
-    const body = (await res.json()) as {
-      sources: Array<{
-        provider: string;
-        last_webhook_at: string | null;
-      }>;
-    };
-    const slack = body.sources.find((s) => s.provider === "slack");
-    expect(slack?.last_webhook_at).toBe("2026-05-01T12:34:56Z");
-  });
-
   it("surfaces last_polled_at on the source row", async () => {
     const res = await handleSources(async () => [
       {
@@ -286,26 +266,6 @@ describe("handleSources", () => {
     };
     for (const s of body.sources) {
       expect(s.last_polled_at).toBeNull();
-    }
-  });
-
-  it("returns last_webhook_at as null when the column is absent or null", async () => {
-    const res = await handleSources(async () => [
-      {
-        provider: "github",
-        account_id: "alice",
-        updated_at: "2026-05-01T00:00:00Z",
-        status: "ok",
-      },
-    ]);
-    const body = (await res.json()) as {
-      sources: Array<{
-        provider: string;
-        last_webhook_at: string | null;
-      }>;
-    };
-    for (const s of body.sources) {
-      expect(s.last_webhook_at).toBeNull();
     }
   });
 

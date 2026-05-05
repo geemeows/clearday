@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   deriveSourceStatus,
-  STALE_WEBHOOK_THRESHOLD_MS,
+  STALE_POLL_THRESHOLD_MS,
 } from "#/lib/source-status";
 
 const NOW = Date.parse("2026-05-05T12:00:00Z");
@@ -12,108 +12,66 @@ describe("deriveSourceStatus", () => {
       deriveSourceStatus({
         providerId: "github",
         apiStatus: "connected",
-        lastWebhookAt: null,
+        lastPolledAt: null,
         now: NOW,
       }),
     ).toBe("ok");
   });
 
-  it("returns ok for slack with a recent webhook", () => {
+  it("returns ok for slack with a recent poll", () => {
     const recent = new Date(NOW - 60 * 60 * 1000).toISOString();
     expect(
       deriveSourceStatus({
         providerId: "slack",
         apiStatus: "connected",
-        lastWebhookAt: recent,
-        now: NOW,
-      }),
-    ).toBe("ok");
-  });
-
-  it("returns stale for slack when last webhook is older than 24h", () => {
-    const stale = new Date(NOW - STALE_WEBHOOK_THRESHOLD_MS - 1).toISOString();
-    expect(
-      deriveSourceStatus({
-        providerId: "slack",
-        apiStatus: "connected",
-        lastWebhookAt: stale,
-        now: NOW,
-      }),
-    ).toBe("stale");
-  });
-
-  it("does not stale-out slack when no webhook timestamp is known", () => {
-    expect(
-      deriveSourceStatus({
-        providerId: "slack",
-        apiStatus: "connected",
-        lastWebhookAt: null,
-        now: NOW,
-      }),
-    ).toBe("ok");
-  });
-
-  it("does not override auth_failed with stale", () => {
-    const stale = new Date(NOW - STALE_WEBHOOK_THRESHOLD_MS - 1).toISOString();
-    expect(
-      deriveSourceStatus({
-        providerId: "slack",
-        apiStatus: "auth_failed",
-        lastWebhookAt: stale,
-        now: NOW,
-      }),
-    ).toBe("auth_failed");
-  });
-
-  it("ignores webhook timestamps for non-slack providers", () => {
-    const stale = new Date(NOW - STALE_WEBHOOK_THRESHOLD_MS - 1).toISOString();
-    expect(
-      deriveSourceStatus({
-        providerId: "github",
-        apiStatus: "connected",
-        lastWebhookAt: stale,
-        now: NOW,
-      }),
-    ).toBe("ok");
-  });
-
-  it("uses lastPolledAt for slack when present", () => {
-    const recent = new Date(NOW - 60 * 60 * 1000).toISOString();
-    const staleWebhook = new Date(
-      NOW - STALE_WEBHOOK_THRESHOLD_MS - 1,
-    ).toISOString();
-    expect(
-      deriveSourceStatus({
-        providerId: "slack",
-        apiStatus: "connected",
-        lastWebhookAt: staleWebhook,
         lastPolledAt: recent,
         now: NOW,
       }),
     ).toBe("ok");
   });
 
-  it("returns stale for slack when lastPolledAt is older than 24h", () => {
-    const stale = new Date(NOW - STALE_WEBHOOK_THRESHOLD_MS - 1).toISOString();
+  it("returns stale for slack when last poll is older than 24h", () => {
+    const stale = new Date(NOW - STALE_POLL_THRESHOLD_MS - 1).toISOString();
     expect(
       deriveSourceStatus({
         providerId: "slack",
         apiStatus: "connected",
-        lastWebhookAt: null,
         lastPolledAt: stale,
         now: NOW,
       }),
     ).toBe("stale");
   });
 
-  it("falls back to lastWebhookAt when lastPolledAt is missing", () => {
-    const recent = new Date(NOW - 60 * 60 * 1000).toISOString();
+  it("does not stale-out slack when no poll timestamp is known", () => {
     expect(
       deriveSourceStatus({
         providerId: "slack",
         apiStatus: "connected",
-        lastWebhookAt: recent,
         lastPolledAt: null,
+        now: NOW,
+      }),
+    ).toBe("ok");
+  });
+
+  it("does not override auth_failed with stale", () => {
+    const stale = new Date(NOW - STALE_POLL_THRESHOLD_MS - 1).toISOString();
+    expect(
+      deriveSourceStatus({
+        providerId: "slack",
+        apiStatus: "auth_failed",
+        lastPolledAt: stale,
+        now: NOW,
+      }),
+    ).toBe("auth_failed");
+  });
+
+  it("ignores poll timestamps for non-slack providers", () => {
+    const stale = new Date(NOW - STALE_POLL_THRESHOLD_MS - 1).toISOString();
+    expect(
+      deriveSourceStatus({
+        providerId: "github",
+        apiStatus: "connected",
+        lastPolledAt: stale,
         now: NOW,
       }),
     ).toBe("ok");

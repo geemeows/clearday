@@ -61,13 +61,11 @@ const SOURCE_PROVIDER: Record<string, string> = {
 type ApiSource = {
   provider: string;
   status: ApiSourceStatus;
-  last_webhook_at?: string | null;
   last_polled_at?: string | null;
 };
 
 type SourceMeta = {
   status: SourceStatus;
-  lastWebhookAt: string | null;
   lastPolledAt: string | null;
 };
 
@@ -116,7 +114,6 @@ export function AppShell() {
             {SOURCES.map((s) => {
               const meta = sourceMeta[s.id] ?? {
                 status: "neutral" as SourceStatus,
-                lastWebhookAt: null,
                 lastPolledAt: null,
               };
               const tooltip = sourceTooltip(s.label, meta);
@@ -132,7 +129,6 @@ export function AppShell() {
                     aria-label={`${s.label} status: ${statusLabel(meta.status)}`}
                     data-source={s.id}
                     data-status={meta.status}
-                    data-last-webhook-at={meta.lastWebhookAt ?? ""}
                     data-last-polled-at={meta.lastPolledAt ?? ""}
                     className={cn(
                       "h-2 w-2 rounded-full",
@@ -228,17 +224,14 @@ function useSourceStatuses(): Record<string, SourceMeta> {
         const next: Record<string, SourceMeta> = {};
         for (const id of Object.keys(SOURCE_PROVIDER)) {
           const match = sources.find((s) => s.provider === SOURCE_PROVIDER[id]);
-          const lastWebhookAt = match?.last_webhook_at ?? null;
           const lastPolledAt = match?.last_polled_at ?? null;
           next[id] = {
             status: deriveSourceStatus({
               providerId: id,
               apiStatus: match?.status,
-              lastWebhookAt,
               lastPolledAt,
               now,
             }),
-            lastWebhookAt,
             lastPolledAt,
           };
         }
@@ -258,9 +251,6 @@ function sourceTooltip(label: string, meta: SourceMeta): string | undefined {
   const status = statusLabel(meta.status);
   if (meta.lastPolledAt) {
     return `${label}: ${status} · last poll ${meta.lastPolledAt}`;
-  }
-  if (meta.lastWebhookAt) {
-    return `${label}: ${status} · last webhook ${meta.lastWebhookAt}`;
   }
   return `${label}: ${status}`;
 }

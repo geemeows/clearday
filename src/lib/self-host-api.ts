@@ -19,7 +19,6 @@ export const REQUIRED_ENV_VARS = [
 ] as const;
 
 export const OPTIONAL_ENV_VARS = [
-  "SLACK_SIGNING_SECRET",
   "VAPID_PUBLIC_KEY",
   "VAPID_PRIVATE_KEY",
   "VAPID_SUBJECT",

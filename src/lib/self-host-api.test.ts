@@ -16,7 +16,6 @@ const FULL_ENV: SelfHostEnv = {
   STATE_HMAC_SECRET: "hmac",
   AUTH_PROXY_URL: "https://auth.example.com",
   AI_KEY_SECRET: "ai",
-  SLACK_SIGNING_SECRET: "s-sign",
   VAPID_PUBLIC_KEY: "vp",
   VAPID_PRIVATE_KEY: "vk",
   VAPID_SUBJECT: "mailto:owner@example.com",
@@ -40,7 +39,6 @@ describe("getSelfHostInfo", () => {
     expect(serialized).not.toContain("anon");
     expect(serialized).not.toContain("service");
     expect(serialized).not.toContain("hmac");
-    expect(serialized).not.toContain("s-sign");
   });
 
   it("flags missing required env vars as not present", () => {

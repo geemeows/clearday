@@ -82,7 +82,6 @@ import { runDueRollups } from "#/lib/signal-rollup";
 import { dismissSignal, markSignalReplied } from "#/lib/signal-store";
 import { listSlackChannels } from "#/lib/slack-channels";
 import { postSlackReply } from "#/lib/slack-reply";
-import { handleSlackWebhook } from "#/lib/slack-webhook";
 import {
   DEFAULT_THEME,
   getTheme,
@@ -103,7 +102,6 @@ import { pruneStaleWebPushSubscriptions } from "#/lib/web-push-dispatcher";
 import type { VapidConfig } from "#/lib/web-push-vapid";
 import {
   buildDispatcherDeps,
-  dispatchUpsertedSignal,
   loadDueQueuedAlerts,
   loadUpcomingMeetings,
   removeQueuedAlert,
@@ -129,78 +127,6 @@ export default {
     _ctx: ExecutionContext,
   ): Promise<Response> {
     const url = new URL(request.url);
-
-    if (url.pathname === "/webhooks/slack" && request.method === "POST") {
-      const service = serviceClient(env);
-      const dispatcher = buildDispatcherDeps(
-        service,
-        (i, init) => fetch(i, init),
-        vapidFromEnv(env),
-        env.AI_KEY_SECRET ?? null,
-      );
-      const outcome = await handleSlackWebhook(request, {
-        signingSecret: env.SLACK_SIGNING_SECRET,
-        store: service,
-        loadInboxRules: () => loadInboxRulesFromService(service),
-        loadAllowlist: async () => {
-          const { data, error } = await service
-            .from("slack_channel_allowlist")
-            .select("channel_id");
-          if (error) throw new Error(error.message);
-          return ((data ?? []) as Array<{ channel_id: string }>).map(
-            (r) => r.channel_id,
-          );
-        },
-        loadSelfUserId: async () => {
-          const { data, error } = await service
-            .from("provider_accounts")
-            .select("account_id")
-            .eq("provider", "slack")
-            .maybeSingle();
-          if (error) throw new Error(error.message);
-          return (data?.account_id as string | null) ?? null;
-        },
-        recordParticipatedThread: async (channel, thread_ts) => {
-          const { error } = await service
-            .from("slack_participated_threads")
-            .upsert(
-              { channel, thread_ts },
-              { onConflict: "channel,thread_ts", ignoreDuplicates: true },
-            );
-          if (error) throw new Error(error.message);
-        },
-        loadParticipatedThread: async (channel, thread_ts) => {
-          const { data, error } = await service
-            .from("slack_participated_threads")
-            .select("channel")
-            .eq("channel", channel)
-            .eq("thread_ts", thread_ts)
-            .maybeSingle();
-          if (error) throw new Error(error.message);
-          return data !== null;
-        },
-        onStored: async (signal) => {
-          await dispatchUpsertedSignal(signal, service, dispatcher);
-        },
-        recordWebhookReceived: async () => {
-          const { error } = await service
-            .from("provider_accounts")
-            .update({ last_webhook_received_at: new Date().toISOString() })
-            .eq("provider", "slack");
-          if (error) throw new Error(error.message);
-        },
-      });
-      if (outcome.kind === "challenge") {
-        return new Response(outcome.challenge, {
-          status: 200,
-          headers: { "content-type": "text/plain" },
-        });
-      }
-      if (outcome.kind === "rejected") {
-        return new Response(outcome.reason, { status: outcome.status });
-      }
-      return new Response(null, { status: 204 });
-    }
 
     if (url.pathname === "/oauth/exchange") {
       return handleOAuthExchange(request, env, {
@@ -236,16 +162,13 @@ export default {
       return handleSources(async () => {
         const { data, error } = await service
           .from("provider_accounts")
-          .select(
-            "provider, account_id, updated_at, status, last_webhook_received_at, last_polled_at",
-          );
+          .select("provider, account_id, updated_at, status, last_polled_at");
         if (error) throw new Error(error.message);
         return (data ?? []) as Array<{
           provider: string;
           account_id: string | null;
           updated_at: string | null;
           status: string | null;
-          last_webhook_received_at: string | null;
           last_polled_at: string | null;
         }>;
       });
