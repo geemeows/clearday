@@ -20,6 +20,9 @@ export type WorkerEnv = {
   JIRA_CLIENT_ID?: string;
   JIRA_CLIENT_SECRET?: string;
   AI_KEY_SECRET: string;
+  /** Ed25519 public key (b64url-encoded raw 32-byte point) for verifying
+   * the auth-proxy's OAuth token envelopes. Published by the project. */
+  ENVELOPE_PUBLIC_KEY: string;
   /** VAPID public key (uncompressed P-256, 65 bytes, b64url). */
   VAPID_PUBLIC_KEY: string;
   /** VAPID private key (32-byte P-256 scalar, b64url). */

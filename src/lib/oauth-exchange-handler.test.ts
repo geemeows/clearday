@@ -1,91 +1,139 @@
-import { describe, expect, it, vi } from "vitest";
-import type { FetchLike, TokenRecord } from "#/lib/oauth-exchange";
+import { beforeAll, describe, expect, it, vi } from "vitest";
+import {
+  type EnvelopeKeypair,
+  generateEnvelopeKeypair,
+  signEnvelope,
+} from "#/lib/oauth-envelope";
+import type { TokenRecord } from "#/lib/oauth-exchange";
 import {
   handleOAuthExchange,
   type OAuthExchangeEnv,
   type PersistTokens,
 } from "#/lib/oauth-exchange-handler";
-import { signState } from "#/lib/oauth-state";
 
-const env: OAuthExchangeEnv = {
-  STATE_HMAC_SECRET: "test-secret",
-  GITHUB_CLIENT_ID: "gh-id",
-  GITHUB_CLIENT_SECRET: "gh-secret",
-  GOOGLE_CLIENT_ID: "go-id",
-  GOOGLE_CLIENT_SECRET: "go-secret",
-  SLACK_CLIENT_ID: "sl-id",
-  SLACK_CLIENT_SECRET: "sl-secret",
-  AUTH_PROXY_URL: "https://auth.example.com",
-};
+let keys: EnvelopeKeypair;
+let env: OAuthExchangeEnv;
 
-const okJson = (body: unknown, status = 200) => ({
-  ok: status >= 200 && status < 300,
-  status,
-  json: async () => body,
-  text: async () => JSON.stringify(body),
+beforeAll(async () => {
+  keys = await generateEnvelopeKeypair();
+  env = { ENVELOPE_PUBLIC_KEY: keys.publicKey };
 });
 
-const requestFor = async (params: Partial<Record<string, string>>) => {
+const requestFor = (envelope: string | null) => {
   const u = new URL("https://owner.example.com/oauth/exchange");
-  for (const [k, v] of Object.entries(params)) {
-    if (v != null) u.searchParams.set(k, v);
-  }
+  if (envelope != null) u.searchParams.set("envelope", envelope);
   return new Request(u.toString());
 };
 
 describe("handleOAuthExchange", () => {
-  it("verifies state, exchanges, persists, and redirects to settings", async () => {
-    const state = await signState(
-      { userBackendUrl: "https://owner.example.com", nonce: "n" },
-      env.STATE_HMAC_SECRET,
-      1000,
+  it("verifies envelope, persists tokens, and 302s to /today", async () => {
+    const envelope = await signEnvelope(
+      {
+        provider: "github",
+        access_token: "ghu_x",
+        refresh_token: null,
+        expires_at: null,
+        scope: "repo,read:user",
+        account_id: "42",
+        backendUrl: "https://owner.example.com",
+      },
+      keys,
+      { now: 1000 },
     );
-    const fetchImpl: FetchLike = vi.fn(async (url) => {
-      if (url === "https://github.com/login/oauth/access_token") {
-        return okJson({ access_token: "ghu_x", scope: "repo" });
-      }
-      return okJson({ id: 7, login: "octo" });
-    });
     const persisted: TokenRecord[] = [];
     const persist: PersistTokens = async (r) => {
       persisted.push(r);
     };
     const res = await handleOAuthExchange(
-      await requestFor({ code: "abc", provider: "github", state }),
+      requestFor(envelope),
       env,
-      { fetch: fetchImpl, persist },
+      { persist },
       1000,
     );
     expect(res.status).toBe(302);
-    expect(res.headers.get("location")).toBe("/settings?connected=github");
-    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(res.headers.get("location")).toBe("/today");
     expect(persisted).toHaveLength(1);
     expect(persisted[0].provider).toBe("github");
     expect(persisted[0].access_token).toBe("ghu_x");
-    expect(persisted[0].account_id).toBe("7");
+    expect(persisted[0].account_id).toBe("42");
+    expect(persisted[0].scopes).toEqual(["repo", "read:user"]);
   });
 
-  it("returns 400 when state is missing", async () => {
+  it("redirects to envelope's return_to when supplied", async () => {
+    const envelope = await signEnvelope(
+      {
+        provider: "github",
+        access_token: "t",
+        scope: "repo",
+        account_id: "1",
+        backendUrl: "https://owner.example.com",
+        return_to: "/onboarding",
+      },
+      keys,
+      { now: 1000 },
+    );
     const res = await handleOAuthExchange(
-      await requestFor({ code: "abc", provider: "github" }),
+      requestFor(envelope),
       env,
-      { fetch: vi.fn(), persist: vi.fn() },
+      { persist: vi.fn() },
+      1000,
+    );
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).toBe("/onboarding");
+  });
+
+  it("ignores absolute or protocol-relative return_to values", async () => {
+    const envelope = await signEnvelope(
+      {
+        provider: "github",
+        access_token: "t",
+        scope: "repo",
+        account_id: "1",
+        backendUrl: "https://owner.example.com",
+        return_to: "//evil.example.com/steal",
+      },
+      keys,
+      { now: 1000 },
+    );
+    const res = await handleOAuthExchange(
+      requestFor(envelope),
+      env,
+      { persist: vi.fn() },
+      1000,
+    );
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).toBe("/today");
+  });
+
+  it("returns 400 when envelope is missing", async () => {
+    const res = await handleOAuthExchange(
+      requestFor(null),
+      env,
+      { persist: vi.fn() },
       1000,
     );
     expect(res.status).toBe(400);
+    expect(await res.text()).toMatch(/missing envelope/);
   });
 
-  it("returns 400 on tampered state (different secret)", async () => {
-    const state = await signState(
-      { userBackendUrl: "https://owner.example.com", nonce: "n" },
-      "wrong",
-      1000,
+  it("returns 400 when envelope signature does not verify", async () => {
+    const otherKeys = await generateEnvelopeKeypair();
+    const envelope = await signEnvelope(
+      {
+        provider: "github",
+        access_token: "t",
+        scope: "repo",
+        account_id: "1",
+        backendUrl: "https://owner.example.com",
+      },
+      otherKeys,
+      { now: 1000 },
     );
     const persist = vi.fn();
     const res = await handleOAuthExchange(
-      await requestFor({ code: "abc", provider: "github", state }),
+      requestFor(envelope),
       env,
-      { fetch: vi.fn(), persist },
+      { persist },
       1000,
     );
     expect(res.status).toBe(400);
@@ -93,54 +141,27 @@ describe("handleOAuthExchange", () => {
     expect(persist).not.toHaveBeenCalled();
   });
 
-  it("returns 400 on expired state", async () => {
-    const state = await signState(
-      { userBackendUrl: "https://owner.example.com", nonce: "n" },
-      env.STATE_HMAC_SECRET,
-      1000,
+  it("returns 400 when envelope has expired", async () => {
+    const envelope = await signEnvelope(
+      {
+        provider: "github",
+        access_token: "t",
+        scope: "repo",
+        account_id: "1",
+        backendUrl: "https://owner.example.com",
+      },
+      keys,
+      { now: 1000 },
     );
+    const persist = vi.fn();
     const res = await handleOAuthExchange(
-      await requestFor({ code: "abc", provider: "github", state }),
+      requestFor(envelope),
       env,
-      { fetch: vi.fn(), persist: vi.fn() },
-      1000 + 601,
+      { persist },
+      1000 + 121,
     );
     expect(res.status).toBe(400);
     expect(await res.text()).toMatch(/expired/);
-  });
-
-  it("returns 400 for unknown providers", async () => {
-    const state = await signState(
-      { userBackendUrl: "https://owner.example.com", nonce: "n" },
-      env.STATE_HMAC_SECRET,
-      1000,
-    );
-    const res = await handleOAuthExchange(
-      await requestFor({ code: "abc", provider: "dropbox", state }),
-      env,
-      { fetch: vi.fn(), persist: vi.fn() },
-      1000,
-    );
-    expect(res.status).toBe(400);
-    expect(await res.text()).toMatch(/unknown provider/);
-  });
-
-  it("returns 502 when the provider rejects the code", async () => {
-    const state = await signState(
-      { userBackendUrl: "https://owner.example.com", nonce: "n" },
-      env.STATE_HMAC_SECRET,
-      1000,
-    );
-    const fetchImpl: FetchLike = async () =>
-      okJson({ error: "bad_verification_code" });
-    const persist = vi.fn();
-    const res = await handleOAuthExchange(
-      await requestFor({ code: "abc", provider: "github", state }),
-      env,
-      { fetch: fetchImpl, persist },
-      1000,
-    );
-    expect(res.status).toBe(502);
     expect(persist).not.toHaveBeenCalled();
   });
 });

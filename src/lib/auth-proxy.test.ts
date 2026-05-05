@@ -1,11 +1,47 @@
-import { describe, expect, it } from "vitest";
-import { handleAuthProxyRequest } from "#/lib/auth-proxy";
+import { beforeAll, describe, expect, it, vi } from "vitest";
+import { type AuthProxyEnv, handleAuthProxyRequest } from "#/lib/auth-proxy";
+import {
+  type EnvelopeKeypair,
+  generateEnvelopeKeypair,
+  verifyEnvelope,
+} from "#/lib/oauth-envelope";
+import type { FetchLike } from "#/lib/oauth-exchange";
 import { signState } from "#/lib/oauth-state";
 
-const env = {
-  STATE_HMAC_SECRET: "test-secret",
-  AUTH_PROXY_URL: "https://auth.example.com",
-  GITHUB_CLIENT_ID: "gh-client-id",
+let keys: EnvelopeKeypair;
+let env: AuthProxyEnv;
+
+beforeAll(async () => {
+  keys = await generateEnvelopeKeypair();
+  env = {
+    STATE_HMAC_SECRET: "test-secret",
+    AUTH_PROXY_URL: "https://auth.example.com",
+    GITHUB_CLIENT_ID: "gh-client-id",
+    GITHUB_CLIENT_SECRET: "gh-client-secret",
+    GOOGLE_CLIENT_ID: "go-id",
+    GOOGLE_CLIENT_SECRET: "go-secret",
+    SLACK_CLIENT_ID: "sl-id",
+    SLACK_CLIENT_SECRET: "sl-secret",
+    ENVELOPE_PRIVATE_KEY: keys.privateKey,
+    ENVELOPE_PUBLIC_KEY: keys.publicKey,
+  };
+});
+
+const okJson = (body: unknown, status = 200) => ({
+  ok: status >= 200 && status < 300,
+  status,
+  json: async () => body,
+  text: async () => JSON.stringify(body),
+});
+
+const githubFetch: FetchLike = async (url) => {
+  if (url === "https://github.com/login/oauth/access_token") {
+    return okJson({ access_token: "ghu_x", scope: "repo,read:user" });
+  }
+  if (url === "https://api.github.com/user") {
+    return okJson({ id: 42, login: "octo" });
+  }
+  throw new Error(`unexpected url: ${url}`);
 };
 
 const callbackUrl = (provider: string, params: Record<string, string>) => {
@@ -14,8 +50,8 @@ const callbackUrl = (provider: string, params: Record<string, string>) => {
   return new Request(u.toString());
 };
 
-describe("handleAuthProxyRequest", () => {
-  it("redirects to <userBackendUrl>/oauth/exchange with code+provider on valid state", async () => {
+describe("handleAuthProxyRequest /callback", () => {
+  it("verifies state, exchanges code, and 302s with a signed envelope", async () => {
     const state = await signState(
       { userBackendUrl: "https://owner.example.com", nonce: "n1" },
       env.STATE_HMAC_SECRET,
@@ -24,34 +60,24 @@ describe("handleAuthProxyRequest", () => {
     const res = await handleAuthProxyRequest(
       callbackUrl("github", { code: "abc", state }),
       env,
+      { fetch: githubFetch },
       1000,
     );
     expect(res.status).toBe(302);
     const location = new URL(res.headers.get("location") ?? "");
     expect(location.origin).toBe("https://owner.example.com");
     expect(location.pathname).toBe("/oauth/exchange");
-    expect(location.searchParams.get("code")).toBe("abc");
-    expect(location.searchParams.get("provider")).toBe("github");
-    expect(location.searchParams.get("state")).toBe(state);
-  });
-
-  it.each([
-    "linear",
-    "jira",
-  ])("redirects %s callbacks to <userBackendUrl>/oauth/exchange", async (provider) => {
-    const state = await signState(
-      { userBackendUrl: "https://owner.example.com", nonce: `n-${provider}` },
-      env.STATE_HMAC_SECRET,
-      1000,
-    );
-    const res = await handleAuthProxyRequest(
-      callbackUrl(provider, { code: "abc", state }),
-      env,
-      1000,
-    );
-    expect(res.status).toBe(302);
-    const location = new URL(res.headers.get("location") ?? "");
-    expect(location.searchParams.get("provider")).toBe(provider);
+    expect(location.searchParams.has("code")).toBe(false);
+    expect(location.searchParams.has("state")).toBe(false);
+    const envelope = location.searchParams.get("envelope") ?? "";
+    expect(envelope).toBeTruthy();
+    const verified = await verifyEnvelope(envelope, keys.publicKey, 1000);
+    if (!verified.ok) throw new Error(`expected ok, got ${verified.reason}`);
+    expect(verified.payload.provider).toBe("github");
+    expect(verified.payload.access_token).toBe("ghu_x");
+    expect(verified.payload.account_id).toBe("42");
+    expect(verified.payload.scope).toBe("repo,read:user");
+    expect(verified.payload.backendUrl).toBe("https://owner.example.com");
   });
 
   it("rejects unknown providers with 400", async () => {
@@ -63,6 +89,7 @@ describe("handleAuthProxyRequest", () => {
     const res = await handleAuthProxyRequest(
       callbackUrl("dropbox", { code: "abc", state }),
       env,
+      { fetch: vi.fn() as unknown as FetchLike },
       1000,
     );
     expect(res.status).toBe(400);
@@ -73,6 +100,7 @@ describe("handleAuthProxyRequest", () => {
     const res = await handleAuthProxyRequest(
       callbackUrl("github", { code: "abc" }),
       env,
+      { fetch: vi.fn() as unknown as FetchLike },
       1000,
     );
     expect(res.status).toBe(400);
@@ -88,6 +116,7 @@ describe("handleAuthProxyRequest", () => {
     const res = await handleAuthProxyRequest(
       callbackUrl("github", { code: "abc", state }),
       env,
+      { fetch: vi.fn() as unknown as FetchLike },
       1000,
     );
     expect(res.status).toBe(400);
@@ -103,6 +132,7 @@ describe("handleAuthProxyRequest", () => {
     const res = await handleAuthProxyRequest(
       callbackUrl("github", { code: "abc", state }),
       env,
+      { fetch: vi.fn() as unknown as FetchLike },
       1000 + 601,
     );
     expect(res.status).toBe(400);
@@ -118,16 +148,36 @@ describe("handleAuthProxyRequest", () => {
     const res = await handleAuthProxyRequest(
       callbackUrl("github", { code: "abc", state }),
       env,
+      { fetch: vi.fn() as unknown as FetchLike },
       1000,
     );
     expect(res.status).toBe(400);
     expect(await res.text()).toMatch(/https/);
   });
 
+  it("returns 502 when the provider rejects the code", async () => {
+    const state = await signState(
+      { userBackendUrl: "https://owner.example.com", nonce: "n6" },
+      env.STATE_HMAC_SECRET,
+      1000,
+    );
+    const failingFetch: FetchLike = async () =>
+      okJson({ error: "bad_verification_code" });
+    const res = await handleAuthProxyRequest(
+      callbackUrl("github", { code: "abc", state }),
+      env,
+      { fetch: failingFetch },
+      1000,
+    );
+    expect(res.status).toBe(502);
+    expect(await res.text()).toMatch(/github exchange failed/);
+  });
+
   it("returns 404 for non-callback / non-start paths", async () => {
     const res = await handleAuthProxyRequest(
       new Request("https://auth.example.com/health"),
       env,
+      { fetch: vi.fn() as unknown as FetchLike },
       1000,
     );
     expect(res.status).toBe(404);
@@ -141,6 +191,7 @@ describe("handleAuthProxyRequest /start", () => {
         "https://auth.example.com/start/github?backend=https://owner.example.com",
       ),
       env,
+      { fetch: vi.fn() as unknown as FetchLike },
       1000,
     );
     expect(res.status).toBe(302);
@@ -159,6 +210,7 @@ describe("handleAuthProxyRequest /start", () => {
     const res = await handleAuthProxyRequest(
       new Request("https://auth.example.com/start/github"),
       env,
+      { fetch: vi.fn() as unknown as FetchLike },
       1000,
     );
     expect(res.status).toBe(400);
@@ -171,6 +223,7 @@ describe("handleAuthProxyRequest /start", () => {
         "https://auth.example.com/start/github?backend=http://owner.example.com",
       ),
       env,
+      { fetch: vi.fn() as unknown as FetchLike },
       1000,
     );
     expect(res.status).toBe(400);
@@ -183,6 +236,7 @@ describe("handleAuthProxyRequest /start", () => {
         "https://auth.example.com/start/google?backend=https://owner.example.com",
       ),
       env,
+      { fetch: vi.fn() as unknown as FetchLike },
       1000,
     );
     expect(res.status).toBe(400);

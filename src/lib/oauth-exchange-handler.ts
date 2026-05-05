@@ -1,26 +1,23 @@
 // HTTP handler for the per-user Worker side of the OAuth callback. The
-// auth-proxy 302-redirects the browser here with `code`, `provider`, and the
-// original signed `state`. Re-verifying the state here closes the gap that
-// would otherwise let any caller hit /oauth/exchange with a chosen `code`.
+// auth-proxy 302-redirects the browser here with `?envelope=<signed>`. The
+// envelope is an Ed25519-signed payload carrying the freshly-exchanged
+// provider token plus metadata; the user-Worker verifies it against the
+// proxy's published public key, then upserts into `provider_accounts` and
+// redirects to `return_to` (default `/today`).
 
-import {
-  type ExchangeEnv,
-  ExchangeError,
-  exchangeCode,
-  type FetchLike,
-  type Provider,
-  type TokenRecord,
-} from "#/lib/oauth-exchange";
-import { verifyState } from "#/lib/oauth-state";
+import { verifyEnvelope } from "#/lib/oauth-envelope";
+import type { Provider, TokenRecord } from "#/lib/oauth-exchange";
 
 const KNOWN_PROVIDERS: ReadonlySet<Provider> = new Set([
   "github",
   "google",
   "slack",
+  "linear",
+  "jira",
 ]);
 
-export type OAuthExchangeEnv = ExchangeEnv & {
-  STATE_HMAC_SECRET: string;
+export type OAuthExchangeEnv = {
+  ENVELOPE_PUBLIC_KEY: string;
 };
 
 export type PersistTokens = (record: TokenRecord) => Promise<void>;
@@ -28,41 +25,60 @@ export type PersistTokens = (record: TokenRecord) => Promise<void>;
 export async function handleOAuthExchange(
   request: Request,
   env: OAuthExchangeEnv,
-  deps: { fetch: FetchLike; persist: PersistTokens },
+  deps: { persist: PersistTokens },
   now: number = Math.floor(Date.now() / 1000),
 ): Promise<Response> {
   const url = new URL(request.url);
-  const code = url.searchParams.get("code");
-  const provider = url.searchParams.get("provider");
-  const state = url.searchParams.get("state");
-  if (!code || !provider || !state) {
-    return text("missing code, provider, or state", 400);
-  }
-  if (!isKnownProvider(provider)) {
-    return text(`unknown provider: ${provider}`, 400);
-  }
-  const verified = await verifyState(state, env.STATE_HMAC_SECRET, now);
+  const envelope = url.searchParams.get("envelope");
+  if (!envelope) return text("missing envelope", 400);
+  const verified = await verifyEnvelope(envelope, env.ENVELOPE_PUBLIC_KEY, now);
   if (!verified.ok) {
-    return text(`invalid state: ${verified.reason}`, 400);
+    return text(`invalid envelope: ${verified.reason}`, 400);
   }
-  let record: TokenRecord;
-  try {
-    record = await exchangeCode(provider, code, env, deps.fetch);
-  } catch (err) {
-    if (err instanceof ExchangeError) {
-      return text(`${provider} exchange failed: ${err.message}`, 502);
-    }
-    throw err;
+  const { payload } = verified;
+  if (!isKnownProvider(payload.provider)) {
+    return text(`unknown provider: ${payload.provider}`, 400);
   }
+  const record: TokenRecord = {
+    provider: payload.provider,
+    account_id: payload.account_id || null,
+    access_token: payload.access_token,
+    refresh_token: payload.refresh_token ?? null,
+    expires_at: unixToIso(payload.expires_at ?? null),
+    scopes: parseScope(payload.scope),
+    metadata: {},
+  };
   await deps.persist(record);
-  return new Response(null, {
-    status: 302,
-    headers: { location: `/settings?connected=${provider}` },
-  });
+  const location = sanitizeReturnTo(payload.return_to ?? null);
+  return new Response(null, { status: 302, headers: { location } });
 }
 
 function isKnownProvider(p: string): p is Provider {
   return KNOWN_PROVIDERS.has(p as Provider);
+}
+
+function parseScope(scope: string): string[] {
+  if (!scope) return [];
+  // Providers vary on separator; both comma and space are normalized away by
+  // the proxy-side scope-join, but accept either here for safety.
+  return scope
+    .split(/[\s,]+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+function unixToIso(unix: number | null): string | null {
+  if (unix == null) return null;
+  return new Date(unix * 1000).toISOString();
+}
+
+function sanitizeReturnTo(returnTo: string | null): string {
+  // Only allow same-origin paths; reject anything that would escape the
+  // user-Worker (absolute URLs, protocol-relative, backslash tricks).
+  if (!returnTo) return "/today";
+  if (!returnTo.startsWith("/")) return "/today";
+  if (returnTo.startsWith("//") || returnTo.startsWith("/\\")) return "/today";
+  return returnTo;
 }
 
 function text(body: string, status: number): Response {

@@ -4,19 +4,39 @@
 // client_id from the scope table and 302s the browser to the provider. The
 // signed `state` carries the user's backend URL through to the callback.
 //
-// `/callback/:provider` verifies the signed `state`, then 302-redirects the
-// provider's `code` onward to the user's own backend, which performs the
-// token exchange. Never persists the code or token; never reads/writes
-// storage.
+// `/callback/:provider` verifies the signed `state`, exchanges the provider's
+// `code` for a token using the project's client_secret, and 302-redirects the
+// browser to `<userBackendUrl>/oauth/exchange?envelope=<ed25519-signed>`. The
+// user-Worker verifies the envelope against the proxy's published public key
+// and persists the token. The proxy never reads/writes storage and never
+// hands the raw code or token to the user-Worker.
 
 import { type AuthorizeEnv, buildAuthorizeUrl } from "#/lib/authorize-url";
+import {
+  type EnvelopeKeypair,
+  type EnvelopePayload,
+  signEnvelope,
+} from "#/lib/oauth-envelope";
+import {
+  type ExchangeEnv,
+  ExchangeError,
+  exchangeCode,
+  type FetchLike,
+  type Provider,
+  type TokenRecord,
+} from "#/lib/oauth-exchange";
 import { verifyState } from "#/lib/oauth-state";
 
-export type AuthProxyEnv = AuthorizeEnv & {
-  STATE_HMAC_SECRET: string;
-};
+export type AuthProxyEnv = AuthorizeEnv &
+  ExchangeEnv & {
+    STATE_HMAC_SECRET: string;
+    ENVELOPE_PRIVATE_KEY: string;
+    ENVELOPE_PUBLIC_KEY: string;
+  };
 
-const KNOWN_PROVIDERS = new Set([
+export type AuthProxyDeps = { fetch: FetchLike };
+
+const KNOWN_PROVIDERS: ReadonlySet<Provider> = new Set([
   "github",
   "google",
   "slack",
@@ -28,6 +48,7 @@ const TEXT_HEADERS = { "content-type": "text/plain; charset=utf-8" };
 export async function handleAuthProxyRequest(
   request: Request,
   env: AuthProxyEnv,
+  deps: AuthProxyDeps,
   now: number = Math.floor(Date.now() / 1000),
 ): Promise<Response> {
   const url = new URL(request.url);
@@ -37,7 +58,7 @@ export async function handleAuthProxyRequest(
   }
   const callbackMatch = url.pathname.match(/^\/callback\/([^/]+)\/?$/);
   if (callbackMatch) {
-    return handleCallback(callbackMatch[1], url, env, now);
+    return handleCallback(callbackMatch[1], url, env, deps, now);
   }
   return text("not found", 404);
 }
@@ -60,9 +81,10 @@ async function handleCallback(
   provider: string,
   url: URL,
   env: AuthProxyEnv,
+  deps: AuthProxyDeps,
   now: number,
 ): Promise<Response> {
-  if (!KNOWN_PROVIDERS.has(provider)) {
+  if (!isKnownProvider(provider)) {
     return text(`unknown provider: ${provider}`, 400);
   }
   const code = url.searchParams.get("code");
@@ -83,13 +105,41 @@ async function handleCallback(
   if (target.protocol !== "https:") {
     return text("backend url must be https", 400);
   }
-  target.searchParams.set("code", code);
-  target.searchParams.set("provider", provider);
-  // Forward the signed state so the user-Worker can re-verify it. Without this,
-  // anyone who can reach /oauth/exchange could trigger a code redemption with
-  // a fabricated `code`. Re-verifying the HMAC there closes the gap.
-  target.searchParams.set("state", state);
+  let record: TokenRecord;
+  try {
+    record = await exchangeCode(provider, code, env, deps.fetch);
+  } catch (err) {
+    if (err instanceof ExchangeError) {
+      return text(`${provider} exchange failed: ${err.message}`, 502);
+    }
+    throw err;
+  }
+  const keys: EnvelopeKeypair = {
+    publicKey: env.ENVELOPE_PUBLIC_KEY,
+    privateKey: env.ENVELOPE_PRIVATE_KEY,
+  };
+  const payload: Omit<EnvelopePayload, "exp"> = {
+    provider,
+    access_token: record.access_token,
+    refresh_token: record.refresh_token,
+    expires_at: expiresAtToUnix(record.expires_at),
+    scope: record.scopes.join(","),
+    account_id: record.account_id ?? "",
+    backendUrl: result.payload.userBackendUrl,
+  };
+  const envelope = await signEnvelope(payload, keys, { now });
+  target.searchParams.set("envelope", envelope);
   return Response.redirect(target.toString(), 302);
+}
+
+function isKnownProvider(p: string): p is Provider {
+  return KNOWN_PROVIDERS.has(p as Provider);
+}
+
+function expiresAtToUnix(iso: string | null): number | null {
+  if (!iso) return null;
+  const ms = Date.parse(iso);
+  return Number.isFinite(ms) ? Math.floor(ms / 1000) : null;
 }
 
 function text(body: string, status: number): Response {

@@ -199,7 +199,6 @@ export default {
 
     if (url.pathname === "/oauth/exchange") {
       return handleOAuthExchange(request, env, {
-        fetch: (input, init) => fetch(input, init),
         persist: persistProviderAccount(env),
       });
     }
