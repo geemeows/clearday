@@ -75,3 +75,32 @@ export async function dispatchWebPush(
 
   return { delivered, pruned, errors };
 }
+
+// Long-silence prune. The dispatcher already drops 404 / 410 endpoints inline,
+// but a subscription whose push service has gone quiet without ever rejecting
+// (Chrome devices uninstalled offline, FCM endpoints that never see another
+// fan-out, etc.) lingers forever and clutters the device list. This tick
+// removes rows that haven't received a push in `staleAfterDays` — measured
+// against `last_delivered_at`, falling back to `created_at` for rows that
+// never delivered at all.
+
+export const STALE_SUBSCRIPTION_DAYS = 30;
+
+export type PruneStaleSubscriptionsDeps = {
+  loadStaleIds: (cutoff: Date) => Promise<string[]>;
+  removeSubscription: (id: string) => Promise<void>;
+  now?: () => Date;
+};
+
+export async function pruneStaleWebPushSubscriptions(
+  deps: PruneStaleSubscriptionsDeps,
+  staleAfterDays: number = STALE_SUBSCRIPTION_DAYS,
+): Promise<{ pruned: string[] }> {
+  const now = (deps.now ?? (() => new Date()))();
+  const cutoff = new Date(now.getTime() - staleAfterDays * 24 * 60 * 60 * 1000);
+  const ids = await deps.loadStaleIds(cutoff);
+  for (const id of ids) {
+    await deps.removeSubscription(id);
+  }
+  return { pruned: ids };
+}

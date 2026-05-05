@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import type { StoredSignal } from "#/lib/signal";
 import {
   dispatchWebPush,
+  pruneStaleWebPushSubscriptions,
+  STALE_SUBSCRIPTION_DAYS,
   type WebPushDispatcherDeps,
 } from "#/lib/web-push-dispatcher";
 import { b64urlDecode, b64urlEncode } from "#/lib/web-push-vapid";
@@ -152,5 +154,62 @@ describe("dispatchWebPush", () => {
     const report = await dispatchWebPush(signal, deps);
     expect(report).toEqual({ delivered: [], pruned: [], errors: {} });
     expect(deps.stampDelivered).not.toHaveBeenCalled();
+  });
+});
+
+describe("pruneStaleWebPushSubscriptions", () => {
+  it("removes the stale ids returned by the loader and returns them", async () => {
+    const removeSubscription = vi.fn(async () => {});
+    const loadStaleIds = vi.fn(async () => ["dev-old-1", "dev-old-2"]);
+    const now = new Date("2026-05-04T00:00:00Z");
+    const report = await pruneStaleWebPushSubscriptions({
+      loadStaleIds,
+      removeSubscription,
+      now: () => now,
+    });
+    expect(report.pruned).toEqual(["dev-old-1", "dev-old-2"]);
+    expect(removeSubscription).toHaveBeenCalledWith("dev-old-1");
+    expect(removeSubscription).toHaveBeenCalledWith("dev-old-2");
+  });
+
+  it("computes the cutoff as now − staleAfterDays days and forwards it to the loader", async () => {
+    const loadStaleIds = vi.fn(async (_cutoff: Date) => [] as string[]);
+    const now = new Date("2026-05-04T00:00:00Z");
+    await pruneStaleWebPushSubscriptions(
+      {
+        loadStaleIds,
+        removeSubscription: async () => {},
+        now: () => now,
+      },
+      10,
+    );
+    const cutoff = loadStaleIds.mock.calls[0][0];
+    expect(cutoff).toEqual(new Date("2026-04-24T00:00:00Z"));
+  });
+
+  it("defaults to STALE_SUBSCRIPTION_DAYS when staleAfterDays is omitted", async () => {
+    const loadStaleIds = vi.fn(async (_cutoff: Date) => [] as string[]);
+    const now = new Date("2026-05-04T00:00:00Z");
+    await pruneStaleWebPushSubscriptions({
+      loadStaleIds,
+      removeSubscription: async () => {},
+      now: () => now,
+    });
+    const cutoff = loadStaleIds.mock.calls[0][0] as Date;
+    const expected = new Date(
+      now.getTime() - STALE_SUBSCRIPTION_DAYS * 24 * 60 * 60 * 1000,
+    );
+    expect(cutoff).toEqual(expected);
+  });
+
+  it("returns an empty list and never calls removeSubscription when nothing is stale", async () => {
+    const removeSubscription = vi.fn(async () => {});
+    const report = await pruneStaleWebPushSubscriptions({
+      loadStaleIds: async () => [],
+      removeSubscription,
+      now: () => new Date("2026-05-04T00:00:00Z"),
+    });
+    expect(report.pruned).toEqual([]);
+    expect(removeSubscription).not.toHaveBeenCalled();
   });
 });

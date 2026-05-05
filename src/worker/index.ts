@@ -98,6 +98,7 @@ import {
   unsubscribe,
   type WebPushSubscriptionStore,
 } from "#/lib/web-push-api";
+import { pruneStaleWebPushSubscriptions } from "#/lib/web-push-dispatcher";
 import type { VapidConfig } from "#/lib/web-push-vapid";
 import {
   buildDispatcherDeps,
@@ -767,6 +768,39 @@ export default {
         })
         .catch((err) => {
           console.error("[cron] briefing tick failed", err);
+        }),
+    );
+
+    ctx.waitUntil(
+      pruneStaleWebPushSubscriptions({
+        loadStaleIds: async (cutoff) => {
+          const iso = cutoff.toISOString();
+          const { data, error } = await service
+            .from("web_push_subscriptions")
+            .select("id")
+            .or(
+              `last_delivered_at.lt.${iso},and(last_delivered_at.is.null,created_at.lt.${iso})`,
+            );
+          if (error) throw new Error(error.message);
+          return ((data ?? []) as Array<{ id: string }>).map((r) => r.id);
+        },
+        removeSubscription: async (id) => {
+          const { error } = await service
+            .from("web_push_subscriptions")
+            .delete()
+            .eq("id", id);
+          if (error) throw new Error(error.message);
+        },
+      })
+        .then((report) => {
+          if (report.pruned.length > 0) {
+            console.log(
+              `[cron] web-push prune: removed ${report.pruned.length} stale subscriptions`,
+            );
+          }
+        })
+        .catch((err) => {
+          console.error("[cron] web-push prune failed", err);
         }),
     );
 
