@@ -4,6 +4,7 @@
 
 import { Settings as SettingsIcon } from "lucide-react";
 import type { ReactNode } from "react";
+import { FocusActiveBlock } from "#/components/FocusActiveBlock";
 import { FocusButton } from "#/components/FocusButton";
 import { SourceGlyph, type SourceKind } from "#/components/SourceGlyph";
 import { Avatar, AvatarFallback, AvatarImage } from "#/components/ui/avatar";
@@ -29,7 +30,7 @@ export type NavSource = {
 
 export type FocusState =
   | { active: false }
-  | { active: true; remainingSeconds: number };
+  | { active: true; remainingSeconds: number; totalSeconds: number };
 
 export type NavProfile = {
   displayName: string | null;
@@ -172,33 +173,15 @@ function FocusSlot({
   focus: FocusState;
   onStartFocus: () => void;
 }) {
-  // onStartFocus exists for the dedicated focus-session slice (#39) which
-  // replaces the inline FocusButton with a Dialog-driven flow. Reference
-  // it here so the prop API is stable.
+  // onStartFocus exists for callers that own the FocusModal flow; the
+  // built-in FocusButton fallback runs its own inline prompt for now.
   void onStartFocus;
   if (focus.active) {
-    const total = focus.remainingSeconds;
-    const mm = Math.max(0, Math.floor(total / 60));
-    const ss = Math.max(0, total % 60);
     return (
-      <output
-        aria-label="Focus session active"
-        data-focus-active="true"
-        className="block rounded-md bg-foreground p-3 text-background"
-      >
-        <div className="font-mono font-semibold text-lg tabular-nums">
-          {pad(mm)}:{pad(ss)}
-        </div>
-        <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-background/20">
-          <div
-            className="h-full bg-primary"
-            style={{ width: `${barFill(total)}%` }}
-          />
-        </div>
-        <div className="mt-2 text-[11px] text-background/70">
-          Slack DND on · Calendar busy
-        </div>
-      </output>
+      <FocusActiveBlock
+        remainingSeconds={focus.remainingSeconds}
+        totalSeconds={focus.totalSeconds}
+      />
     );
   }
   return (
@@ -273,16 +256,6 @@ function dotClass(status: SourceStatus): string {
     default:
       return "bg-zinc-300";
   }
-}
-
-function pad(n: number): string {
-  return n.toString().padStart(2, "0");
-}
-
-function barFill(remainingSeconds: number): number {
-  // Stub fill — real countdown wiring lands in the Focus session slice (#39).
-  if (remainingSeconds <= 0) return 100;
-  return 50;
 }
 
 function SectionTitle({ children }: { children: ReactNode }) {
