@@ -17,6 +17,7 @@ import {
   handleBriefingGenerate,
   runBriefingTick,
 } from "#/lib/briefing-api";
+import { declineCalendarEvent } from "#/lib/calendar-actions";
 import {
   type ExportDeps,
   exportData,
@@ -75,7 +76,7 @@ import {
 } from "#/lib/self-host-api";
 import type { StoredSignal } from "#/lib/signal";
 import { runDueRollups } from "#/lib/signal-rollup";
-import { markSignalReplied } from "#/lib/signal-store";
+import { dismissSignal, markSignalReplied } from "#/lib/signal-store";
 import { listSlackChannels } from "#/lib/slack-channels";
 import { postSlackReply } from "#/lib/slack-reply";
 import { handleSlackWebhook } from "#/lib/slack-webhook";
@@ -277,6 +278,10 @@ export default {
 
     if (url.pathname === "/api/slack/reply" && request.method === "POST") {
       return handlePostSlackReply(request, service);
+    }
+
+    if (url.pathname === "/api/calendar/decline" && request.method === "POST") {
+      return handleDeclineCalendarEvent(request, service);
     }
 
     if (url.pathname === "/api/ai/settings") {
@@ -1057,6 +1062,49 @@ async function handlePostSlackReply(
   );
   if (out.ok && signalId) {
     await markSignalReplied(service, signalId);
+  }
+  return json(out, out.ok ? 200 : 400);
+}
+
+async function handleDeclineCalendarEvent(
+  request: Request,
+  service: SupabaseService,
+): Promise<Response> {
+  let body: {
+    event_id?: unknown;
+    calendar_id?: unknown;
+    signal_id?: unknown;
+  };
+  try {
+    body = (await request.json()) as typeof body;
+  } catch {
+    return json({ ok: false, error: "invalid json" }, 400);
+  }
+  const event_id = typeof body.event_id === "string" ? body.event_id : "";
+  const calendar_id =
+    typeof body.calendar_id === "string" && body.calendar_id.length > 0
+      ? body.calendar_id
+      : undefined;
+  const signalId =
+    typeof body.signal_id === "string" && body.signal_id.length > 0
+      ? body.signal_id
+      : null;
+
+  const { data, error } = await service
+    .from("provider_accounts")
+    .select("access_token")
+    .eq("provider", "google")
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  const token =
+    (data as { access_token: string | null } | null)?.access_token ?? null;
+
+  const out = await declineCalendarEvent(
+    { event_id, calendar_id },
+    { token, fetch: (i, init) => fetch(i, init) },
+  );
+  if (out.ok && signalId) {
+    await dismissSignal(service, signalId);
   }
   return json(out, out.ok ? 200 : 400);
 }

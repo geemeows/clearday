@@ -71,20 +71,51 @@ function CalendarPage() {
       now={now}
       loading={signals == null}
       error={error}
+      onDeclined={(id) =>
+        setSignals((cur) => (cur ? cur.filter((s) => s.id !== id) : cur))
+      }
     />
   );
 }
+
+export type DeclineRequest = {
+  event_id: string;
+  signal_id: string;
+};
+
+export type DeclineResult = { ok: true } | { ok: false; error: string };
+
+const defaultDecliner: (req: DeclineRequest) => Promise<DeclineResult> = async (
+  req,
+) => {
+  try {
+    const out = (await apiFetch("/api/calendar/decline", {
+      method: "POST",
+      body: JSON.stringify(req),
+    })) as DeclineResult;
+    return out;
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "request failed",
+    };
+  }
+};
 
 export function CalendarView({
   events,
   now: nowProp,
   loading = false,
   error = null,
+  onDeclined,
+  decliner = defaultDecliner,
 }: {
   events: MeetingEvent[];
   now?: Date;
   loading?: boolean;
   error?: string | null;
+  onDeclined?: (signalId: string) => void;
+  decliner?: (req: DeclineRequest) => Promise<DeclineResult>;
 }) {
   const [mode, setMode] = useState<ViewMode>("day");
   const [anchor, setAnchor] = useState<Date>(() =>
@@ -199,7 +230,12 @@ export function CalendarView({
         </div>
         <aside className="space-y-4">
           <TodayPanel events={todayEvents} nextEvent={nextEvent} now={now} />
-          <ConflictCard conflict={conflict} now={now} />
+          <ConflictCard
+            conflict={conflict}
+            now={now}
+            onDeclined={onDeclined}
+            decliner={decliner}
+          />
           <FocusBlocksCard blocks={focusBlocks} now={now} />
         </aside>
       </div>
@@ -471,11 +507,34 @@ function TodayPanel({
 function ConflictCard({
   conflict,
   now,
+  onDeclined,
+  decliner,
 }: {
   conflict: Conflict | null;
   now: Date;
+  onDeclined?: (signalId: string) => void;
+  decliner: (req: DeclineRequest) => Promise<DeclineResult>;
 }) {
+  const [pending, setPending] = useState(false);
+  const [declineError, setDeclineError] = useState<string | null>(null);
   if (!conflict) return null;
+  const laterSignal = conflict.b.signal;
+  const sourceId = laterSignal.source_id;
+  const handleDecline = async () => {
+    if (!sourceId || pending) return;
+    setPending(true);
+    setDeclineError(null);
+    const out = await decliner({
+      event_id: sourceId,
+      signal_id: laterSignal.id,
+    });
+    setPending(false);
+    if (out.ok) {
+      onDeclined?.(laterSignal.id);
+    } else {
+      setDeclineError(out.error);
+    }
+  };
   return (
     <article
       aria-label="Conflict"
@@ -505,9 +564,19 @@ function ConflictCard({
         </li>
       </ul>
       <div className="mt-3 flex flex-wrap gap-2">
-        {conflict.b.signal.url && (
+        {sourceId && (
+          <button
+            type="button"
+            onClick={handleDecline}
+            disabled={pending}
+            className="inline-flex items-center gap-1 rounded border border-amber-300 bg-white px-2.5 py-1 text-xs text-amber-900 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {pending ? "Declining…" : "Decline"}
+          </button>
+        )}
+        {laterSignal.url && (
           <a
-            href={conflict.b.signal.url}
+            href={laterSignal.url}
             target="_blank"
             rel="noreferrer"
             className="inline-flex items-center gap-1 rounded border border-amber-300 bg-white px-2.5 py-1 text-xs text-amber-900 hover:bg-amber-100"
@@ -517,6 +586,11 @@ function ConflictCard({
           </a>
         )}
       </div>
+      {declineError && (
+        <p role="alert" className="mt-2 text-xs text-red-700">
+          {declineError}
+        </p>
+      )}
     </article>
   );
 }

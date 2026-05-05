@@ -1,5 +1,12 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 import { toMeetingEvent } from "#/lib/calendar-view";
 import type { StoredSignal } from "#/lib/next-up";
 import { CalendarView } from "#/routes/_app.calendar";
@@ -141,6 +148,58 @@ describe("CalendarView", () => {
     // Next steps to next month.
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
     expect(screen.getAllByText(/June 2026/).length).toBeGreaterThan(0);
+  });
+
+  it("Decline forwards conflict event_id + signal_id and reports an error", async () => {
+    const now = new Date("2026-05-04T08:00:00.000Z");
+    const events = [
+      ev("a", "2026-05-04T13:00:00.000Z", "2026-05-04T14:00:00.000Z", {
+        title: "Standup",
+      }),
+      ev("b", "2026-05-04T13:30:00.000Z", "2026-05-04T14:30:00.000Z", {
+        title: "Design review",
+      }),
+    ];
+    const decliner = vi.fn(async () => ({
+      ok: false as const,
+      error: "google HTTP 403",
+    }));
+    render(<CalendarView events={events} now={now} decliner={decliner} />);
+    const conflict = screen.getByRole("article", { name: "Conflict" });
+    fireEvent.click(within(conflict).getByRole("button", { name: "Decline" }));
+    await waitFor(() => expect(decliner).toHaveBeenCalledTimes(1));
+    expect(decliner).toHaveBeenCalledWith({
+      event_id: "b",
+      signal_id: "b",
+    });
+    expect(within(conflict).getByRole("alert").textContent).toContain(
+      "google HTTP 403",
+    );
+  });
+
+  it("Decline success invokes onDeclined with the later event's signal id", async () => {
+    const now = new Date("2026-05-04T08:00:00.000Z");
+    const events = [
+      ev("a", "2026-05-04T13:00:00.000Z", "2026-05-04T14:00:00.000Z"),
+      ev("b", "2026-05-04T13:30:00.000Z", "2026-05-04T14:30:00.000Z"),
+    ];
+    const decliner = vi.fn(async () => ({ ok: true as const }));
+    const onDeclined = vi.fn();
+    render(
+      <CalendarView
+        events={events}
+        now={now}
+        decliner={decliner}
+        onDeclined={onDeclined}
+      />,
+    );
+    const conflict = screen.getByRole("article", { name: "Conflict" });
+    await act(async () => {
+      fireEvent.click(
+        within(conflict).getByRole("button", { name: "Decline" }),
+      );
+    });
+    expect(onDeclined).toHaveBeenCalledWith("b");
   });
 
   it("renders an empty state when there are no events on the day", () => {
