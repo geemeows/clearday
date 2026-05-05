@@ -620,6 +620,78 @@ describe("pollSlackSignals", () => {
     expect(out[0]?.payload.author).toBe("U_OTHER");
   });
 
+  it("stamps channel_name from users.conversations and substitutes <@id> mentions inside text/title", async () => {
+    const fetchImpl = vi.fn(async (url: string) => {
+      if (url.includes("users.conversations")) {
+        const isIm = /types=im(&|$)/.test(url);
+        return jsonResponse({
+          ok: true,
+          channels: isIm ? [] : [{ id: "C0B10B6CMPZ", name: "general" }],
+        });
+      }
+      if (url.includes("conversations.history")) {
+        return jsonResponse({
+          ok: true,
+          messages: [
+            {
+              type: "message",
+              user: "U001OTHER",
+              ts: "1.0",
+              text: "<@U001SELF> testing in channel",
+            },
+          ],
+        });
+      }
+      if (url.includes("users.info")) {
+        const m = url.match(/user=([^&]+)/);
+        const id = m ? decodeURIComponent(m[1]!) : "";
+        const name = id === "U001SELF" ? "geemeows" : "Other Person";
+        return jsonResponse({
+          ok: true,
+          user: { profile: { display_name: name } },
+        });
+      }
+      return jsonResponse({ ok: true });
+    });
+    const out = await pollSlackSignals("token", "U001SELF", fetchImpl);
+    expect(out).toHaveLength(1);
+    expect(out[0]?.payload.channel_name).toBe("general");
+    expect(out[0]?.payload.text).toBe("@geemeows testing in channel");
+    expect(out[0]?.title).toBe("@geemeows testing in channel");
+    expect(out[0]?.payload.author_name).toBe("Other Person");
+  });
+
+  it("leaves <@id> raw when users.info doesn't resolve the id", async () => {
+    const fetchImpl = vi.fn(async (url: string) => {
+      if (url.includes("users.conversations")) {
+        const isIm = /types=im(&|$)/.test(url);
+        return jsonResponse({
+          ok: true,
+          channels: isIm ? [{ id: "D1" }] : [],
+        });
+      }
+      if (url.includes("conversations.history")) {
+        return jsonResponse({
+          ok: true,
+          messages: [
+            {
+              type: "message",
+              user: "U001OTHER",
+              ts: "1.0",
+              text: "ping <@U999UNKNOWN>",
+            },
+          ],
+        });
+      }
+      if (url.includes("users.info")) {
+        return jsonResponse({ ok: false, error: "user_not_found" });
+      }
+      return jsonResponse({ ok: true });
+    });
+    const out = await pollSlackSignals("token", "U001SELF", fetchImpl);
+    expect(out[0]?.payload.text).toBe("ping <@U999UNKNOWN>");
+  });
+
   it("throws on non-2xx HTTP", async () => {
     const fetchImpl = vi.fn(async () =>
       jsonResponse({ error: "ratelimited" }, 429),

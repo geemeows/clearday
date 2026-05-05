@@ -748,6 +748,7 @@ function SlackBody({
   onReplyRollback?: (id: string) => void;
 }) {
   const channel = signal.payload?.channel as string | undefined;
+  const channelName = signal.payload?.channel_name as string | undefined;
   const channelType = signal.payload?.channel_type as string | undefined;
   const author = signal.payload?.author as string | undefined;
   const authorName = signal.payload?.author_name as string | undefined;
@@ -755,7 +756,13 @@ function SlackBody({
   const ts = signal.payload?.ts as string | undefined;
   const threadTs = signal.payload?.thread_ts as string | undefined;
   const where =
-    channelType === "im" ? "Direct message" : channel ? `#${channel}` : null;
+    channelType === "im"
+      ? "Direct message"
+      : channelName
+        ? `#${channelName}`
+        : channel
+          ? `#${channel}`
+          : null;
   return (
     <div className="mt-3 space-y-4 text-sm">
       <dl className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1.5">
@@ -1155,9 +1162,17 @@ function secondaryLabel(s: StoredSignal): string {
   if (s.provider === "slack") {
     const channelType = s.payload?.channel_type as string | undefined;
     const channel = s.payload?.channel as string | undefined;
+    const channelName = s.payload?.channel_name as string | undefined;
     const author = s.payload?.author as string | undefined;
     const authorName = s.payload?.author_name as string | undefined;
-    const where = channelType === "im" ? "DM" : channel ? `#${channel}` : "";
+    const where =
+      channelType === "im"
+        ? "DM"
+        : channelName
+          ? `#${channelName}`
+          : channel
+            ? `#${channel}`
+            : "";
     const fromLabel = authorName
       ? `from ${authorName}`
       : author

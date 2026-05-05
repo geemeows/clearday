@@ -143,6 +143,7 @@ export function threadKey(channel: string, threadTs: string): string {
 
 export type SlackConversation = {
   id?: string;
+  name?: string;
   is_archived?: boolean;
   is_im?: boolean;
 };
@@ -246,21 +247,24 @@ export async function pollSlackSignals(
     ),
   ]);
 
+  const channelNames = new Map<string, string>();
+  for (const c of channels) if (c.name) channelNames.set(c.id, c.name);
+
   const channelHistories = await Promise.all(
-    channels.map((c) => runHistoryQuery(accessToken, c, fetchImpl, oldest)),
+    channels.map((c) => runHistoryQuery(accessToken, c.id, fetchImpl, oldest)),
   );
   const imHistories = await Promise.all(
-    ims.map((c) => runHistoryQuery(accessToken, c, fetchImpl, oldest)),
+    ims.map((c) => runHistoryQuery(accessToken, c.id, fetchImpl, oldest)),
   );
 
   const out: Signal[] = [];
   for (let i = 0; i < channels.length; i++) {
     const channel = channels[i];
     if (!channel) continue;
-    const allowBroadcast = broadcastSet.has(channel);
+    const allowBroadcast = broadcastSet.has(channel.id);
     for (const msg of channelHistories[i] ?? []) {
       const sig = normalizeChannelMessage(
-        channel,
+        channel.id,
         msg,
         selfUserId,
         allowBroadcast,
@@ -272,7 +276,7 @@ export async function pollSlackSignals(
     const channel = ims[i];
     if (!channel) continue;
     for (const msg of imHistories[i] ?? []) {
-      const sig = normalizeDmMessage(channel, msg, selfUserId);
+      const sig = normalizeDmMessage(channel.id, msg, selfUserId);
       if (sig) out.push(sig);
     }
   }
@@ -285,24 +289,59 @@ export async function pollSlackSignals(
     if (sig) out.push(sig);
   }
 
-  // Resolve author user-ids to display names so the UI can render "from Alice"
-  // instead of "from <@U0B1JJ9UQ67>". `users.info` is one call per unique
-  // author per tick — bounded by signal volume, not channel volume.
-  const authorIds = new Set<string>();
+  // Resolve user-ids to display names: senders (payload.author) plus every
+  // `<@U…>` mention referenced inside a message body. Then substitute mentions
+  // in title + text and stamp `author_name` / `channel_name` for the UI.
+  const userIds = new Set<string>();
   for (const sig of out) {
     const author = sig.payload.author;
-    if (typeof author === "string" && author) authorIds.add(author);
-  }
-  if (authorIds.size > 0) {
-    const names = await resolveUserNames(accessToken, authorIds, fetchImpl);
-    for (const sig of out) {
-      const author = sig.payload.author;
-      if (typeof author === "string" && names.has(author)) {
-        sig.payload.author_name = names.get(author);
+    if (typeof author === "string" && author) userIds.add(author);
+    const text = sig.payload.text;
+    if (typeof text === "string") {
+      for (const m of text.matchAll(USER_MENTION_RE)) {
+        if (m[1]) userIds.add(m[1]);
       }
     }
   }
+  const userNames =
+    userIds.size > 0
+      ? await resolveUserNames(accessToken, userIds, fetchImpl)
+      : new Map<string, string>();
+
+  for (const sig of out) {
+    const author = sig.payload.author;
+    if (typeof author === "string" && userNames.has(author)) {
+      sig.payload.author_name = userNames.get(author);
+    }
+    const ch = sig.payload.channel;
+    if (typeof ch === "string" && channelNames.has(ch)) {
+      sig.payload.channel_name = channelNames.get(ch);
+    }
+    if (typeof sig.payload.text === "string") {
+      sig.payload.text = substituteMentions(sig.payload.text, userNames);
+    }
+    sig.title = substituteMentions(sig.title, userNames);
+    if (
+      sig.title &&
+      sig.title.length > 140 &&
+      typeof sig.payload.text === "string"
+    ) {
+      sig.title = `${sig.title.slice(0, 139)}…`;
+    }
+  }
   return out;
+}
+
+const USER_MENTION_RE = /<@([UW][A-Z0-9]+)>/g;
+
+function substituteMentions(
+  text: string,
+  names: ReadonlyMap<string, string>,
+): string {
+  return text.replace(USER_MENTION_RE, (raw, id: string) => {
+    const name = names.get(id);
+    return name ? `@${name}` : raw;
+  });
 }
 
 async function resolveUserNames(
@@ -361,7 +400,7 @@ async function listConversations(
   accessToken: string,
   types: string,
   fetchImpl: SlackFetch,
-): Promise<string[]> {
+): Promise<Array<{ id: string; name?: string }>> {
   const url = `https://slack.com/api/users.conversations?types=${encodeURIComponent(
     types,
   )}&exclude_archived=true&limit=200`;
@@ -379,12 +418,13 @@ async function listConversations(
   if (!body.ok) {
     throw new SlackPollError(res.status, body.error ?? "unknown");
   }
-  const ids: string[] = [];
+  const out: Array<{ id: string; name?: string }> = [];
   for (const c of body.channels ?? []) {
     if (c.is_archived) continue;
-    if (c.id) ids.push(c.id);
+    if (!c.id) continue;
+    out.push(c.name ? { id: c.id, name: c.name } : { id: c.id });
   }
-  return ids;
+  return out;
 }
 
 async function runRepliesQuery(
