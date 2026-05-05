@@ -8,8 +8,7 @@ import {
   putAiSettings,
   testAiConnection,
 } from "#/lib/ai-settings-api";
-import { sendSlackDm } from "#/lib/alert-channel/slack-dm";
-import type { AlertChannel } from "#/lib/alert-dispatcher";
+import { type AlertChannel, fireChannels } from "#/lib/alert-dispatcher";
 import { runAlertQueueDrain } from "#/lib/alert-queue-drain";
 import { type AskAiDeps, handleAskAi } from "#/lib/ask-ai-api";
 import {
@@ -913,19 +912,31 @@ function sanitizeMatrixForPut(input: unknown): Record<string, string[]> {
 
 async function handleTestNotification(
   service: SupabaseService,
-  _env: WorkerEnv,
+  env: WorkerEnv,
 ): Promise<Response> {
-  const { data, error } = await service
-    .from("provider_accounts")
-    .select("access_token, account_id")
-    .eq("provider", "slack")
-    .maybeSingle();
-  if (error) return json({ ok: false, error: error.message }, 500);
-  if (!data?.access_token || !data?.account_id) {
-    return json({ ok: false, error: "slack not connected" }, 400);
+  const dispatcher = buildDispatcherDeps(
+    service,
+    (i, init) => fetch(i, init),
+    vapidFromEnv(env),
+    env.AI_KEY_SECRET ?? null,
+  );
+  let prefs: { enabledChannels: AlertChannel[] };
+  try {
+    prefs = await dispatcher.loadPreferences();
+  } catch (err) {
+    return json(
+      { ok: false, error: err instanceof Error ? err.message : String(err) },
+      500,
+    );
+  }
+  const candidates = prefs.enabledChannels.filter(
+    (c) => dispatcher.channels[c],
+  );
+  if (candidates.length === 0) {
+    return json({ ok: false, error: "no channels configured" }, 400);
   }
   const stub: StoredSignal = {
-    id: "test",
+    id: `test:${Date.now()}`,
     provider: "slack",
     kind: "mention",
     source_id: "test",
@@ -939,19 +950,13 @@ async function handleTestNotification(
     updated_at: new Date().toISOString(),
     dismissed_at: null,
   };
-  try {
-    await sendSlackDm(stub, {
-      accessToken: data.access_token as string,
-      selfUserId: data.account_id as string,
-      fetch: (i, init) => fetch(i, init),
-    });
-    return json({ ok: true });
-  } catch (err) {
-    return json(
-      { ok: false, error: err instanceof Error ? err.message : String(err) },
-      502,
-    );
-  }
+  const result = await fireChannels(stub, candidates, dispatcher);
+  const ok = result.fired.length > 0 && Object.keys(result.errors).length === 0;
+  return json({
+    ok,
+    fired: result.fired,
+    errors: result.errors,
+  });
 }
 
 async function handleStartFocus(

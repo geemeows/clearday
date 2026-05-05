@@ -88,13 +88,62 @@ describe("NotificationsPanel", () => {
     );
   });
 
-  it("disables the test button when slack_dm is not enabled", async () => {
+  it("disables the test button when no channels are enabled", async () => {
     const loader = vi.fn(async () => ({ alert_channels: [] }));
     render(<NotificationsPanel loader={loader} />);
     const button = await screen.findByRole("button", {
       name: /send test notification/i,
     });
     expect((button as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("enables the test button when web_push is enabled even without slack_dm", async () => {
+    const loader = vi.fn(async () => ({ alert_channels: ["web_push"] }));
+    render(<NotificationsPanel loader={loader} />);
+    const button = await screen.findByRole("button", {
+      name: /send test notification/i,
+    });
+    expect((button as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("surfaces the fired channels list on success", async () => {
+    const loader = vi.fn(async () => ({
+      alert_channels: ["slack_dm", "web_push"],
+    }));
+    const tester = vi.fn(async () => ({
+      ok: true,
+      fired: ["slack_dm", "web_push"],
+      errors: {},
+    }));
+    render(<NotificationsPanel loader={loader} tester={tester} />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: /send test notification/i }),
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("status").textContent).toMatch(
+        /sent via slack_dm, web_push/i,
+      ),
+    );
+  });
+
+  it("surfaces per-channel errors on partial failure", async () => {
+    const loader = vi.fn(async () => ({
+      alert_channels: ["slack_dm", "web_push"],
+    }));
+    const tester = vi.fn(async () => ({
+      ok: false,
+      fired: [],
+      errors: { web_push: "no devices registered" },
+    }));
+    render(<NotificationsPanel loader={loader} tester={tester} />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: /send test notification/i }),
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("status").textContent).toMatch(
+        /web_push: no devices registered/,
+      ),
+    );
   });
 });
 

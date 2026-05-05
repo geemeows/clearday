@@ -90,7 +90,12 @@ export function NotificationsPanel({
 }: {
   loader?: () => Promise<LoadResponse>;
   saver?: (channels: string[]) => Promise<LoadResponse>;
-  tester?: () => Promise<{ ok?: boolean; error?: string }>;
+  tester?: () => Promise<{
+    ok?: boolean;
+    error?: string;
+    fired?: string[];
+    errors?: Record<string, string>;
+  }>;
 } = {}) {
   const [enabled, setEnabled] = useState<Set<string> | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -119,6 +124,8 @@ export function NotificationsPanel({
         apiFetch("/api/notifications/test", { method: "POST" }) as Promise<{
           ok?: boolean;
           error?: string;
+          fired?: string[];
+          errors?: Record<string, string>;
         }>),
     [tester],
   );
@@ -165,8 +172,22 @@ export function NotificationsPanel({
     setStatus(null);
     try {
       const result = await test();
-      if (result.ok) setStatus("Test notification sent");
-      else setStatus(`Failed: ${result.error ?? "unknown error"}`);
+      if (result.ok) {
+        const fired = result.fired ?? [];
+        setStatus(
+          fired.length > 0
+            ? `Test notification sent via ${fired.join(", ")}`
+            : "Test notification sent",
+        );
+      } else {
+        const detail =
+          result.errors && Object.keys(result.errors).length > 0
+            ? Object.entries(result.errors)
+                .map(([c, m]) => `${c}: ${m}`)
+                .join("; ")
+            : (result.error ?? "unknown error");
+        setStatus(`Failed: ${detail}`);
+      }
     } catch (e) {
       setStatus(`Failed: ${e instanceof Error ? e.message : "unknown error"}`);
     } finally {
@@ -229,7 +250,7 @@ export function NotificationsPanel({
           <button
             type="button"
             onClick={sendTest}
-            disabled={busy || !enabled.has("slack_dm")}
+            disabled={busy || enabled.size === 0}
             className="rounded border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50 disabled:opacity-50"
           >
             Send test notification
