@@ -198,7 +198,10 @@ function StepBody({ step }: { step: StepId }) {
   }
 }
 
-type ApiSource = { provider: string; status: "connected" | "disconnected" };
+type ApiSource = {
+  provider: string;
+  status: "connected" | "disconnected" | "rate_limited" | "auth_failed";
+};
 
 const PROVIDER_LABELS: Record<string, string> = {
   github: "GitHub",
@@ -306,7 +309,10 @@ export function ProvidersStep({
         <ul className="mt-4 divide-y divide-zinc-100 rounded border border-zinc-200">
           {Object.keys(PROVIDER_LABELS).map((id) => {
             const match = sources.find((s) => s.provider === id);
-            const connected = match?.status === "connected";
+            // OAuth-complete includes rate_limited / auth_failed: those rows
+            // exist in provider_accounts, so the user finished the connect
+            // flow. Health detail belongs in the Sources rail, not here.
+            const connected = !!match && match.status !== "disconnected";
             return (
               <li
                 key={id}

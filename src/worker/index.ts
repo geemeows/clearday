@@ -199,12 +199,13 @@ export default {
       return handleSources(async () => {
         const { data, error } = await service
           .from("provider_accounts")
-          .select("provider, account_id, updated_at");
+          .select("provider, account_id, updated_at, status");
         if (error) throw new Error(error.message);
         return (data ?? []) as Array<{
           provider: string;
           account_id: string | null;
           updated_at: string | null;
+          status: string | null;
         }>;
       });
     }
@@ -577,6 +578,13 @@ export default {
               expires_at,
               updated_at: new Date().toISOString(),
             })
+            .eq("provider", provider);
+          if (error) throw new Error(error.message);
+        },
+        saveProviderStatus: async (provider, status) => {
+          const { error } = await service
+            .from("provider_accounts")
+            .update({ status, updated_at: new Date().toISOString() })
             .eq("provider", provider);
           if (error) throw new Error(error.message);
         },

@@ -110,6 +110,125 @@ describe("runScheduledPoll", () => {
     expect(reports[0].error).toMatch(/github poll failed/);
   });
 
+  it("stamps provider_accounts.status='ok' on a successful poll", async () => {
+    const store = makeStore();
+    const saveProviderStatus = vi.fn(async () => {});
+    const fetchImpl = vi.fn(
+      async () => new Response(JSON.stringify({ items: [] }), { status: 200 }),
+    );
+    const deps: OrchestratorDeps = {
+      loadAccounts: async () => [
+        {
+          provider: "github",
+          access_token: "ghu_abc",
+          refresh_token: null,
+          expires_at: null,
+        },
+      ],
+      saveProviderStatus,
+      store: store.client,
+      fetch: fetchImpl as unknown as typeof fetch,
+    };
+    const reports = await runScheduledPoll(deps);
+    expect(saveProviderStatus).toHaveBeenCalledWith("github", "ok");
+    expect(reports[0].status).toBe("ok");
+  });
+
+  it("stamps status='auth_failed' on 401/403", async () => {
+    const store = makeStore();
+    const saveProviderStatus = vi.fn(async () => {});
+    const fetchImpl = vi.fn(async () => new Response("nope", { status: 401 }));
+    const deps: OrchestratorDeps = {
+      loadAccounts: async () => [
+        {
+          provider: "github",
+          access_token: "ghu_abc",
+          refresh_token: null,
+          expires_at: null,
+        },
+      ],
+      saveProviderStatus,
+      store: store.client,
+      fetch: fetchImpl as unknown as typeof fetch,
+    };
+    const reports = await runScheduledPoll(deps);
+    expect(saveProviderStatus).toHaveBeenCalledWith("github", "auth_failed");
+    expect(reports[0].status).toBe("auth_failed");
+    expect(reports[0].error).toMatch(/github poll failed/);
+  });
+
+  it("stamps status='rate_limited' on 429", async () => {
+    const store = makeStore();
+    const saveProviderStatus = vi.fn(async () => {});
+    const fetchImpl = vi.fn(
+      async () => new Response("slow down", { status: 429 }),
+    );
+    const deps: OrchestratorDeps = {
+      loadAccounts: async () => [
+        {
+          provider: "github",
+          access_token: "ghu_abc",
+          refresh_token: null,
+          expires_at: null,
+        },
+      ],
+      saveProviderStatus,
+      store: store.client,
+      fetch: fetchImpl as unknown as typeof fetch,
+    };
+    const reports = await runScheduledPoll(deps);
+    expect(saveProviderStatus).toHaveBeenCalledWith("github", "rate_limited");
+    expect(reports[0].status).toBe("rate_limited");
+  });
+
+  it("leaves status alone for unclassified errors (no_token, network)", async () => {
+    const store = makeStore();
+    const saveProviderStatus = vi.fn(async () => {});
+    const deps: OrchestratorDeps = {
+      loadAccounts: async () => [
+        {
+          provider: "github",
+          access_token: null,
+          refresh_token: null,
+          expires_at: null,
+        },
+      ],
+      saveProviderStatus,
+      store: store.client,
+      fetch: (async () => new Response()) as unknown as typeof fetch,
+    };
+    const reports = await runScheduledPoll(deps);
+    expect(saveProviderStatus).not.toHaveBeenCalled();
+    expect(reports[0].status).toBeUndefined();
+    expect(reports[0].error).toBe("no access_token");
+  });
+
+  it("swallows saveProviderStatus errors so they never mask the poll outcome", async () => {
+    const store = makeStore();
+    const saveProviderStatus = vi.fn(async () => {
+      throw new Error("db down");
+    });
+    const fetchImpl = vi.fn(
+      async () => new Response(JSON.stringify({ items: [] }), { status: 200 }),
+    );
+    const deps: OrchestratorDeps = {
+      loadAccounts: async () => [
+        {
+          provider: "github",
+          access_token: "ghu_abc",
+          refresh_token: null,
+          expires_at: null,
+        },
+      ],
+      saveProviderStatus,
+      store: store.client,
+      fetch: fetchImpl as unknown as typeof fetch,
+    };
+    const reports = await runScheduledPoll(deps);
+    expect(reports[0].provider).toBe("github");
+    expect(reports[0].error).toBeUndefined();
+  });
+
   it("flags accounts with no access_token", async () => {
     const store = makeStore();
     const deps: OrchestratorDeps = {

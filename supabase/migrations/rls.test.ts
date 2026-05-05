@@ -29,6 +29,11 @@ const unreadBumpSql = readFileSync(
   "utf8",
 );
 
+const providerStatusSql = readFileSync(
+  resolve(__dirname, "0015_provider_accounts_status.sql"),
+  "utf8",
+);
+
 describe("0001_init.sql contents", () => {
   it("declares the (provider, kind, source_id) unique constraint on signals", () => {
     expect(migrationSql).toMatch(
@@ -55,6 +60,21 @@ describe("0001_init.sql contents", () => {
 
   it("uses the allowed-email predicate in policies", () => {
     expect(migrationSql).toMatch(/public\.is_allowed_user\(\)/);
+  });
+});
+
+describe("0015_provider_accounts_status.sql contents", () => {
+  it("adds provider_accounts.status with default 'ok'", () => {
+    expect(providerStatusSql).toMatch(
+      /alter table public\.provider_accounts\s+add column if not exists status text not null default 'ok'/i,
+    );
+  });
+
+  it("constrains status to the three poll-outcome values", () => {
+    for (const v of ["ok", "rate_limited", "auth_failed"]) {
+      expect(providerStatusSql).toContain(`'${v}'`);
+    }
+    expect(providerStatusSql).toMatch(/check\s*\(\s*status in/i);
   });
 });
 

@@ -53,9 +53,12 @@ const SOURCE_PROVIDER: Record<string, string> = {
   jira: "jira",
 };
 
-type SourceStatus = "ok" | "error" | "neutral";
+type SourceStatus = "ok" | "rate_limited" | "auth_failed" | "neutral";
 
-type ApiSource = { provider: string; status: "connected" | "disconnected" };
+type ApiSource = {
+  provider: string;
+  status: "connected" | "disconnected" | "rate_limited" | "auth_failed";
+};
 
 export function AppShell() {
   const path = useRouterState({ select: (s) => s.location.pathname });
@@ -202,7 +205,7 @@ function useSourceStatuses(): Record<string, SourceStatus> {
         const next: Record<string, SourceStatus> = {};
         for (const id of Object.keys(SOURCE_PROVIDER)) {
           const match = sources.find((s) => s.provider === SOURCE_PROVIDER[id]);
-          next[id] = match?.status === "connected" ? "ok" : "neutral";
+          next[id] = mapStatus(match?.status);
         }
         setStatuses(next);
       })
@@ -216,12 +219,27 @@ function useSourceStatuses(): Record<string, SourceStatus> {
   return statuses;
 }
 
+function mapStatus(api: ApiSource["status"] | undefined): SourceStatus {
+  switch (api) {
+    case "connected":
+      return "ok";
+    case "rate_limited":
+      return "rate_limited";
+    case "auth_failed":
+      return "auth_failed";
+    default:
+      return "neutral";
+  }
+}
+
 function statusLabel(status: SourceStatus): string {
   switch (status) {
     case "ok":
       return "connected";
-    case "error":
-      return "error";
+    case "rate_limited":
+      return "rate-limited";
+    case "auth_failed":
+      return "authorization failed";
     default:
       return "not connected";
   }
@@ -231,7 +249,9 @@ function dotClass(status: SourceStatus): string {
   switch (status) {
     case "ok":
       return "bg-emerald-500";
-    case "error":
+    case "rate_limited":
+      return "bg-amber-500";
+    case "auth_failed":
       return "bg-red-500";
     default:
       return "bg-zinc-300";

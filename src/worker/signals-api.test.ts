@@ -159,6 +159,7 @@ describe("handleSources", () => {
         provider: "github",
         account_id: "alice",
         updated_at: "2026-05-01T00:00:00Z",
+        status: "ok",
       },
     ]);
     expect(res.status).toBe(200);
@@ -174,5 +175,53 @@ describe("handleSources", () => {
     expect(map.slack).toBe("disconnected");
     expect(map.linear).toBe("disconnected");
     expect(map.jira).toBe("disconnected");
+  });
+
+  it("surfaces rate_limited from provider_accounts.status", async () => {
+    const res = await handleSources(async () => [
+      {
+        provider: "github",
+        account_id: "alice",
+        updated_at: "2026-05-01T00:00:00Z",
+        status: "rate_limited",
+      },
+    ]);
+    const body = (await res.json()) as {
+      sources: Array<{ provider: string; status: string }>;
+    };
+    const github = body.sources.find((s) => s.provider === "github");
+    expect(github?.status).toBe("rate_limited");
+  });
+
+  it("surfaces auth_failed from provider_accounts.status", async () => {
+    const res = await handleSources(async () => [
+      {
+        provider: "slack",
+        account_id: "U1",
+        updated_at: "2026-05-01T00:00:00Z",
+        status: "auth_failed",
+      },
+    ]);
+    const body = (await res.json()) as {
+      sources: Array<{ provider: string; status: string }>;
+    };
+    const slack = body.sources.find((s) => s.provider === "slack");
+    expect(slack?.status).toBe("auth_failed");
+  });
+
+  it("treats null/unknown status as connected when a row exists", async () => {
+    const res = await handleSources(async () => [
+      {
+        provider: "linear",
+        account_id: "u1",
+        updated_at: "2026-05-01T00:00:00Z",
+        status: null,
+      },
+    ]);
+    const body = (await res.json()) as {
+      sources: Array<{ provider: string; status: string }>;
+    };
+    const linear = body.sources.find((s) => s.provider === "linear");
+    expect(linear?.status).toBe("connected");
   });
 });

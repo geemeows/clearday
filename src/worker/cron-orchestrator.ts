@@ -32,11 +32,23 @@ export type RefreshedAccountUpdate = {
   expires_at: string | null;
 };
 
+export type ProviderHealthStatus = "ok" | "rate_limited" | "auth_failed";
+
 export type OrchestratorDeps = {
   /** Returns provider_accounts rows for connected providers. */
   loadAccounts: () => Promise<ProviderAccountRow[]>;
   /** Persist a refreshed access_token + expires_at back to provider_accounts. */
   saveRefreshedToken?: (update: RefreshedAccountUpdate) => Promise<void>;
+  /**
+   * Persist the latest poll outcome on provider_accounts.status so the
+   * Sources rail can render yellow on rate-limit / red on auth failure.
+   * Only called when the new status is classifiable; transient network
+   * errors leave the prior status untouched.
+   */
+  saveProviderStatus?: (
+    provider: string,
+    status: ProviderHealthStatus,
+  ) => Promise<void>;
   /** Supabase write client for signal upserts (service-role in cron context). */
   store: SupabaseLike;
   /** HTTP fetch wrapper, injected for tests. */
@@ -57,6 +69,7 @@ export type OrchestratorReport = {
   provider: string;
   upserted: number;
   error?: string;
+  status?: ProviderHealthStatus;
 };
 
 const REFRESH_LEEWAY_SECONDS = 60;
@@ -70,16 +83,50 @@ export async function runScheduledPoll(
   for (const account of accounts) {
     try {
       const upserted = await pollOne(account, deps, rules);
-      reports.push({ provider: account.provider, upserted });
+      const persisted = await persistStatus(deps, account.provider, "ok");
+      reports.push({
+        provider: account.provider,
+        upserted,
+        ...(persisted ? { status: "ok" as const } : {}),
+      });
     } catch (err) {
+      const status = classifyError(err);
+      const persisted = status
+        ? await persistStatus(deps, account.provider, status)
+        : false;
       reports.push({
         provider: account.provider,
         upserted: 0,
         error: err instanceof Error ? err.message : String(err),
+        ...(persisted && status ? { status } : {}),
       });
     }
   }
   return reports;
+}
+
+function classifyError(err: unknown): ProviderHealthStatus | undefined {
+  const status = (err as { status?: unknown })?.status;
+  if (typeof status !== "number") return undefined;
+  if (status === 401 || status === 403) return "auth_failed";
+  if (status === 429) return "rate_limited";
+  return undefined;
+}
+
+async function persistStatus(
+  deps: OrchestratorDeps,
+  provider: string,
+  status: ProviderHealthStatus,
+): Promise<boolean> {
+  if (!deps.saveProviderStatus) return false;
+  try {
+    await deps.saveProviderStatus(provider, status);
+    return true;
+  } catch {
+    // Health writes are best-effort; surfacing one provider's poll outcome
+    // must never mask the real provider error or block the next provider.
+    return false;
+  }
 }
 
 async function pollOne(
