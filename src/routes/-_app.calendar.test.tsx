@@ -1,268 +1,93 @@
-import {
-  act,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-  within,
-} from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
-import { toMeetingEvent } from "#/lib/calendar-view";
-import type { StoredSignal } from "#/lib/next-up";
-import { CalendarView } from "#/routes/_app.calendar";
-
-const signal = (args: {
-  id: string;
-  starts_at: string;
-  ends_at: string;
-  title?: string;
-  is_focus?: boolean;
-}): StoredSignal => ({
-  id: args.id,
-  provider: "google",
-  kind: "meeting",
-  source_id: args.id,
-  title: args.title ?? "Standup",
-  url: "https://calendar.google.com/event",
-  payload: {
-    starts_at: args.starts_at,
-    ends_at: args.ends_at,
-    video_link: "https://meet.google.com/abc",
-    linked_items: [],
-    ...(args.is_focus ? { is_focus: true } : {}),
-  },
-  requires_action: false,
-  source_created_at: args.starts_at,
-  dismissed_at: null,
-});
+import { render, screen, within } from "@testing-library/react";
+import { describe, expect, it } from "vitest";
+import { CalendarView, type WeekEvent } from "#/routes/_app.calendar";
 
 const ev = (
   id: string,
-  start: string,
-  end: string,
-  opts: { title?: string; is_focus?: boolean } = {},
-) => {
-  const e = toMeetingEvent(
-    signal({ id, starts_at: start, ends_at: end, ...opts }),
-  );
-  if (!e) throw new Error("toMeetingEvent returned null");
-  return e;
-};
+  day: number,
+  start: number,
+  end: number,
+  opts: { kind?: WeekEvent["kind"]; title?: string } = {},
+): WeekEvent => ({
+  id,
+  day,
+  start,
+  end,
+  kind: opts.kind ?? "meeting",
+  title: opts.title ?? id,
+});
 
 describe("CalendarView", () => {
-  it("renders today's events in the day view by default and surfaces Next:", () => {
-    const now = new Date("2026-05-04T11:00:00.000Z");
+  it("renders events with kind-specific color", () => {
+    const now = new Date(2026, 4, 4, 11, 0); // Mon May 4 2026
     const events = [
-      ev("a", "2026-05-04T13:00:00.000Z", "2026-05-04T13:30:00.000Z", {
-        title: "Design review",
-      }),
-      ev("b", "2026-05-04T15:00:00.000Z", "2026-05-04T15:30:00.000Z"),
+      ev("focus", 0, 9 * 60, 11 * 60, { kind: "focus", title: "Deep work" }),
+      ev("meet", 1, 10 * 60, 11 * 60, { kind: "meeting", title: "Standup" }),
     ];
     render(<CalendarView events={events} now={now} />);
-    const list = screen.getByRole("list", { name: "Day events" });
-    expect(within(list).getAllByRole("article")).toHaveLength(2);
-    const today = screen.getByRole("article", { name: "Today" });
-    expect(today.textContent).toContain("Design review");
-    expect(today.textContent).toMatch(/Next:/);
+    const focusBlock = screen.getByRole("article", { name: "Deep work" });
+    expect(focusBlock.dataset.kind).toBe("focus");
+    expect(focusBlock.className).toContain("bg-foreground");
+    const meetBlock = screen.getByRole("article", { name: "Standup" });
+    expect(meetBlock.dataset.kind).toBe("meeting");
+    expect(meetBlock.className).toContain("bg-primary");
   });
 
-  it("switches to week view and renders 7 day buckets", () => {
-    const now = new Date("2026-05-04T11:00:00.000Z");
+  it("renders the conflict banner when two events overlap on the same day", () => {
+    const now = new Date(2026, 4, 4, 11, 0);
     const events = [
-      ev("a", "2026-05-04T13:00:00.000Z", "2026-05-04T13:30:00.000Z"),
-      ev("b", "2026-05-06T13:00:00.000Z", "2026-05-06T13:30:00.000Z"),
+      ev("a", 1, 10 * 60, 11 * 60, { title: "Sprint planning" }),
+      ev("b", 1, 10 * 60 + 30, 11 * 60 + 30, { title: "1:1 with Joon" }),
     ];
     render(<CalendarView events={events} now={now} />);
-    fireEvent.click(screen.getByRole("tab", { name: "Week" }));
-    const grid = screen.getByLabelText("Week grid");
-    expect(grid.children).toHaveLength(7);
+    const banner = screen.getByRole("article", { name: "Conflict" });
+    expect(banner.textContent).toContain("Sprint planning");
+    expect(banner.textContent).toContain("1:1 with Joon");
+    expect(
+      within(banner).getByRole("button", { name: "Decline" }),
+    ).toBeTruthy();
+    expect(
+      within(banner).getByRole("button", { name: "Reschedule" }),
+    ).toBeTruthy();
   });
 
-  it("renders a Conflict card when two events overlap", () => {
-    const now = new Date("2026-05-04T08:00:00.000Z");
+  it("does not render a conflict banner when events do not overlap", () => {
+    const now = new Date(2026, 4, 4, 11, 0);
+    const events = [ev("a", 0, 9 * 60, 10 * 60), ev("b", 1, 9 * 60, 10 * 60)];
+    render(<CalendarView events={events} now={now} />);
+    expect(screen.queryByRole("article", { name: "Conflict" })).toBeNull();
+  });
+
+  it("flags conflicting events with the data-conflict attribute", () => {
+    const now = new Date(2026, 4, 4, 11, 0);
     const events = [
-      ev("a", "2026-05-04T13:00:00.000Z", "2026-05-04T14:00:00.000Z", {
-        title: "Standup",
-      }),
-      ev("b", "2026-05-04T13:30:00.000Z", "2026-05-04T14:30:00.000Z", {
-        title: "Design review",
-      }),
+      ev("a", 1, 10 * 60, 11 * 60, { title: "A" }),
+      ev("b", 1, 10 * 60 + 30, 11 * 60 + 30, { title: "B" }),
     ];
     render(<CalendarView events={events} now={now} />);
-    const conflict = screen.getByRole("article", { name: "Conflict" });
-    expect(conflict.textContent).toContain("Standup");
-    expect(conflict.textContent).toContain("Design review");
+    expect(
+      screen.getByRole("article", { name: "A" }).dataset.conflict,
+    ).toBeDefined();
+    expect(
+      screen.getByRole("article", { name: "B" }).dataset.conflict,
+    ).toBeDefined();
   });
 
-  it("renders Focus blocks card with upcoming focus events only", () => {
-    const now = new Date("2026-05-04T08:00:00.000Z");
-    const events = [
-      ev("focus", "2026-05-04T13:00:00.000Z", "2026-05-04T15:00:00.000Z", {
-        title: "Focus block",
-      }),
-      ev("standup", "2026-05-04T15:00:00.000Z", "2026-05-04T15:15:00.000Z"),
-    ];
-    render(<CalendarView events={events} now={now} />);
-    const focus = screen.getByRole("article", { name: "Focus blocks" });
-    expect(focus.textContent).toContain("Focus block");
-    expect(focus.textContent).not.toContain("Standup");
-  });
-
-  it("Today / Prev / Next move the anchor", () => {
-    const now = new Date("2026-05-04T11:00:00.000Z");
-    const events = [
-      ev("today", "2026-05-04T13:00:00.000Z", "2026-05-04T13:30:00.000Z", {
-        title: "Today's meeting",
-      }),
-      ev("tomorrow", "2026-05-05T13:00:00.000Z", "2026-05-05T13:30:00.000Z", {
-        title: "Tomorrow's meeting",
-      }),
-    ];
-    render(<CalendarView events={events} now={now} />);
-    expect(screen.getByLabelText("Day events").textContent).toContain(
-      "Today's meeting",
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Next" }));
-    expect(screen.getByLabelText("Day events").textContent).toContain(
-      "Tomorrow's meeting",
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Today" }));
-    expect(screen.getByLabelText("Day events").textContent).toContain(
-      "Today's meeting",
-    );
-  });
-
-  it("switches to month view, renders 42 cells, and steps by month", () => {
-    const now = new Date("2026-05-04T11:00:00.000Z");
-    const events = [
-      ev("a", "2026-05-04T13:00:00.000Z", "2026-05-04T13:30:00.000Z"),
-    ];
-    render(<CalendarView events={events} now={now} />);
-    fireEvent.click(screen.getByRole("tab", { name: "Month" }));
-    const grid = screen.getByLabelText("Month grid");
-    expect(within(grid).getAllByRole("listitem").length).toBeGreaterThanOrEqual(
-      42,
-    );
-    // Anchor label switches to month + year.
-    expect(screen.getAllByText(/May 2026/).length).toBeGreaterThan(0);
-    // Next steps to next month.
-    fireEvent.click(screen.getByRole("button", { name: "Next" }));
-    expect(screen.getAllByText(/June 2026/).length).toBeGreaterThan(0);
-  });
-
-  it("Decline forwards conflict event_id + signal_id and reports an error", async () => {
-    const now = new Date("2026-05-04T08:00:00.000Z");
-    const events = [
-      ev("a", "2026-05-04T13:00:00.000Z", "2026-05-04T14:00:00.000Z", {
-        title: "Standup",
-      }),
-      ev("b", "2026-05-04T13:30:00.000Z", "2026-05-04T14:30:00.000Z", {
-        title: "Design review",
-      }),
-    ];
-    const decliner = vi.fn(async () => ({
-      ok: false as const,
-      error: "google HTTP 403",
-    }));
-    render(<CalendarView events={events} now={now} decliner={decliner} />);
-    const conflict = screen.getByRole("article", { name: "Conflict" });
-    fireEvent.click(within(conflict).getByRole("button", { name: "Decline" }));
-    await waitFor(() => expect(decliner).toHaveBeenCalledTimes(1));
-    expect(decliner).toHaveBeenCalledWith({
-      event_id: "b",
-      signal_id: "b",
-    });
-    expect(within(conflict).getByRole("alert").textContent).toContain(
-      "google HTTP 403",
-    );
-  });
-
-  it("Decline success invokes onDeclined with the later event's signal id", async () => {
-    const now = new Date("2026-05-04T08:00:00.000Z");
-    const events = [
-      ev("a", "2026-05-04T13:00:00.000Z", "2026-05-04T14:00:00.000Z"),
-      ev("b", "2026-05-04T13:30:00.000Z", "2026-05-04T14:30:00.000Z"),
-    ];
-    const decliner = vi.fn(async () => ({ ok: true as const }));
-    const onDeclined = vi.fn();
-    render(
-      <CalendarView
-        events={events}
-        now={now}
-        decliner={decliner}
-        onDeclined={onDeclined}
-      />,
-    );
-    const conflict = screen.getByRole("article", { name: "Conflict" });
-    await act(async () => {
-      fireEvent.click(
-        within(conflict).getByRole("button", { name: "Decline" }),
-      );
-    });
-    expect(onDeclined).toHaveBeenCalledWith("b");
-  });
-
-  it("Reschedule forwards conflict event_id + shift_minutes and reports an error", async () => {
-    const now = new Date("2026-05-04T08:00:00.000Z");
-    const events = [
-      ev("a", "2026-05-04T13:00:00.000Z", "2026-05-04T14:00:00.000Z"),
-      ev("b", "2026-05-04T13:30:00.000Z", "2026-05-04T14:30:00.000Z"),
-    ];
-    const rescheduler = vi.fn(async () => ({
-      ok: false as const,
-      error: "google HTTP 500",
-    }));
-    render(
-      <CalendarView events={events} now={now} rescheduler={rescheduler} />,
-    );
-    const conflict = screen.getByRole("article", { name: "Conflict" });
-    fireEvent.click(
-      within(conflict).getByRole("button", { name: "Reschedule +30m" }),
-    );
-    await waitFor(() => expect(rescheduler).toHaveBeenCalledTimes(1));
-    expect(rescheduler).toHaveBeenCalledWith({
-      event_id: "b",
-      signal_id: "b",
-      shift_minutes: 30,
-    });
-    expect(within(conflict).getByRole("alert").textContent).toContain(
-      "google HTTP 500",
-    );
-  });
-
-  it("Reschedule success invokes onRescheduled with the later event's signal id", async () => {
-    const now = new Date("2026-05-04T08:00:00.000Z");
-    const events = [
-      ev("a", "2026-05-04T13:00:00.000Z", "2026-05-04T14:00:00.000Z"),
-      ev("b", "2026-05-04T13:30:00.000Z", "2026-05-04T14:30:00.000Z"),
-    ];
-    const rescheduler = vi.fn(async () => ({ ok: true as const }));
-    const onRescheduled = vi.fn();
-    render(
-      <CalendarView
-        events={events}
-        now={now}
-        rescheduler={rescheduler}
-        onRescheduled={onRescheduled}
-      />,
-    );
-    const conflict = screen.getByRole("article", { name: "Conflict" });
-    await act(async () => {
-      fireEvent.click(
-        within(conflict).getByRole("button", { name: "Reschedule +1h" }),
-      );
-    });
-    expect(rescheduler).toHaveBeenCalledWith({
-      event_id: "b",
-      signal_id: "b",
-      shift_minutes: 60,
-    });
-    expect(onRescheduled).toHaveBeenCalledWith("b");
-  });
-
-  it("renders an empty state when there are no events on the day", () => {
-    const now = new Date("2026-05-04T11:00:00.000Z");
+  it("renders the now line only on today's column", () => {
+    // Tuesday 2026-05-05 at 10:00 local — Tuesday is column index 1.
+    const now = new Date(2026, 4, 5, 10, 0);
     render(<CalendarView events={[]} now={now} />);
-    expect(screen.getByText(/No meetings on this day/i)).toBeTruthy();
+    const nowLines = screen.getAllByLabelText("Now");
+    expect(nowLines).toHaveLength(1);
+    const col = nowLines[0].closest("[data-day-col]") as HTMLElement;
+    expect(col.dataset.dayCol).toBe("1");
+    expect(col.dataset.today).toBe("true");
+  });
+
+  it("does not render a now line on weekend days", () => {
+    // Saturday 2026-05-09 — outside Mon–Fri grid.
+    const now = new Date(2026, 4, 9, 10, 0);
+    render(<CalendarView events={[]} now={now} />);
+    expect(screen.queryByLabelText("Now")).toBeNull();
   });
 });
