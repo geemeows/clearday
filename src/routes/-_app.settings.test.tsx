@@ -1,4 +1,18 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  createMemoryHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+  RouterProvider,
+  redirect,
+} from "@tanstack/react-router";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import {
   type ExportPayload,
@@ -23,10 +37,93 @@ import {
   NotificationsPanel,
   ProfilePanel,
   QuietHoursPanel,
+  SETTINGS_TABS,
+  SectionHead,
   SelfHostPanel,
+  Route as SettingsLayoutRoute,
   ThemePanel,
   WebPushDevicesPanel,
 } from "#/routes/_app.settings";
+
+async function renderSettings(initial = "/settings") {
+  const rootRoute = createRootRoute();
+  const settingsLayoutRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/settings",
+    // biome-ignore lint/suspicious/noExplicitAny: re-using the layout component out of the file-based tree
+    component: SettingsLayoutRoute.options.component as any,
+  });
+  const indexRoute = createRoute({
+    getParentRoute: () => settingsLayoutRoute,
+    path: "/",
+    beforeLoad: () => {
+      throw redirect({ to: "/settings/integrations" });
+    },
+  });
+  const subRoutes = SETTINGS_TABS.map((tab) =>
+    createRoute({
+      getParentRoute: () => settingsLayoutRoute,
+      path: tab.to.replace("/settings/", ""),
+      component: () => <SectionHead title={tab.label} comingInIssue={99} />,
+    }),
+  );
+  const router = createRouter({
+    routeTree: rootRoute.addChildren([
+      settingsLayoutRoute.addChildren([indexRoute, ...subRoutes]),
+    ]),
+    history: createMemoryHistory({ initialEntries: [initial] }),
+  });
+  await router.load();
+  // biome-ignore lint/suspicious/noExplicitAny: test-only router cast
+  render(<RouterProvider router={router as any} />);
+  return router;
+}
+
+describe("Settings hub layout", () => {
+  it("redirects from /settings to /settings/integrations", async () => {
+    const router = await renderSettings("/settings");
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe("/settings/integrations");
+    });
+  });
+
+  it("renders six sub-sidebar tabs", async () => {
+    await renderSettings("/settings/integrations");
+    const nav = await screen.findByRole("navigation", {
+      name: /settings sections/i,
+    });
+    for (const label of [
+      "Integrations",
+      "Notifications",
+      "Inbox rules",
+      "AI provider",
+      "Self-host",
+      "Profile",
+    ]) {
+      expect(within(nav).getByRole("link", { name: label })).toBeTruthy();
+    }
+  });
+
+  it("clicking a tab updates the route", async () => {
+    const router = await renderSettings("/settings/integrations");
+    const nav = await screen.findByRole("navigation", {
+      name: /settings sections/i,
+    });
+    fireEvent.click(within(nav).getByRole("link", { name: /notifications/i }));
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe("/settings/notifications");
+    });
+  });
+
+  it("active tab has the active styling", async () => {
+    await renderSettings("/settings/rules");
+    const nav = await screen.findByRole("navigation", {
+      name: /settings sections/i,
+    });
+    const active = within(nav).getByRole("link", { name: /inbox rules/i });
+    expect(active.className).toMatch(/font-medium/);
+  });
+});
 
 describe("NotificationsPanel", () => {
   it("loads the current alert channels and reflects them in the toggle", async () => {

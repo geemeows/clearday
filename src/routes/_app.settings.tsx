@@ -1,8 +1,7 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, Outlet } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { AlertChannel } from "#/lib/alert-dispatcher";
 import { apiFetch } from "#/lib/api-client";
-import { signOut, useAuth } from "#/lib/auth";
 import {
   DEFAULT_RETENTION_DAYS,
   type ExportPayload,
@@ -34,50 +33,68 @@ import {
 } from "#/lib/theme-api";
 
 export const Route = createFileRoute("/_app/settings")({
-  component: SettingsPage,
+  component: SettingsLayout,
 });
 
-function SettingsPage() {
-  const { session } = useAuth();
-  return (
-    <section className="p-8">
-      <h1 className="text-xl font-semibold">Settings</h1>
-      <p className="mt-2 text-sm text-zinc-500">
-        Signed in as <code>{session?.user.email}</code>
-      </p>
-      <div className="mt-4 flex gap-2">
-        <button
-          type="button"
-          onClick={() => signOut()}
-          className="rounded border px-3 py-1.5 text-sm hover:bg-zinc-50"
-        >
-          Sign out
-        </button>
-        <Link
-          to="/onboarding"
-          className="rounded border px-3 py-1.5 text-sm hover:bg-zinc-50"
-        >
-          Re-run onboarding
-        </Link>
-      </div>
+export const SETTINGS_TABS: ReadonlyArray<{ to: string; label: string }> = [
+  { to: "/settings/integrations", label: "Integrations" },
+  { to: "/settings/notifications", label: "Notifications" },
+  { to: "/settings/rules", label: "Inbox rules" },
+  { to: "/settings/ai", label: "AI provider" },
+  { to: "/settings/selfhost", label: "Self-host" },
+  { to: "/settings/profile", label: "Profile" },
+];
 
-      <ProfilePanel />
-      <IntegrationsPanel />
-      <ThemePanel />
-      <DataPrivacyPanel />
-      <SelfHostPanel />
-      <NotificationsPanel />
-      <InstallPwaPanel />
-      <WebPushDevicesPanel />
-      <EmailDigestPanel />
-      <NotificationMatrixPanel />
-      <QuietHoursPanel />
-      <FocusBlockPanel />
-      <FocusDefaultsPanel />
-      <AiProviderPanel />
-      <AiSafeguardsPanel />
-      <InboxRulesPanel />
+function SettingsLayout() {
+  return (
+    <section className="flex min-h-full">
+      <aside
+        aria-label="Settings"
+        className="w-[220px] shrink-0 border-border border-r bg-sidebar"
+      >
+        <h1 className="px-5 pt-6 pb-3 font-semibold text-base text-sidebar-foreground">
+          Settings
+        </h1>
+        <nav
+          aria-label="Settings sections"
+          className="flex flex-col gap-0.5 px-2"
+        >
+          {SETTINGS_TABS.map((tab) => (
+            <Link
+              key={tab.to}
+              to={tab.to}
+              className="rounded-md px-3 py-2 text-sidebar-foreground/80 text-sm hover:bg-sidebar-accent hover:text-sidebar-foreground"
+              activeProps={{
+                className:
+                  "bg-sidebar-accent font-medium text-sidebar-accent-foreground",
+              }}
+            >
+              {tab.label}
+            </Link>
+          ))}
+        </nav>
+      </aside>
+      <div className="min-w-0 flex-1 p-8">
+        <Outlet />
+      </div>
     </section>
+  );
+}
+
+export function SectionHead({
+  title,
+  comingInIssue,
+}: {
+  title: string;
+  comingInIssue: number;
+}) {
+  return (
+    <header>
+      <h2 className="font-semibold text-xl">{title}</h2>
+      <p className="mt-2 text-muted-foreground text-sm">
+        Coming in #issue-{comingInIssue}
+      </p>
+    </header>
   );
 }
 
