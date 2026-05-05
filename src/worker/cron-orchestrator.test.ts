@@ -399,29 +399,34 @@ describe("runScheduledPoll", () => {
     expect(firstCall[1].headers.authorization).toBe("Bearer atl_oauth_abc");
   });
 
-  it("polls slack search.messages with the stored access_token + account_id and upserts mention Signals", async () => {
+  it("polls slack search.messages with the stored access_token + account_id and upserts mention + dm Signals", async () => {
     const store = makeStore();
     const fetchImpl = vi.fn(async (url: string) => {
       expect(url).toContain("https://slack.com/api/search.messages");
-      expect(url).toContain(encodeURIComponent("<@U_SELF>"));
-      return new Response(
-        JSON.stringify({
-          ok: true,
-          messages: {
-            matches: [
-              {
-                type: "message",
-                user: "U_OTHER",
-                channel: { id: "C1", name: "general" },
-                ts: "1714820000.000100",
-                text: "<@U_SELF> ping",
-                team: "T1",
-              },
-            ],
-          },
-        }),
-        { status: 200 },
-      );
+      const matches = url.includes("is%3Adm")
+        ? [
+            {
+              type: "message",
+              user: "U_OTHER",
+              channel: { id: "D1" },
+              ts: "1714820500.000100",
+              text: "hey, got a sec?",
+              team: "T1",
+            },
+          ]
+        : [
+            {
+              type: "message",
+              user: "U_OTHER",
+              channel: { id: "C1", name: "general" },
+              ts: "1714820000.000100",
+              text: "<@U_SELF> ping",
+              team: "T1",
+            },
+          ];
+      return new Response(JSON.stringify({ ok: true, messages: { matches } }), {
+        status: 200,
+      });
     });
     const deps: OrchestratorDeps = {
       loadAccounts: async () => [
@@ -437,13 +442,15 @@ describe("runScheduledPoll", () => {
       fetch: fetchImpl as unknown as typeof fetch,
     };
     const reports = await runScheduledPoll(deps);
-    expect(reports).toEqual([{ provider: "slack", upserted: 1 }]);
+    expect(reports).toEqual([{ provider: "slack", upserted: 2 }]);
     expect(store.upsert).toHaveBeenCalledTimes(1);
-    const call = fetchImpl.mock.calls[0] as unknown as [
-      string,
-      { headers: Record<string, string> },
-    ];
-    expect(call[1].headers.authorization).toBe("Bearer xoxp-abc");
+    const calls = fetchImpl.mock.calls as unknown as Array<
+      [string, { headers: Record<string, string> }]
+    >;
+    expect(calls).toHaveLength(2);
+    for (const [, init] of calls) {
+      expect(init.headers.authorization).toBe("Bearer xoxp-abc");
+    }
   });
 
   it("flags slack accounts with no account_id (poll requires <@self>)", async () => {

@@ -160,8 +160,29 @@ export async function pollSlackSignals(
   selfUserId: string,
   fetchImpl: SlackFetch,
 ): Promise<Signal[]> {
-  const query = encodeURIComponent(`<@${selfUserId}>`);
-  const url = `https://slack.com/api/search.messages?query=${query}&count=100&sort=timestamp&sort_dir=desc`;
+  const [mentions, dms] = await Promise.all([
+    runSearchQuery(accessToken, `<@${selfUserId}>`, fetchImpl),
+    runSearchQuery(accessToken, "is:dm", fetchImpl),
+  ]);
+  const out: Signal[] = [];
+  for (const match of mentions) {
+    const sig = normalizeSearchMatch(match, selfUserId, "mention");
+    if (sig) out.push(sig);
+  }
+  for (const match of dms) {
+    const sig = normalizeSearchMatch(match, selfUserId, "dm");
+    if (sig) out.push(sig);
+  }
+  return out;
+}
+
+async function runSearchQuery(
+  accessToken: string,
+  query: string,
+  fetchImpl: SlackFetch,
+): Promise<SlackSearchMatch[]> {
+  const encoded = encodeURIComponent(query);
+  const url = `https://slack.com/api/search.messages?query=${encoded}&count=100&sort=timestamp&sort_dir=desc`;
   const res = await fetchImpl(url, {
     method: "GET",
     headers: {
@@ -176,24 +197,19 @@ export async function pollSlackSignals(
   if (!body.ok) {
     throw new SlackPollError(res.status, body.error ?? "unknown");
   }
-  const matches = body.messages?.matches ?? [];
-  const out: Signal[] = [];
-  for (const match of matches) {
-    const sig = normalizeSearchMatch(match, selfUserId);
-    if (sig) out.push(sig);
-  }
-  return out;
+  return body.messages?.matches ?? [];
 }
 
 function normalizeSearchMatch(
   match: SlackSearchMatch,
   selfUserId: string,
+  kind: "mention" | "dm",
 ): Signal | null {
   const channel = match.channel?.id;
   if (!channel || !match.ts || !match.user) return null;
   if (match.user === selfUserId) return null;
   const text = match.text ?? "";
-  if (!text.includes(`<@${selfUserId}>`)) return null;
+  if (kind === "mention" && !text.includes(`<@${selfUserId}>`)) return null;
 
   const anchorTs = match.thread_ts ?? match.ts;
   const teamId = match.team ?? null;
@@ -203,13 +219,13 @@ function normalizeSearchMatch(
 
   return {
     provider: "slack",
-    kind: "mention",
+    kind,
     source_id: `${channel}:${anchorTs}`,
-    title: titleFromText(text, "mention"),
+    title: titleFromText(text, kind),
     url,
     payload: {
       channel,
-      channel_type: null,
+      channel_type: kind === "dm" ? "im" : null,
       ts: match.ts,
       thread_ts: match.thread_ts ?? null,
       author: match.user,

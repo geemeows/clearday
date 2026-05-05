@@ -144,39 +144,50 @@ describe("pollSlackSignals", () => {
     };
   }
 
-  it("calls search.messages with the self mention query and bearer auth", async () => {
+  it("calls search.messages once for the self-mention query and once for is:dm with bearer auth", async () => {
     const fetchImpl = vi.fn(async () =>
       jsonResponse({ ok: true, messages: { matches: [] } }),
     );
     await pollSlackSignals(SELF, "U_SELF", fetchImpl);
-    expect(fetchImpl).toHaveBeenCalledTimes(1);
-    const call = fetchImpl.mock.calls[0] as unknown as [
-      string,
-      { method: string; headers: Record<string, string> },
-    ];
-    expect(call[0]).toContain("https://slack.com/api/search.messages");
-    expect(call[0]).toContain(`query=${encodeURIComponent("<@U_SELF>")}`);
-    expect(call[1].method).toBe("GET");
-    expect(call[1].headers.authorization).toBe(`Bearer ${SELF}`);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    const calls = fetchImpl.mock.calls as unknown as Array<
+      [string, { method: string; headers: Record<string, string> }]
+    >;
+    const queries = calls.map((c) => c[0]);
+    expect(
+      queries.some((q) =>
+        q.includes(`query=${encodeURIComponent("<@U_SELF>")}`),
+      ),
+    ).toBe(true);
+    expect(
+      queries.some((q) => q.includes(`query=${encodeURIComponent("is:dm")}`)),
+    ).toBe(true);
+    for (const [url, init] of calls) {
+      expect(url).toContain("https://slack.com/api/search.messages");
+      expect(init.method).toBe("GET");
+      expect(init.headers.authorization).toBe(`Bearer ${SELF}`);
+    }
   });
 
   it("normalizes mention matches into Signals with the shared identity rule", async () => {
-    const fetchImpl = vi.fn(async () =>
-      jsonResponse({
-        ok: true,
-        messages: {
-          matches: [
-            {
-              type: "message",
-              user: "U_OTHER",
-              channel: { id: "C1", name: "general" },
-              ts: "1714820000.000100",
-              text: "<@U_SELF> can you take a look?",
-              team: "T1",
+    const fetchImpl = vi.fn(async (url: string) =>
+      url.includes("is%3Adm")
+        ? jsonResponse({ ok: true, messages: { matches: [] } })
+        : jsonResponse({
+            ok: true,
+            messages: {
+              matches: [
+                {
+                  type: "message",
+                  user: "U_OTHER",
+                  channel: { id: "C1", name: "general" },
+                  ts: "1714820000.000100",
+                  text: "<@U_SELF> can you take a look?",
+                  team: "T1",
+                },
+              ],
             },
-          ],
-        },
-      }),
+          }),
     );
     const out = await pollSlackSignals("token", "U_SELF", fetchImpl);
     expect(out).toHaveLength(1);
@@ -197,50 +208,112 @@ describe("pollSlackSignals", () => {
   });
 
   it("uses thread_ts as the identity anchor so a reply folds into the parent row", async () => {
-    const fetchImpl = vi.fn(async () =>
-      jsonResponse({
-        ok: true,
-        messages: {
-          matches: [
-            {
-              type: "message",
-              user: "U_OTHER",
-              channel: { id: "C1" },
-              ts: "1714820100.000200",
-              thread_ts: "1714820000.000100",
-              text: "<@U_SELF> ping",
+    const fetchImpl = vi.fn(async (url: string) =>
+      url.includes("is%3Adm")
+        ? jsonResponse({ ok: true, messages: { matches: [] } })
+        : jsonResponse({
+            ok: true,
+            messages: {
+              matches: [
+                {
+                  type: "message",
+                  user: "U_OTHER",
+                  channel: { id: "C1" },
+                  ts: "1714820100.000200",
+                  thread_ts: "1714820000.000100",
+                  text: "<@U_SELF> ping",
+                },
+              ],
             },
-          ],
-        },
-      }),
+          }),
     );
     const out = await pollSlackSignals("token", "U_SELF", fetchImpl);
     expect(out[0]?.source_id).toBe("C1:1714820000.000100");
   });
 
-  it("drops matches authored by self and matches that don't actually contain the self mention", async () => {
-    const fetchImpl = vi.fn(async () =>
-      jsonResponse({
-        ok: true,
-        messages: {
-          matches: [
-            {
-              type: "message",
-              user: "U_SELF",
-              channel: { id: "C1" },
-              ts: "1.0",
-              text: "<@U_SELF> note to self",
+  it("drops mention matches authored by self and matches that don't contain the self mention", async () => {
+    const fetchImpl = vi.fn(async (url: string) =>
+      url.includes("is%3Adm")
+        ? jsonResponse({ ok: true, messages: { matches: [] } })
+        : jsonResponse({
+            ok: true,
+            messages: {
+              matches: [
+                {
+                  type: "message",
+                  user: "U_SELF",
+                  channel: { id: "C1" },
+                  ts: "1.0",
+                  text: "<@U_SELF> note to self",
+                },
+                {
+                  type: "message",
+                  user: "U_OTHER",
+                  channel: { id: "C1" },
+                  ts: "2.0",
+                  text: "no mention here",
+                },
+              ],
             },
-            {
-              type: "message",
-              user: "U_OTHER",
-              channel: { id: "C1" },
-              ts: "2.0",
-              text: "no mention here",
+          }),
+    );
+    const out = await pollSlackSignals("token", "U_SELF", fetchImpl);
+    expect(out).toHaveLength(0);
+  });
+
+  it("normalizes is:dm matches into dm Signals (no <@self> required, channel_type=im)", async () => {
+    const fetchImpl = vi.fn(async (url: string) =>
+      url.includes("is%3Adm")
+        ? jsonResponse({
+            ok: true,
+            messages: {
+              matches: [
+                {
+                  type: "message",
+                  user: "U_OTHER",
+                  channel: { id: "D1" },
+                  ts: "1714820500.000100",
+                  text: "hey, got a sec?",
+                  team: "T1",
+                },
+              ],
             },
-          ],
-        },
-      }),
+          })
+        : jsonResponse({ ok: true, messages: { matches: [] } }),
+    );
+    const out = await pollSlackSignals("token", "U_SELF", fetchImpl);
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({
+      provider: "slack",
+      kind: "dm",
+      source_id: "D1:1714820500.000100",
+      requires_action: true,
+    });
+    expect(out[0]?.payload).toMatchObject({
+      channel: "D1",
+      channel_type: "im",
+      author: "U_OTHER",
+    });
+  });
+
+  it("drops is:dm matches authored by self", async () => {
+    const fetchImpl = vi.fn(async (url: string) =>
+      url.includes("is%3Adm")
+        ? jsonResponse({
+            ok: true,
+            messages: {
+              matches: [
+                {
+                  type: "message",
+                  user: "U_SELF",
+                  channel: { id: "D1" },
+                  ts: "1.0",
+                  text: "note to self",
+                },
+              ],
+            },
+          })
+        : jsonResponse({ ok: true, messages: { matches: [] } }),
     );
     const out = await pollSlackSignals("token", "U_SELF", fetchImpl);
     expect(out).toHaveLength(0);
