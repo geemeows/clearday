@@ -1,10 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { SectionHead } from "#/routes/_app.settings";
+import { AIPanel } from "#/components/AIPanel";
 
 export const Route = createFileRoute("/_app/settings/ai")({
   component: AiRoute,
 });
 
 function AiRoute() {
-  return <SectionHead title="AI provider" comingInIssue={43} />;
+  return <AIPanel />;
 }
