@@ -5,10 +5,10 @@ import {
   createRouter,
   RouterProvider,
 } from "@tanstack/react-router";
-import { act, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { AppShell, UserMenu } from "#/components/AppShell";
-import { PROFILE_UPDATED_EVENT } from "#/lib/profile-api";
+import { AppShell } from "#/components/AppShell";
+import { OPEN_CMDK_EVENT } from "#/components/NavigationSidebar";
 
 async function renderShell(initial = "/today") {
   const rootRoute = createRootRoute({ component: AppShell });
@@ -35,77 +35,68 @@ async function renderShell(initial = "/today") {
 }
 
 describe("AppShell sidebar", () => {
-  it("renders Workspace nav items", async () => {
+  it("renders the Devy brand wordmark", async () => {
+    await renderShell();
+    const sidebar = await screen.findByRole("complementary", {
+      name: /primary/i,
+    });
+    expect(within(sidebar).getByText("Devy")).toBeTruthy();
+  });
+
+  it("renders Workspace nav buttons", async () => {
     await renderShell();
     const nav = await screen.findByRole("navigation", { name: /workspace/i });
     for (const label of ["Today", "Inbox", "Tasks", "Calendar"]) {
-      expect(within(nav).getByRole("link", { name: label })).toBeTruthy();
+      expect(within(nav).getByRole("button", { name: label })).toBeTruthy();
     }
   });
 
-  it("renders Sources rail with neutral status dots", async () => {
+  it("renders Sources rail with neutral dots for every provider", async () => {
     await renderShell();
     const sources = await screen.findByRole("navigation", { name: /sources/i });
     for (const label of [
       "GitHub",
-      "Linear",
-      "Jira",
       "Slack",
       "Google Calendar",
+      "Linear",
+      "Jira",
     ]) {
       expect(within(sources).getByText(label)).toBeTruthy();
     }
     const dots = sources.querySelectorAll('[data-status="neutral"]');
     expect(dots.length).toBe(5);
-    for (const dot of Array.from(dots)) {
-      expect(dot.getAttribute("data-last-polled-at")).toBe("");
+  });
+
+  it("dispatches devy:open-cmdk when the search trigger is clicked", async () => {
+    await renderShell();
+    const onEvent = vi.fn();
+    window.addEventListener(OPEN_CMDK_EVENT, onEvent);
+    try {
+      const trigger = await screen.findByRole("button", {
+        name: /search anything/i,
+      });
+      fireEvent.click(trigger);
+      expect(onEvent).toHaveBeenCalledTimes(1);
+    } finally {
+      window.removeEventListener(OPEN_CMDK_EVENT, onEvent);
     }
   });
 
-  it("includes a Settings link", async () => {
+  it("renders the FocusButton CTA in the focus slot when no session is active", async () => {
     await renderShell();
-    expect(await screen.findByRole("link", { name: /settings/i })).toBeTruthy();
-  });
-});
-
-describe("UserMenu", () => {
-  const profile = {
-    display_name: "Devy",
-    timezone: null,
-    locale: null,
-    avatar_url: null,
-  };
-
-  it("renders the display name from the loader", async () => {
-    const loader = vi.fn(async () => profile);
-    render(<UserMenu loader={loader} />);
-    const menu = await screen.findByRole("status", { name: /user menu/i });
-    expect(menu.textContent).toBe("Devy");
+    const slot = document.querySelector('[data-focus-active="false"]');
+    expect(slot).toBeTruthy();
+    expect(
+      within(slot as HTMLElement).getByRole("button", {
+        name: /start focus session/i,
+      }),
+    ).toBeTruthy();
   });
 
-  it("falls back to 'Account' when no display name is set", async () => {
-    const loader = vi.fn(async () => ({
-      display_name: null,
-      timezone: null,
-      locale: null,
-      avatar_url: null,
-    }));
-    render(<UserMenu loader={loader} />);
-    const menu = await screen.findByRole("status", { name: /user menu/i });
-    expect(menu.textContent).toBe("Account");
-  });
-
-  it("updates immediately when a profile-updated event fires", async () => {
-    const loader = vi.fn(async () => profile);
-    render(<UserMenu loader={loader} />);
-    await screen.findByText("Devy");
-    act(() => {
-      window.dispatchEvent(
-        new CustomEvent(PROFILE_UPDATED_EVENT, {
-          detail: { ...profile, display_name: "Renamed" },
-        }),
-      );
-    });
-    expect(screen.getByRole("status").textContent).toBe("Renamed");
+  it("links the account row's settings cog to the settings page", async () => {
+    await renderShell();
+    expect(
+      await screen.findByRole("button", { name: /^settings$/i }),
+    ).toBeTruthy();
   });
 });

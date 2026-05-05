@@ -87,8 +87,18 @@ export function CommandPalette({
         });
       }
     }
+    function onOpenEvent() {
+      // Triggered by the sidebar search-trigger pill (`devy:open-cmdk`).
+      // Mirror the keyboard guard so we don't open over an existing modal.
+      if (document.querySelector('[role="dialog"]')) return;
+      setOpen(true);
+    }
     window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    window.addEventListener("devy:open-cmdk", onOpenEvent);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("devy:open-cmdk", onOpenEvent);
+    };
   }, []);
 
   if (!open) return null;
