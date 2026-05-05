@@ -11,7 +11,7 @@ import type { Signal } from "#/lib/signal";
 const PRIMARY_EVENTS =
   "https://www.googleapis.com/calendar/v3/calendars/primary/events";
 
-const FORWARD_WINDOW_MS = 24 * 60 * 60 * 1000;
+const FORWARD_WINDOW_MS = 30 * 24 * 60 * 60 * 1000;
 
 export type CalendarFetch = (
   input: string,
@@ -78,7 +78,7 @@ export async function pollCalendarSignals(
     timeMax,
     singleEvents: "true",
     orderBy: "startTime",
-    maxResults: "50",
+    maxResults: "250",
   });
   const res = await fetchImpl(`${PRIMARY_EVENTS}?${params.toString()}`, {
     headers: {

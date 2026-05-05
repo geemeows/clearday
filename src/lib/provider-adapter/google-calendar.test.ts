@@ -204,7 +204,7 @@ describe("parseLinkedItems", () => {
 });
 
 describe("pollCalendarSignals", () => {
-  it("queries primary calendar with a 24h forward window and returns normalized Signals", async () => {
+  it("queries primary calendar with a 30d forward window and returns normalized Signals", async () => {
     const fetchImpl: CalendarFetch = vi.fn(async (url, init) => {
       const u = new URL(url);
       expect(u.pathname).toMatch(/calendars\/primary\/events$/);
@@ -214,7 +214,7 @@ describe("pollCalendarSignals", () => {
       const timeMin = u.searchParams.get("timeMin");
       const timeMax = u.searchParams.get("timeMax");
       expect(timeMin).toBe("2026-05-04T12:00:00.000Z");
-      expect(timeMax).toBe("2026-05-05T12:00:00.000Z");
+      expect(timeMax).toBe("2026-06-03T12:00:00.000Z");
       return okJson({
         items: [
           baseEvent,
