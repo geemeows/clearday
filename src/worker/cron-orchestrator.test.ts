@@ -450,4 +450,162 @@ describe("runScheduledPoll", () => {
       "Bearer ya29.refreshed",
     );
   });
+
+  it("refreshes an expired linear token (rotating refresh_token) and polls with the new access_token", async () => {
+    const store = makeStore();
+    const saveRefreshedToken = vi.fn(async () => {});
+    const fetchImpl = vi.fn(async (url: string) => {
+      if (url === "https://api.linear.app/oauth/token") {
+        return new Response(
+          JSON.stringify({
+            access_token: "lin_refreshed",
+            refresh_token: "lin_rt_2",
+            expires_in: 3600,
+            scope: "read,write",
+          }),
+          { status: 200 },
+        );
+      }
+      if (url === "https://api.linear.app/graphql") {
+        return new Response(
+          JSON.stringify({
+            data: {
+              viewer: { id: "v1", assignedIssues: { nodes: [] } },
+            },
+          }),
+          { status: 200 },
+        );
+      }
+      throw new Error(`unexpected url: ${url}`);
+    });
+    const deps: OrchestratorDeps = {
+      loadAccounts: async () => [
+        {
+          provider: "linear",
+          access_token: "lin_stale",
+          refresh_token: "lin_rt",
+          expires_at: "2026-05-04T11:30:00.000Z",
+        },
+      ],
+      saveRefreshedToken,
+      store: store.client,
+      fetch: fetchImpl as unknown as typeof fetch,
+      oauthEnv: {
+        ...oauthEnv,
+        LINEAR_CLIENT_ID: "lin-id",
+        LINEAR_CLIENT_SECRET: "lin-secret",
+      },
+      now: () => new Date("2026-05-04T12:00:00.000Z"),
+    };
+    const reports = await runScheduledPoll(deps);
+    expect(reports).toEqual([{ provider: "linear", upserted: 0 }]);
+    expect(saveRefreshedToken).toHaveBeenCalledWith({
+      provider: "linear",
+      access_token: "lin_refreshed",
+      refresh_token: "lin_rt_2",
+      expires_at: expect.any(String),
+    });
+    const graphqlCall = fetchImpl.mock.calls.find(
+      (c) => String(c[0]) === "https://api.linear.app/graphql",
+    ) as unknown as [string, { headers: Record<string, string> }] | undefined;
+    expect(graphqlCall?.[1].headers.authorization).toBe("Bearer lin_refreshed");
+  });
+
+  it("refreshes an expired jira token and polls with the new access_token", async () => {
+    const store = makeStore();
+    const saveRefreshedToken = vi.fn(async () => {});
+    const fetchImpl = vi.fn(async (url: string) => {
+      if (url === "https://auth.atlassian.com/oauth/token") {
+        return new Response(
+          JSON.stringify({
+            access_token: "atl_refreshed",
+            refresh_token: "atl_rt_2",
+            expires_in: 3600,
+            scope: "read:jira-work offline_access",
+          }),
+          { status: 200 },
+        );
+      }
+      if (
+        url === "https://api.atlassian.com/oauth/token/accessible-resources"
+      ) {
+        return new Response(JSON.stringify([]), { status: 200 });
+      }
+      throw new Error(`unexpected url: ${url}`);
+    });
+    const deps: OrchestratorDeps = {
+      loadAccounts: async () => [
+        {
+          provider: "jira",
+          access_token: "atl_stale",
+          refresh_token: "atl_rt",
+          expires_at: "2026-05-04T11:30:00.000Z",
+        },
+      ],
+      saveRefreshedToken,
+      store: store.client,
+      fetch: fetchImpl as unknown as typeof fetch,
+      oauthEnv: {
+        ...oauthEnv,
+        JIRA_CLIENT_ID: "atl-id",
+        JIRA_CLIENT_SECRET: "atl-secret",
+      },
+      now: () => new Date("2026-05-04T12:00:00.000Z"),
+    };
+    const reports = await runScheduledPoll(deps);
+    expect(reports).toEqual([{ provider: "jira", upserted: 0 }]);
+    expect(saveRefreshedToken).toHaveBeenCalledWith({
+      provider: "jira",
+      access_token: "atl_refreshed",
+      refresh_token: "atl_rt_2",
+      expires_at: expect.any(String),
+    });
+    const resourcesCall = fetchImpl.mock.calls.find(
+      (c) =>
+        String(c[0]) ===
+        "https://api.atlassian.com/oauth/token/accessible-resources",
+    ) as unknown as [string, { headers: Record<string, string> }] | undefined;
+    expect(resourcesCall?.[1].headers.authorization).toBe(
+      "Bearer atl_refreshed",
+    );
+  });
+
+  it("does not pass refresh_token to saveRefreshedToken when google does not rotate it", async () => {
+    const store = makeStore();
+    const saveRefreshedToken = vi.fn(async () => {});
+    const fetchImpl = vi.fn(async (url: string) => {
+      if (url === "https://oauth2.googleapis.com/token") {
+        return new Response(
+          JSON.stringify({ access_token: "ya29.refreshed", expires_in: 3600 }),
+          { status: 200 },
+        );
+      }
+      if (url.includes("/calendar/v3/")) {
+        return new Response(JSON.stringify({ items: [] }), { status: 200 });
+      }
+      throw new Error(`unexpected url: ${url}`);
+    });
+    const deps: OrchestratorDeps = {
+      loadAccounts: async () => [
+        {
+          provider: "google",
+          access_token: "ya29.stale",
+          refresh_token: "1//rt",
+          expires_at: "2026-05-04T11:30:00.000Z",
+        },
+      ],
+      saveRefreshedToken,
+      store: store.client,
+      fetch: fetchImpl as unknown as typeof fetch,
+      oauthEnv,
+      now: () => new Date("2026-05-04T12:00:00.000Z"),
+    };
+    await runScheduledPoll(deps);
+    const update = (
+      saveRefreshedToken.mock.calls as unknown as Array<
+        [Record<string, unknown>]
+      >
+    )[0][0];
+    expect(update.refresh_token).toBeUndefined();
+  });
 });

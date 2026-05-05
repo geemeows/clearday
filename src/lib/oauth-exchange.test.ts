@@ -6,6 +6,8 @@ import {
   type FetchLike,
   redirectUri,
   refreshGoogleToken,
+  refreshJiraToken,
+  refreshLinearToken,
 } from "#/lib/oauth-exchange";
 
 const env: ExchangeEnv = {
@@ -262,6 +264,103 @@ describe("exchangeCode — jira", () => {
     const fetchImpl: FetchLike = async () =>
       okJson({ error: "invalid_grant" }, 400);
     await expect(exchangeCode("jira", "c", jiraEnv, fetchImpl)).rejects.toThrow(
+      ExchangeError,
+    );
+  });
+});
+
+describe("refreshLinearToken", () => {
+  const linearEnv: ExchangeEnv = {
+    ...env,
+    LINEAR_CLIENT_ID: "lin-id",
+    LINEAR_CLIENT_SECRET: "lin-secret",
+  };
+
+  it("posts grant_type=refresh_token and returns the rotated token", async () => {
+    const fetchImpl: FetchLike = async (url, init) => {
+      expect(url).toBe("https://api.linear.app/oauth/token");
+      const params = new URLSearchParams(init?.body ?? "");
+      expect(params.get("grant_type")).toBe("refresh_token");
+      expect(params.get("refresh_token")).toBe("lin_rt");
+      expect(params.get("client_id")).toBe("lin-id");
+      expect(params.get("client_secret")).toBe("lin-secret");
+      return okJson({
+        access_token: "lin_refreshed",
+        refresh_token: "lin_rt_2",
+        expires_in: 3600,
+        scope: "read,write",
+      });
+    };
+    const refreshed = await refreshLinearToken("lin_rt", linearEnv, fetchImpl);
+    expect(refreshed.access_token).toBe("lin_refreshed");
+    expect(refreshed.refresh_token).toBe("lin_rt_2");
+    expect(refreshed.expires_at).toBeTruthy();
+    expect(refreshed.scopes).toEqual(["read", "write"]);
+  });
+
+  it("returns refresh_token=null when linear does not rotate it", async () => {
+    const fetchImpl: FetchLike = async () =>
+      okJson({ access_token: "lin_x", expires_in: 3600 });
+    const refreshed = await refreshLinearToken("lin_rt", linearEnv, fetchImpl);
+    expect(refreshed.refresh_token).toBeNull();
+  });
+
+  it("throws when LINEAR_CLIENT_ID is not configured", async () => {
+    const fetchImpl: FetchLike = async () => okJson({});
+    await expect(
+      refreshLinearToken("rt", env, fetchImpl),
+    ).rejects.toBeInstanceOf(ExchangeError);
+  });
+
+  it("throws ExchangeError on invalid_grant", async () => {
+    const fetchImpl: FetchLike = async () =>
+      okJson({ error: "invalid_grant" }, 400);
+    await expect(
+      refreshLinearToken("rt", linearEnv, fetchImpl),
+    ).rejects.toThrow(ExchangeError);
+  });
+});
+
+describe("refreshJiraToken", () => {
+  const jiraEnv: ExchangeEnv = {
+    ...env,
+    JIRA_CLIENT_ID: "atl-id",
+    JIRA_CLIENT_SECRET: "atl-secret",
+  };
+
+  it("posts a JSON body to atlassian's token endpoint with the rotated refresh token", async () => {
+    const fetchImpl: FetchLike = async (url, init) => {
+      expect(url).toBe("https://auth.atlassian.com/oauth/token");
+      expect(init?.headers["content-type"]).toBe("application/json");
+      const body = JSON.parse(init?.body ?? "{}") as Record<string, unknown>;
+      expect(body.grant_type).toBe("refresh_token");
+      expect(body.refresh_token).toBe("atl_rt");
+      expect(body.client_id).toBe("atl-id");
+      expect(body.client_secret).toBe("atl-secret");
+      return okJson({
+        access_token: "atl_refreshed",
+        refresh_token: "atl_rt_2",
+        expires_in: 3600,
+        scope: "read:jira-work offline_access",
+      });
+    };
+    const refreshed = await refreshJiraToken("atl_rt", jiraEnv, fetchImpl);
+    expect(refreshed.access_token).toBe("atl_refreshed");
+    expect(refreshed.refresh_token).toBe("atl_rt_2");
+    expect(refreshed.scopes).toEqual(["read:jira-work", "offline_access"]);
+  });
+
+  it("throws when JIRA_CLIENT_ID is not configured", async () => {
+    const fetchImpl: FetchLike = async () => okJson({});
+    await expect(refreshJiraToken("rt", env, fetchImpl)).rejects.toBeInstanceOf(
+      ExchangeError,
+    );
+  });
+
+  it("throws ExchangeError on invalid_grant", async () => {
+    const fetchImpl: FetchLike = async () =>
+      okJson({ error: "invalid_grant" }, 400);
+    await expect(refreshJiraToken("rt", jiraEnv, fetchImpl)).rejects.toThrow(
       ExchangeError,
     );
   });

@@ -570,14 +570,21 @@ export default {
             expires_at: string | null;
           }>;
         },
-        saveRefreshedToken: async ({ provider, access_token, expires_at }) => {
+        saveRefreshedToken: async ({
+          provider,
+          access_token,
+          refresh_token,
+          expires_at,
+        }) => {
+          const update: Record<string, unknown> = {
+            access_token,
+            expires_at,
+            updated_at: new Date().toISOString(),
+          };
+          if (refresh_token) update.refresh_token = refresh_token;
           const { error } = await service
             .from("provider_accounts")
-            .update({
-              access_token,
-              expires_at,
-              updated_at: new Date().toISOString(),
-            })
+            .update(update)
             .eq("provider", provider);
           if (error) throw new Error(error.message);
         },
@@ -597,6 +604,10 @@ export default {
           GOOGLE_CLIENT_SECRET: env.GOOGLE_CLIENT_SECRET,
           SLACK_CLIENT_ID: env.SLACK_CLIENT_ID,
           SLACK_CLIENT_SECRET: env.SLACK_CLIENT_SECRET,
+          LINEAR_CLIENT_ID: env.LINEAR_CLIENT_ID,
+          LINEAR_CLIENT_SECRET: env.LINEAR_CLIENT_SECRET,
+          JIRA_CLIENT_ID: env.JIRA_CLIENT_ID,
+          JIRA_CLIENT_SECRET: env.JIRA_CLIENT_SECRET,
           AUTH_PROXY_URL: env.AUTH_PROXY_URL,
         },
       })

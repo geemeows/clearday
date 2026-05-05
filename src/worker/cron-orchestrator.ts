@@ -10,7 +10,10 @@ import type { InboxRule } from "#/lib/inbox-rules-engine";
 import {
   type ExchangeEnv,
   type FetchLike,
+  type RefreshedToken,
   refreshGoogleToken,
+  refreshJiraToken,
+  refreshLinearToken,
 } from "#/lib/oauth-exchange";
 import { pollGithubSignals } from "#/lib/provider-adapter/github";
 import { pollCalendarSignals } from "#/lib/provider-adapter/google-calendar";
@@ -29,6 +32,11 @@ export type ProviderAccountRow = {
 export type RefreshedAccountUpdate = {
   provider: string;
   access_token: string;
+  /**
+   * Set when the provider rotates the refresh_token (Atlassian / Linear).
+   * Omitted when the previously-stored refresh_token is still valid.
+   */
+  refresh_token?: string;
   expires_at: string | null;
 };
 
@@ -146,7 +154,11 @@ async function pollOne(
   }
 
   if (account.provider === "google") {
-    const accessToken = await ensureFreshGoogleToken(account, deps);
+    const accessToken = await ensureFreshToken(
+      account,
+      deps,
+      refreshGoogleToken,
+    );
     const signals = await pollCalendarSignals(
       accessToken,
       async (url, init) => deps.fetch(url, init),
@@ -157,18 +169,22 @@ async function pollOne(
   }
 
   if (account.provider === "linear") {
-    const signals = await pollLinearSignals(
-      account.access_token,
-      async (url, init) => deps.fetch(url, init),
+    const accessToken = await ensureFreshToken(
+      account,
+      deps,
+      refreshLinearToken,
+    );
+    const signals = await pollLinearSignals(accessToken, async (url, init) =>
+      deps.fetch(url, init),
     );
     for (const sig of signals) await upsertSignal(deps.store, sig, { rules });
     return signals.length;
   }
 
   if (account.provider === "jira") {
-    const signals = await pollJiraSignals(
-      account.access_token,
-      async (url, init) => deps.fetch(url, init),
+    const accessToken = await ensureFreshToken(account, deps, refreshJiraToken);
+    const signals = await pollJiraSignals(accessToken, async (url, init) =>
+      deps.fetch(url, init),
     );
     for (const sig of signals) await upsertSignal(deps.store, sig, { rules });
     return signals.length;
@@ -178,34 +194,45 @@ async function pollOne(
   return 0;
 }
 
-async function ensureFreshGoogleToken(
+type RefreshFn = (
+  refreshToken: string,
+  env: ExchangeEnv,
+  fetchImpl: FetchLike,
+) => Promise<RefreshedToken>;
+
+async function ensureFreshToken(
   account: ProviderAccountRow,
   deps: OrchestratorDeps,
+  refreshFn: RefreshFn,
 ): Promise<string> {
   if (!account.access_token) throw new Error("no access_token");
   if (!isExpired(account.expires_at, deps.now?.() ?? new Date())) {
     return account.access_token;
   }
   if (!account.refresh_token) {
-    throw new Error("google access_token expired and no refresh_token stored");
+    throw new Error(
+      `${account.provider} access_token expired and no refresh_token stored`,
+    );
   }
   if (!deps.oauthEnv) {
-    throw new Error("oauthEnv missing — cannot refresh google token");
+    throw new Error(
+      `oauthEnv missing — cannot refresh ${account.provider} token`,
+    );
   }
-  const fetchLike: FetchLike = async (url, init) => {
-    const res = await deps.fetch(url, init);
-    return res;
-  };
-  const refreshed = await refreshGoogleToken(
+  const fetchLike: FetchLike = async (url, init) => deps.fetch(url, init);
+  const refreshed = await refreshFn(
     account.refresh_token,
     deps.oauthEnv,
     fetchLike,
   );
   if (deps.saveRefreshedToken) {
     await deps.saveRefreshedToken({
-      provider: "google",
+      provider: account.provider,
       access_token: refreshed.access_token,
       expires_at: refreshed.expires_at,
+      ...(refreshed.refresh_token
+        ? { refresh_token: refreshed.refresh_token }
+        : {}),
     });
   }
   return refreshed.access_token;
