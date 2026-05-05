@@ -52,12 +52,14 @@ export async function handleListSignals(
       ? new Date(sinceParam).toISOString()
       : undefined;
   const includeDismissed = url.searchParams.get("include_dismissed") === "true";
+  const includeSnoozed = url.searchParams.get("include_snoozed") === "true";
   const signals = await listSignals(client, {
     kinds,
     query,
     limit,
     since,
     includeDismissed,
+    includeSnoozed,
   });
   return json({ signals });
 }

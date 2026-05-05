@@ -119,6 +119,26 @@ describe("handleListSignals", () => {
     ).toBe(false);
   });
 
+  it("skips the snoozed filter when include_snoozed=true", async () => {
+    const { client, spies } = listClient();
+    await handleListSignals(
+      new URL("https://x/api/signals?filter=all&include_snoozed=true"),
+      client,
+    );
+    // The snoozed-future gate is the only `or(...)` call listSignals issues.
+    // Absence means snoozed-future rows come back alongside live ones.
+    expect(spies.or).not.toHaveBeenCalled();
+  });
+
+  it("applies the snoozed filter by default", async () => {
+    const { client, spies } = listClient();
+    await handleListSignals(
+      new URL("https://x/api/signals?filter=all"),
+      client,
+    );
+    expect(spies.or).toHaveBeenCalled();
+  });
+
   it("clamps user-supplied limit to 200", async () => {
     const { client, spies } = listClient();
     await handleListSignals(

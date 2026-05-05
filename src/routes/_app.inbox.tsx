@@ -22,6 +22,7 @@ type StoredSignal = Signal & {
   id: string;
   dismissed_at: string | null;
   priority?: "low" | "high" | null;
+  snoozed_until?: string | null;
 };
 
 type Filter = "all" | "prs" | "tickets" | "mentions" | "meetings";
@@ -36,26 +37,33 @@ const FILTERS: Array<{ id: Filter; label: string; enabled: boolean }> = [
 
 function InboxPage() {
   const [filter, setFilter] = useState<Filter>("all");
+  const [showSnoozed, setShowSnoozed] = useState(false);
   const [signals, setSignals] = useState<StoredSignal[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [repliedIds, setRepliedIds] = useState<Set<string>>(() => new Set());
 
-  const reload = useCallback(async (current: Filter) => {
-    try {
-      const body = (await apiFetch(`/api/signals?filter=${current}`)) as {
-        signals: StoredSignal[];
-      };
-      setSignals(body.signals);
-      setError(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "failed to load");
-    }
-  }, []);
+  const reload = useCallback(
+    async (current: Filter, includeSnoozed: boolean) => {
+      try {
+        const qs = includeSnoozed
+          ? `filter=${current}&include_snoozed=true`
+          : `filter=${current}`;
+        const body = (await apiFetch(`/api/signals?${qs}`)) as {
+          signals: StoredSignal[];
+        };
+        setSignals(body.signals);
+        setError(null);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "failed to load");
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
-    reload(filter);
-  }, [filter, reload]);
+    reload(filter, showSnoozed);
+  }, [filter, showSnoozed, reload]);
 
   const dismiss = useCallback(
     async (id: string) => {
@@ -68,9 +76,9 @@ function InboxPage() {
         return next;
       });
       await apiFetch(`/api/signals/${id}/dismiss`, { method: "POST" });
-      reload(filter);
+      reload(filter, showSnoozed);
     },
-    [filter, reload],
+    [filter, showSnoozed, reload],
   );
 
   const handleReplyStart = useCallback((id: string) => {
@@ -95,6 +103,8 @@ function InboxPage() {
     <InboxView
       filter={filter}
       onFilterChange={setFilter}
+      showSnoozed={showSnoozed}
+      onShowSnoozedChange={setShowSnoozed}
       signals={signals}
       error={error}
       onDismiss={dismiss}
@@ -110,6 +120,8 @@ function InboxPage() {
 export function InboxView({
   filter,
   onFilterChange,
+  showSnoozed = false,
+  onShowSnoozedChange,
   signals,
   error,
   onDismiss,
@@ -121,6 +133,8 @@ export function InboxView({
 }: {
   filter: Filter;
   onFilterChange: (f: Filter) => void;
+  showSnoozed?: boolean;
+  onShowSnoozedChange?: (v: boolean) => void;
   signals: StoredSignal[] | null;
   error: string | null;
   onDismiss: (id: string) => void;
@@ -130,6 +144,7 @@ export function InboxView({
   onReplyStart?: (id: string) => void;
   onReplyRollback?: (id: string) => void;
 }) {
+  const nowIso = new Date().toISOString();
   const selected = useMemo(
     () => signals?.find((s) => s.id === selectedId) ?? null,
     [signals, selectedId],
@@ -143,7 +158,10 @@ export function InboxView({
         </p>
       </header>
 
-      <nav aria-label="Inbox filters" className="mt-4 flex gap-2">
+      <nav
+        aria-label="Inbox filters"
+        className="mt-4 flex flex-wrap items-center gap-2"
+      >
         {FILTERS.map((f) => (
           <button
             type="button"
@@ -162,6 +180,15 @@ export function InboxView({
             {f.label}
           </button>
         ))}
+        <label className="ml-2 inline-flex cursor-pointer items-center gap-1.5 text-xs text-zinc-600">
+          <input
+            type="checkbox"
+            checked={showSnoozed}
+            onChange={(e) => onShowSnoozedChange?.(e.target.checked)}
+            className="h-3.5 w-3.5 rounded border-zinc-300"
+          />
+          Show snoozed
+        </label>
       </nav>
 
       {error && (
@@ -185,13 +212,14 @@ export function InboxView({
           <ul className="flex-1 divide-y divide-zinc-200 rounded border border-zinc-200 bg-white">
             {signals.map((s) => {
               const replied = repliedIds?.has(s.id) ?? false;
+              const snoozed = !!s.snoozed_until && s.snoozed_until > nowIso;
               return (
                 <li
                   key={s.id}
                   className={cn(
                     "flex items-center gap-3 px-4 py-3",
                     selectedId === s.id && "bg-zinc-50",
-                    replied && "opacity-60",
+                    (replied || snoozed) && "opacity-60",
                   )}
                 >
                   <ProviderBadge provider={s.provider} />
@@ -217,6 +245,15 @@ export function InboxView({
                       {s.priority === "low" && (
                         <span className="shrink-0 rounded-full border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-zinc-500">
                           Low
+                        </span>
+                      )}
+                      {snoozed && (
+                        <span
+                          className="shrink-0 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700"
+                          title={`Returns at ${formatSnoozeReturn(s.snoozed_until)}`}
+                        >
+                          Snoozed · returns{" "}
+                          {formatSnoozeReturn(s.snoozed_until)}
                         </span>
                       )}
                     </div>
@@ -1019,6 +1056,17 @@ function formatMeetingTime(startsAt: string, endsAt?: string): string {
     minute: "2-digit",
   });
   return `${start} – ${end}`;
+}
+
+function formatSnoozeReturn(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleString(undefined, {
+    weekday: "short",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 
 function kindGroup(kind: SignalKind): "pr" | "slack" | "meeting" | "ticket" {

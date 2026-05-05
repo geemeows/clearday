@@ -181,6 +181,51 @@ describe("InboxView", () => {
     expect(screen.queryByText("Low")).toBeNull();
   });
 
+  it("renders a Snoozed pill when the signal is snoozed in the future", () => {
+    const future = new Date(Date.now() + 60 * 60_000).toISOString();
+    render(
+      <InboxView
+        filter="all"
+        onFilterChange={() => {}}
+        signals={[{ ...sample({ id: "abc" }), snoozed_until: future }]}
+        error={null}
+        onDismiss={() => {}}
+      />,
+    );
+    expect(screen.getByText(/snoozed · returns/i)).toBeTruthy();
+  });
+
+  it("does not render a Snoozed pill when snoozed_until is in the past", () => {
+    const past = new Date(Date.now() - 60 * 60_000).toISOString();
+    render(
+      <InboxView
+        filter="all"
+        onFilterChange={() => {}}
+        signals={[{ ...sample({ id: "abc" }), snoozed_until: past }]}
+        error={null}
+        onDismiss={() => {}}
+      />,
+    );
+    expect(screen.queryByText(/snoozed · returns/i)).toBeNull();
+  });
+
+  it("forwards Show snoozed checkbox toggles to onShowSnoozedChange", () => {
+    const onShowSnoozedChange = vi.fn();
+    render(
+      <InboxView
+        filter="all"
+        onFilterChange={() => {}}
+        showSnoozed={false}
+        onShowSnoozedChange={onShowSnoozedChange}
+        signals={[sample()]}
+        error={null}
+        onDismiss={() => {}}
+      />,
+    );
+    fireEvent.click(screen.getByLabelText(/show snoozed/i));
+    expect(onShowSnoozedChange).toHaveBeenCalledWith(true);
+  });
+
   it("does not show a Replied pill when the id is not in repliedIds", () => {
     render(
       <InboxView

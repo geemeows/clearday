@@ -41,4 +41,5 @@ export type StoredSignal = Signal & {
   updated_at: string;
   dismissed_at: string | null;
   priority?: SignalPriority | null;
+  snoozed_until?: string | null;
 };
