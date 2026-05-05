@@ -313,8 +313,43 @@ describe("PrReviewActions", () => {
     fireEvent.click(screen.getByRole("button", { name: /approve/i }));
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toMatch(/scope missing/);
-    const reauth = within(alert).getByRole("link", { name: /reauthorize/i });
-    expect(reauth.getAttribute("href")).toBe("/settings");
+    const reauth = within(alert).getByRole("button", {
+      name: /reauthorize github/i,
+    });
+    expect(reauth).toBeTruthy();
+  });
+
+  it("opens the GitHub connect URL when Reauthorize is clicked", async () => {
+    const submit = vi.fn(async () => ({
+      ok: false,
+      error: "scope missing",
+      needs_reauth: true,
+    }));
+    const requestConnectUrl = vi.fn(async () => ({
+      ok: true,
+      url: "https://example.test/oauth/github",
+    }));
+    const openUrl = vi.fn();
+    render(
+      <PrReviewActions
+        repo="o/r"
+        number={1}
+        submit={submit}
+        requestConnectUrl={requestConnectUrl}
+        openUrl={openUrl}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /approve/i }));
+    const alert = await screen.findByRole("alert");
+    fireEvent.click(
+      within(alert).getByRole("button", { name: /reauthorize github/i }),
+    );
+    await waitFor(() =>
+      expect(requestConnectUrl).toHaveBeenCalledWith("github"),
+    );
+    await waitFor(() =>
+      expect(openUrl).toHaveBeenCalledWith("https://example.test/oauth/github"),
+    );
   });
 });
 
@@ -368,8 +403,45 @@ describe("SlackReplyComposer", () => {
     fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
     const alert = await screen.findByRole("alert");
     expect(alert.textContent).toMatch(/missing_scope/);
-    const reauth = within(alert).getByRole("link", { name: /reauthorize/i });
-    expect(reauth.getAttribute("href")).toBe("/settings");
+    const reauth = within(alert).getByRole("button", {
+      name: /reauthorize slack/i,
+    });
+    expect(reauth).toBeTruthy();
+  });
+
+  it("opens the Slack connect URL when Reauthorize is clicked", async () => {
+    const submit = vi.fn(async () => ({
+      ok: false,
+      error: "missing_scope",
+      needs_reauth: true,
+    }));
+    const requestConnectUrl = vi.fn(async () => ({
+      ok: true,
+      url: "https://example.test/oauth/slack",
+    }));
+    const openUrl = vi.fn();
+    render(
+      <SlackReplyComposer
+        channel="C1"
+        submit={submit}
+        requestConnectUrl={requestConnectUrl}
+        openUrl={openUrl}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText("Slack reply"), {
+      target: { value: "hi" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
+    const alert = await screen.findByRole("alert");
+    fireEvent.click(
+      within(alert).getByRole("button", { name: /reauthorize slack/i }),
+    );
+    await waitFor(() =>
+      expect(requestConnectUrl).toHaveBeenCalledWith("slack"),
+    );
+    await waitFor(() =>
+      expect(openUrl).toHaveBeenCalledWith("https://example.test/oauth/slack"),
+    );
   });
 });
 

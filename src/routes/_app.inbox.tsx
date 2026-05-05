@@ -378,27 +378,73 @@ function draftRefusedMessage(reason: string): string {
   return "AI draft failed.";
 }
 
+type RequestConnectUrl = (
+  provider: string,
+) => Promise<{ ok: boolean; url?: string; error?: string }>;
+
+type OpenUrl = (url: string) => void;
+
+const defaultRequestConnectUrl: RequestConnectUrl = async (provider) =>
+  (await apiFetch(`/api/providers/${provider}/connect-url`)) as {
+    ok: boolean;
+    url?: string;
+    error?: string;
+  };
+
+const defaultOpenUrl: OpenUrl = (url) => {
+  window.open(url, "_blank", "noopener,noreferrer");
+};
+
 export function PrReviewActions({
   repo,
   number,
   signalId,
   submit = defaultPrReviewSubmit,
   requestDraft = defaultDraftRequest,
+  requestConnectUrl = defaultRequestConnectUrl,
+  openUrl = defaultOpenUrl,
 }: {
   repo: string;
   number: number;
   signalId?: string;
   submit?: PrReviewSubmit;
   requestDraft?: DraftRequest;
+  requestConnectUrl?: RequestConnectUrl;
+  openUrl?: OpenUrl;
 }) {
   const [body, setBody] = useState("");
   const [pending, setPending] = useState<PrReviewEvent | null>(null);
   const [drafting, setDrafting] = useState(false);
+  const [reauthing, setReauthing] = useState(false);
   const [status, setStatus] = useState<
     | { kind: "ok"; event: PrReviewEvent }
     | { kind: "error"; message: string; needs_reauth?: boolean }
     | null
   >(null);
+
+  const reauth = async () => {
+    setReauthing(true);
+    try {
+      const out = await requestConnectUrl("github");
+      if (out.ok && out.url) {
+        openUrl(out.url);
+      } else {
+        setStatus({
+          kind: "error",
+          message: out.error ?? "reauthorize failed",
+          needs_reauth: true,
+        });
+      }
+    } catch (e) {
+      setStatus({
+        kind: "error",
+        message: e instanceof Error ? e.message : "reauthorize failed",
+        needs_reauth: true,
+      });
+    } finally {
+      setReauthing(false);
+    }
+  };
 
   const draft = async () => {
     if (!signalId) return;
@@ -513,9 +559,14 @@ export function PrReviewActions({
           {status.needs_reauth && (
             <>
               {" "}
-              <a href="/settings" className="underline">
-                Reauthorize GitHub
-              </a>
+              <button
+                type="button"
+                onClick={reauth}
+                disabled={reauthing}
+                className="underline disabled:opacity-60"
+              >
+                {reauthing ? "Reauthorizing…" : "Reauthorize GitHub"}
+              </button>
               .
             </>
           )}
@@ -584,21 +635,50 @@ export function SlackReplyComposer({
   signalId,
   submit = defaultSlackReplySubmit,
   requestDraft = defaultDraftRequest,
+  requestConnectUrl = defaultRequestConnectUrl,
+  openUrl = defaultOpenUrl,
 }: {
   channel: string;
   thread_ts?: string;
   signalId?: string;
   submit?: SlackReplySubmit;
   requestDraft?: DraftRequest;
+  requestConnectUrl?: RequestConnectUrl;
+  openUrl?: OpenUrl;
 }) {
   const [text, setText] = useState("");
   const [pending, setPending] = useState(false);
   const [drafting, setDrafting] = useState(false);
+  const [reauthing, setReauthing] = useState(false);
   const [status, setStatus] = useState<
     | { kind: "ok" }
     | { kind: "error"; message: string; needs_reauth?: boolean }
     | null
   >(null);
+
+  const reauth = async () => {
+    setReauthing(true);
+    try {
+      const out = await requestConnectUrl("slack");
+      if (out.ok && out.url) {
+        openUrl(out.url);
+      } else {
+        setStatus({
+          kind: "error",
+          message: out.error ?? "reauthorize failed",
+          needs_reauth: true,
+        });
+      }
+    } catch (e) {
+      setStatus({
+        kind: "error",
+        message: e instanceof Error ? e.message : "reauthorize failed",
+        needs_reauth: true,
+      });
+    } finally {
+      setReauthing(false);
+    }
+  };
 
   const draft = async () => {
     if (!signalId) return;
@@ -693,9 +773,14 @@ export function SlackReplyComposer({
           {status.needs_reauth && (
             <>
               {" "}
-              <a href="/settings" className="underline">
-                Reauthorize Slack
-              </a>
+              <button
+                type="button"
+                onClick={reauth}
+                disabled={reauthing}
+                className="underline disabled:opacity-60"
+              >
+                {reauthing ? "Reauthorizing…" : "Reauthorize Slack"}
+              </button>
               .
             </>
           )}
