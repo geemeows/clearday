@@ -15,6 +15,11 @@ import { FocusButton } from "#/components/FocusButton";
 import { apiFetch } from "#/lib/api-client";
 import { cn } from "#/lib/cn";
 import { PROFILE_UPDATED_EVENT, type ProfileView } from "#/lib/profile-api";
+import {
+  type ApiSourceStatus,
+  deriveSourceStatus,
+  type SourceStatus,
+} from "#/lib/source-status";
 
 type NavItem = {
   to: string;
@@ -53,11 +58,9 @@ const SOURCE_PROVIDER: Record<string, string> = {
   jira: "jira",
 };
 
-type SourceStatus = "ok" | "rate_limited" | "auth_failed" | "neutral";
-
 type ApiSource = {
   provider: string;
-  status: "connected" | "disconnected" | "rate_limited" | "auth_failed";
+  status: ApiSourceStatus;
   last_webhook_at?: string | null;
 };
 
@@ -217,12 +220,19 @@ function useSourceStatuses(): Record<string, SourceMeta> {
       .then((body) => {
         if (cancelled) return;
         const sources = (body as { sources: ApiSource[] }).sources;
+        const now = Date.now();
         const next: Record<string, SourceMeta> = {};
         for (const id of Object.keys(SOURCE_PROVIDER)) {
           const match = sources.find((s) => s.provider === SOURCE_PROVIDER[id]);
+          const lastWebhookAt = match?.last_webhook_at ?? null;
           next[id] = {
-            status: mapStatus(match?.status),
-            lastWebhookAt: match?.last_webhook_at ?? null,
+            status: deriveSourceStatus({
+              providerId: id,
+              apiStatus: match?.status,
+              lastWebhookAt,
+              now,
+            }),
+            lastWebhookAt,
           };
         }
         setMeta(next);
@@ -243,23 +253,12 @@ function sourceTooltip(label: string, meta: SourceMeta): string | undefined {
   return `${label}: ${status} · last webhook ${meta.lastWebhookAt}`;
 }
 
-function mapStatus(api: ApiSource["status"] | undefined): SourceStatus {
-  switch (api) {
-    case "connected":
-      return "ok";
-    case "rate_limited":
-      return "rate_limited";
-    case "auth_failed":
-      return "auth_failed";
-    default:
-      return "neutral";
-  }
-}
-
 function statusLabel(status: SourceStatus): string {
   switch (status) {
     case "ok":
       return "connected";
+    case "stale":
+      return "no recent webhook";
     case "rate_limited":
       return "rate-limited";
     case "auth_failed":
@@ -273,6 +272,7 @@ function dotClass(status: SourceStatus): string {
   switch (status) {
     case "ok":
       return "bg-emerald-500";
+    case "stale":
     case "rate_limited":
       return "bg-amber-500";
     case "auth_failed":
