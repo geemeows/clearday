@@ -20,13 +20,19 @@ const dec = new TextDecoder();
 
 export type EnvelopePayload = {
   provider: string;
-  access_token: string;
+  /** Required on success envelopes; omitted when `error` is set. */
+  access_token?: string;
   refresh_token?: string | null;
   expires_at?: number | null;
-  scope: string;
-  account_id: string;
+  /** Required on success envelopes; omitted when `error` is set. */
+  scope?: string;
+  /** Required on success envelopes; omitted when `error` is set. */
+  account_id?: string;
   backendUrl: string;
   return_to?: string | null;
+  /** Set on error envelopes (provider denial or exchange failure). */
+  error?: string | null;
+  error_description?: string | null;
   exp: number;
 };
 
@@ -116,12 +122,19 @@ export async function verifyEnvelope(
   if (
     typeof payload.exp !== "number" ||
     typeof payload.provider !== "string" ||
-    typeof payload.access_token !== "string" ||
-    typeof payload.scope !== "string" ||
-    typeof payload.account_id !== "string" ||
     typeof payload.backendUrl !== "string"
   ) {
     return { ok: false, reason: "malformed" };
+  }
+  const isError = typeof payload.error === "string" && payload.error.length > 0;
+  if (!isError) {
+    if (
+      typeof payload.access_token !== "string" ||
+      typeof payload.scope !== "string" ||
+      typeof payload.account_id !== "string"
+    ) {
+      return { ok: false, reason: "malformed" };
+    }
   }
   if (now > payload.exp) return { ok: false, reason: "expired" };
   return { ok: true, payload };

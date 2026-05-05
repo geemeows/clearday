@@ -87,10 +87,9 @@ async function handleCallback(
   if (!isKnownProvider(provider)) {
     return text(`unknown provider: ${provider}`, 400);
   }
-  const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
-  if (!code || !state) {
-    return text("missing code or state", 400);
+  if (!state) {
+    return text("missing state", 400);
   }
   const result = await verifyState(state, env.STATE_HMAC_SECRET, now);
   if (!result.ok) {
@@ -105,19 +104,51 @@ async function handleCallback(
   if (target.protocol !== "https:") {
     return text("backend url must be https", 400);
   }
+  const keys: EnvelopeKeypair = {
+    publicKey: env.ENVELOPE_PUBLIC_KEY,
+    privateKey: env.ENVELOPE_PRIVATE_KEY,
+  };
+  const backendUrl = result.payload.userBackendUrl;
+
+  // Provider denied or otherwise short-circuited the consent screen — e.g.
+  // `?error=access_denied`. Surface to the user-Worker as a signed error
+  // envelope rather than a 400 so the user sees a real message.
+  const providerError = url.searchParams.get("error");
+  if (providerError) {
+    const envelope = await buildErrorEnvelope({
+      provider,
+      backendUrl,
+      error: providerError,
+      error_description: url.searchParams.get("error_description"),
+      keys,
+      now,
+    });
+    target.searchParams.set("envelope", envelope);
+    return Response.redirect(target.toString(), 302);
+  }
+
+  const code = url.searchParams.get("code");
+  if (!code) {
+    return text("missing code", 400);
+  }
   let record: TokenRecord;
   try {
     record = await exchangeCode(provider, code, env, deps.fetch);
   } catch (err) {
     if (err instanceof ExchangeError) {
-      return text(`${provider} exchange failed: ${err.message}`, 502);
+      const envelope = await buildErrorEnvelope({
+        provider,
+        backendUrl,
+        error: "exchange_failed",
+        error_description: err.message,
+        keys,
+        now,
+      });
+      target.searchParams.set("envelope", envelope);
+      return Response.redirect(target.toString(), 302);
     }
     throw err;
   }
-  const keys: EnvelopeKeypair = {
-    publicKey: env.ENVELOPE_PUBLIC_KEY,
-    privateKey: env.ENVELOPE_PRIVATE_KEY,
-  };
   const payload: Omit<EnvelopePayload, "exp"> = {
     provider,
     access_token: record.access_token,
@@ -125,11 +156,28 @@ async function handleCallback(
     expires_at: expiresAtToUnix(record.expires_at),
     scope: record.scopes.join(","),
     account_id: record.account_id ?? "",
-    backendUrl: result.payload.userBackendUrl,
+    backendUrl,
   };
   const envelope = await signEnvelope(payload, keys, { now });
   target.searchParams.set("envelope", envelope);
   return Response.redirect(target.toString(), 302);
+}
+
+async function buildErrorEnvelope(args: {
+  provider: string;
+  backendUrl: string;
+  error: string;
+  error_description: string | null;
+  keys: EnvelopeKeypair;
+  now: number;
+}): Promise<string> {
+  const payload: Omit<EnvelopePayload, "exp"> = {
+    provider: args.provider,
+    backendUrl: args.backendUrl,
+    error: args.error,
+    error_description: args.error_description,
+  };
+  return signEnvelope(payload, args.keys, { now: args.now });
 }
 
 function isKnownProvider(p: string): p is Provider {

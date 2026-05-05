@@ -141,6 +141,61 @@ describe("handleOAuthExchange", () => {
     expect(persist).not.toHaveBeenCalled();
   });
 
+  it("redirects to return_to with oauth_error params on an error envelope", async () => {
+    const envelope = await signEnvelope(
+      {
+        provider: "github",
+        backendUrl: "https://owner.example.com",
+        return_to: "/onboarding",
+        error: "access_denied",
+        error_description: "user denied consent",
+      },
+      keys,
+      { now: 1000 },
+    );
+    const persist = vi.fn();
+    const res = await handleOAuthExchange(
+      requestFor(envelope),
+      env,
+      { persist },
+      1000,
+    );
+    expect(res.status).toBe(302);
+    const location = res.headers.get("location") ?? "";
+    expect(location.startsWith("/onboarding?")).toBe(true);
+    const params = new URLSearchParams(location.split("?")[1]);
+    expect(params.get("oauth_error")).toBe("access_denied");
+    expect(params.get("oauth_provider")).toBe("github");
+    expect(params.get("oauth_error_description")).toBe("user denied consent");
+    expect(persist).not.toHaveBeenCalled();
+  });
+
+  it("redirects an error envelope without return_to to /today with oauth_error params", async () => {
+    const envelope = await signEnvelope(
+      {
+        provider: "github",
+        backendUrl: "https://owner.example.com",
+        error: "exchange_failed",
+        error_description: "github 400: bad_verification_code",
+      },
+      keys,
+      { now: 1000 },
+    );
+    const persist = vi.fn();
+    const res = await handleOAuthExchange(
+      requestFor(envelope),
+      env,
+      { persist },
+      1000,
+    );
+    expect(res.status).toBe(302);
+    const location = res.headers.get("location") ?? "";
+    expect(location.startsWith("/today?")).toBe(true);
+    const params = new URLSearchParams(location.split("?")[1]);
+    expect(params.get("oauth_error")).toBe("exchange_failed");
+    expect(persist).not.toHaveBeenCalled();
+  });
+
   it("returns 400 when envelope has expired", async () => {
     const envelope = await signEnvelope(
       {

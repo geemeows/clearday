@@ -39,6 +39,24 @@ export async function handleOAuthExchange(
   if (!isKnownProvider(payload.provider)) {
     return text(`unknown provider: ${payload.provider}`, 400);
   }
+  const base = sanitizeReturnTo(payload.return_to ?? null);
+  if (payload.error) {
+    // Provider denied or exchange failed on the proxy. Skip persist, surface
+    // the error code/description to the wizard or settings landing.
+    const location = appendQuery(base, {
+      oauth_error: payload.error,
+      oauth_provider: payload.provider,
+      oauth_error_description: payload.error_description ?? null,
+    });
+    return new Response(null, { status: 302, headers: { location } });
+  }
+  if (
+    typeof payload.access_token !== "string" ||
+    typeof payload.scope !== "string" ||
+    typeof payload.account_id !== "string"
+  ) {
+    return text("invalid envelope: malformed", 400);
+  }
   const record: TokenRecord = {
     provider: payload.provider,
     account_id: payload.account_id || null,
@@ -49,8 +67,22 @@ export async function handleOAuthExchange(
     metadata: {},
   };
   await deps.persist(record);
-  const location = sanitizeReturnTo(payload.return_to ?? null);
-  return new Response(null, { status: 302, headers: { location } });
+  return new Response(null, { status: 302, headers: { location: base } });
+}
+
+function appendQuery(
+  pathAndQuery: string,
+  params: Record<string, string | null>,
+): string {
+  const entries = Object.entries(params).filter(
+    ([, v]) => typeof v === "string" && v.length > 0,
+  ) as [string, string][];
+  if (entries.length === 0) return pathAndQuery;
+  const sep = pathAndQuery.includes("?") ? "&" : "?";
+  const qs = entries
+    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+    .join("&");
+  return `${pathAndQuery}${sep}${qs}`;
 }
 
 function isKnownProvider(p: string): p is Provider {

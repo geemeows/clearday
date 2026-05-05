@@ -96,7 +96,7 @@ describe("handleAuthProxyRequest /callback", () => {
     expect(await res.text()).toMatch(/unknown provider/);
   });
 
-  it("returns 400 when code or state is missing", async () => {
+  it("returns 400 when state is missing", async () => {
     const res = await handleAuthProxyRequest(
       callbackUrl("github", { code: "abc" }),
       env,
@@ -104,7 +104,23 @@ describe("handleAuthProxyRequest /callback", () => {
       1000,
     );
     expect(res.status).toBe(400);
-    expect(await res.text()).toMatch(/missing code or state/);
+    expect(await res.text()).toMatch(/missing state/);
+  });
+
+  it("returns 400 when code is missing on a non-error callback", async () => {
+    const state = await signState(
+      { userBackendUrl: "https://owner.example.com", nonce: "n-no-code" },
+      env.STATE_HMAC_SECRET,
+      1000,
+    );
+    const res = await handleAuthProxyRequest(
+      callbackUrl("github", { state }),
+      env,
+      { fetch: vi.fn() as unknown as FetchLike },
+      1000,
+    );
+    expect(res.status).toBe(400);
+    expect(await res.text()).toMatch(/missing code/);
   });
 
   it("rejects state signed with a different secret", async () => {
@@ -155,7 +171,7 @@ describe("handleAuthProxyRequest /callback", () => {
     expect(await res.text()).toMatch(/https/);
   });
 
-  it("returns 502 when the provider rejects the code", async () => {
+  it("surfaces exchange failures as a 302 with a signed error envelope", async () => {
     const state = await signState(
       { userBackendUrl: "https://owner.example.com", nonce: "n6" },
       env.STATE_HMAC_SECRET,
@@ -169,8 +185,48 @@ describe("handleAuthProxyRequest /callback", () => {
       { fetch: failingFetch },
       1000,
     );
-    expect(res.status).toBe(502);
-    expect(await res.text()).toMatch(/github exchange failed/);
+    expect(res.status).toBe(302);
+    const location = new URL(res.headers.get("location") ?? "");
+    expect(location.origin + location.pathname).toBe(
+      "https://owner.example.com/oauth/exchange",
+    );
+    const envelope = location.searchParams.get("envelope") ?? "";
+    const verified = await verifyEnvelope(envelope, keys.publicKey, 1000);
+    if (!verified.ok) throw new Error(`expected ok, got ${verified.reason}`);
+    expect(verified.payload.error).toBe("exchange_failed");
+    expect(verified.payload.error_description).toMatch(/bad_verification_code/);
+    expect(verified.payload.access_token).toBeUndefined();
+  });
+
+  it("surfaces provider ?error=access_denied as a 302 with a signed error envelope", async () => {
+    const state = await signState(
+      { userBackendUrl: "https://owner.example.com", nonce: "n7" },
+      env.STATE_HMAC_SECRET,
+      1000,
+    );
+    const fetchSpy = vi.fn() as unknown as FetchLike;
+    const res = await handleAuthProxyRequest(
+      callbackUrl("github", {
+        state,
+        error: "access_denied",
+        error_description: "user denied consent",
+      }),
+      env,
+      { fetch: fetchSpy },
+      1000,
+    );
+    expect(res.status).toBe(302);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    const location = new URL(res.headers.get("location") ?? "");
+    expect(location.origin + location.pathname).toBe(
+      "https://owner.example.com/oauth/exchange",
+    );
+    const envelope = location.searchParams.get("envelope") ?? "";
+    const verified = await verifyEnvelope(envelope, keys.publicKey, 1000);
+    if (!verified.ok) throw new Error(`expected ok, got ${verified.reason}`);
+    expect(verified.payload.error).toBe("access_denied");
+    expect(verified.payload.error_description).toBe("user denied consent");
+    expect(verified.payload.provider).toBe("github");
   });
 
   it("returns 404 for non-callback / non-start paths", async () => {
