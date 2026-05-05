@@ -141,6 +141,46 @@ describe("InboxView", () => {
     expect(row?.className).toMatch(/opacity-60/);
   });
 
+  it("renders a High pill when the signal has priority=high", () => {
+    render(
+      <InboxView
+        filter="all"
+        onFilterChange={() => {}}
+        signals={[{ ...sample({ id: "abc" }), priority: "high" }]}
+        error={null}
+        onDismiss={() => {}}
+      />,
+    );
+    expect(screen.getByText("High")).toBeTruthy();
+  });
+
+  it("renders a Low pill when the signal has priority=low", () => {
+    render(
+      <InboxView
+        filter="all"
+        onFilterChange={() => {}}
+        signals={[{ ...sample({ id: "abc" }), priority: "low" }]}
+        error={null}
+        onDismiss={() => {}}
+      />,
+    );
+    expect(screen.getByText("Low")).toBeTruthy();
+  });
+
+  it("renders no priority pill when the signal has no priority override", () => {
+    render(
+      <InboxView
+        filter="all"
+        onFilterChange={() => {}}
+        signals={[sample({ id: "abc" })]}
+        error={null}
+        onDismiss={() => {}}
+      />,
+    );
+    expect(screen.queryByText("High")).toBeNull();
+    expect(screen.queryByText("Low")).toBeNull();
+  });
+
   it("does not show a Replied pill when the id is not in repliedIds", () => {
     render(
       <InboxView

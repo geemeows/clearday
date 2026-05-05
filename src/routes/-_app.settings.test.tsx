@@ -592,6 +592,24 @@ describe("InboxRulesPanel", () => {
     expect(screen.getByText(/Snooze deps/)).toBeTruthy();
   });
 
+  it("switches the effect to a priority override", async () => {
+    const loader = vi.fn(async () => ({ rules: [sampleRule] }));
+    const saver = vi.fn(async (rules: InboxRule[]) => ({ ok: true, rules }));
+    render(<InboxRulesPanel loader={loader} saver={saver} />);
+    await screen.findByLabelText("Rule name");
+    const effectSelect = screen.getByLabelText(/effect type/i);
+    fireEvent.change(effectSelect, { target: { value: "priority" } });
+    await waitFor(() => expect(saver).toHaveBeenCalled());
+    const saved = saver.mock.calls.at(-1)?.[0] as InboxRule[];
+    expect(saved[0].effects[0]).toEqual({ type: "priority", value: "high" });
+    const value = await screen.findByLabelText(/priority value/i);
+    fireEvent.change(value, { target: { value: "low" } });
+    await waitFor(() => {
+      const last = saver.mock.calls.at(-1)?.[0] as InboxRule[];
+      expect(last[0].effects[0]).toEqual({ type: "priority", value: "low" });
+    });
+  });
+
   it("reorders rules via the move buttons", async () => {
     const r1 = { ...sampleRule, id: "a", name: "A", priority: 1 };
     const r2 = { ...sampleRule, id: "b", name: "B", priority: 2 };

@@ -11,7 +11,7 @@
 // last-write-wins for its own slot (auto_dismiss is sticky once set; snooze
 // uses the longest window seen; tags accumulate).
 
-import type { Signal } from "#/lib/signal";
+import type { Signal, SignalPriority } from "#/lib/signal";
 
 export type RulePredicate =
   | { type: "provider"; provider: string }
@@ -22,7 +22,8 @@ export type RulePredicate =
 export type RuleEffect =
   | { type: "auto_dismiss" }
   | { type: "snooze"; minutes: number }
-  | { type: "tag"; tag: string };
+  | { type: "tag"; tag: string }
+  | { type: "priority"; value: SignalPriority };
 
 export type InboxRule = {
   id: string;
@@ -37,6 +38,7 @@ export type RuleApplication = {
   dismissed: boolean;
   snoozed_until: string | null;
   tags: string[];
+  priority: SignalPriority | null;
   matched_rule_ids: string[];
 };
 
@@ -49,6 +51,7 @@ export function applyInboxRules(
     dismissed: false,
     snoozed_until: null,
     tags: [],
+    priority: null,
     matched_rule_ids: [],
   };
   const ordered = [...rules].sort((a, b) => a.priority - b.priority);
@@ -103,6 +106,11 @@ function applyEffect(e: RuleEffect, result: RuleApplication, now: Date): void {
     case "tag":
       if (!e.tag) break;
       if (!result.tags.includes(e.tag)) result.tags.push(e.tag);
+      break;
+    case "priority":
+      // Last-write-wins by rule order. Engine evaluates rules in ascending
+      // priority order so a higher-priority rule overrides a lower one.
+      if (e.value === "low" || e.value === "high") result.priority = e.value;
       break;
   }
 }

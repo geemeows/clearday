@@ -44,6 +44,11 @@ const webhookReceivedSql = readFileSync(
   "utf8",
 );
 
+const signalPrioritySql = readFileSync(
+  resolve(__dirname, "0018_signal_priority.sql"),
+  "utf8",
+);
+
 describe("0001_init.sql contents", () => {
   it("declares the (provider, kind, source_id) unique constraint on signals", () => {
     expect(migrationSql).toMatch(
@@ -93,6 +98,20 @@ describe("0017_provider_accounts_webhook_received.sql contents", () => {
     expect(webhookReceivedSql).toMatch(
       /alter table public\.provider_accounts\s+add column if not exists last_webhook_received_at timestamptz null/i,
     );
+  });
+});
+
+describe("0018_signal_priority.sql contents", () => {
+  it("adds signals.priority as a nullable text column", () => {
+    expect(signalPrioritySql).toMatch(
+      /alter table public\.signals\s+add column if not exists priority text/i,
+    );
+  });
+
+  it("constrains priority to 'low' or 'high' (or null)", () => {
+    expect(signalPrioritySql).toMatch(/check\s*\(\s*priority is null/i);
+    expect(signalPrioritySql).toContain("'low'");
+    expect(signalPrioritySql).toContain("'high'");
   });
 });
 

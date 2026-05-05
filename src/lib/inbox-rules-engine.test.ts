@@ -152,6 +152,39 @@ describe("applyInboxRules — effects", () => {
     expect(out.snoozed_until).toBe("2026-05-04T14:00:00.000Z");
   });
 
+  it("priority effect sets priority on the application", () => {
+    const r = makeRule({
+      effects: [{ type: "priority", value: "high" }],
+    });
+    expect(applyInboxRules(makeSignal(), [r]).priority).toBe("high");
+  });
+
+  it("higher-priority rule wins last on priority effect", () => {
+    const out = applyInboxRules(
+      makeSignal(),
+      [
+        makeRule({
+          id: "a",
+          priority: 1,
+          effects: [{ type: "priority", value: "low" }],
+        }),
+        makeRule({
+          id: "b",
+          priority: 2,
+          effects: [{ type: "priority", value: "high" }],
+        }),
+      ],
+      new Date(),
+    );
+    expect(out.priority).toBe("high");
+  });
+
+  it("priority defaults to null when no rule sets it", () => {
+    expect(applyInboxRules(makeSignal(), []).priority).toBeNull();
+    const r = makeRule({ effects: [{ type: "tag", tag: "x" }] });
+    expect(applyInboxRules(makeSignal(), [r]).priority).toBeNull();
+  });
+
   it("tags accumulate without duplicates", () => {
     const out = applyInboxRules(
       makeSignal(),

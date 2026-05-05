@@ -229,6 +229,25 @@ describe("upsertSignal — inbox rules", () => {
     expect(values).not.toHaveProperty("dismissed_at");
     expect(values).not.toHaveProperty("snoozed_until");
     expect(values).not.toHaveProperty("tags");
+    expect(values).not.toHaveProperty("priority");
+  });
+
+  it("priority rule sets priority column", async () => {
+    const { client, spies } = makeClient({});
+    await upsertSignal(client, sample, {
+      rules: [
+        {
+          id: "r-prio",
+          name: "x",
+          enabled: true,
+          priority: 1,
+          predicates: [{ type: "kind", kind: "pr_review_requested" }],
+          effects: [{ type: "priority", value: "high" }],
+        },
+      ],
+    });
+    const values = spies.upsert.mock.calls[0][0];
+    expect(values.priority).toBe("high");
   });
 });
 

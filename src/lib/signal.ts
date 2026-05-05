@@ -32,10 +32,13 @@ export type Signal = {
   source_created_at: string | null;
 };
 
+export type SignalPriority = "low" | "high";
+
 export type StoredSignal = Signal & {
   id: string;
   unread_count: number;
   created_at: string;
   updated_at: string;
   dismissed_at: string | null;
+  priority?: SignalPriority | null;
 };

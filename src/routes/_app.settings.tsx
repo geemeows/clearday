@@ -1682,6 +1682,7 @@ const EFFECT_TYPES: Array<{ id: RuleEffect["type"]; label: string }> = [
   { id: "auto_dismiss", label: "Auto-dismiss" },
   { id: "snooze", label: "Snooze (minutes)" },
   { id: "tag", label: "Tag" },
+  { id: "priority", label: "Set priority" },
 ];
 
 function emptyRule(): InboxRule {
@@ -1981,7 +1982,8 @@ function RuleRow({
     let next: RuleEffect;
     if (t === "auto_dismiss") next = { type: "auto_dismiss" };
     else if (t === "snooze") next = { type: "snooze", minutes: 60 };
-    else next = { type: "tag", tag: "" };
+    else if (t === "tag") next = { type: "tag", tag: "" };
+    else next = { type: "priority", value: "high" };
     onChange({ effects: [next] });
   };
 
@@ -2196,16 +2198,32 @@ function EffectInputs({
       />
     );
   }
+  if (effect.type === "tag") {
+    return (
+      <input
+        type="text"
+        aria-label="Tag value"
+        value={effect.tag}
+        onChange={(e) => onChange({ ...effect, tag: e.target.value })}
+        placeholder="tag"
+        disabled={busy}
+        className="mt-2 w-full rounded border border-zinc-200 px-2 py-1"
+      />
+    );
+  }
   return (
-    <input
-      type="text"
-      aria-label="Tag value"
-      value={effect.tag}
-      onChange={(e) => onChange({ ...effect, tag: e.target.value })}
-      placeholder="tag"
+    <select
+      aria-label="Priority value"
+      value={effect.value}
+      onChange={(e) =>
+        onChange({ ...effect, value: e.target.value as "low" | "high" })
+      }
       disabled={busy}
       className="mt-2 w-full rounded border border-zinc-200 px-2 py-1"
-    />
+    >
+      <option value="high">High</option>
+      <option value="low">Low</option>
+    </select>
   );
 }
 

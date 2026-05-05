@@ -83,6 +83,7 @@ export async function upsertSignal(
     if (application.snoozed_until)
       values.snoozed_until = application.snoozed_until;
     if (application.tags.length > 0) values.tags = application.tags;
+    if (application.priority) values.priority = application.priority;
   }
 
   const { error } = await client

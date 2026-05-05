@@ -18,7 +18,11 @@ export const Route = createFileRoute("/_app/inbox")({
   component: InboxPage,
 });
 
-type StoredSignal = Signal & { id: string; dismissed_at: string | null };
+type StoredSignal = Signal & {
+  id: string;
+  dismissed_at: string | null;
+  priority?: "low" | "high" | null;
+};
 
 type Filter = "all" | "prs" | "tickets" | "mentions" | "meetings";
 
@@ -203,6 +207,16 @@ export function InboxView({
                       {replied && (
                         <span className="shrink-0 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-emerald-700">
                           Replied
+                        </span>
+                      )}
+                      {s.priority === "high" && (
+                        <span className="shrink-0 rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-red-700">
+                          High
+                        </span>
+                      )}
+                      {s.priority === "low" && (
+                        <span className="shrink-0 rounded-full border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-zinc-500">
+                          Low
                         </span>
                       )}
                     </div>
