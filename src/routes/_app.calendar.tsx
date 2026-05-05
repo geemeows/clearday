@@ -74,6 +74,9 @@ function CalendarPage() {
       onDeclined={(id) =>
         setSignals((cur) => (cur ? cur.filter((s) => s.id !== id) : cur))
       }
+      onRescheduled={(id) =>
+        setSignals((cur) => (cur ? cur.filter((s) => s.id !== id) : cur))
+      }
     />
   );
 }
@@ -84,6 +87,14 @@ export type DeclineRequest = {
 };
 
 export type DeclineResult = { ok: true } | { ok: false; error: string };
+
+export type RescheduleRequest = {
+  event_id: string;
+  signal_id: string;
+  shift_minutes: number;
+};
+
+export type RescheduleResult = { ok: true } | { ok: false; error: string };
 
 const defaultDecliner: (req: DeclineRequest) => Promise<DeclineResult> = async (
   req,
@@ -102,20 +113,47 @@ const defaultDecliner: (req: DeclineRequest) => Promise<DeclineResult> = async (
   }
 };
 
+const defaultRescheduler: (
+  req: RescheduleRequest,
+) => Promise<RescheduleResult> = async (req) => {
+  try {
+    const out = (await apiFetch("/api/calendar/reschedule", {
+      method: "POST",
+      body: JSON.stringify(req),
+    })) as RescheduleResult;
+    return out;
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "request failed",
+    };
+  }
+};
+
+const RESCHEDULE_PRESETS: ReadonlyArray<{ label: string; minutes: number }> = [
+  { label: "+15m", minutes: 15 },
+  { label: "+30m", minutes: 30 },
+  { label: "+1h", minutes: 60 },
+];
+
 export function CalendarView({
   events,
   now: nowProp,
   loading = false,
   error = null,
   onDeclined,
+  onRescheduled,
   decliner = defaultDecliner,
+  rescheduler = defaultRescheduler,
 }: {
   events: MeetingEvent[];
   now?: Date;
   loading?: boolean;
   error?: string | null;
   onDeclined?: (signalId: string) => void;
+  onRescheduled?: (signalId: string) => void;
   decliner?: (req: DeclineRequest) => Promise<DeclineResult>;
+  rescheduler?: (req: RescheduleRequest) => Promise<RescheduleResult>;
 }) {
   const [mode, setMode] = useState<ViewMode>("day");
   const [anchor, setAnchor] = useState<Date>(() =>
@@ -234,7 +272,9 @@ export function CalendarView({
             conflict={conflict}
             now={now}
             onDeclined={onDeclined}
+            onRescheduled={onRescheduled}
             decliner={decliner}
+            rescheduler={rescheduler}
           />
           <FocusBlocksCard blocks={focusBlocks} now={now} />
         </aside>
@@ -508,12 +548,16 @@ function ConflictCard({
   conflict,
   now,
   onDeclined,
+  onRescheduled,
   decliner,
+  rescheduler,
 }: {
   conflict: Conflict | null;
   now: Date;
   onDeclined?: (signalId: string) => void;
+  onRescheduled?: (signalId: string) => void;
   decliner: (req: DeclineRequest) => Promise<DeclineResult>;
+  rescheduler: (req: RescheduleRequest) => Promise<RescheduleResult>;
 }) {
   const [pending, setPending] = useState(false);
   const [declineError, setDeclineError] = useState<string | null>(null);
@@ -531,6 +575,22 @@ function ConflictCard({
     setPending(false);
     if (out.ok) {
       onDeclined?.(laterSignal.id);
+    } else {
+      setDeclineError(out.error);
+    }
+  };
+  const handleReschedule = async (minutes: number) => {
+    if (!sourceId || pending) return;
+    setPending(true);
+    setDeclineError(null);
+    const out = await rescheduler({
+      event_id: sourceId,
+      signal_id: laterSignal.id,
+      shift_minutes: minutes,
+    });
+    setPending(false);
+    if (out.ok) {
+      onRescheduled?.(laterSignal.id);
     } else {
       setDeclineError(out.error);
     }
@@ -571,9 +631,22 @@ function ConflictCard({
             disabled={pending}
             className="inline-flex items-center gap-1 rounded border border-amber-300 bg-white px-2.5 py-1 text-xs text-amber-900 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {pending ? "Declining…" : "Decline"}
+            {pending ? "Working…" : "Decline"}
           </button>
         )}
+        {sourceId &&
+          RESCHEDULE_PRESETS.map((preset) => (
+            <button
+              key={preset.minutes}
+              type="button"
+              onClick={() => handleReschedule(preset.minutes)}
+              disabled={pending}
+              aria-label={`Reschedule ${preset.label}`}
+              className="inline-flex items-center gap-1 rounded border border-amber-300 bg-white px-2.5 py-1 text-xs text-amber-900 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {preset.label}
+            </button>
+          ))}
         {laterSignal.url && (
           <a
             href={laterSignal.url}

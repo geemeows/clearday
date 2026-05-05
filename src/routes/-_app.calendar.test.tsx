@@ -202,6 +202,64 @@ describe("CalendarView", () => {
     expect(onDeclined).toHaveBeenCalledWith("b");
   });
 
+  it("Reschedule forwards conflict event_id + shift_minutes and reports an error", async () => {
+    const now = new Date("2026-05-04T08:00:00.000Z");
+    const events = [
+      ev("a", "2026-05-04T13:00:00.000Z", "2026-05-04T14:00:00.000Z"),
+      ev("b", "2026-05-04T13:30:00.000Z", "2026-05-04T14:30:00.000Z"),
+    ];
+    const rescheduler = vi.fn(async () => ({
+      ok: false as const,
+      error: "google HTTP 500",
+    }));
+    render(
+      <CalendarView events={events} now={now} rescheduler={rescheduler} />,
+    );
+    const conflict = screen.getByRole("article", { name: "Conflict" });
+    fireEvent.click(
+      within(conflict).getByRole("button", { name: "Reschedule +30m" }),
+    );
+    await waitFor(() => expect(rescheduler).toHaveBeenCalledTimes(1));
+    expect(rescheduler).toHaveBeenCalledWith({
+      event_id: "b",
+      signal_id: "b",
+      shift_minutes: 30,
+    });
+    expect(within(conflict).getByRole("alert").textContent).toContain(
+      "google HTTP 500",
+    );
+  });
+
+  it("Reschedule success invokes onRescheduled with the later event's signal id", async () => {
+    const now = new Date("2026-05-04T08:00:00.000Z");
+    const events = [
+      ev("a", "2026-05-04T13:00:00.000Z", "2026-05-04T14:00:00.000Z"),
+      ev("b", "2026-05-04T13:30:00.000Z", "2026-05-04T14:30:00.000Z"),
+    ];
+    const rescheduler = vi.fn(async () => ({ ok: true as const }));
+    const onRescheduled = vi.fn();
+    render(
+      <CalendarView
+        events={events}
+        now={now}
+        rescheduler={rescheduler}
+        onRescheduled={onRescheduled}
+      />,
+    );
+    const conflict = screen.getByRole("article", { name: "Conflict" });
+    await act(async () => {
+      fireEvent.click(
+        within(conflict).getByRole("button", { name: "Reschedule +1h" }),
+      );
+    });
+    expect(rescheduler).toHaveBeenCalledWith({
+      event_id: "b",
+      signal_id: "b",
+      shift_minutes: 60,
+    });
+    expect(onRescheduled).toHaveBeenCalledWith("b");
+  });
+
   it("renders an empty state when there are no events on the day", () => {
     const now = new Date("2026-05-04T11:00:00.000Z");
     render(<CalendarView events={[]} now={now} />);

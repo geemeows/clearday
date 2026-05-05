@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { declineCalendarEvent } from "#/lib/calendar-actions";
+import {
+  declineCalendarEvent,
+  rescheduleCalendarEvent,
+} from "#/lib/calendar-actions";
 
 type Call = { url: string; init: RequestInit };
 
@@ -158,6 +161,170 @@ describe("declineCalendarEvent", () => {
       expect(out.reason).toBe("api_error");
       expect(out.needs_reauth).toBe(true);
       expect(out.error).toContain("403");
+    }
+  });
+});
+
+describe("rescheduleCalendarEvent", () => {
+  it("GETs then PATCHes start/end shifted by shift_minutes preserving timeZone", async () => {
+    const { fn, calls } = recordingFetch((_url, init) => {
+      if (init.method === "GET") {
+        return jsonResponse(200, {
+          id: "ev1",
+          start: {
+            dateTime: "2026-05-04T13:00:00.000Z",
+            timeZone: "America/Los_Angeles",
+          },
+          end: {
+            dateTime: "2026-05-04T14:00:00.000Z",
+            timeZone: "America/Los_Angeles",
+          },
+        });
+      }
+      return jsonResponse(200, {});
+    });
+
+    const out = await rescheduleCalendarEvent(
+      { event_id: "ev1", shift_minutes: 30 },
+      { token: "g-tok", fetch: fn },
+    );
+
+    expect(out).toEqual({
+      ok: true,
+      start: "2026-05-04T13:30:00.000Z",
+      end: "2026-05-04T14:30:00.000Z",
+    });
+    expect(calls).toHaveLength(2);
+    expect(calls[1].url).toBe(
+      "https://www.googleapis.com/calendar/v3/calendars/primary/events/ev1?sendUpdates=all",
+    );
+    expect(calls[1].init.method).toBe("PATCH");
+    const sent = JSON.parse(calls[1].init.body as string);
+    expect(sent).toEqual({
+      start: {
+        dateTime: "2026-05-04T13:30:00.000Z",
+        timeZone: "America/Los_Angeles",
+      },
+      end: {
+        dateTime: "2026-05-04T14:30:00.000Z",
+        timeZone: "America/Los_Angeles",
+      },
+    });
+  });
+
+  it("omits timeZone when the source event has none", async () => {
+    const { fn, calls } = recordingFetch((_url, init) => {
+      if (init.method === "GET") {
+        return jsonResponse(200, {
+          start: { dateTime: "2026-05-04T13:00:00.000Z" },
+          end: { dateTime: "2026-05-04T14:00:00.000Z" },
+        });
+      }
+      return jsonResponse(200, {});
+    });
+
+    await rescheduleCalendarEvent(
+      { event_id: "ev1", shift_minutes: -15 },
+      { token: "t", fetch: fn },
+    );
+
+    const sent = JSON.parse(calls[1].init.body as string);
+    expect(sent.start).toEqual({ dateTime: "2026-05-04T12:45:00.000Z" });
+    expect(sent.end).toEqual({ dateTime: "2026-05-04T13:45:00.000Z" });
+  });
+
+  it("rejects an empty event_id without a network call", async () => {
+    const { fn, calls } = recordingFetch(() => jsonResponse(200, {}));
+    const out = await rescheduleCalendarEvent(
+      { event_id: "", shift_minutes: 30 },
+      { token: "t", fetch: fn },
+    );
+    expect(out.ok).toBe(false);
+    if (!out.ok) expect(out.reason).toBe("invalid_event");
+    expect(calls).toHaveLength(0);
+  });
+
+  it("rejects a zero or non-finite shift without a network call", async () => {
+    const { fn, calls } = recordingFetch(() => jsonResponse(200, {}));
+    const zero = await rescheduleCalendarEvent(
+      { event_id: "ev1", shift_minutes: 0 },
+      { token: "t", fetch: fn },
+    );
+    const nan = await rescheduleCalendarEvent(
+      { event_id: "ev1", shift_minutes: Number.NaN },
+      { token: "t", fetch: fn },
+    );
+    expect(zero.ok).toBe(false);
+    expect(nan.ok).toBe(false);
+    if (!zero.ok) expect(zero.reason).toBe("invalid_shift");
+    if (!nan.ok) expect(nan.reason).toBe("invalid_shift");
+    expect(calls).toHaveLength(0);
+  });
+
+  it("returns no_token + needs_reauth when token is missing", async () => {
+    const { fn, calls } = recordingFetch(() => jsonResponse(200, {}));
+    const out = await rescheduleCalendarEvent(
+      { event_id: "ev1", shift_minutes: 30 },
+      { token: null, fetch: fn },
+    );
+    expect(out.ok).toBe(false);
+    if (!out.ok) {
+      expect(out.reason).toBe("no_token");
+      expect(out.needs_reauth).toBe(true);
+    }
+    expect(calls).toHaveLength(0);
+  });
+
+  it("returns no_time when the event has no dateTime (all-day)", async () => {
+    const { fn, calls } = recordingFetch((_url, init) => {
+      if (init.method === "GET") {
+        return jsonResponse(200, {
+          start: { date: "2026-05-04" },
+          end: { date: "2026-05-05" },
+        });
+      }
+      return jsonResponse(200, {});
+    });
+    const out = await rescheduleCalendarEvent(
+      { event_id: "ev1", shift_minutes: 30 },
+      { token: "t", fetch: fn },
+    );
+    expect(out.ok).toBe(false);
+    if (!out.ok) expect(out.reason).toBe("no_time");
+    expect(calls).toHaveLength(1); // GET only, no PATCH
+  });
+
+  it("flags needs_reauth on a 401 GET response", async () => {
+    const { fn } = recordingFetch(() => jsonResponse(401, { error: "nope" }));
+    const out = await rescheduleCalendarEvent(
+      { event_id: "ev1", shift_minutes: 30 },
+      { token: "t", fetch: fn },
+    );
+    expect(out.ok).toBe(false);
+    if (!out.ok) {
+      expect(out.reason).toBe("api_error");
+      expect(out.needs_reauth).toBe(true);
+    }
+  });
+
+  it("surfaces a non-2xx PATCH as api_error", async () => {
+    const { fn } = recordingFetch((_url, init) => {
+      if (init.method === "GET") {
+        return jsonResponse(200, {
+          start: { dateTime: "2026-05-04T13:00:00.000Z" },
+          end: { dateTime: "2026-05-04T14:00:00.000Z" },
+        });
+      }
+      return new Response("nope", { status: 500 });
+    });
+    const out = await rescheduleCalendarEvent(
+      { event_id: "ev1", shift_minutes: 30 },
+      { token: "t", fetch: fn },
+    );
+    expect(out.ok).toBe(false);
+    if (!out.ok) {
+      expect(out.reason).toBe("api_error");
+      expect(out.error).toContain("500");
     }
   });
 });

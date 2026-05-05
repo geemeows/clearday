@@ -17,7 +17,10 @@ import {
   handleBriefingGenerate,
   runBriefingTick,
 } from "#/lib/briefing-api";
-import { declineCalendarEvent } from "#/lib/calendar-actions";
+import {
+  declineCalendarEvent,
+  rescheduleCalendarEvent,
+} from "#/lib/calendar-actions";
 import {
   type ExportDeps,
   exportData,
@@ -281,6 +284,13 @@ export default {
 
     if (url.pathname === "/api/calendar/decline" && request.method === "POST") {
       return handleDeclineCalendarEvent(request, service);
+    }
+
+    if (
+      url.pathname === "/api/calendar/reschedule" &&
+      request.method === "POST"
+    ) {
+      return handleRescheduleCalendarEvent(request, service);
     }
 
     if (url.pathname === "/api/ai/settings") {
@@ -1107,6 +1117,52 @@ async function handleDeclineCalendarEvent(
 
   const out = await declineCalendarEvent(
     { event_id, calendar_id },
+    { token, fetch: (i, init) => fetch(i, init) },
+  );
+  if (out.ok && signalId) {
+    await dismissSignal(service, signalId);
+  }
+  return json(out, out.ok ? 200 : 400);
+}
+
+async function handleRescheduleCalendarEvent(
+  request: Request,
+  service: SupabaseService,
+): Promise<Response> {
+  let body: {
+    event_id?: unknown;
+    calendar_id?: unknown;
+    shift_minutes?: unknown;
+    signal_id?: unknown;
+  };
+  try {
+    body = (await request.json()) as typeof body;
+  } catch {
+    return json({ ok: false, error: "invalid json" }, 400);
+  }
+  const event_id = typeof body.event_id === "string" ? body.event_id : "";
+  const calendar_id =
+    typeof body.calendar_id === "string" && body.calendar_id.length > 0
+      ? body.calendar_id
+      : undefined;
+  const shift_minutes =
+    typeof body.shift_minutes === "number" ? body.shift_minutes : Number.NaN;
+  const signalId =
+    typeof body.signal_id === "string" && body.signal_id.length > 0
+      ? body.signal_id
+      : null;
+
+  const { data, error } = await service
+    .from("provider_accounts")
+    .select("access_token")
+    .eq("provider", "google")
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  const token =
+    (data as { access_token: string | null } | null)?.access_token ?? null;
+
+  const out = await rescheduleCalendarEvent(
+    { event_id, calendar_id, shift_minutes },
     { token, fetch: (i, init) => fetch(i, init) },
   );
   if (out.ok && signalId) {
