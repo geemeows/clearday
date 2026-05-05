@@ -37,7 +37,7 @@ export const AUTHORIZE_PROVIDERS: Record<
   },
   google: {
     authorizeUrl: "https://accounts.google.com/o/oauth2/v2/auth",
-    scopes: ["openid", "https://www.googleapis.com/auth/calendar.readonly"],
+    scopes: ["openid", "https://www.googleapis.com/auth/calendar.events"],
     scopeSeparator: " ",
     scopeParam: "scope",
     // `access_type=offline` + `prompt=consent` together force Google to issue
@@ -91,6 +91,8 @@ export const AUTHORIZE_PROVIDERS: Record<
       "im:read",
       "mpim:read",
       "search:read",
+      "users.profile:write",
+      "dnd:write",
     ],
     scopeSeparator: ",",
     // Slack's v2 endpoint uses `user_scope` for user-token scopes (and `scope`
