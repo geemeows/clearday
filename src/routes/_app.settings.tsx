@@ -10,14 +10,16 @@ import {
   PURGE_CONFIRMATION,
   type RetentionView,
 } from "#/lib/data-privacy-api";
-import type {
-  InboxRule,
-  RuleEffect,
-  RulePredicate,
+import {
+  type InboxRule,
+  previewInboxRules,
+  type RuleEffect,
+  type RulePredicate,
 } from "#/lib/inbox-rules-engine";
 import type { IntegrationView } from "#/lib/integrations-api";
 import { PROFILE_UPDATED_EVENT, type ProfileView } from "#/lib/profile-api";
 import type { HealthCheckResult, SelfHostInfo } from "#/lib/self-host-api";
+import type { StoredSignal } from "#/lib/signal";
 import {
   ACCENTS,
   type Accent,
@@ -1557,18 +1559,32 @@ function emptyRule(): InboxRule {
   };
 }
 
+type RulesSignalsLoader = () => Promise<StoredSignal[]>;
+
+const defaultRulesSignalsLoader: RulesSignalsLoader = async () => {
+  const body = (await apiFetch("/api/signals?filter=all")) as {
+    signals: StoredSignal[];
+  };
+  return body.signals;
+};
+
 export function InboxRulesPanel({
   loader,
   saver,
+  signalsLoader = defaultRulesSignalsLoader,
 }: {
   loader?: () => Promise<{ rules: InboxRule[] }>;
   saver?: (
     rules: InboxRule[],
   ) => Promise<{ ok: boolean; rules?: InboxRule[]; error?: string }>;
+  signalsLoader?: RulesSignalsLoader;
 } = {}) {
   const [rules, setRules] = useState<InboxRule[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [previewSignals, setPreviewSignals] = useState<StoredSignal[] | null>(
+    null,
+  );
 
   const load = useMemo(
     () =>
@@ -1602,6 +1618,22 @@ export function InboxRulesPanel({
       cancelled = true;
     };
   }, [load]);
+
+  useEffect(() => {
+    let cancelled = false;
+    signalsLoader()
+      .then((list) => {
+        if (cancelled) return;
+        setPreviewSignals(list);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setPreviewSignals([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [signalsLoader]);
 
   const persist = useCallback(
     async (next: InboxRule[]) => {
@@ -1716,6 +1748,59 @@ export function InboxRulesPanel({
             Add rule
           </button>
         </div>
+      )}
+
+      {rules && previewSignals && (
+        <RulesPreview rules={rules} signals={previewSignals} />
+      )}
+    </section>
+  );
+}
+
+function RulesPreview({
+  rules,
+  signals,
+}: {
+  rules: InboxRule[];
+  signals: StoredSignal[];
+}) {
+  const matches = useMemo(
+    () => previewInboxRules(signals, rules),
+    [rules, signals],
+  );
+  const ruleNames = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const r of rules) map.set(r.id, r.name || "Unnamed rule");
+    return map;
+  }, [rules]);
+
+  return (
+    <section
+      aria-label="Rules preview"
+      className="mt-6 border-t border-zinc-200 pt-4"
+    >
+      <h3 className="text-sm font-semibold text-zinc-900">
+        Preview against recent Signals
+      </h3>
+      <p className="mt-1 text-xs text-zinc-500">
+        {matches.length} of {signals.length} recent Signals would be affected.
+      </p>
+      {matches.length > 0 && (
+        <ul className="mt-3 space-y-2">
+          {matches.slice(0, 10).map(({ signal, application }) => (
+            <li
+              key={`${signal.provider}:${signal.kind}:${signal.source_id}`}
+              className="rounded border border-zinc-200 bg-zinc-50 p-2 text-xs"
+            >
+              <div className="font-medium text-zinc-900">{signal.title}</div>
+              <div className="mt-0.5 text-zinc-500">
+                {application.matched_rule_ids
+                  .map((id) => ruleNames.get(id) ?? id)
+                  .join(", ")}
+              </div>
+            </li>
+          ))}
+        </ul>
       )}
     </section>
   );

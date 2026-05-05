@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   applyInboxRules,
   type InboxRule,
+  previewInboxRules,
   validateInboxRules,
 } from "#/lib/inbox-rules-engine";
 import type { Signal } from "#/lib/signal";
@@ -235,6 +236,41 @@ describe("applyInboxRules — ordering and gating", () => {
     expect(out.snoozed_until).toBe("2026-05-05T12:00:00.000Z");
     expect(out.tags).toEqual(["deps"]);
     expect(out.matched_rule_ids).toEqual(["snooze-dependabot"]);
+  });
+});
+
+describe("previewInboxRules", () => {
+  it("keeps only signals that any rule fired on, preserving order", () => {
+    const rule = makeRule({
+      predicates: [
+        { type: "source_match", field: "author", equals: "dependabot" },
+      ],
+      effects: [{ type: "auto_dismiss" }],
+    });
+    const matched = makeSignal({
+      source_id: "pr-1",
+      payload: { author: "dependabot" },
+    });
+    const skipped = makeSignal({
+      source_id: "pr-2",
+      payload: { author: "alice" },
+    });
+    const matched2 = makeSignal({
+      source_id: "pr-3",
+      payload: { author: "dependabot" },
+    });
+    const out = previewInboxRules([matched, skipped, matched2], [rule]);
+    expect(out.map((r) => r.signal.source_id)).toEqual(["pr-1", "pr-3"]);
+    expect(out[0].application.dismissed).toBe(true);
+    expect(out[0].application.matched_rule_ids).toEqual(["r-1"]);
+  });
+
+  it("returns an empty list when no rule fires", () => {
+    const rule = makeRule({
+      predicates: [{ type: "kind", kind: "ticket_blocked" }],
+      effects: [{ type: "tag", tag: "blocked" }],
+    });
+    expect(previewInboxRules([makeSignal()], [rule])).toEqual([]);
   });
 });
 

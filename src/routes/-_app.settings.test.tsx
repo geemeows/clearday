@@ -8,6 +8,7 @@ import {
 import type { IntegrationView } from "#/lib/integrations-api";
 import { PROFILE_UPDATED_EVENT } from "#/lib/profile-api";
 import type { HealthCheckResult, SelfHostInfo } from "#/lib/self-host-api";
+import type { StoredSignal } from "#/lib/signal";
 import { THEME_UPDATED_EVENT, type ThemeView } from "#/lib/theme-api";
 import {
   AiProviderPanel,
@@ -494,6 +495,57 @@ describe("InboxRulesPanel", () => {
     render(<InboxRulesPanel loader={loader} saver={saver} />);
     fireEvent.click(await screen.findByRole("button", { name: /add rule/i }));
     await waitFor(() => expect(screen.getByText(/boom/)).toBeTruthy());
+  });
+
+  it("renders a live preview of recent Signals matched by the rules", async () => {
+    const loader = vi.fn(async () => ({ rules: [sampleRule] }));
+    const saver = vi.fn();
+    const previewSignals: StoredSignal[] = [
+      {
+        id: "s-1",
+        provider: "github",
+        kind: "pr_review_requested",
+        source_id: "pr-1",
+        title: "chore: bump deps",
+        url: null,
+        payload: { author: "dependabot" },
+        requires_action: true,
+        source_created_at: "2026-05-04T10:00:00.000Z",
+        unread_count: 0,
+        created_at: "2026-05-04T10:00:00.000Z",
+        updated_at: "2026-05-04T10:00:00.000Z",
+        dismissed_at: null,
+      },
+      {
+        id: "s-2",
+        provider: "github",
+        kind: "pr_review_requested",
+        source_id: "pr-2",
+        title: "feat: thing",
+        url: null,
+        payload: { author: "alice" },
+        requires_action: true,
+        source_created_at: "2026-05-04T10:00:00.000Z",
+        unread_count: 0,
+        created_at: "2026-05-04T10:00:00.000Z",
+        updated_at: "2026-05-04T10:00:00.000Z",
+        dismissed_at: null,
+      },
+    ];
+    const signalsLoader = vi.fn(async () => previewSignals);
+    render(
+      <InboxRulesPanel
+        loader={loader}
+        saver={saver}
+        signalsLoader={signalsLoader}
+      />,
+    );
+    await screen.findByLabelText("Rule name");
+    await waitFor(() =>
+      expect(screen.getByText(/1 of 2 recent Signals/i)).toBeTruthy(),
+    );
+    expect(screen.getByText("chore: bump deps")).toBeTruthy();
+    expect(screen.getByText(/Snooze deps/)).toBeTruthy();
   });
 
   it("reorders rules via the move buttons", async () => {

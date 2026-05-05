@@ -107,6 +107,30 @@ function applyEffect(e: RuleEffect, result: RuleApplication, now: Date): void {
   }
 }
 
+export type RulePreviewRow = {
+  signal: Signal;
+  application: RuleApplication;
+};
+
+/**
+ * Run the engine over each Signal and keep only those that any rule fired on.
+ * The settings page uses this to render a live preview of how the current
+ * rule set would shape recently-seen Signals.
+ */
+export function previewInboxRules(
+  signals: Signal[],
+  rules: InboxRule[],
+  now: Date = new Date(),
+): RulePreviewRow[] {
+  const out: RulePreviewRow[] = [];
+  for (const signal of signals) {
+    const application = applyInboxRules(signal, rules, now);
+    if (application.matched_rule_ids.length === 0) continue;
+    out.push({ signal, application });
+  }
+  return out;
+}
+
 /**
  * Validate a rule list; returns an array of human-readable error messages
  * (empty when valid). The API uses this to reject malformed PUT bodies.
