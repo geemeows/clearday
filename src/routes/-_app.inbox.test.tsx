@@ -522,6 +522,41 @@ describe("SlackReplyComposer", () => {
     expect(screen.getByRole("status").textContent).toMatch(/reply sent/i);
   });
 
+  it("omits thread_ts when the user toggles 'send as new message in #channel'", async () => {
+    const submit = vi.fn(async () => ({ ok: true }));
+    render(
+      <SlackReplyComposer
+        channel="C123"
+        thread_ts="1700000000.000100"
+        submit={submit}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText("Slack reply"), {
+      target: { value: "fresh top-level message" },
+    });
+    fireEvent.click(
+      screen.getByRole("checkbox", {
+        name: /send as a new message in #C123/i,
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /^send$/i }));
+    await waitFor(() => expect(submit).toHaveBeenCalled());
+    expect(submit).toHaveBeenCalledWith({
+      channel: "C123",
+      text: "fresh top-level message",
+      thread_ts: undefined,
+    });
+  });
+
+  it("does not render the new-message toggle when there is no thread_ts", () => {
+    render(
+      <SlackReplyComposer channel="C1" submit={async () => ({ ok: true })} />,
+    );
+    expect(
+      screen.queryByRole("checkbox", { name: /send as a new message/i }),
+    ).toBeNull();
+  });
+
   it("surfaces a Reauthorize hint on needs_reauth", async () => {
     const submit = vi.fn(async () => ({
       ok: false,

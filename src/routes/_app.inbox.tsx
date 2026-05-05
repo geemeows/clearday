@@ -848,6 +848,11 @@ export function SlackReplyComposer({
     | { kind: "error"; message: string; needs_reauth?: boolean }
     | null
   >(null);
+  // When the signal lives inside a thread, default to replying in-thread.
+  // The user can flip to "send as new message in #channel" if they'd rather
+  // start a fresh top-level message instead of nesting under the parent.
+  const [asNewMessage, setAsNewMessage] = useState(false);
+  const effectiveThreadTs = asNewMessage ? undefined : thread_ts;
 
   const reauth = async () => {
     setReauthing(true);
@@ -905,7 +910,7 @@ export function SlackReplyComposer({
       const out = await submit({
         channel,
         text: text.trim(),
-        thread_ts,
+        thread_ts: effectiveThreadTs,
         signal_id: signalId,
       });
       if (out.ok) {
@@ -939,12 +944,25 @@ export function SlackReplyComposer({
         value={text}
         onChange={(e) => setText(e.target.value)}
         placeholder={
-          thread_ts ? "Reply in thread…" : `Send a message to #${channel}`
+          effectiveThreadTs
+            ? "Reply in thread…"
+            : `Send a message to #${channel}`
         }
         aria-label="Slack reply"
         rows={3}
         className="w-full resize-y rounded border border-zinc-200 bg-white px-2 py-1.5 text-sm text-zinc-900 outline-none focus:border-zinc-400"
       />
+      {thread_ts && (
+        <label className="flex items-center gap-2 text-xs text-zinc-600">
+          <input
+            type="checkbox"
+            checked={asNewMessage}
+            onChange={(e) => setAsNewMessage(e.target.checked)}
+            className="h-3.5 w-3.5"
+          />
+          Send as a new message in #{channel} (don't reply in thread)
+        </label>
+      )}
       <div className="flex flex-wrap gap-2">
         <button
           type="button"

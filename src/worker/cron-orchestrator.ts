@@ -96,6 +96,14 @@ export type OrchestratorDeps = {
    * when absent, the slack poll only fires the mention + DM + thread queries.
    */
   loadSlackBroadcastAllowlist?: () => Promise<string[]>;
+  /**
+   * Records `(channel, thread_ts)` rows discovered by the slack adapter (a
+   * self-authored reply seen during this tick). Best-effort: failures are
+   * swallowed so the rest of the poll's results still persist.
+   */
+  saveSlackParticipatedThreads?: (
+    threads: ReadonlyArray<{ channel: string; thread_ts: string }>,
+  ) => Promise<void>;
 };
 
 export type OrchestratorReport = {
@@ -240,7 +248,7 @@ async function pollOne(
     const broadcastChannels = deps.loadSlackBroadcastAllowlist
       ? await deps.loadSlackBroadcastAllowlist()
       : undefined;
-    const signals = await pollSlackSignals(
+    const result = await pollSlackSignals(
       account.access_token,
       account.account_id,
       async (url, init) => deps.fetch(url, init),
@@ -249,8 +257,19 @@ async function pollOne(
         ...(broadcastChannels ? { broadcastChannels } : {}),
       },
     );
-    await upsertSignals(deps.store, signals, { rules });
-    return signals.length;
+    await upsertSignals(deps.store, result.signals, { rules });
+    if (
+      deps.saveSlackParticipatedThreads &&
+      result.discoveredThreads.length > 0
+    ) {
+      try {
+        await deps.saveSlackParticipatedThreads(result.discoveredThreads);
+      } catch {
+        // Best-effort: a failure to record participated threads must not mask
+        // the signals we did upsert this tick.
+      }
+    }
+    return result.signals.length;
   }
 
   // Other providers land in later slices.

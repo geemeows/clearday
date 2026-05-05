@@ -582,6 +582,20 @@ export default {
           }>;
         },
         loadSlackBroadcastAllowlist: () => loadSlackAllowlist(service),
+        saveSlackParticipatedThreads: async (threads) => {
+          if (threads.length === 0) return;
+          const rows = threads.map((t) => ({
+            channel: t.channel,
+            thread_ts: t.thread_ts,
+          }));
+          const { error } = await service
+            .from("slack_participated_threads")
+            .upsert(rows, {
+              onConflict: "channel,thread_ts",
+              ignoreDuplicates: true,
+            });
+          if (error) throw new Error(error.message);
+        },
         loadAccounts: async () => {
           const { data, error } = await service
             .from("provider_accounts")
@@ -1079,6 +1093,21 @@ async function handlePostSlackReply(
   );
   if (out.ok && signalId) {
     await markSignalReplied(service, signalId);
+  }
+  if (out.ok && thread_ts && channel) {
+    // Eagerly register the thread so the next poll picks up further replies
+    // even if the self-authored reply falls outside the history window.
+    const { error: insertError } = await service
+      .from("slack_participated_threads")
+      .upsert([{ channel, thread_ts }], {
+        onConflict: "channel,thread_ts",
+        ignoreDuplicates: true,
+      });
+    if (insertError) {
+      console.warn(
+        `[slack-reply] could not register participated thread: ${insertError.message}`,
+      );
+    }
   }
   return json(out, out.ok ? 200 : 400);
 }

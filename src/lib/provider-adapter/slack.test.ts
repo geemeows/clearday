@@ -222,7 +222,11 @@ describe("pollSlackSignals", () => {
         ],
       },
     });
-    const out = await pollSlackSignals("token", "U_SELF", fetchImpl);
+    const { signals: out } = await pollSlackSignals(
+      "token",
+      "U_SELF",
+      fetchImpl,
+    );
     expect(out).toHaveLength(1);
     expect(out[0]).toMatchObject({
       provider: "slack",
@@ -255,7 +259,11 @@ describe("pollSlackSignals", () => {
         ],
       },
     });
-    const out = await pollSlackSignals("token", "U_SELF", fetchImpl);
+    const { signals: out } = await pollSlackSignals(
+      "token",
+      "U_SELF",
+      fetchImpl,
+    );
     expect(out[0]?.source_id).toBe("C1:1714820000.000100");
   });
 
@@ -279,7 +287,11 @@ describe("pollSlackSignals", () => {
         ],
       },
     });
-    const out = await pollSlackSignals("token", "U_SELF", fetchImpl);
+    const { signals: out } = await pollSlackSignals(
+      "token",
+      "U_SELF",
+      fetchImpl,
+    );
     expect(out).toHaveLength(0);
   });
 
@@ -298,7 +310,11 @@ describe("pollSlackSignals", () => {
         ],
       },
     });
-    const out = await pollSlackSignals("token", "U_SELF", fetchImpl);
+    const { signals: out } = await pollSlackSignals(
+      "token",
+      "U_SELF",
+      fetchImpl,
+    );
     expect(out).toHaveLength(1);
     expect(out[0]).toMatchObject({
       provider: "slack",
@@ -327,7 +343,11 @@ describe("pollSlackSignals", () => {
         ],
       },
     });
-    const out = await pollSlackSignals("token", "U_SELF", fetchImpl);
+    const { signals: out } = await pollSlackSignals(
+      "token",
+      "U_SELF",
+      fetchImpl,
+    );
     expect(out).toHaveLength(0);
   });
 
@@ -354,9 +374,16 @@ describe("pollSlackSignals", () => {
         ],
       },
     });
-    const out = await pollSlackSignals("token", "U_SELF", fetchImpl, {
-      participatedThreads: [{ channel: "C1", thread_ts: "1714820000.000100" }],
-    });
+    const { signals: out } = await pollSlackSignals(
+      "token",
+      "U_SELF",
+      fetchImpl,
+      {
+        participatedThreads: [
+          { channel: "C1", thread_ts: "1714820000.000100" },
+        ],
+      },
+    );
     const repliesCall = (fetchImpl.mock.calls as unknown as Array<[string]>)
       .map((c) => c[0])
       .find((u) => u.includes("conversations.replies"));
@@ -401,9 +428,16 @@ describe("pollSlackSignals", () => {
         ],
       },
     });
-    const out = await pollSlackSignals("token", "U_SELF", fetchImpl, {
-      participatedThreads: [{ channel: "C1", thread_ts: "1714820000.000100" }],
-    });
+    const { signals: out } = await pollSlackSignals(
+      "token",
+      "U_SELF",
+      fetchImpl,
+      {
+        participatedThreads: [
+          { channel: "C1", thread_ts: "1714820000.000100" },
+        ],
+      },
+    );
     expect(out).toHaveLength(0);
   });
 
@@ -435,9 +469,16 @@ describe("pollSlackSignals", () => {
         ],
       },
     });
-    const out = await pollSlackSignals("token", "U_SELF", fetchImpl, {
-      participatedThreads: [{ channel: "C1", thread_ts: "1714820000.000100" }],
-    });
+    const { signals: out } = await pollSlackSignals(
+      "token",
+      "U_SELF",
+      fetchImpl,
+      {
+        participatedThreads: [
+          { channel: "C1", thread_ts: "1714820000.000100" },
+        ],
+      },
+    );
     expect(out).toHaveLength(1);
     expect(out[0]?.title).toBe("newest reply");
   });
@@ -473,9 +514,12 @@ describe("pollSlackSignals", () => {
       channels: [{ id: "C_ANNOUNCE" }],
       history: { C_ANNOUNCE: broadcastMessages },
     });
-    const allowedOut = await pollSlackSignals("token", "U_SELF", allowedFetch, {
-      broadcastChannels: ["C_ANNOUNCE"],
-    });
+    const { signals: allowedOut } = await pollSlackSignals(
+      "token",
+      "U_SELF",
+      allowedFetch,
+      { broadcastChannels: ["C_ANNOUNCE"] },
+    );
     expect(allowedOut).toHaveLength(1);
     expect(allowedOut[0]).toMatchObject({
       provider: "slack",
@@ -494,7 +538,11 @@ describe("pollSlackSignals", () => {
       channels: [{ id: "C_ANNOUNCE" }],
       history: { C_ANNOUNCE: broadcastMessages },
     });
-    const deniedOut = await pollSlackSignals("token", "U_SELF", deniedFetch);
+    const { signals: deniedOut } = await pollSlackSignals(
+      "token",
+      "U_SELF",
+      deniedFetch,
+    );
     expect(deniedOut).toHaveLength(0);
   });
 
@@ -525,9 +573,14 @@ describe("pollSlackSignals", () => {
         ],
       },
     });
-    const out = await pollSlackSignals("token", "U_SELF", fetchImpl, {
-      broadcastChannels: ["C_ANNOUNCE"],
-    });
+    const { signals: out } = await pollSlackSignals(
+      "token",
+      "U_SELF",
+      fetchImpl,
+      {
+        broadcastChannels: ["C_ANNOUNCE"],
+      },
+    );
     expect(out).toHaveLength(0);
   });
 
@@ -545,7 +598,11 @@ describe("pollSlackSignals", () => {
         ],
       },
     });
-    const out = await pollSlackSignals("token", "U_SELF", fetchImpl);
+    const { signals: out } = await pollSlackSignals(
+      "token",
+      "U_SELF",
+      fetchImpl,
+    );
     expect(out).toHaveLength(0);
     const urls = (fetchImpl.mock.calls as unknown as Array<[string]>).map(
       (c) => c[0],
@@ -587,7 +644,11 @@ describe("pollSlackSignals", () => {
       }
       return jsonResponse({ ok: true });
     });
-    const out = await pollSlackSignals("token", "U_SELF", fetchImpl);
+    const { signals: out } = await pollSlackSignals(
+      "token",
+      "U_SELF",
+      fetchImpl,
+    );
     expect(out).toHaveLength(1);
     expect(out[0]?.payload.author_name).toBe("babyyy");
   });
@@ -614,7 +675,11 @@ describe("pollSlackSignals", () => {
       }
       return jsonResponse({ ok: true });
     });
-    const out = await pollSlackSignals("token", "U_SELF", fetchImpl);
+    const { signals: out } = await pollSlackSignals(
+      "token",
+      "U_SELF",
+      fetchImpl,
+    );
     expect(out).toHaveLength(1);
     expect(out[0]?.payload.author_name).toBeUndefined();
     expect(out[0]?.payload.author).toBe("U_OTHER");
@@ -653,7 +718,11 @@ describe("pollSlackSignals", () => {
       }
       return jsonResponse({ ok: true });
     });
-    const out = await pollSlackSignals("token", "U001SELF", fetchImpl);
+    const { signals: out } = await pollSlackSignals(
+      "token",
+      "U001SELF",
+      fetchImpl,
+    );
     expect(out).toHaveLength(1);
     expect(out[0]?.payload.channel_name).toBe("general");
     expect(out[0]?.payload.text).toBe("@geemeows testing in channel");
@@ -688,8 +757,83 @@ describe("pollSlackSignals", () => {
       }
       return jsonResponse({ ok: true });
     });
-    const out = await pollSlackSignals("token", "U001SELF", fetchImpl);
+    const { signals: out } = await pollSlackSignals(
+      "token",
+      "U001SELF",
+      fetchImpl,
+    );
     expect(out[0]?.payload.text).toBe("ping <@U999UNKNOWN>");
+  });
+
+  it("returns discoveredThreads for self-authored replies seen in channel history", async () => {
+    const fetchImpl = buildFetch({
+      channels: [{ id: "C1" }],
+      history: {
+        C1: [
+          {
+            type: "message",
+            user: "U_SELF",
+            ts: "1714820500.000200",
+            thread_ts: "1714820000.000100",
+            text: "I'll look into it",
+          },
+          // A reply NOT authored by self in another thread shouldn't register.
+          {
+            type: "message",
+            user: "U_OTHER",
+            ts: "1714820700.000300",
+            thread_ts: "1714820600.000100",
+            text: "fyi",
+          },
+          // A self message that is the parent (ts === thread_ts) shouldn't register.
+          {
+            type: "message",
+            user: "U_SELF",
+            ts: "1714820800.000400",
+            thread_ts: "1714820800.000400",
+            text: "starting a thread",
+          },
+        ],
+      },
+    });
+    const { discoveredThreads } = await pollSlackSignals(
+      "token",
+      "U_SELF",
+      fetchImpl,
+    );
+    expect(discoveredThreads).toEqual([
+      { channel: "C1", thread_ts: "1714820000.000100" },
+    ]);
+  });
+
+  it("dedupes discoveredThreads when multiple self replies share a thread", async () => {
+    const fetchImpl = buildFetch({
+      channels: [{ id: "C1" }],
+      history: {
+        C1: [
+          {
+            type: "message",
+            user: "U_SELF",
+            ts: "1.0",
+            thread_ts: "0.5",
+            text: "first reply",
+          },
+          {
+            type: "message",
+            user: "U_SELF",
+            ts: "2.0",
+            thread_ts: "0.5",
+            text: "second reply",
+          },
+        ],
+      },
+    });
+    const { discoveredThreads } = await pollSlackSignals(
+      "token",
+      "U_SELF",
+      fetchImpl,
+    );
+    expect(discoveredThreads).toEqual([{ channel: "C1", thread_ts: "0.5" }]);
   });
 
   it("throws on non-2xx HTTP", async () => {

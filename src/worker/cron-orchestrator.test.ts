@@ -669,6 +669,83 @@ describe("runScheduledPoll", () => {
     });
   });
 
+  it("calls saveSlackParticipatedThreads for self-authored replies discovered in history", async () => {
+    const store = makeStore();
+    const fetchImpl = vi.fn(async (url: string) => {
+      if (url.includes("users.conversations")) {
+        const isIm = /types=im(&|$|%26)/.test(url) || url.includes("=im&");
+        return new Response(
+          JSON.stringify({
+            ok: true,
+            channels: isIm ? [] : [{ id: "C1", name: "general" }],
+          }),
+          { status: 200 },
+        );
+      }
+      if (url.includes("conversations.history")) {
+        return new Response(
+          JSON.stringify({
+            ok: true,
+            messages: [
+              {
+                type: "message",
+                user: "U_SELF",
+                ts: "10.0",
+                thread_ts: "5.0",
+                text: "self reply",
+              },
+            ],
+          }),
+          { status: 200 },
+        );
+      }
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    });
+    const saveSlackParticipatedThreads = vi.fn(async () => {});
+    const deps: OrchestratorDeps = {
+      loadAccounts: async () => [
+        {
+          provider: "slack",
+          access_token: "xoxp-abc",
+          refresh_token: null,
+          expires_at: null,
+          account_id: "U_SELF",
+        },
+      ],
+      saveSlackParticipatedThreads,
+      store: store.client,
+      fetch: fetchImpl as unknown as typeof fetch,
+    };
+    await runScheduledPoll(deps);
+    expect(saveSlackParticipatedThreads).toHaveBeenCalledWith([
+      { channel: "C1", thread_ts: "5.0" },
+    ]);
+  });
+
+  it("does not call saveSlackParticipatedThreads when no self replies are discovered", async () => {
+    const store = makeStore();
+    const fetchImpl = vi.fn(
+      async () => new Response(JSON.stringify({ ok: true }), { status: 200 }),
+    );
+    const saveSlackParticipatedThreads = vi.fn(async () => {});
+    const deps: OrchestratorDeps = {
+      loadAccounts: async () => [
+        {
+          provider: "slack",
+          access_token: "xoxp-abc",
+          refresh_token: null,
+          expires_at: null,
+          account_id: "U_SELF",
+        },
+      ],
+      saveSlackParticipatedThreads,
+      store: store.client,
+      fetch: fetchImpl as unknown as typeof fetch,
+    };
+    await runScheduledPoll(deps);
+    expect(saveSlackParticipatedThreads).not.toHaveBeenCalled();
+  });
+
   it("flags slack accounts with no account_id (poll requires <@self>)", async () => {
     const store = makeStore();
     const fetchImpl = vi.fn(async () => new Response("{}", { status: 200 }));

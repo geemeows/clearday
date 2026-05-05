@@ -221,12 +221,23 @@ export type SlackFetch = (
   text: () => Promise<string>;
 }>;
 
+export type SlackPollResult = {
+  signals: Signal[];
+  /** (channel, thread_ts) pairs where the user authored a reply during the
+   *  poll window. The orchestrator persists these into
+   *  `slack_participated_threads` so a later tick can pull subsequent replies
+   *  via `conversations.replies`. Detection is best-effort within the history
+   *  window — older self-replies that fall outside the window are caught only
+   *  when the user replies again or replies via the in-app composer. */
+  discoveredThreads: SlackParticipatedThread[];
+};
+
 export async function pollSlackSignals(
   accessToken: string,
   selfUserId: string,
   fetchImpl: SlackFetch,
   options: SlackPollOptions = {},
-): Promise<Signal[]> {
+): Promise<SlackPollResult> {
   const now = options.now ?? new Date();
   const windowSec = options.historyWindowSec ?? 120;
   const oldest = (now.getTime() / 1000 - windowSec).toFixed(6);
@@ -258,11 +269,27 @@ export async function pollSlackSignals(
   );
 
   const out: Signal[] = [];
+  const discoveredKeys = new Set<string>();
+  const discoveredThreads: SlackParticipatedThread[] = [];
+  const recordSelfReply = (
+    channel: string,
+    msg: { user?: string; ts?: string; thread_ts?: string },
+  ) => {
+    if (msg.user !== selfUserId) return;
+    if (!msg.thread_ts || !msg.ts) return;
+    if (msg.thread_ts === msg.ts) return; // parent message, not a reply
+    const key = `${channel}:${msg.thread_ts}`;
+    if (discoveredKeys.has(key)) return;
+    discoveredKeys.add(key);
+    discoveredThreads.push({ channel, thread_ts: msg.thread_ts });
+  };
+
   for (let i = 0; i < channels.length; i++) {
     const channel = channels[i];
     if (!channel) continue;
     const allowBroadcast = broadcastSet.has(channel.id);
     for (const msg of channelHistories[i] ?? []) {
+      recordSelfReply(channel.id, msg);
       const sig = normalizeChannelMessage(
         channel.id,
         msg,
@@ -276,11 +303,16 @@ export async function pollSlackSignals(
     const channel = ims[i];
     if (!channel) continue;
     for (const msg of imHistories[i] ?? []) {
+      recordSelfReply(channel.id, msg);
       const sig = normalizeDmMessage(channel.id, msg, selfUserId);
       if (sig) out.push(sig);
     }
   }
   for (let i = 0; i < threads.length; i++) {
+    const t = threads[i];
+    if (t) {
+      for (const msg of threadReplies[i] ?? []) recordSelfReply(t.channel, msg);
+    }
     const sig = normalizeThreadReplies(
       threads[i],
       threadReplies[i] ?? [],
@@ -329,7 +361,7 @@ export async function pollSlackSignals(
       sig.title = `${sig.title.slice(0, 139)}…`;
     }
   }
-  return out;
+  return { signals: out, discoveredThreads };
 }
 
 const USER_MENTION_RE = /<@([UW][A-Z0-9]+)>/g;
