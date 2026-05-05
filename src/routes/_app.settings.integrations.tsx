@@ -1,10 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { SectionHead } from "#/routes/_app.settings";
+import { IntegrationsPanel } from "#/components/IntegrationsPanel";
 
 export const Route = createFileRoute("/_app/settings/integrations")({
   component: IntegrationsRoute,
 });
 
 function IntegrationsRoute() {
-  return <SectionHead title="Integrations" comingInIssue={40} />;
+  return <IntegrationsPanel />;
 }
