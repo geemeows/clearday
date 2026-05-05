@@ -256,15 +256,18 @@ export function WebPushDevicesPanel({
   loader,
   remover,
   register,
+  vapidLoader,
 }: {
   loader?: () => Promise<{ devices: DeviceView[] }>;
   remover?: (id: string) => Promise<void>;
   register?: RegisterFn;
+  vapidLoader?: () => Promise<{ publicKey: string | null }>;
 } = {}) {
   const [devices, setDevices] = useState<DeviceView[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
+  const [vapidConfigured, setVapidConfigured] = useState<boolean | null>(null);
 
   const load = useMemo(
     () =>
@@ -287,6 +290,15 @@ export function WebPushDevicesPanel({
     () => register ?? (() => registerThisDevice()),
     [register],
   );
+  const loadVapid = useMemo(
+    () =>
+      vapidLoader ??
+      (() =>
+        apiFetch("/api/push/public-key") as Promise<{
+          publicKey: string | null;
+        }>),
+    [vapidLoader],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -303,6 +315,22 @@ export function WebPushDevicesPanel({
       cancelled = true;
     };
   }, [load]);
+
+  useEffect(() => {
+    let cancelled = false;
+    loadVapid()
+      .then((body) => {
+        if (cancelled) return;
+        setVapidConfigured(Boolean(body.publicKey));
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setVapidConfigured(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [loadVapid]);
 
   const onRegister = useCallback(async () => {
     setBusy(true);
@@ -356,11 +384,19 @@ export function WebPushDevicesPanel({
         </p>
       )}
 
+      {vapidConfigured === false && (
+        <p className="mt-3 rounded border border-amber-200 bg-amber-50 p-2 text-sm text-amber-800">
+          VAPID not configured — set the <code>VAPID_PUBLIC_KEY</code>,{" "}
+          <code>VAPID_PRIVATE_KEY</code>, and <code>VAPID_SUBJECT</code>{" "}
+          wrangler secrets to enable Web Push.
+        </p>
+      )}
+
       <div className="mt-4 space-y-3">
         <button
           type="button"
           onClick={onRegister}
-          disabled={busy}
+          disabled={busy || vapidConfigured === false}
           className="rounded border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50 disabled:opacity-50"
         >
           Register this device

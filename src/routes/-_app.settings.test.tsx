@@ -660,6 +660,30 @@ describe("WebPushDevicesPanel", () => {
       expect(screen.getByText(/permission denied/i)).toBeTruthy(),
     );
   });
+
+  it("shows a banner and disables register when VAPID is not configured", async () => {
+    const loader = vi.fn(async () => ({ devices: [] }));
+    const vapidLoader = vi.fn(async () => ({ publicKey: null }));
+    render(<WebPushDevicesPanel loader={loader} vapidLoader={vapidLoader} />);
+    await waitFor(() => expect(vapidLoader).toHaveBeenCalled());
+    expect(await screen.findByText(/VAPID not configured/i)).toBeTruthy();
+    const button = (await screen.findByRole("button", {
+      name: /register this device/i,
+    })) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+  });
+
+  it("hides the banner and enables register when VAPID is configured", async () => {
+    const loader = vi.fn(async () => ({ devices: [] }));
+    const vapidLoader = vi.fn(async () => ({ publicKey: "pk-abc" }));
+    render(<WebPushDevicesPanel loader={loader} vapidLoader={vapidLoader} />);
+    await waitFor(() => expect(vapidLoader).toHaveBeenCalled());
+    const button = (await screen.findByRole("button", {
+      name: /register this device/i,
+    })) as HTMLButtonElement;
+    expect(button.disabled).toBe(false);
+    expect(screen.queryByText(/VAPID not configured/i)).toBeNull();
+  });
 });
 
 describe("EmailDigestPanel", () => {
