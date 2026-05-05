@@ -1,6 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   normalizeSlackEvent,
+  pollSlackSignals,
   type SlackEventPayload,
   type SlackNormalizeContext,
   threadKey,
@@ -130,5 +131,136 @@ describe("normalizeSlackEvent", () => {
     );
     expect(sig?.title.length).toBe(140);
     expect(sig?.title.endsWith("…")).toBe(true);
+  });
+});
+
+describe("pollSlackSignals", () => {
+  function jsonResponse(body: unknown, status = 200) {
+    return {
+      ok: status >= 200 && status < 300,
+      status,
+      json: async () => body,
+      text: async () => JSON.stringify(body),
+    };
+  }
+
+  it("calls search.messages with the self mention query and bearer auth", async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse({ ok: true, messages: { matches: [] } }),
+    );
+    await pollSlackSignals(SELF, "U_SELF", fetchImpl);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    const call = fetchImpl.mock.calls[0] as unknown as [
+      string,
+      { method: string; headers: Record<string, string> },
+    ];
+    expect(call[0]).toContain("https://slack.com/api/search.messages");
+    expect(call[0]).toContain(`query=${encodeURIComponent("<@U_SELF>")}`);
+    expect(call[1].method).toBe("GET");
+    expect(call[1].headers.authorization).toBe(`Bearer ${SELF}`);
+  });
+
+  it("normalizes mention matches into Signals with the shared identity rule", async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse({
+        ok: true,
+        messages: {
+          matches: [
+            {
+              type: "message",
+              user: "U_OTHER",
+              channel: { id: "C1", name: "general" },
+              ts: "1714820000.000100",
+              text: "<@U_SELF> can you take a look?",
+              team: "T1",
+            },
+          ],
+        },
+      }),
+    );
+    const out = await pollSlackSignals("token", "U_SELF", fetchImpl);
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({
+      provider: "slack",
+      kind: "mention",
+      source_id: "C1:1714820000.000100",
+      requires_action: true,
+    });
+    expect(out[0]?.payload).toMatchObject({
+      channel: "C1",
+      author: "U_OTHER",
+      team: "T1",
+    });
+    expect(out[0]?.url).toBe(
+      "https://app.slack.com/client/T1/C1/thread/C1-1714820000.000100",
+    );
+  });
+
+  it("uses thread_ts as the identity anchor so a reply folds into the parent row", async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse({
+        ok: true,
+        messages: {
+          matches: [
+            {
+              type: "message",
+              user: "U_OTHER",
+              channel: { id: "C1" },
+              ts: "1714820100.000200",
+              thread_ts: "1714820000.000100",
+              text: "<@U_SELF> ping",
+            },
+          ],
+        },
+      }),
+    );
+    const out = await pollSlackSignals("token", "U_SELF", fetchImpl);
+    expect(out[0]?.source_id).toBe("C1:1714820000.000100");
+  });
+
+  it("drops matches authored by self and matches that don't actually contain the self mention", async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse({
+        ok: true,
+        messages: {
+          matches: [
+            {
+              type: "message",
+              user: "U_SELF",
+              channel: { id: "C1" },
+              ts: "1.0",
+              text: "<@U_SELF> note to self",
+            },
+            {
+              type: "message",
+              user: "U_OTHER",
+              channel: { id: "C1" },
+              ts: "2.0",
+              text: "no mention here",
+            },
+          ],
+        },
+      }),
+    );
+    const out = await pollSlackSignals("token", "U_SELF", fetchImpl);
+    expect(out).toHaveLength(0);
+  });
+
+  it("throws on non-2xx HTTP", async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse({ error: "ratelimited" }, 429),
+    );
+    await expect(
+      pollSlackSignals("token", "U_SELF", fetchImpl),
+    ).rejects.toThrow(/slack poll failed/);
+  });
+
+  it("throws when the body is `ok: false`", async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonResponse({ ok: false, error: "invalid_auth" }),
+    );
+    await expect(
+      pollSlackSignals("token", "U_SELF", fetchImpl),
+    ).rejects.toThrow(/invalid_auth/);
   });
 });

@@ -19,6 +19,7 @@ import { pollGithubSignals } from "#/lib/provider-adapter/github";
 import { pollCalendarSignals } from "#/lib/provider-adapter/google-calendar";
 import { pollJiraSignals } from "#/lib/provider-adapter/jira";
 import { pollLinearSignals } from "#/lib/provider-adapter/linear";
+import { pollSlackSignals } from "#/lib/provider-adapter/slack";
 import type { SupabaseLike } from "#/lib/signal-store";
 import { upsertSignals } from "#/lib/signal-store";
 
@@ -27,6 +28,9 @@ export type ProviderAccountRow = {
   access_token: string | null;
   refresh_token: string | null;
   expires_at: string | null;
+  /** Provider-side user id (e.g. Slack `authed_user.id`). Required for the
+   *  Slack poll's `<@self>` query; unused by other providers. */
+  account_id?: string | null;
 };
 
 export type RefreshedAccountUpdate = {
@@ -185,6 +189,19 @@ async function pollOne(
     const accessToken = await ensureFreshToken(account, deps, refreshJiraToken);
     const signals = await pollJiraSignals(accessToken, async (url, init) =>
       deps.fetch(url, init),
+    );
+    await upsertSignals(deps.store, signals, { rules });
+    return signals.length;
+  }
+
+  if (account.provider === "slack") {
+    if (!account.account_id) {
+      throw new Error("slack account_id missing — cannot run search.messages");
+    }
+    const signals = await pollSlackSignals(
+      account.access_token,
+      account.account_id,
+      async (url, init) => deps.fetch(url, init),
     );
     await upsertSignals(deps.store, signals, { rules });
     return signals.length;

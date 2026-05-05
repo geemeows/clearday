@@ -651,13 +651,16 @@ export default {
         loadAccounts: async () => {
           const { data, error } = await service
             .from("provider_accounts")
-            .select("provider, access_token, refresh_token, expires_at");
+            .select(
+              "provider, access_token, refresh_token, expires_at, account_id",
+            );
           if (error) throw new Error(error.message);
           return (data ?? []) as Array<{
             provider: string;
             access_token: string | null;
             refresh_token: string | null;
             expires_at: string | null;
+            account_id: string | null;
           }>;
         },
         saveRefreshedToken: async ({

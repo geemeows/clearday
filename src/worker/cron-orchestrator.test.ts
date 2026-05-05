@@ -399,6 +399,76 @@ describe("runScheduledPoll", () => {
     expect(firstCall[1].headers.authorization).toBe("Bearer atl_oauth_abc");
   });
 
+  it("polls slack search.messages with the stored access_token + account_id and upserts mention Signals", async () => {
+    const store = makeStore();
+    const fetchImpl = vi.fn(async (url: string) => {
+      expect(url).toContain("https://slack.com/api/search.messages");
+      expect(url).toContain(encodeURIComponent("<@U_SELF>"));
+      return new Response(
+        JSON.stringify({
+          ok: true,
+          messages: {
+            matches: [
+              {
+                type: "message",
+                user: "U_OTHER",
+                channel: { id: "C1", name: "general" },
+                ts: "1714820000.000100",
+                text: "<@U_SELF> ping",
+                team: "T1",
+              },
+            ],
+          },
+        }),
+        { status: 200 },
+      );
+    });
+    const deps: OrchestratorDeps = {
+      loadAccounts: async () => [
+        {
+          provider: "slack",
+          access_token: "xoxp-abc",
+          refresh_token: null,
+          expires_at: null,
+          account_id: "U_SELF",
+        },
+      ],
+      store: store.client,
+      fetch: fetchImpl as unknown as typeof fetch,
+    };
+    const reports = await runScheduledPoll(deps);
+    expect(reports).toEqual([{ provider: "slack", upserted: 1 }]);
+    expect(store.upsert).toHaveBeenCalledTimes(1);
+    const call = fetchImpl.mock.calls[0] as unknown as [
+      string,
+      { headers: Record<string, string> },
+    ];
+    expect(call[1].headers.authorization).toBe("Bearer xoxp-abc");
+  });
+
+  it("flags slack accounts with no account_id (poll requires <@self>)", async () => {
+    const store = makeStore();
+    const fetchImpl = vi.fn(async () => new Response("{}", { status: 200 }));
+    const deps: OrchestratorDeps = {
+      loadAccounts: async () => [
+        {
+          provider: "slack",
+          access_token: "xoxp-abc",
+          refresh_token: null,
+          expires_at: null,
+          account_id: null,
+        },
+      ],
+      store: store.client,
+      fetch: fetchImpl as unknown as typeof fetch,
+    };
+    const reports = await runScheduledPoll(deps);
+    expect(reports[0].provider).toBe("slack");
+    expect(reports[0].upserted).toBe(0);
+    expect(reports[0].error).toMatch(/account_id/);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
   it("refreshes an expired google token, persists it, and then polls", async () => {
     const store = makeStore();
     const saveRefreshedToken = vi.fn(async () => {});

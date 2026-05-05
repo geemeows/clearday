@@ -1,11 +1,12 @@
-// Slack provider adapter. Slack doesn't poll — events arrive at the Worker's
-// /webhooks/slack endpoint via the Events API. This module is the pure
-// translation step: a `message` / `app_mention` / threaded-reply event +
-// the deployment owner's Slack user id + the channel allowlist → a Signal,
-// or null when the event is not actionable for this user.
+// Slack provider adapter. Two surfaces share the same Signal shape:
 //
-// Identity rule: one Signal per `(channel, thread_ts || ts)`. Replies in a
-// thread the user is in upsert into the same row as the parent.
+// 1. Webhook event normalization (`normalizeSlackEvent`) — translates a single
+//    `message` / `app_mention` Events API payload into a Signal.
+// 2. Cron-driven polling (`pollSlackSignals`) — calls `search.messages` for
+//    explicit `<@self>` mentions and normalizes the matches into Signals.
+//
+// Identity rule (shared): one Signal per `(channel, thread_ts || ts)`.
+// Replies fold into the parent row via upsert.
 
 import type { Signal, SignalKind } from "#/lib/signal";
 
@@ -118,4 +119,122 @@ function tsToIso(ts: string): string | null {
 
 export function threadKey(channel: string, threadTs: string): string {
   return `${channel}:${threadTs}`;
+}
+
+// --- Polling surface (search.messages) -------------------------------------
+//
+// The cron orchestrator calls this on every tick for connected Slack accounts.
+// v1 covers explicit `<@self>` mentions only; DM + thread-reply queries layer
+// on as follow-up slices. Identity rule is shared with the webhook path:
+// `(channel, thread_ts || ts)` so a re-poll (or a webhook arriving for the
+// same message) upserts into the same Signal row.
+
+export type SlackSearchMatch = {
+  type?: string;
+  user?: string;
+  channel?: { id?: string; name?: string };
+  ts?: string;
+  thread_ts?: string;
+  text?: string;
+  team?: string;
+};
+
+export type SlackSearchResponse = {
+  ok?: boolean;
+  error?: string;
+  messages?: { matches?: SlackSearchMatch[] };
+};
+
+export type SlackFetch = (
+  url: string,
+  init: { method: string; headers: Record<string, string> },
+) => Promise<{
+  ok: boolean;
+  status: number;
+  json: () => Promise<unknown>;
+  text: () => Promise<string>;
+}>;
+
+export async function pollSlackSignals(
+  accessToken: string,
+  selfUserId: string,
+  fetchImpl: SlackFetch,
+): Promise<Signal[]> {
+  const query = encodeURIComponent(`<@${selfUserId}>`);
+  const url = `https://slack.com/api/search.messages?query=${query}&count=100&sort=timestamp&sort_dir=desc`;
+  const res = await fetchImpl(url, {
+    method: "GET",
+    headers: {
+      authorization: `Bearer ${accessToken}`,
+      accept: "application/json",
+    },
+  });
+  if (!res.ok) {
+    throw new SlackPollError(res.status, await safeText(res));
+  }
+  const body = (await res.json()) as SlackSearchResponse;
+  if (!body.ok) {
+    throw new SlackPollError(res.status, body.error ?? "unknown");
+  }
+  const matches = body.messages?.matches ?? [];
+  const out: Signal[] = [];
+  for (const match of matches) {
+    const sig = normalizeSearchMatch(match, selfUserId);
+    if (sig) out.push(sig);
+  }
+  return out;
+}
+
+function normalizeSearchMatch(
+  match: SlackSearchMatch,
+  selfUserId: string,
+): Signal | null {
+  const channel = match.channel?.id;
+  if (!channel || !match.ts || !match.user) return null;
+  if (match.user === selfUserId) return null;
+  const text = match.text ?? "";
+  if (!text.includes(`<@${selfUserId}>`)) return null;
+
+  const anchorTs = match.thread_ts ?? match.ts;
+  const teamId = match.team ?? null;
+  const url = teamId
+    ? `https://app.slack.com/client/${teamId}/${channel}/thread/${channel}-${anchorTs}`
+    : null;
+
+  return {
+    provider: "slack",
+    kind: "mention",
+    source_id: `${channel}:${anchorTs}`,
+    title: titleFromText(text, "mention"),
+    url,
+    payload: {
+      channel,
+      channel_type: null,
+      ts: match.ts,
+      thread_ts: match.thread_ts ?? null,
+      author: match.user,
+      text,
+      team: teamId,
+    },
+    requires_action: true,
+    source_created_at: tsToIso(anchorTs),
+  };
+}
+
+async function safeText(res: { text: () => Promise<string> }): Promise<string> {
+  try {
+    return await res.text();
+  } catch {
+    return "";
+  }
+}
+
+export class SlackPollError extends Error {
+  constructor(
+    public readonly status: number,
+    body: string,
+  ) {
+    super(`slack poll failed (${status}): ${body.slice(0, 200)}`);
+    this.name = "SlackPollError";
+  }
 }
