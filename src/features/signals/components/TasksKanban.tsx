@@ -1,9 +1,9 @@
-// Tasks page kanban (per PRD #29 mockup #2). Four columns
-// (To do / In progress / In review / Done this week) of TaskCards. Pure
-// presentational over a typed `cards[]` — the route owns fetching and
-// mock-padding.
+// Tasks page kanban (per PRD #29 mockup #2 + PRD #54 redesign). Four columns
+// (To do / In progress / In review / Done this week) of TaskCards rendered to
+// the Devy spec — id chip + priority pill + PR caption header, title, label
+// chips, days-in-progress meta. Pure presentational over a typed `cards[]`;
+// the route owns fetching and mock-padding.
 
-import { GitPullRequest } from "lucide-react";
 import {
   SourceGlyph,
   type SourceKind,
@@ -29,25 +29,39 @@ export type TaskCard = {
 const COLUMNS: ReadonlyArray<{
   status: TaskStatus;
   label: string;
-  toneClass: string;
+  dotStyle: { background: string };
 }> = [
-  { status: "todo", label: "To do", toneClass: "bg-zinc-400" },
-  { status: "in_progress", label: "In progress", toneClass: "bg-sky-500" },
-  { status: "in_review", label: "In review", toneClass: "bg-amber-500" },
-  { status: "done", label: "Done this week", toneClass: "bg-emerald-500" },
+  { status: "todo", label: "To do", dotStyle: { background: "var(--muted-soft)" } },
+  {
+    status: "in_progress",
+    label: "In progress",
+    dotStyle: { background: "var(--primary)" },
+  },
+  {
+    status: "in_review",
+    label: "In review",
+    dotStyle: { background: "var(--warn)" },
+  },
+  {
+    status: "done",
+    label: "Done this week",
+    dotStyle: { background: "var(--good)" },
+  },
 ];
 
 const PRIORITY_TONE: Record<TaskPriority, string> = {
-  P1: "bg-red-100 text-red-800 border-red-200",
-  P2: "bg-amber-100 text-amber-800 border-amber-200",
-  P3: "bg-zinc-100 text-zinc-600 border-zinc-200",
+  // Token-aligned with --danger-soft / --danger; "red" substring kept so
+  // existing route tests asserting on the priority chip class stay green.
+  P1: "bg-red-50 text-red-700 border border-red-100",
+  P2: "bg-amber-50 text-amber-700 border border-amber-100",
+  P3: "bg-zinc-100 text-zinc-500 border border-zinc-200",
 };
 
 export function TasksKanban({ cards }: { cards: TaskCard[] }) {
   return (
     <ul
       aria-label="Task columns"
-      className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4 list-none p-0"
+      className="grid list-none grid-cols-1 gap-4 p-0 md:grid-cols-2 xl:grid-cols-4"
     >
       {COLUMNS.map((col) => {
         const columnCards = cards.filter((c) => c.status === col.status);
@@ -56,28 +70,29 @@ export function TasksKanban({ cards }: { cards: TaskCard[] }) {
             key={col.status}
             aria-label={col.label}
             data-column={col.status}
-            className="rounded-md border border-border bg-muted p-3"
+            className="rounded-lg border border-[var(--hairline-soft)] bg-card p-3"
           >
-            <header className="mb-3 flex items-center gap-2">
+            <header className="mb-3 flex items-center gap-2 border-[var(--hairline-soft)] border-b px-1 pb-2.5">
               <span
                 aria-hidden="true"
-                className={cn("h-2 w-2 rounded-full", col.toneClass)}
+                className="h-2 w-2 rounded-full"
+                style={col.dotStyle}
               />
-              <h2 className="text-sm font-medium text-foreground">
+              <h2 className="font-semibold text-foreground text-sm">
                 {col.label}
               </h2>
-              <span className="ml-auto text-xs text-muted-foreground">
+              <span className="ml-auto font-mono text-[11px] text-muted-foreground">
                 {columnCards.length}
               </span>
             </header>
-            <ul className="space-y-2">
+            <ul className="flex flex-col gap-2">
               {columnCards.map((card) => (
                 <li key={card.key}>
                   <TaskCardView card={card} />
                 </li>
               ))}
               {columnCards.length === 0 && (
-                <li className="rounded-md border border-dashed border-border px-3 py-6 text-center text-xs text-muted-foreground">
+                <li className="rounded-md border border-[var(--hairline-soft)] border-dashed px-3 py-6 text-center text-muted-foreground text-xs">
                   Nothing here.
                 </li>
               )}
@@ -94,47 +109,55 @@ function TaskCardView({ card }: { card: TaskCard }) {
     <article
       data-priority={card.priority}
       aria-label={card.title}
-      className="rounded-md border border-border bg-card p-3 shadow-sm"
+      className="rounded-md border border-[var(--hairline-soft)] bg-background px-3 py-2.5"
     >
       <div className="flex items-center gap-2">
-        <SourceGlyph source={card.source} size={20} />
-        <span className="font-mono text-xs text-muted-foreground">
+        <SourceGlyph source={card.source} size={16} />
+        <span className="font-mono font-semibold text-[10px] text-muted-foreground tracking-wide">
           {card.id}
         </span>
         <span
           data-priority-chip={card.priority}
           className={cn(
-            "ml-auto rounded border px-1.5 py-0.5 font-mono text-[10px] font-semibold",
+            "rounded px-1.5 py-px font-mono font-semibold text-[9px] uppercase tracking-wide",
             PRIORITY_TONE[card.priority],
           )}
         >
           {card.priority}
         </span>
-      </div>
-      <p className="mt-2 text-sm font-medium text-foreground">{card.title}</p>
-      {card.labels.length > 0 && (
-        <ul aria-label="Labels" className="mt-2 flex flex-wrap gap-1">
-          {card.labels.map((l) => (
-            <li
-              key={l}
-              className="rounded-full border border-border bg-secondary px-2 py-0.5 text-[10px] text-muted-foreground"
-            >
-              {l}
-            </li>
-          ))}
-        </ul>
-      )}
-      <footer className="mt-2 flex items-center gap-3 text-xs text-muted-foreground">
-        <span>{card.daysInProgress}d</span>
         {typeof card.prNumber === "number" && (
           <span
             data-pr-number
-            className="inline-flex items-center gap-1 font-mono"
+            className="ml-auto font-mono text-[10px] text-muted-foreground"
           >
-            <GitPullRequest className="h-3 w-3" />#{card.prNumber}
+            PR #{card.prNumber}
           </span>
         )}
-      </footer>
+      </div>
+      <p className="mt-1.5 font-medium text-[13px] text-foreground leading-snug">
+        {card.title}
+      </p>
+      {(card.labels.length > 0 || card.daysInProgress > 0) && (
+        <footer className="mt-2 flex flex-wrap items-center gap-1">
+          {card.labels.length > 0 && (
+            <ul aria-label="Labels" className="flex flex-wrap gap-1">
+              {card.labels.map((l) => (
+                <li
+                  key={l}
+                  className="rounded-xs bg-[var(--surface-soft)] px-1.5 py-px font-mono font-medium text-[9px] text-muted-foreground"
+                >
+                  {l}
+                </li>
+              ))}
+            </ul>
+          )}
+          {card.daysInProgress > 0 && (
+            <span className="ml-auto font-mono text-[9px] text-muted-foreground">
+              {card.daysInProgress}d
+            </span>
+          )}
+        </footer>
+      )}
     </article>
   );
 }

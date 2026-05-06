@@ -124,31 +124,34 @@ export function TasksView({
   error: string | null;
   loading: boolean;
 }) {
+  const total = cards.length;
+  const inProgress = cards.filter((c) => c.status === "in_progress").length;
+
   return (
-    <section className="p-8">
-      <header>
-        <h1 className="text-xl font-semibold">Tasks</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Open work — your PRs from GitHub plus tickets from Linear/Jira.
-        </p>
+    <section className="mx-auto max-w-[1500px] space-y-5 p-8">
+      <header className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <h1 className="font-semibold text-2xl text-foreground tracking-tight">
+          Tasks
+        </h1>
+        <span className="font-mono text-muted-foreground text-xs">
+          {total} open · {inProgress} in progress
+        </span>
       </header>
 
       {error && (
         <p
           role="alert"
-          className="mt-6 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700"
+          className="rounded-sm border border-destructive/30 bg-destructive/10 p-3 text-destructive text-sm"
         >
           {error}
         </p>
       )}
 
       {loading && !error && signals === null && (
-        <p className="mt-6 text-sm text-muted-foreground">Loading…</p>
+        <p className="text-muted-foreground text-sm">Loading…</p>
       )}
 
-      <div className="mt-6">
-        <TasksKanban cards={cards} />
-      </div>
+      <TasksKanban cards={cards} />
     </section>
   );
 }
