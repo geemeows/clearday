@@ -7,6 +7,7 @@ import {
   providerSourceKind,
   signalKindLabel,
 } from "#/features/integrations/display";
+import { InboxPreviewRow } from "#/features/signals/components/InboxPreviewRow";
 import { SourceGlyph } from "#/features/signals/components/SourceGlyph";
 import { filterMeetingsToToday } from "#/features/signals/views/today";
 import { useAutoRefresh } from "#/hooks/use-auto-refresh";
@@ -224,9 +225,18 @@ export function InboxView({
 
   if (visible.length === 0) {
     return (
-      <section className="flex h-full min-h-0 flex-col px-8 pt-6">
-        <p className="text-sm text-muted-foreground">
-          Nothing here. New Signals show up automatically.
+      <section
+        className="flex h-full min-h-0 flex-col items-center justify-center gap-2 px-8 text-center"
+        style={{ background: "var(--canvas)" }}
+      >
+        <p
+          className="font-semibold tracking-tight"
+          style={{ fontSize: 16, color: "var(--ink)" }}
+        >
+          Nothing here.
+        </p>
+        <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
+          New signals show up automatically.
         </p>
       </section>
     );
@@ -355,10 +365,40 @@ export function InboxRow({
   void onDismiss;
   const severity = severityOf(signal);
   const isAutoRule = signal.payload?.badge === "auto-rule";
-  const unread =
-    typeof signal.unread_count === "number" && signal.unread_count > 0
-      ? signal.unread_count
-      : null;
+  const chips = (
+    <>
+      {severity === "ci_fail" && (
+        <SeverityChip tone="danger">CI FAIL</SeverityChip>
+      )}
+      {severity === "conflict" && (
+        <SeverityChip tone="warning">CONFLICT</SeverityChip>
+      )}
+      {isAutoRule && <SeverityChip tone="muted">RULE</SeverityChip>}
+      {replied && (
+        <SeverityChip tone="success" className="uppercase tracking-wide">
+          Replied
+        </SeverityChip>
+      )}
+      {signal.priority === "high" && (
+        <SeverityChip tone="danger" className="uppercase tracking-wide">
+          High
+        </SeverityChip>
+      )}
+      {signal.priority === "low" && (
+        <SeverityChip tone="muted" className="uppercase tracking-wide">
+          Low
+        </SeverityChip>
+      )}
+      {snoozed && (
+        <SeverityChip
+          tone="warning"
+          title={`Returns at ${formatSnoozeReturn(signal.snoozed_until)}`}
+        >
+          Snoozed · returns {formatSnoozeReturn(signal.snoozed_until)}
+        </SeverityChip>
+      )}
+    </>
+  );
   return (
     <li
       data-selected={selected || undefined}
@@ -372,94 +412,15 @@ export function InboxRow({
       <button
         type="button"
         onClick={onSelect}
-        className="grid w-full items-start text-left"
-        style={{
-          gridTemplateColumns: "auto 1fr auto",
-          gap: 12,
-          padding: "14px 18px",
-        }}
+        className="block w-full"
+        style={{ padding: "2px 6px" }}
       >
-        <span
-          className="flex shrink-0 flex-col items-center"
-          style={{ gap: 6, paddingTop: 2 }}
-        >
-          <SourceGlyph source={providerSourceKind(signal.provider)} size={22} />
-          {unread && (
-            <span
-              role="img"
-              data-slot="unread"
-              aria-label={`${unread} unread`}
-              className="tabular-nums"
-              style={{ fontSize: 10, fontWeight: 700, color: "var(--primary)" }}
-            >
-              {unread}
-            </span>
-          )}
-        </span>
-        <span className="min-w-0">
-          <span
-            className="flex items-center"
-            style={{ gap: 6, marginBottom: 2 }}
-          >
-            {severity === "ci_fail" && (
-              <SeverityChip tone="danger">CI FAIL</SeverityChip>
-            )}
-            {severity === "conflict" && (
-              <SeverityChip tone="warning">CONFLICT</SeverityChip>
-            )}
-            {isAutoRule && <SeverityChip tone="muted">RULE</SeverityChip>}
-            <span
-              className="truncate"
-              style={{
-                fontSize: 14,
-                fontWeight: unread ? 600 : 500,
-                color: "var(--ink)",
-              }}
-            >
-              {signal.title}
-            </span>
-            {replied && (
-              <SeverityChip tone="success" className="uppercase tracking-wide">
-                Replied
-              </SeverityChip>
-            )}
-            {signal.priority === "high" && (
-              <SeverityChip tone="danger" className="uppercase tracking-wide">
-                High
-              </SeverityChip>
-            )}
-            {signal.priority === "low" && (
-              <SeverityChip tone="muted" className="uppercase tracking-wide">
-                Low
-              </SeverityChip>
-            )}
-            {snoozed && (
-              <SeverityChip
-                tone="warning"
-                title={`Returns at ${formatSnoozeReturn(signal.snoozed_until)}`}
-              >
-                Snoozed · returns {formatSnoozeReturn(signal.snoozed_until)}
-              </SeverityChip>
-            )}
-          </span>
-          <span
-            className="block truncate"
-            style={{ fontSize: 12, color: "var(--muted-foreground)" }}
-          >
-            {secondaryLabel(signal) || signalKindLabel(signal.kind)}
-          </span>
-        </span>
-        <time
-          className="shrink-0 tabular-nums"
-          style={{
-            fontSize: 11,
-            paddingTop: 3,
-            color: "var(--muted-foreground)",
-            fontFamily: "ui-monospace, SF Mono, Menlo, monospace",
-          }}
-        >
-          {relAgo(signal.source_created_at, nowIso)}
-        </time>
+        <InboxPreviewRow
+          signal={signal}
+          nowIso={nowIso}
+          chips={chips}
+          unreadDisplay="count"
+        />
       </button>
     </li>
   );
@@ -2459,7 +2420,7 @@ export function kindGroup(kind: SignalKind): SignalGroup {
   return "pr";
 }
 
-export function secondaryLabel(s: StoredSignal): string {
+export function secondaryLabel(s: Signal): string {
   if (s.provider === "slack") {
     const channelType = s.payload?.channel_type as string | undefined;
     const channel = s.payload?.channel as string | undefined;

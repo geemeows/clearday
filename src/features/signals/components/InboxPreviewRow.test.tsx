@@ -62,4 +62,27 @@ describe("InboxPreviewRow", () => {
     render(<InboxPreviewRow signal={baseSignal()} nowIso={nowIso} />);
     expect(screen.getByText("Wire up the new pulse card")).toBeTruthy();
   });
+
+  it("renders the unread count with aria-label when unreadDisplay='count'", () => {
+    const { container } = render(
+      <InboxPreviewRow
+        signal={baseSignal({ unread_count: 3 })}
+        nowIso={nowIso}
+        unreadDisplay="count"
+      />,
+    );
+    expect(screen.getByLabelText("3 unread")).toBeTruthy();
+    expect(container.querySelector('[data-slot="unread-dot"]')).toBeNull();
+  });
+
+  it("renders chips before the title when provided", () => {
+    render(
+      <InboxPreviewRow
+        signal={baseSignal()}
+        nowIso={nowIso}
+        chips={<span data-slot="chip">CI FAIL</span>}
+      />,
+    );
+    expect(screen.getByText("CI FAIL")).toBeTruthy();
+  });
 });
