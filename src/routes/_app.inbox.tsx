@@ -7,7 +7,10 @@ import {
   providerSourceKind,
   signalKindLabel,
 } from "#/features/integrations/display";
-import { InboxPreviewRow } from "#/features/signals/components/InboxPreviewRow";
+import {
+  InboxPreviewRow,
+  InboxPreviewRowSkeleton,
+} from "#/features/signals/components/InboxPreviewRow";
 import { SourceGlyph } from "#/features/signals/components/SourceGlyph";
 import { filterMeetingsToToday } from "#/features/signals/views/today";
 import { useAutoRefresh } from "#/hooks/use-auto-refresh";
@@ -40,6 +43,17 @@ const FILTERS: Array<{ id: Filter; label: string }> = [
   { id: "tickets", label: "Tickets" },
   { id: "mentions", label: "Mentions" },
   { id: "meetings", label: "Meetings" },
+];
+
+const SKELETON_ROWS = [
+  { id: "sk-a", width: "78%" },
+  { id: "sk-b", width: "55%" },
+  { id: "sk-c", width: "82%" },
+  { id: "sk-d", width: "44%" },
+  { id: "sk-e", width: "70%" },
+  { id: "sk-f", width: "60%" },
+  { id: "sk-g", width: "76%" },
+  { id: "sk-h", width: "50%" },
 ];
 
 function InboxPage() {
@@ -217,8 +231,90 @@ export function InboxView({
 
   if (visible == null) {
     return (
-      <section className="flex h-full min-h-0 flex-col px-8 pt-6">
-        <p className="text-sm text-muted-foreground">Loading…</p>
+      <section
+        aria-busy="true"
+        aria-label="Loading inbox"
+        className="grid h-full min-h-0 grid-cols-1 overflow-hidden lg:grid-cols-[420px_1fr]"
+        style={{ background: "var(--canvas)" }}
+      >
+        <div
+          className="flex min-h-0 flex-col overflow-hidden"
+          style={{ borderRight: "1px solid var(--hairline-soft)" }}
+        >
+          <div
+            className="flex flex-col gap-3 px-[18px] pt-4 pb-3"
+            style={{ borderBottom: "1px solid var(--hairline-soft)" }}
+          >
+            <div className="flex items-baseline">
+              <h1
+                className="font-semibold tracking-tight"
+                style={{ fontSize: 21, lineHeight: 1.25, color: "var(--ink)" }}
+              >
+                Inbox
+              </h1>
+              <span
+                className="ml-2.5 font-medium"
+                style={{ fontSize: 13, color: "var(--muted-foreground)" }}
+              >
+                — unread · — total
+              </span>
+              <span className="flex-1" />
+              <button
+                type="button"
+                disabled
+                className="rounded-md px-3"
+                style={{
+                  height: 30,
+                  fontSize: 12,
+                  color: "var(--ink)",
+                  opacity: 0.5,
+                }}
+              >
+                Mark all read
+              </button>
+            </div>
+            <nav
+              aria-label="Inbox filters"
+              className="flex flex-wrap items-center gap-1.5"
+            >
+              {FILTERS.map((f) => {
+                const active = filter === f.id;
+                return (
+                  <button
+                    type="button"
+                    key={f.id}
+                    aria-pressed={active}
+                    onClick={() => onFilterChange(f.id)}
+                    className="inline-flex items-center gap-1.5 rounded-full px-3 py-[5px] font-medium leading-tight transition-colors"
+                    style={{
+                      fontSize: 13,
+                      background: active ? "var(--ink)" : "var(--surface-soft)",
+                      color: active ? "var(--canvas)" : "var(--ink)",
+                      border: "1px solid transparent",
+                    }}
+                  >
+                    {f.label}
+                  </button>
+                );
+              })}
+            </nav>
+          </div>
+          <ul className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            {SKELETON_ROWS.map(({ id, width }) => (
+              <li
+                key={id}
+                style={{
+                  borderLeft: "2px solid transparent",
+                  borderBottom: "1px solid var(--hairline-soft)",
+                  padding: "2px 6px",
+                }}
+              >
+                <InboxPreviewRowSkeleton titleWidth={width} />
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div style={{ background: "var(--canvas)" }} />
       </section>
     );
   }

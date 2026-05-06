@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { Skeleton } from "#/components/ui/skeleton";
 import {
   providerSourceKind,
   signalKindLabel,
@@ -65,6 +66,7 @@ export function InboxPreviewRow({
             </span>
           ) : (
             <span
+              role="img"
               data-slot="unread-dot"
               aria-label="Unread"
               className="inline-block h-1.5 w-1.5 rounded-full"
@@ -93,6 +95,51 @@ export function InboxPreviewRow({
       >
         {relAgo(signal.source_created_at, nowIso)}
       </time>
+    </span>
+  );
+}
+
+// Loading placeholder mirroring InboxPreviewRow's geometry so the swap to real
+// rows doesn't shift layout. `titleWidth` lets callers vary widths to avoid a
+// uniform skeleton stack.
+export function InboxPreviewRowSkeleton({
+  titleWidth = "70%",
+  unreadDisplay = "count",
+}: {
+  titleWidth?: string;
+  unreadDisplay?: "dot" | "count";
+}) {
+  const stackedUnread = unreadDisplay === "count";
+  return (
+    <span
+      data-slot="inbox-preview-row-skeleton"
+      aria-hidden="true"
+      className="grid w-full items-start gap-3 px-3 py-3"
+      style={{ gridTemplateColumns: "auto 1fr auto" }}
+    >
+      <span
+        className={
+          stackedUnread
+            ? "flex shrink-0 flex-col items-center gap-1.5 pt-0.5"
+            : "flex items-center gap-2"
+        }
+      >
+        <Skeleton className="size-5 rounded-md" />
+        {stackedUnread && <Skeleton className="h-2.5 w-3 rounded-sm" />}
+      </span>
+      <span className="min-w-0">
+        <span className="flex items-center gap-1.5" style={{ marginBottom: 6 }}>
+          <Skeleton
+            className="h-3.5 rounded-md"
+            style={{ width: titleWidth }}
+          />
+        </span>
+        <Skeleton className="h-3 w-2/5 rounded-sm" />
+      </span>
+      <Skeleton
+        className="h-3 w-7 shrink-0 rounded-sm"
+        style={{ marginTop: 3 }}
+      />
     </span>
   );
 }
