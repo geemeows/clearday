@@ -8,9 +8,11 @@ import {
 import { describe, expect, it, vi } from "vitest";
 import type { Signal } from "#/lib/signal";
 import {
+  computeFilterCounts,
   InboxDetailPane,
   InboxView,
   PrReviewActions,
+  relAgo,
   SlackReplyComposer,
   SlackThreadContext,
 } from "#/routes/_app.inbox";
@@ -32,7 +34,7 @@ const sample = (
 });
 
 describe("InboxView", () => {
-  it("renders signal rows with provider, title, and an Open link", () => {
+  it("renders signal rows with source glyph, title, and a Dismiss action", () => {
     render(
       <InboxView
         filter="all"
@@ -43,11 +45,158 @@ describe("InboxView", () => {
       />,
     );
     expect(screen.getByText("Add cron orchestrator")).toBeTruthy();
-    expect(screen.getByLabelText("Source: github")).toBeTruthy();
-    const link = screen.getByRole("link", { name: /open/i });
-    expect(link.getAttribute("href")).toBe(
-      "https://github.com/owner/repo/pull/42",
+    expect(screen.getByLabelText("Git source")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /dismiss/i })).toBeTruthy();
+  });
+
+  it("renders live filter counts derived from the signals", () => {
+    const signals = [
+      sample({ id: "a" }),
+      sample({ id: "b", kind: "pr_authored" }),
+      sample({
+        id: "c",
+        kind: "mention",
+        provider: "slack",
+        payload: { channel: "C1", author: "U1" },
+      }),
+    ];
+    render(
+      <InboxView
+        filter="all"
+        onFilterChange={() => {}}
+        signals={signals}
+        error={null}
+        onDismiss={() => {}}
+      />,
     );
+    const filters = screen.getByRole("navigation", { name: /inbox filters/i });
+    const all = within(filters).getByRole("button", { name: /^All/ });
+    const prs = within(filters).getByRole("button", { name: /^PRs/ });
+    const mentions = within(filters).getByRole("button", { name: /^Mentions/ });
+    const tickets = within(filters).getByRole("button", { name: /^Tickets/ });
+    expect(within(all).getByText("3")).toBeTruthy();
+    expect(within(prs).getByText("2")).toBeTruthy();
+    expect(within(mentions).getByText("1")).toBeTruthy();
+    expect(within(tickets).getByText("0")).toBeTruthy();
+  });
+
+  it("filters list contents client-side when the filter changes", () => {
+    const signals = [
+      sample({ id: "a", title: "PR one" }),
+      sample({
+        id: "b",
+        kind: "mention",
+        provider: "slack",
+        title: "Mention one",
+        payload: { channel: "C1", author: "U1" },
+      }),
+    ];
+    const { rerender } = render(
+      <InboxView
+        filter="all"
+        onFilterChange={() => {}}
+        signals={signals}
+        error={null}
+        onDismiss={() => {}}
+      />,
+    );
+    expect(screen.getByText("PR one")).toBeTruthy();
+    expect(screen.getByText("Mention one")).toBeTruthy();
+    rerender(
+      <InboxView
+        filter="prs"
+        onFilterChange={() => {}}
+        signals={signals}
+        error={null}
+        onDismiss={() => {}}
+      />,
+    );
+    expect(screen.getByText("PR one")).toBeTruthy();
+    expect(screen.queryByText("Mention one")).toBeNull();
+  });
+
+  it("renders CI FAIL severity chip when payload signals it", () => {
+    render(
+      <InboxView
+        filter="all"
+        onFilterChange={() => {}}
+        signals={[
+          sample({
+            id: "a",
+            payload: { repo: "o/r", author: "x", severity: "ci_fail" },
+          }),
+        ]}
+        error={null}
+        onDismiss={() => {}}
+      />,
+    );
+    expect(screen.getByText("CI FAIL")).toBeTruthy();
+  });
+
+  it("renders CONFLICT severity chip when payload signals it", () => {
+    render(
+      <InboxView
+        filter="all"
+        onFilterChange={() => {}}
+        signals={[
+          sample({
+            id: "a",
+            payload: { repo: "o/r", author: "x", has_conflict: true },
+          }),
+        ]}
+        error={null}
+        onDismiss={() => {}}
+      />,
+    );
+    expect(screen.getByText("CONFLICT")).toBeTruthy();
+  });
+
+  it("renders RULE chip when signal.payload.badge === 'auto-rule'", () => {
+    render(
+      <InboxView
+        filter="all"
+        onFilterChange={() => {}}
+        signals={[
+          sample({
+            id: "a",
+            payload: { repo: "o/r", author: "x", badge: "auto-rule" },
+          }),
+        ]}
+        error={null}
+        onDismiss={() => {}}
+      />,
+    );
+    expect(screen.getByText("RULE")).toBeTruthy();
+  });
+
+  it("marks the selected row with a Rausch left-border accent (data-selected)", () => {
+    render(
+      <InboxView
+        filter="all"
+        onFilterChange={() => {}}
+        signals={[sample({ id: "abc" })]}
+        error={null}
+        onDismiss={() => {}}
+        selectedId="abc"
+        onSelect={() => {}}
+      />,
+    );
+    const row = document.querySelector('li[data-selected="true"]');
+    expect(row).not.toBeNull();
+    expect(row?.className).toMatch(/before:bg-primary/);
+  });
+
+  it("renders an unread indicator when unread_count > 0", () => {
+    render(
+      <InboxView
+        filter="all"
+        onFilterChange={() => {}}
+        signals={[{ ...sample({ id: "abc" }), unread_count: 3 }]}
+        error={null}
+        onDismiss={() => {}}
+      />,
+    );
+    expect(screen.getByLabelText("3 unread")).toBeTruthy();
   });
 
   it("shows the empty-state copy when the list is empty", () => {
@@ -75,9 +224,9 @@ describe("InboxView", () => {
       />,
     );
     const filters = screen.getByRole("navigation", { name: /inbox filters/i });
-    const all = within(filters).getByRole("button", { name: "All" });
+    const all = within(filters).getByRole("button", { name: /^All/ });
     expect(all.getAttribute("aria-pressed")).toBe("true");
-    fireEvent.click(within(filters).getByRole("button", { name: "PRs" }));
+    fireEvent.click(within(filters).getByRole("button", { name: /^PRs/ }));
     expect(onFilterChange).toHaveBeenCalledWith("prs");
   });
 
@@ -309,7 +458,7 @@ describe("InboxDetailPane", () => {
     );
   });
 
-  it("renders a Meeting layout with time, Join button and linked PRs", () => {
+  it("renders a Meeting layout with time, Join meeting button, Open invite, agenda and linked PRs", () => {
     render(
       <InboxDetailPane
         signal={baseSignal({
@@ -320,6 +469,7 @@ describe("InboxDetailPane", () => {
             ends_at: "2026-05-04T12:45:00.000Z",
             video_link: "https://meet.google.com/abc-defg-hij",
             organizer: "boss@acme.com",
+            description: "- Roadmap review\n- Q&A",
             linked_items: [
               {
                 kind: "pr",
@@ -339,14 +489,99 @@ describe("InboxDetailPane", () => {
     const pane = screen.getByLabelText("Signal detail");
     expect(within(pane).getByText("Standup")).toBeTruthy();
     expect(within(pane).getByText("boss@acme.com")).toBeTruthy();
-    const join = within(pane).getByRole("link", { name: /^join$/i });
+    expect(within(pane).getByText("Roadmap review")).toBeTruthy();
+    const join = within(pane).getByRole("link", { name: /join meeting/i });
     expect(join.getAttribute("href")).toBe(
       "https://meet.google.com/abc-defg-hij",
+    );
+    const invite = within(pane).getByRole("link", { name: /open invite/i });
+    expect(invite.getAttribute("href")).toBe(
+      "https://calendar.google.com/event?eid=evt-1",
     );
     const linked = within(pane).getByRole("link", { name: "acme/web#123" });
     expect(linked.getAttribute("href")).toBe(
       "https://github.com/acme/web/pull/123",
     );
+  });
+
+  it("renders a Task layout for ticket signals with id, title, status and Open in Linear", () => {
+    render(
+      <InboxDetailPane
+        signal={baseSignal({
+          provider: "linear",
+          kind: "ticket_assigned",
+          source_id: "lin-issue-1",
+          title: "Implement onboarding",
+          url: "https://linear.app/acme/issue/ENG-42",
+          payload: {
+            identifier: "ENG-42",
+            state_name: "Todo",
+            team_key: "ENG",
+            priority_label: "P2",
+          },
+        })}
+        onClose={() => {}}
+        onDismiss={() => {}}
+      />,
+    );
+    const pane = screen.getByLabelText("Signal detail");
+    expect(pane.getAttribute("data-detail-kind")).toBe("ticket");
+    expect(within(pane).getByText("Implement onboarding")).toBeTruthy();
+    expect(within(pane).getByText("ENG-42")).toBeTruthy();
+    expect(within(pane).getByText("ENG")).toBeTruthy();
+    expect(within(pane).getByText("P2")).toBeTruthy();
+    const open = within(pane).getByRole("link", { name: /open in linear/i });
+    expect(open.getAttribute("href")).toBe(
+      "https://linear.app/acme/issue/ENG-42",
+    );
+  });
+
+  it("dispatches to the right detail by kind via data-detail-kind", () => {
+    const { rerender } = render(
+      <InboxDetailPane
+        signal={baseSignal()}
+        onClose={() => {}}
+        onDismiss={() => {}}
+      />,
+    );
+    expect(
+      screen.getByLabelText("Signal detail").getAttribute("data-detail-kind"),
+    ).toBe("pr");
+    rerender(
+      <InboxDetailPane
+        signal={baseSignal({
+          provider: "slack",
+          kind: "mention",
+          payload: { channel: "C1", author: "U1", text: "hey" },
+        })}
+        onClose={() => {}}
+        onDismiss={() => {}}
+      />,
+    );
+    expect(
+      screen.getByLabelText("Signal detail").getAttribute("data-detail-kind"),
+    ).toBe("slack");
+    rerender(
+      <InboxDetailPane
+        signal={baseSignal({
+          provider: "google",
+          kind: "meeting",
+          payload: { starts_at: "2026-05-04T12:30:00.000Z" },
+        })}
+        onClose={() => {}}
+        onDismiss={() => {}}
+      />,
+    );
+    expect(
+      screen.getByLabelText("Signal detail").getAttribute("data-detail-kind"),
+    ).toBe("meeting");
+  });
+
+  it("renders an empty detail prompt when no signal is selected", () => {
+    render(
+      <InboxDetailPane signal={null} onClose={() => {}} onDismiss={() => {}} />,
+    );
+    expect(screen.getByText(/select a signal/i)).toBeTruthy();
   });
 
   it("dismiss and close buttons fire their handlers", () => {
@@ -366,6 +601,100 @@ describe("InboxDetailPane", () => {
     expect(onClose).toHaveBeenCalled();
     fireEvent.click(within(pane).getByRole("button", { name: /dismiss/i }));
     expect(onDismiss).toHaveBeenCalledWith("xyz");
+  });
+});
+
+describe("PR detail extras", () => {
+  it("renders +/- diff stats, AI summary, files-changed and recent comments when present", () => {
+    render(
+      <InboxDetailPane
+        signal={{
+          id: "p1",
+          provider: "github" as const,
+          kind: "pr_review_requested" as const,
+          source_id: "o/r#9",
+          title: "Refactor cron",
+          url: "https://github.com/o/r/pull/9",
+          payload: {
+            repo: "o/r",
+            number: 9,
+            author: "alice",
+            additions: 42,
+            deletions: 7,
+            ai_summary: "Refactors the cron orchestrator into a state machine.",
+            files_changed: [
+              { path: "src/cron.ts", additions: 30, deletions: 5 },
+              { path: "src/cron.test.ts", additions: 12, deletions: 2 },
+            ],
+            recent_comments: [
+              { author: "bob", body: "lgtm with nits" },
+              { author: "carol", body: "thanks" },
+            ],
+          },
+          requires_action: true,
+          source_created_at: "2026-05-01T10:00:00Z",
+          dismissed_at: null,
+        }}
+        onClose={() => {}}
+        onDismiss={() => {}}
+      />,
+    );
+    expect(screen.getByText("+42")).toBeTruthy();
+    expect(screen.getByText("-7")).toBeTruthy();
+    expect(screen.getByLabelText("AI summary")).toBeTruthy();
+    expect(screen.getByLabelText("Files changed")).toBeTruthy();
+    expect(screen.getByText("src/cron.ts")).toBeTruthy();
+    expect(screen.getByLabelText("Recent comments")).toBeTruthy();
+    expect(screen.getByText("lgtm with nits")).toBeTruthy();
+  });
+});
+
+describe("computeFilterCounts", () => {
+  it("counts signals by group", () => {
+    const sig = (kind: Signal["kind"], i: number) =>
+      ({
+        id: `s${i}`,
+        provider: "github",
+        kind,
+        source_id: `s${i}`,
+        title: "t",
+        url: null,
+        payload: {},
+        requires_action: false,
+        source_created_at: null,
+        dismissed_at: null,
+      }) as Signal & { id: string; dismissed_at: string | null };
+    const counts = computeFilterCounts([
+      sig("pr_review_requested", 1),
+      sig("pr_authored", 2),
+      sig("mention", 3),
+      sig("meeting", 4),
+      sig("ticket_assigned", 5),
+    ]);
+    expect(counts.all).toBe(5);
+    expect(counts.prs).toBe(2);
+    expect(counts.mentions).toBe(1);
+    expect(counts.meetings).toBe(1);
+    expect(counts.tickets).toBe(1);
+  });
+});
+
+describe("relAgo", () => {
+  const now = "2026-05-06T12:00:00.000Z";
+  it("returns minutes for sub-hour gaps", () => {
+    expect(relAgo("2026-05-06T11:55:00.000Z", now)).toBe("5m ago");
+  });
+  it("returns hours for sub-day gaps", () => {
+    expect(relAgo("2026-05-06T09:00:00.000Z", now)).toBe("3h ago");
+  });
+  it("returns days for multi-day gaps", () => {
+    expect(relAgo("2026-05-04T12:00:00.000Z", now)).toBe("2d ago");
+  });
+  it("returns 'in Nm' for future timestamps", () => {
+    expect(relAgo("2026-05-06T12:10:00.000Z", now)).toBe("in 10m");
+  });
+  it("returns empty string when iso is null", () => {
+    expect(relAgo(null, now)).toBe("");
   });
 });
 

@@ -1,8 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { ExternalLink } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  type TaskCard,
+  type TaskStatus,
+  TasksKanban,
+} from "#/components/TasksKanban";
 import { apiFetch } from "#/lib/api-client";
-import { cn } from "#/lib/cn";
 import type { Signal, SignalKind } from "#/lib/signal";
 
 export const Route = createFileRoute("/_app/tasks")({
@@ -11,187 +14,192 @@ export const Route = createFileRoute("/_app/tasks")({
 
 type StoredSignal = Signal & { id: string; dismissed_at: string | null };
 
-type StatusFilter = "all" | SignalKind;
-
-const TICKET_KINDS: SignalKind[] = [
-  "ticket_assigned",
-  "ticket_in_progress",
-  "ticket_in_review",
-  "ticket_blocked",
-];
-
-const FILTERS: Array<{ id: StatusFilter; label: string }> = [
-  { id: "all", label: "All" },
-  { id: "ticket_assigned", label: "Todo" },
-  { id: "ticket_in_progress", label: "In progress" },
-  { id: "ticket_in_review", label: "In review" },
-  { id: "ticket_blocked", label: "Blocked" },
+// TODO(post-redesign): replace with real Linear/Jira adapters per PRD #29.
+const MOCK_TICKETS: TaskCard[] = [
+  {
+    key: "mock-eng-101",
+    id: "ENG-101",
+    source: "task",
+    status: "todo",
+    priority: "P1",
+    title: "Migrate cron orchestrator to Durable Objects",
+    labels: ["infra", "blocker"],
+    daysInProgress: 0,
+  },
+  {
+    key: "mock-eng-118",
+    id: "ENG-118",
+    source: "task",
+    status: "todo",
+    priority: "P3",
+    title: "Tighten copy on onboarding hero",
+    labels: ["copy"],
+    daysInProgress: 0,
+  },
+  {
+    key: "mock-eng-91",
+    id: "ENG-91",
+    source: "task",
+    status: "in_progress",
+    priority: "P2",
+    title: "Slack DND auto-on during focus sessions",
+    labels: ["focus", "slack"],
+    daysInProgress: 2,
+  },
+  {
+    key: "mock-eng-86",
+    id: "ENG-86",
+    source: "task",
+    status: "in_review",
+    priority: "P2",
+    title: "Conflict banner on Calendar week view",
+    labels: ["calendar"],
+    daysInProgress: 4,
+    prNumber: 412,
+  },
+  {
+    key: "mock-eng-77",
+    id: "ENG-77",
+    source: "task",
+    status: "done",
+    priority: "P1",
+    title: "Notification routing matrix",
+    labels: ["notifications"],
+    daysInProgress: 6,
+    prNumber: 401,
+  },
+  {
+    key: "mock-eng-72",
+    id: "ENG-72",
+    source: "task",
+    status: "done",
+    priority: "P3",
+    title: "Self-host panel polish",
+    labels: ["settings"],
+    daysInProgress: 5,
+  },
 ];
 
 function TasksPage() {
   const [signals, setSignals] = useState<StoredSignal[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [filter, setFilter] = useState<StatusFilter>("all");
-
-  const reload = useCallback(async () => {
-    try {
-      const body = (await apiFetch("/api/signals?filter=tickets")) as {
-        signals: StoredSignal[];
-      };
-      setSignals(body.signals);
-      setError(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "failed to load");
-    }
-  }, []);
 
   useEffect(() => {
-    reload();
-  }, [reload]);
+    let cancelled = false;
+    apiFetch("/api/signals?filter=prs")
+      .then((body) => {
+        if (cancelled) return;
+        setSignals((body as { signals: StoredSignal[] }).signals);
+        setError(null);
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        setError(e instanceof Error ? e.message : "failed to load");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const cards = useMemo(() => buildCards(signals ?? []), [signals]);
 
   return (
     <TasksView
       signals={signals}
-      filter={filter}
-      onFilterChange={setFilter}
+      cards={cards}
       error={error}
+      loading={signals === null}
     />
   );
 }
 
 export function TasksView({
   signals,
-  filter,
-  onFilterChange,
+  cards,
   error,
+  loading,
 }: {
   signals: StoredSignal[] | null;
-  filter: StatusFilter;
-  onFilterChange: (f: StatusFilter) => void;
+  cards: TaskCard[];
   error: string | null;
+  loading: boolean;
 }) {
-  const groups = useMemo(() => groupByKind(signals ?? []), [signals]);
-  const visible = filter === "all" ? signals : (groups[filter] ?? []);
   return (
     <section className="p-8">
       <header>
         <h1 className="text-xl font-semibold">Tasks</h1>
-        <p className="mt-1 text-sm text-zinc-500">
-          Tickets assigned to you across Linear and Jira.
+        <p className="mt-1 text-sm text-muted-foreground">
+          Open work — your PRs from GitHub plus tickets from Linear/Jira.
         </p>
       </header>
 
-      <nav aria-label="Status filters" className="mt-4 flex gap-2">
-        {FILTERS.map((f) => {
-          const count =
-            f.id === "all"
-              ? (signals?.length ?? 0)
-              : (groups[f.id]?.length ?? 0);
-          return (
-            <button
-              key={f.id}
-              type="button"
-              onClick={() => onFilterChange(f.id)}
-              aria-pressed={filter === f.id}
-              className={cn(
-                "rounded-full border px-3 py-1 text-sm",
-                filter === f.id
-                  ? "border-zinc-900 bg-zinc-900 text-white"
-                  : "border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50",
-              )}
-            >
-              {f.label}
-              <span className="ml-1 text-xs opacity-70">{count}</span>
-            </button>
-          );
-        })}
-      </nav>
-
       {error && (
-        <p className="mt-6 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+        <p
+          role="alert"
+          className="mt-6 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700"
+        >
           {error}
         </p>
       )}
 
-      {signals == null && !error && (
-        <p className="mt-6 text-sm text-zinc-500">Loading…</p>
+      {loading && !error && signals === null && (
+        <p className="mt-6 text-sm text-muted-foreground">Loading…</p>
       )}
 
-      {signals && signals.length === 0 && (
-        <p className="mt-6 text-sm text-zinc-500">
-          No assigned tickets. Connect Linear or Jira from Settings →
-          Integrations to start syncing.
-        </p>
-      )}
-
-      {visible && visible.length > 0 && (
-        <ul className="mt-4 divide-y divide-zinc-200 rounded border border-zinc-200 bg-white">
-          {visible.map((s) => (
-            <TicketRow key={s.id} signal={s} />
-          ))}
-        </ul>
-      )}
+      <div className="mt-6">
+        <TasksKanban cards={cards} />
+      </div>
     </section>
   );
 }
 
-function TicketRow({ signal }: { signal: StoredSignal }) {
-  const identifier =
-    (signal.payload?.identifier as string | undefined) ?? signal.source_id;
-  const stateName = signal.payload?.state_name as string | undefined;
-  const priority = signal.payload?.priority_label as string | undefined;
-  return (
-    <li className="flex items-center gap-3 px-4 py-3">
-      <span className="font-mono text-xs text-zinc-500">{identifier}</span>
-      <div className="min-w-0 flex-1">
-        <div className="truncate text-sm font-medium text-zinc-900">
-          {signal.title}
-        </div>
-        <div className="truncate text-xs text-zinc-500">
-          {[statusLabel(signal.kind), stateName, priority]
-            .filter(Boolean)
-            .join(" · ")}
-        </div>
-      </div>
-      {signal.url && (
-        <a
-          href={signal.url}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex items-center gap-1 rounded border border-zinc-200 px-2 py-1 text-xs text-zinc-700 hover:bg-zinc-50"
-        >
-          <ExternalLink className="h-3 w-3" />
-          Open
-        </a>
-      )}
-    </li>
-  );
+export function buildCards(signals: StoredSignal[]): TaskCard[] {
+  const ghCards = signals
+    .map(signalToCard)
+    .filter((c): c is TaskCard => c !== null);
+  return [...ghCards, ...MOCK_TICKETS];
 }
 
-function groupByKind(
-  signals: StoredSignal[],
-): Partial<Record<SignalKind, StoredSignal[]>> {
-  const out: Partial<Record<SignalKind, StoredSignal[]>> = {};
-  for (const s of signals) {
-    if (!TICKET_KINDS.includes(s.kind)) continue;
-    const bucket = out[s.kind] ?? [];
-    bucket.push(s);
-    out[s.kind] = bucket;
-  }
-  return out;
+const PR_STATUS_BY_KIND: Partial<Record<SignalKind, TaskStatus>> = {
+  pr_authored: "in_progress",
+  pr_assigned: "in_review",
+  pr_review_requested: "in_review",
+};
+
+function signalToCard(s: StoredSignal): TaskCard | null {
+  const status = PR_STATUS_BY_KIND[s.kind];
+  if (!status) return null;
+  const repo = (s.payload?.repo as string | undefined) ?? "";
+  const number = s.payload?.number as number | undefined;
+  const id = repo && number ? `${repo}#${number}` : s.source_id;
+  const labels = (s.payload?.labels as string[] | undefined) ?? [];
+  return {
+    key: s.id,
+    id,
+    source: "git",
+    status,
+    priority: derivePriority(s),
+    title: s.title,
+    labels,
+    daysInProgress: daysSince(s.source_created_at),
+    prNumber: typeof number === "number" ? number : null,
+    url: s.url,
+  };
 }
 
-function statusLabel(kind: SignalKind): string {
-  switch (kind) {
-    case "ticket_assigned":
-      return "Todo";
-    case "ticket_in_progress":
-      return "In progress";
-    case "ticket_in_review":
-      return "In review";
-    case "ticket_blocked":
-      return "Blocked";
-    default:
-      return kind;
-  }
+function derivePriority(s: StoredSignal): "P1" | "P2" | "P3" {
+  const label = (
+    s.payload?.priority_label as string | undefined
+  )?.toLowerCase();
+  if (label === "urgent" || label === "high" || label === "p1") return "P1";
+  if (label === "medium" || label === "p2") return "P2";
+  return "P3";
+}
+
+function daysSince(iso: string | null): number {
+  if (!iso) return 0;
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return 0;
+  const ms = Date.now() - t;
+  return Math.max(0, Math.floor(ms / 86_400_000));
 }

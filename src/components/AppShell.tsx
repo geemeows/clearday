@@ -1,51 +1,56 @@
-import { Link, Outlet, useRouterState } from "@tanstack/react-router";
+import { Outlet, useRouter, useRouterState } from "@tanstack/react-router";
 import {
   Calendar,
   CheckSquare,
-  Github,
   Inbox,
-  Layers,
-  Slack,
+  Moon,
+  Settings as SettingsIcon,
   Sun,
-  Trello,
 } from "lucide-react";
-import { useEffect, useState } from "react";
-import { CommandPalette } from "#/components/CommandPalette";
-import { FocusButton } from "#/components/FocusButton";
+import { useEffect, useMemo, useState } from "react";
+import {
+  CommandPalette,
+  type PaletteCommand,
+} from "#/components/CommandPalette";
+import {
+  type FocusState,
+  NavigationSidebar,
+  type NavigationSidebarProps,
+  type NavPage,
+  type NavProfile,
+  type NavSource,
+  OPEN_CMDK_EVENT,
+} from "#/components/NavigationSidebar";
+import type { SourceKind } from "#/components/SourceGlyph";
 import { apiFetch } from "#/lib/api-client";
-import { cn } from "#/lib/cn";
 import { PROFILE_UPDATED_EVENT, type ProfileView } from "#/lib/profile-api";
 import {
   type ApiSourceStatus,
   deriveSourceStatus,
   type SourceStatus,
 } from "#/lib/source-status";
+import {
+  DEFAULT_THEME,
+  resolveEffectiveTheme,
+  THEME_UPDATED_EVENT,
+  type ThemeView,
+} from "#/lib/theme-api";
 
-type NavItem = {
-  to: string;
-  label: string;
-  icon: React.ComponentType<{ className?: string }>;
-};
-
-const WORKSPACE: NavItem[] = [
+const PAGES: NavPage[] = [
   { to: "/today", label: "Today", icon: Sun },
   { to: "/inbox", label: "Inbox", icon: Inbox },
   { to: "/tasks", label: "Tasks", icon: CheckSquare },
   { to: "/calendar", label: "Calendar", icon: Calendar },
 ];
 
-type Source = {
-  id: string;
-  label: string;
-  icon: React.ComponentType<{ className?: string }>;
-};
+type SourceDef = { id: string; label: string; kind: SourceKind };
 
-const SOURCES: Source[] = [
-  { id: "github", label: "GitHub", icon: Github },
-  { id: "linear", label: "Linear", icon: Layers },
-  { id: "jira", label: "Jira", icon: Trello },
-  { id: "slack", label: "Slack", icon: Slack },
-  { id: "google-calendar", label: "Google Calendar", icon: Calendar },
+const SOURCE_DEFS: SourceDef[] = [
+  { id: "github", label: "GitHub", kind: "git" },
+  { id: "slack", label: "Slack", kind: "slack" },
+  { id: "google-calendar", label: "Google Calendar", kind: "cal" },
+  { id: "linear", label: "Linear", kind: "task" },
+  { id: "jira", label: "Jira", kind: "task" },
 ];
 
 // Maps the AppShell's Source ids onto the backend provider keys returned by
@@ -70,122 +75,165 @@ type SourceMeta = {
 };
 
 export function AppShell() {
+  const router = useRouter();
   const path = useRouterState({ select: (s) => s.location.pathname });
   const sourceMeta = useSourceStatuses();
+  const inboxBadge = useInboxBadge();
+  const profile = useProfile();
+  const theme = useEffectiveTheme();
+
+  const sources = useMemo<NavSource[]>(
+    () =>
+      SOURCE_DEFS.map((def) => ({
+        id: def.id,
+        label: def.label,
+        kind: def.kind,
+        count: 0,
+        // TODO(post-redesign): Linear/Jira live counts ship with the adapters
+        // (see PRD #29 provider-scope decision).
+        status: sourceMeta[def.id]?.status ?? ("neutral" as SourceStatus),
+      })),
+    [sourceMeta],
+  );
+
+  // focus.active is stubbed to false until the focus session slice (#39)
+  // wires the live countdown.
+  const focus: FocusState = { active: false };
+
+  const props: NavigationSidebarProps = {
+    pages: PAGES,
+    page: path,
+    onPage: (to) => router.navigate({ to }),
+    inboxBadge,
+    sources,
+    focus,
+    onStartFocus: () => {
+      // Inline FocusButton owns its own dialog for now.
+    },
+    onOpenSettings: () => router.navigate({ to: "/settings" }),
+    onOpenCmdk: () => window.dispatchEvent(new CustomEvent(OPEN_CMDK_EVENT)),
+    profile,
+  };
+
+  const commands: PaletteCommand[] = useMemo(() => {
+    const navItems: PaletteCommand[] = PAGES.map((p) => ({
+      id: `nav:${p.to}`,
+      group: "Navigation",
+      label: `Go to ${p.label}`,
+      keywords: p.label,
+      icon: p.icon,
+      onSelect: () => router.navigate({ to: p.to }),
+    }));
+    navItems.push({
+      id: "nav:/settings",
+      group: "Navigation",
+      label: "Go to Settings",
+      keywords: "settings preferences",
+      icon: SettingsIcon,
+      onSelect: () => router.navigate({ to: "/settings" }),
+    });
+    const actionItems: PaletteCommand[] = [
+      {
+        id: "action:theme-toggle",
+        group: "Actions",
+        label:
+          theme.effective === "dark"
+            ? "Switch to light mode"
+            : "Switch to dark mode",
+        keywords: "theme dark light mode appearance",
+        icon: theme.effective === "dark" ? Sun : Moon,
+        onSelect: () => void theme.toggle(),
+      },
+    ];
+    return [...navItems, ...actionItems];
+  }, [router, theme]);
 
   return (
-    <div className="flex min-h-screen bg-zinc-50 text-zinc-900">
-      <aside
-        aria-label="Primary"
-        className="flex w-60 shrink-0 flex-col border-r border-zinc-200 bg-white"
-      >
-        <div className="px-4 py-5 text-sm font-semibold tracking-tight">
-          ClearDay
-        </div>
-
-        <nav aria-label="Workspace" className="px-2">
-          <SectionTitle>Workspace</SectionTitle>
-          <ul className="mt-1 space-y-0.5">
-            {WORKSPACE.map((item) => {
-              const active = path === item.to || path.startsWith(`${item.to}/`);
-              return (
-                <li key={item.to}>
-                  <Link
-                    to={item.to}
-                    className={cn(
-                      "flex items-center gap-2 rounded px-2 py-1.5 text-sm",
-                      active
-                        ? "bg-zinc-100 font-medium text-zinc-900"
-                        : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900",
-                    )}
-                  >
-                    <item.icon className="h-4 w-4" />
-                    {item.label}
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-        </nav>
-
-        <nav aria-label="Sources" className="mt-6 px-2">
-          <SectionTitle>Sources</SectionTitle>
-          <ul className="mt-1 space-y-0.5">
-            {SOURCES.map((s) => {
-              const meta = sourceMeta[s.id] ?? {
-                status: "neutral" as SourceStatus,
-                lastPolledAt: null,
-              };
-              const tooltip = sourceTooltip(s.label, meta);
-              return (
-                <li
-                  key={s.id}
-                  className="flex items-center gap-2 rounded px-2 py-1.5 text-sm text-zinc-600"
-                  title={tooltip}
-                >
-                  <s.icon className="h-4 w-4" />
-                  <span className="flex-1">{s.label}</span>
-                  <output
-                    aria-label={`${s.label} status: ${statusLabel(meta.status)}`}
-                    data-source={s.id}
-                    data-status={meta.status}
-                    data-last-polled-at={meta.lastPolledAt ?? ""}
-                    className={cn(
-                      "h-2 w-2 rounded-full",
-                      dotClass(meta.status),
-                    )}
-                  />
-                </li>
-              );
-            })}
-          </ul>
-        </nav>
-
-        <div className="mt-auto px-2 pb-3">
-          <Link
-            to="/settings"
-            className={cn(
-              "block rounded px-2 py-1.5 text-sm",
-              path.startsWith("/settings")
-                ? "bg-zinc-100 font-medium"
-                : "text-zinc-600 hover:bg-zinc-100",
-            )}
-          >
-            Settings
-          </Link>
-        </div>
-      </aside>
-
+    <div className="flex min-h-screen bg-background text-foreground">
+      <NavigationSidebar {...props} />
       <main className="flex-1">
-        <header className="flex items-center justify-end gap-3 border-b border-zinc-200 bg-white px-6 py-3">
-          <FocusButton />
-          <UserMenu />
-        </header>
         <Outlet />
       </main>
-      <CommandPalette />
+      <CommandPalette commands={commands} />
     </div>
   );
 }
 
-export function UserMenu({
-  loader,
-}: {
-  loader?: () => Promise<ProfileView>;
-} = {}) {
+type ThemeSaveResult =
+  | { ok: true; theme: ThemeView }
+  | { ok: false; error: string };
+
+function useEffectiveTheme(): {
+  effective: "light" | "dark";
+  toggle: () => Promise<void>;
+} {
+  const [view, setView] = useState<ThemeView>(DEFAULT_THEME);
+  const [prefersDark, setPrefersDark] = useState(
+    () => window.matchMedia("(prefers-color-scheme: dark)").matches,
+  );
+  useEffect(() => {
+    let cancelled = false;
+    (apiFetch("/api/theme") as Promise<ThemeView>)
+      .then((t) => {
+        if (!cancelled) setView(t);
+      })
+      .catch(() => {
+        // Pre-auth or worker error: stay on defaults.
+      });
+    const onUpdate = (e: Event) => {
+      const detail = (e as CustomEvent<ThemeView>).detail;
+      if (detail) setView(detail);
+    };
+    window.addEventListener(THEME_UPDATED_EVENT, onUpdate);
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const onMedia = () => setPrefersDark(media.matches);
+    media.addEventListener("change", onMedia);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(THEME_UPDATED_EVENT, onUpdate);
+      media.removeEventListener("change", onMedia);
+    };
+  }, []);
+
+  const effective = resolveEffectiveTheme(view.theme, prefersDark);
+
+  const toggle = async () => {
+    const next: ThemeView = {
+      ...view,
+      theme: effective === "dark" ? "light" : "dark",
+    };
+    setView(next);
+    try {
+      const out = (await apiFetch("/api/theme", {
+        method: "PUT",
+        body: { theme: next.theme },
+      })) as ThemeSaveResult;
+      if (out.ok) {
+        setView(out.theme);
+        window.dispatchEvent(
+          new CustomEvent(THEME_UPDATED_EVENT, { detail: out.theme }),
+        );
+      }
+    } catch {
+      // Save failed: revert optimistic state on next /api/theme load.
+    }
+  };
+
+  return { effective, toggle };
+}
+
+function useProfile(): NavProfile {
   const [profile, setProfile] = useState<ProfileView | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    const load =
-      loader ?? (() => apiFetch("/api/profile") as Promise<ProfileView>);
     const refresh = () =>
-      load()
+      (apiFetch("/api/profile") as Promise<ProfileView>)
         .then((p) => {
           if (!cancelled) setProfile(p);
         })
         .catch(() => {
-          // Leave profile null; menu shows the generic fallback.
+          // Leave profile null; sidebar shows the generic fallback.
         });
     refresh();
     const onUpdate = (e: Event) => {
@@ -198,18 +246,33 @@ export function UserMenu({
       cancelled = true;
       window.removeEventListener(PROFILE_UPDATED_EVENT, onUpdate);
     };
-  }, [loader]);
+  }, []);
 
-  const display = profile?.display_name?.trim() || "Account";
-  return (
-    <output
-      aria-label="User menu"
-      data-display-name={profile?.display_name ?? ""}
-      className="rounded border border-zinc-200 px-3 py-1.5 text-sm text-zinc-700"
-    >
-      {display}
-    </output>
-  );
+  return {
+    displayName: profile?.display_name ?? null,
+    email: null,
+    avatarUrl: profile?.avatar_url ?? null,
+  };
+}
+
+function useInboxBadge(): number {
+  const [count, setCount] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    apiFetch("/api/signals?filter=all")
+      .then((body) => {
+        if (cancelled) return;
+        const signals = (body as { signals?: unknown[] }).signals ?? [];
+        setCount(signals.length);
+      })
+      .catch(() => {
+        // Leave at 0 on auth/network failure.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  return count;
 }
 
 function useSourceStatuses(): Record<string, SourceMeta> {
@@ -245,49 +308,4 @@ function useSourceStatuses(): Record<string, SourceMeta> {
     };
   }, []);
   return meta;
-}
-
-function sourceTooltip(label: string, meta: SourceMeta): string | undefined {
-  const status = statusLabel(meta.status);
-  if (meta.lastPolledAt) {
-    return `${label}: ${status} · last poll ${meta.lastPolledAt}`;
-  }
-  return `${label}: ${status}`;
-}
-
-function statusLabel(status: SourceStatus): string {
-  switch (status) {
-    case "ok":
-      return "connected";
-    case "stale":
-      return "no recent activity";
-    case "rate_limited":
-      return "rate-limited";
-    case "auth_failed":
-      return "authorization failed";
-    default:
-      return "not connected";
-  }
-}
-
-function dotClass(status: SourceStatus): string {
-  switch (status) {
-    case "ok":
-      return "bg-emerald-500";
-    case "stale":
-    case "rate_limited":
-      return "bg-amber-500";
-    case "auth_failed":
-      return "bg-red-500";
-    default:
-      return "bg-zinc-300";
-  }
-}
-
-function SectionTitle({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="px-2 pt-2 text-[10px] font-medium uppercase tracking-wider text-zinc-400">
-      {children}
-    </div>
-  );
 }

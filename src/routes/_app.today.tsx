@@ -1,7 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import {
   BarChart3,
-  Calendar as CalIcon,
   ExternalLink,
   Inbox,
   RefreshCw,
@@ -10,18 +9,24 @@ import {
   Video,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+import { UpcomingEventsCard } from "#/components/UpcomingEventsCard";
 import { apiFetch } from "#/lib/api-client";
 import type { MeetingEvent } from "#/lib/calendar-view";
 import type { BriefingResult } from "#/lib/morning-briefing";
 import {
-  formatCountdown,
-  type LinkedItem,
   type NextUpMeeting,
   pickMeetingForAlert,
-  pickNextUp,
+  pickUpcoming,
   type StoredSignal,
 } from "#/lib/next-up";
+import type { ProfileView } from "#/lib/profile-api";
 import {
   computeWeekStats,
   pickInboxPreview,
@@ -76,8 +81,8 @@ function TodayPage() {
     setActiveAlertId(due.id);
   }, [meetings, now]);
 
-  const nextUp = useMemo(
-    () => (meetings ? pickNextUp(meetings, now) : null),
+  const upcoming = useMemo(
+    () => (meetings ? pickUpcoming(meetings, now, 5) : []),
     [meetings, now],
   );
 
@@ -93,19 +98,26 @@ function TodayPage() {
     [meetings, now],
   );
 
+  const greeting = useGreeting(now);
+
   return (
     <TodayView
       meetings={meetings}
-      nextUp={nextUp}
-      now={now}
+      upcoming={upcoming}
       error={error}
       alertSignal={alertSignal}
       onDismissAlert={dismissAlert}
+      greeting={greeting}
+      summary={
+        <SummaryLine
+          meetings={meetings}
+          todaysMeetings={todaysMeetings}
+          alertActive={activeAlertId != null}
+        />
+      }
       briefing={<BriefingCard />}
       schedule={
-        meetings != null && (
-          <TodayScheduleCard events={todaysMeetings} now={now} />
-        )
+        meetings != null && <TodaySchedule events={todaysMeetings} now={now} />
       }
       inboxPreview={<InboxPreviewCard />}
       inProgress={<InProgressCard />}
@@ -116,11 +128,12 @@ function TodayPage() {
 
 export function TodayView({
   meetings,
-  nextUp,
-  now,
+  upcoming,
   error,
   alertSignal,
   onDismissAlert,
+  greeting,
+  summary,
   briefing,
   schedule,
   inboxPreview,
@@ -128,48 +141,52 @@ export function TodayView({
   weekStats,
 }: {
   meetings: StoredSignal[] | null;
-  nextUp: NextUpMeeting | null;
-  now: Date;
+  upcoming: NextUpMeeting[];
   error: string | null;
   alertSignal: StoredSignal | null;
   onDismissAlert: () => void;
-  briefing?: React.ReactNode;
-  schedule?: React.ReactNode;
-  inboxPreview?: React.ReactNode;
-  inProgress?: React.ReactNode;
-  weekStats?: React.ReactNode;
+  greeting?: string;
+  summary?: ReactNode;
+  briefing?: ReactNode;
+  schedule?: ReactNode;
+  inboxPreview?: ReactNode;
+  inProgress?: ReactNode;
+  weekStats?: ReactNode;
 }) {
   return (
-    <section className="p-8">
+    <section className="mx-auto max-w-6xl space-y-6 p-8">
       <header>
-        <h1 className="text-xl font-semibold">Today</h1>
-        <p className="mt-1 text-sm text-zinc-500">
-          Your morning briefing, in-progress work, schedule, and inbox detail
-          will live here.
-        </p>
+        <h1 className="font-semibold text-2xl text-foreground">
+          {greeting ?? "Today"}
+        </h1>
+        {summary && (
+          <p className="mt-1 text-muted-foreground text-sm">{summary}</p>
+        )}
       </header>
 
       {error && (
-        <p className="mt-6 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+        <p className="rounded-sm border border-destructive/30 bg-destructive/10 p-3 text-destructive text-sm">
           {error}
         </p>
       )}
 
       {meetings == null && !error && (
-        <p className="mt-6 text-sm text-zinc-500">Loading…</p>
+        <p className="text-muted-foreground text-sm">Loading…</p>
       )}
+
+      {meetings != null && <UpcomingEventsCard meetings={upcoming} />}
 
       {briefing}
 
-      {meetings != null && <NextUpCard meeting={nextUp} now={now} />}
+      <div className="grid gap-6 md:grid-cols-2">
+        {inboxPreview}
+        {inProgress}
+      </div>
 
-      {schedule}
-
-      {inProgress}
-
-      {inboxPreview}
-
-      {weekStats}
+      <div className="grid gap-6 md:grid-cols-2">
+        {schedule}
+        {weekStats}
+      </div>
 
       {alertSignal && (
         <MeetingAlertToast signal={alertSignal} onDismiss={onDismissAlert} />
@@ -178,81 +195,70 @@ export function TodayView({
   );
 }
 
-export function NextUpCard({
-  meeting,
-  now,
+// Placeholder hook backing the greeting + summary line. Reads display name
+// from /api/profile and derives a time-of-day greeting from `now`.
+function useGreeting(now: Date): string {
+  const [name, setName] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    (apiFetch("/api/profile") as Promise<ProfileView>)
+      .then((p) => {
+        if (cancelled) return;
+        setName(firstNameOf(p?.display_name));
+      })
+      .catch(() => {
+        // Leave name null; greeting falls back to no first name.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  return formatGreeting(now, name);
+}
+
+export function formatGreeting(now: Date, name: string | null): string {
+  const h = now.getHours();
+  const tod =
+    h < 5
+      ? "Up early"
+      : h < 12
+        ? "Good morning"
+        : h < 18
+          ? "Good afternoon"
+          : "Good evening";
+  return name ? `${tod}, ${name}` : tod;
+}
+
+function firstNameOf(displayName: string | null | undefined): string | null {
+  if (!displayName) return null;
+  const trimmed = displayName.trim();
+  if (!trimmed) return null;
+  return trimmed.split(/\s+/)[0] ?? null;
+}
+
+function SummaryLine({
+  meetings,
+  todaysMeetings,
+  alertActive,
 }: {
-  meeting: NextUpMeeting | null;
-  now: Date;
+  meetings: StoredSignal[] | null;
+  todaysMeetings: MeetingEvent[];
+  alertActive: boolean;
 }) {
-  if (!meeting) {
-    return (
-      <div className="mt-6 rounded border border-zinc-200 bg-white p-5">
-        <h2 className="text-sm font-semibold text-zinc-900">Next up</h2>
-        <p className="mt-1 text-sm text-zinc-500">
-          Nothing on your calendar in the next 24 hours.
-        </p>
-      </div>
-    );
-  }
+  if (meetings == null) return null;
+  const meetingCount = todaysMeetings.length;
   return (
-    <article
-      aria-label="Next up"
-      className="mt-6 rounded border border-zinc-200 bg-white p-5"
-    >
-      <header className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-zinc-500">
-        <CalIcon className="h-4 w-4" />
-        Next up · {formatCountdown(meeting.startsAt, now)}
-      </header>
-      <h2 className="mt-2 text-lg font-semibold text-zinc-900">
-        {meeting.signal.title}
-      </h2>
-      <p className="mt-1 text-sm text-zinc-500">
-        {formatLocalTime(meeting.startsAt)}
-        {meeting.endsAt && ` – ${formatLocalTime(meeting.endsAt)}`}
-      </p>
-      <div className="mt-4 flex flex-wrap items-center gap-2">
-        {meeting.videoLink && (
-          <a
-            href={meeting.videoLink}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1 rounded bg-zinc-900 px-3 py-1.5 text-sm text-white hover:bg-zinc-800"
-          >
-            <Video className="h-4 w-4" />
-            Join
-          </a>
-        )}
-        {meeting.signal.url && (
-          <a
-            href={meeting.signal.url}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1 rounded border border-zinc-200 px-3 py-1.5 text-sm text-zinc-700 hover:bg-zinc-50"
-          >
-            <ExternalLink className="h-4 w-4" />
-            Open in Calendar
-          </a>
-        )}
-      </div>
-      {meeting.linkedItems.length > 0 && (
-        <ul aria-label="Linked items" className="mt-4 space-y-1">
-          {meeting.linkedItems.map((item) => (
-            <li key={item.url}>
-              <a
-                href={item.url}
-                target="_blank"
-                rel="noreferrer"
-                className="text-sm text-zinc-700 underline hover:text-zinc-900"
-              >
-                {linkedLabel(item)}
-              </a>
-            </li>
-          ))}
-        </ul>
-      )}
-    </article>
+    <>
+      {meetingCount === 0
+        ? "No meetings today"
+        : `${meetingCount} ${plural(meetingCount, "meeting")} today`}
+      {alertActive && " · meeting in 10 min"}
+    </>
   );
+}
+
+function plural(n: number, word: string): string {
+  return n === 1 ? word : `${word}s`;
 }
 
 type Generator = (force: boolean) => Promise<BriefingResult>;
@@ -260,6 +266,7 @@ type Generator = (force: boolean) => Promise<BriefingResult>;
 export function BriefingCard({ generator }: { generator?: Generator } = {}) {
   const [result, setResult] = useState<BriefingResult | null>(null);
   const [busy, setBusy] = useState(false);
+  const [latencyMs, setLatencyMs] = useState<number | null>(null);
   const [regenWarning, setRegenWarning] = useState<string | null>(null);
 
   const gen = useMemo<Generator>(
@@ -276,18 +283,20 @@ export function BriefingCard({ generator }: { generator?: Generator } = {}) {
   useEffect(() => {
     let cancelled = false;
     setBusy(true);
+    const startedAt = Date.now();
     gen(false)
       .then((r) => {
-        if (!cancelled) setResult(r);
+        if (cancelled) return;
+        setResult(r);
+        setLatencyMs(Date.now() - startedAt);
       })
       .catch((e) => {
-        if (!cancelled) {
-          setResult({
-            ok: false,
-            reason: "error",
-            error: e instanceof Error ? e.message : String(e),
-          });
-        }
+        if (cancelled) return;
+        setResult({
+          ok: false,
+          reason: "error",
+          error: e instanceof Error ? e.message : String(e),
+        });
       })
       .finally(() => {
         if (!cancelled) setBusy(false);
@@ -300,6 +309,7 @@ export function BriefingCard({ generator }: { generator?: Generator } = {}) {
   const regenerate = useCallback(async () => {
     setBusy(true);
     setRegenWarning(null);
+    const startedAt = Date.now();
     try {
       const r = await gen(true);
       // Daily regenerate cap: keep the existing briefing visible and surface
@@ -309,6 +319,7 @@ export function BriefingCard({ generator }: { generator?: Generator } = {}) {
         setRegenWarning("Daily regenerate limit reached. Try again tomorrow.");
       } else {
         setResult(r);
+        setLatencyMs(Date.now() - startedAt);
       }
     } catch (e) {
       setResult({
@@ -324,16 +335,16 @@ export function BriefingCard({ generator }: { generator?: Generator } = {}) {
   return (
     <article
       aria-label="Morning briefing"
-      className="mt-6 rounded border border-zinc-200 bg-white p-5"
+      className="rounded-lg border border-border bg-card p-5"
     >
       <header className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-zinc-500">
+        <div className="flex items-center gap-2 text-muted-foreground text-xs uppercase tracking-wider">
           <Sparkles className="h-4 w-4" />
           Morning briefing
         </div>
         <div className="flex items-center gap-2">
           {result?.ok && result.used_fallback && (
-            <span className="inline-flex items-center rounded border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800">
+            <span className="inline-flex items-center rounded-sm border border-amber-200 bg-amber-50 px-2 py-0.5 font-medium text-[11px] text-amber-800">
               Running on fallback model
             </span>
           )}
@@ -342,7 +353,7 @@ export function BriefingCard({ generator }: { generator?: Generator } = {}) {
               type="button"
               onClick={regenerate}
               disabled={busy}
-              className="inline-flex items-center gap-1 rounded border border-zinc-200 px-2.5 py-1 text-xs text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
+              className="inline-flex items-center gap-1 rounded-sm border border-border bg-card px-2.5 py-1 text-foreground text-xs hover:bg-accent disabled:opacity-50"
             >
               <RefreshCw className="h-3 w-3" />
               Regenerate
@@ -350,19 +361,22 @@ export function BriefingCard({ generator }: { generator?: Generator } = {}) {
           )}
         </div>
       </header>
-      <div className="mt-3 text-sm text-zinc-800">
+      <div className="mt-3 text-foreground text-sm">
         {busy && !result && (
-          <p className="text-zinc-500">Generating your briefing…</p>
+          <p className="text-muted-foreground">Generating your briefing…</p>
         )}
         {result?.ok && (
           <>
-            <p className="whitespace-pre-line">{result.text}</p>
-            <p className="mt-3 text-xs text-zinc-500">
-              {result.provider} · {result.model}
-              {result.cached && " · cached for today"}
+            <p className="whitespace-pre-line">{renderBold(result.text)}</p>
+            <p className="mt-3 font-mono text-[11px] text-muted-foreground uppercase tracking-wider">
+              {result.model.toUpperCase()}
+              {latencyMs != null && ` · ${formatLatency(latencyMs)}`}
+              {/* TODO(post-redesign): wire to real cost telemetry — see PRD #29 */}
+              {" · $0.000"}
+              {result.cached && " · cached"}
             </p>
             {regenWarning && (
-              <p className="mt-2 text-xs text-amber-700">{regenWarning}</p>
+              <p className="mt-2 text-amber-700 text-xs">{regenWarning}</p>
             )}
           </>
         )}
@@ -374,6 +388,36 @@ export function BriefingCard({ generator }: { generator?: Generator } = {}) {
   );
 }
 
+// Parses `**bold**` markers into <strong> nodes. Other characters pass
+// through untouched. Pure helper, exported for tests.
+export function renderBold(text: string): ReactNode[] {
+  const parts: ReactNode[] = [];
+  const re = /\*\*([^*]+)\*\*/g;
+  let last = 0;
+  let i = 0;
+  let match: RegExpExecArray | null = re.exec(text);
+  while (match !== null) {
+    if (match.index > last) {
+      parts.push(text.slice(last, match.index));
+    }
+    parts.push(
+      <strong key={`b-${i}`} className="font-semibold">
+        {match[1]}
+      </strong>,
+    );
+    last = match.index + match[0].length;
+    i += 1;
+    match = re.exec(text);
+  }
+  if (last < text.length) parts.push(text.slice(last));
+  return parts;
+}
+
+function formatLatency(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+  return `${(ms / 1000).toFixed(1)}s`;
+}
+
 function BriefingFallback({
   result,
   busy,
@@ -383,9 +427,9 @@ function BriefingFallback({
 }) {
   if (result.reason === "no_provider") {
     return (
-      <p className="text-zinc-600">
+      <p className="text-muted-foreground">
         No AI provider configured. Add your API key in{" "}
-        <a href="/settings" className="underline hover:text-zinc-900">
+        <a href="/settings" className="underline hover:text-foreground">
           Settings → AI provider
         </a>
         .
@@ -394,9 +438,9 @@ function BriefingFallback({
   }
   if (result.reason === "disabled") {
     return (
-      <p className="text-zinc-600">
+      <p className="text-muted-foreground">
         AI is disabled for this account. Enable it in{" "}
-        <a href="/settings" className="underline hover:text-zinc-900">
+        <a href="/settings" className="underline hover:text-foreground">
           Settings
         </a>{" "}
         to see your briefing.
@@ -405,18 +449,20 @@ function BriefingFallback({
   }
   if (result.reason === "budget_reached") {
     return (
-      <p className="text-zinc-600">AI disabled — monthly budget reached.</p>
+      <p className="text-muted-foreground">
+        AI disabled — monthly budget reached.
+      </p>
     );
   }
   if (result.reason === "regenerate_limit") {
     return (
-      <p className="text-zinc-600">
+      <p className="text-muted-foreground">
         Daily regenerate limit reached. Try again tomorrow.
       </p>
     );
   }
   return (
-    <p className="text-red-700">
+    <p className="text-destructive">
       Couldn't generate briefing{result.error ? `: ${result.error}` : ""}.
       {busy && " Retrying…"}
     </p>
@@ -434,20 +480,21 @@ function MeetingAlertToast({
   return (
     <output
       aria-label="Meeting starting soon"
-      className="fixed bottom-6 right-6 z-50 flex max-w-sm items-start gap-3 rounded-lg border border-zinc-200 bg-white p-4 shadow-lg"
+      className="fixed right-6 bottom-6 z-50 flex max-w-sm items-start gap-3 rounded-lg border border-border bg-card p-4 shadow-lg"
     >
-      <CalIcon className="mt-0.5 h-5 w-5 text-zinc-700" />
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-semibold text-zinc-900">
+        <p className="font-semibold text-foreground text-sm">
           Starts in 10 minutes
         </p>
-        <p className="mt-0.5 truncate text-sm text-zinc-700">{signal.title}</p>
+        <p className="mt-0.5 truncate text-foreground text-sm">
+          {signal.title}
+        </p>
         {videoLink && (
           <a
             href={videoLink}
             target="_blank"
             rel="noreferrer"
-            className="mt-2 inline-flex items-center gap-1 rounded bg-zinc-900 px-2.5 py-1 text-xs text-white hover:bg-zinc-800"
+            className="mt-2 inline-flex items-center gap-1 rounded-sm bg-primary px-2.5 py-1 text-primary-foreground text-xs hover:opacity-90"
           >
             <Video className="h-3 w-3" />
             Join
@@ -458,7 +505,7 @@ function MeetingAlertToast({
         type="button"
         aria-label="Dismiss alert"
         onClick={onDismiss}
-        className="rounded p-1 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700"
+        className="rounded-sm p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
       >
         <X className="h-4 w-4" />
       </button>
@@ -466,7 +513,7 @@ function MeetingAlertToast({
   );
 }
 
-export function TodayScheduleCard({
+export function TodaySchedule({
   events,
   now,
 }: {
@@ -476,54 +523,90 @@ export function TodayScheduleCard({
   return (
     <article
       aria-label="Today schedule"
-      className="mt-6 rounded border border-zinc-200 bg-white p-5"
+      className="rounded-lg border border-border bg-card p-5"
     >
-      <header className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-zinc-500">
-        <CalIcon className="h-4 w-4" />
+      <header className="text-muted-foreground text-xs uppercase tracking-wider">
         Today's schedule
       </header>
       {events.length === 0 ? (
-        <p className="mt-3 text-sm text-zinc-500">No meetings today.</p>
+        <p className="mt-3 text-muted-foreground text-sm">No meetings today.</p>
       ) : (
-        <ul className="mt-3 divide-y divide-zinc-100">
-          {events.map((e) => (
-            <li
-              key={e.signal.id}
-              className="flex items-start gap-3 py-2 first:pt-0 last:pb-0"
-            >
-              <time
-                dateTime={e.startsAt.toISOString()}
-                className="w-20 shrink-0 text-sm text-zinc-500"
+        <ul className="mt-3 divide-y divide-border">
+          {events.map((e) => {
+            const isNow = isCurrentBlock(e, now);
+            const focus = e.isFocus;
+            return (
+              <li
+                key={e.signal.id}
+                aria-current={isNow ? "true" : undefined}
+                className={
+                  focus
+                    ? "flex items-start gap-3 bg-foreground py-2 px-2 text-background first:pt-2 last:pb-2"
+                    : "flex items-start gap-3 py-2 first:pt-0 last:pb-0"
+                }
               >
-                {formatLocalTime(e.startsAt)}
-              </time>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-zinc-900">
-                  {e.signal.title}
-                </p>
-                {e.endsAt && (
-                  <p className="text-xs text-zinc-500">
-                    {formatRange(e.startsAt, e.endsAt, now)}
-                  </p>
-                )}
-              </div>
-              {e.videoLink && (
-                <a
-                  href={e.videoLink}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-1 rounded border border-zinc-200 px-2 py-1 text-xs text-zinc-700 hover:bg-zinc-50"
+                <time
+                  dateTime={e.startsAt.toISOString()}
+                  className={
+                    focus
+                      ? "w-20 shrink-0 font-mono text-background/80 text-xs"
+                      : "w-20 shrink-0 font-mono text-muted-foreground text-xs"
+                  }
                 >
-                  <Video className="h-3 w-3" />
-                  Join
-                </a>
-              )}
-            </li>
-          ))}
+                  {formatLocalTime(e.startsAt)}
+                </time>
+                <div className="min-w-0 flex-1">
+                  <p
+                    className={
+                      focus
+                        ? "truncate font-medium text-background text-sm"
+                        : "truncate font-medium text-foreground text-sm"
+                    }
+                  >
+                    {e.signal.title}
+                  </p>
+                </div>
+                {isNow && (
+                  <span className="inline-flex items-center rounded-sm bg-primary px-1.5 py-0.5 font-semibold text-[10px] text-primary-foreground uppercase tracking-wider">
+                    NOW
+                  </span>
+                )}
+                {!isNow && e.videoLink && (
+                  <a
+                    href={e.videoLink}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 rounded-sm border border-border bg-card px-2 py-1 text-foreground text-xs hover:bg-accent"
+                  >
+                    <Video className="h-3 w-3" />
+                    Join
+                  </a>
+                )}
+              </li>
+            );
+          })}
         </ul>
       )}
     </article>
   );
+}
+
+function isCurrentBlock(e: MeetingEvent, now: Date): boolean {
+  const t = now.getTime();
+  return e.startsAt.getTime() <= t && t < e.endsAt.getTime();
+}
+
+// Placeholder hook used by the schedule card; backend lands in a follow-up
+// issue, hence the loader is a thin pass-through over /api/signals.
+// TODO(post-redesign): replace with a real schedule source once the
+// calendar provider is wired — see PRD #29.
+export function useTodaySchedule(): {
+  events: MeetingEvent[] | null;
+  error: string | null;
+} {
+  // Intentionally a thin wrapper; today's schedule is derived in TodayPage
+  // above. Exposed for future callers and tests.
+  return { events: null, error: null };
 }
 
 type InboxLoader = () => Promise<StoredSignal[]>;
@@ -568,48 +651,50 @@ export function InboxPreviewCard({
   return (
     <article
       aria-label="Inbox preview"
-      className="mt-6 rounded border border-zinc-200 bg-white p-5"
+      className="rounded-lg border border-border bg-card p-5"
     >
       <header className="flex items-center justify-between">
-        <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-zinc-500">
+        <div className="flex items-center gap-2 text-muted-foreground text-xs uppercase tracking-wider">
           <Inbox className="h-4 w-4" />
-          Inbox
+          Needs you
         </div>
         <a
           href="/inbox"
-          className="text-xs text-zinc-700 underline hover:text-zinc-900"
+          className="text-foreground text-xs underline hover:text-primary"
         >
           Open all
         </a>
       </header>
-      {error && <p className="mt-3 text-sm text-red-700">{error}</p>}
+      {error && <p className="mt-3 text-destructive text-sm">{error}</p>}
       {!error && signals == null && (
-        <p className="mt-3 text-sm text-zinc-500">Loading…</p>
+        <p className="mt-3 text-muted-foreground text-sm">Loading…</p>
       )}
       {!error && signals != null && preview.length === 0 && (
-        <p className="mt-3 text-sm text-zinc-500">
+        <p className="mt-3 text-muted-foreground text-sm">
           Nothing actionable. Inbox zero.
         </p>
       )}
       {!error && preview.length > 0 && (
-        <ul className="mt-3 divide-y divide-zinc-100">
+        <ul className="mt-3 divide-y divide-border">
           {preview.map((s) => (
             <li
               key={s.id}
               className="flex items-center gap-3 py-2 first:pt-0 last:pb-0"
             >
               <span className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-zinc-900">
+                <p className="truncate font-medium text-foreground text-sm">
                   {s.title}
                 </p>
-                <p className="truncate text-xs text-zinc-500">{s.provider}</p>
+                <p className="truncate text-muted-foreground text-xs">
+                  {s.provider}
+                </p>
               </span>
               {s.url && (
                 <a
                   href={s.url}
                   target="_blank"
                   rel="noreferrer"
-                  className="inline-flex items-center gap-1 rounded border border-zinc-200 px-2 py-1 text-xs text-zinc-700 hover:bg-zinc-50"
+                  className="inline-flex items-center gap-1 rounded-sm border border-border bg-card px-2 py-1 text-foreground text-xs hover:bg-accent"
                 >
                   <ExternalLink className="h-3 w-3" />
                   Open
@@ -639,16 +724,16 @@ const TICKET_STATUS_LABEL: Record<string, string> = {
   ticket_assigned: "Assigned",
 };
 
-export function InProgressCard({
-  loader = defaultTicketLoader,
-  limit = 5,
-}: {
-  loader?: TicketLoader;
-  limit?: number;
-} = {}) {
+// TODO(post-redesign): replace the GitHub PR / ticket signal fetch with the
+// dedicated Linear/Jira adapter once it lands — see PRD #29.
+export function useInProgressTickets(
+  loader: TicketLoader = defaultTicketLoader,
+): {
+  tickets: StoredSignal[] | null;
+  error: string | null;
+} {
   const [tickets, setTickets] = useState<StoredSignal[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-
   useEffect(() => {
     let cancelled = false;
     loader()
@@ -665,6 +750,17 @@ export function InProgressCard({
       cancelled = true;
     };
   }, [loader]);
+  return { tickets, error };
+}
+
+export function InProgressCard({
+  loader = defaultTicketLoader,
+  limit = 5,
+}: {
+  loader?: TicketLoader;
+  limit?: number;
+} = {}) {
+  const { tickets, error } = useInProgressTickets(loader);
 
   const top = useMemo(
     () => (tickets ? pickInProgressTickets(tickets, limit) : []),
@@ -674,36 +770,36 @@ export function InProgressCard({
   return (
     <article
       aria-label="In progress"
-      className="mt-6 rounded border border-zinc-200 bg-white p-5"
+      className="rounded-lg border border-border bg-card p-5"
     >
-      <header className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-zinc-500">
+      <header className="flex items-center gap-2 text-muted-foreground text-xs uppercase tracking-wider">
         <SquareKanban className="h-4 w-4" />
         In progress
       </header>
-      {error && <p className="mt-3 text-sm text-red-700">{error}</p>}
+      {error && <p className="mt-3 text-destructive text-sm">{error}</p>}
       {!error && tickets == null && (
-        <p className="mt-3 text-sm text-zinc-500">Loading…</p>
+        <p className="mt-3 text-muted-foreground text-sm">Loading…</p>
       )}
       {!error && tickets != null && top.length === 0 && (
-        <p className="mt-3 text-sm text-zinc-500">
+        <p className="mt-3 text-muted-foreground text-sm">
           Nothing in progress. Connect Linear or Jira in{" "}
-          <a href="/settings" className="underline hover:text-zinc-900">
+          <a href="/settings" className="underline hover:text-foreground">
             Settings
           </a>
           .
         </p>
       )}
       {!error && top.length > 0 && (
-        <ul className="mt-3 divide-y divide-zinc-100">
+        <ul className="mt-3 divide-y divide-border">
           {top.map((s) => (
             <li
               key={s.id}
               className="flex items-center gap-3 py-2 first:pt-0 last:pb-0"
             >
-              <span className="rounded bg-zinc-100 px-2 py-0.5 font-mono text-xs text-zinc-700">
+              <span className="rounded-sm bg-secondary px-2 py-0.5 font-mono text-foreground text-xs">
                 {TICKET_STATUS_LABEL[s.kind] ?? s.kind}
               </span>
-              <span className="min-w-0 flex-1 truncate text-sm font-medium text-zinc-900">
+              <span className="min-w-0 flex-1 truncate font-medium text-foreground text-sm">
                 {s.title}
               </span>
               {s.url && (
@@ -711,7 +807,7 @@ export function InProgressCard({
                   href={s.url}
                   target="_blank"
                   rel="noreferrer"
-                  className="inline-flex items-center gap-1 rounded border border-zinc-200 px-2 py-1 text-xs text-zinc-700 hover:bg-zinc-50"
+                  className="inline-flex items-center gap-1 rounded-sm border border-border bg-card px-2 py-1 text-foreground text-xs hover:bg-accent"
                 >
                   <ExternalLink className="h-3 w-3" />
                   Open
@@ -734,18 +830,29 @@ const defaultWeekLoader: WeekLoader = async (since) => {
   return body.signals;
 };
 
-export function WeekStatsCard({
-  now,
-  loader = defaultWeekLoader,
-}: {
-  now: Date;
-  loader?: WeekLoader;
-}) {
+// Placeholder trend deltas. Real prev-week comparison lands with the
+// follow-up retrospective backend.
+// TODO(post-redesign): wire to real prev-week comparison data — see PRD #29.
+const PLACEHOLDER_TRENDS: Record<keyof WeekStats, number> = {
+  prsReviewed: 2,
+  ticketsShipped: 1,
+  focusHours: -1,
+  inboxZeroedDays: 0,
+};
+
+// TODO(post-redesign): replace the per-week signals fetch with a dedicated
+// retrospective endpoint that returns both current + prev counts — see PRD #29.
+export function useWeekStats(
+  now: Date,
+  loader: WeekLoader = defaultWeekLoader,
+): {
+  stats: WeekStats | null;
+  trends: Record<keyof WeekStats, number>;
+  error: string | null;
+} {
   const [stats, setStats] = useState<WeekStats | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Stabilise the `since` ISO so the effect doesn't refetch every render
-  // when callers pass a fresh `now` from a 1-minute tick.
   const sinceIso = useMemo(() => {
     const d = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
     return d.toISOString();
@@ -768,47 +875,102 @@ export function WeekStatsCard({
     };
   }, [loader, sinceIso]);
 
+  return { stats, trends: PLACEHOLDER_TRENDS, error };
+}
+
+export function WeekStatsCard({
+  now,
+  loader = defaultWeekLoader,
+}: {
+  now: Date;
+  loader?: WeekLoader;
+}) {
+  const { stats, trends, error } = useWeekStats(now, loader);
+
   return (
     <article
       aria-label="This week"
-      className="mt-6 rounded border border-zinc-200 bg-white p-5"
+      className="rounded-lg border border-border bg-card p-5"
     >
-      <header className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-zinc-500">
+      <header className="flex items-center gap-2 text-muted-foreground text-xs uppercase tracking-wider">
         <BarChart3 className="h-4 w-4" />
         This week
       </header>
-      {error && <p className="mt-3 text-sm text-red-700">{error}</p>}
+      {error && <p className="mt-3 text-destructive text-sm">{error}</p>}
       {!error && stats == null && (
-        <p className="mt-3 text-sm text-zinc-500">Loading…</p>
+        <p className="mt-3 text-muted-foreground text-sm">Loading…</p>
       )}
       {!error && stats != null && (
         <dl className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Stat label="PRs reviewed" value={stats.prsReviewed} />
-          <Stat label="Tickets shipped" value={stats.ticketsShipped} />
-          <Stat label="Focus hours" value={stats.focusHours} />
-          <Stat label="Inbox zeroed days" value={stats.inboxZeroedDays} />
+          <Stat
+            label="PRs reviewed"
+            value={stats.prsReviewed}
+            delta={trends.prsReviewed}
+          />
+          <Stat
+            label="Tickets shipped"
+            value={stats.ticketsShipped}
+            delta={trends.ticketsShipped}
+          />
+          <Stat
+            label="Focus hours"
+            value={stats.focusHours}
+            delta={trends.focusHours}
+          />
+          <Stat
+            label="Inbox zeroed days"
+            value={stats.inboxZeroedDays}
+            delta={trends.inboxZeroedDays}
+          />
         </dl>
       )}
     </article>
   );
 }
 
-function Stat({ label, value }: { label: string; value: number }) {
+function Stat({
+  label,
+  value,
+  delta,
+}: {
+  label: string;
+  value: number;
+  delta: number;
+}) {
   return (
-    <div className="rounded border border-zinc-100 bg-zinc-50 px-3 py-2">
-      <dt className="text-xs text-zinc-500">{label}</dt>
-      <dd className="mt-0.5 text-lg font-semibold text-zinc-900">{value}</dd>
+    <div className="rounded-sm border border-border bg-secondary/40 px-3 py-2">
+      <dt className="text-muted-foreground text-xs">{label}</dt>
+      <dd className="mt-0.5 flex items-baseline gap-2">
+        <span className="font-semibold text-foreground text-lg">{value}</span>
+        <TrendDelta delta={delta} />
+      </dd>
     </div>
   );
 }
 
-function formatRange(start: Date, end: Date, _now: Date): string {
-  return `${formatLocalTime(start)} – ${formatLocalTime(end)}`;
-}
-
-function linkedLabel(item: LinkedItem): string {
-  if (item.kind === "pr") return `${item.repo}#${item.number}`;
-  return item.key;
+function TrendDelta({ delta }: { delta: number }) {
+  if (delta === 0) {
+    return (
+      <span data-trend="flat" className="text-muted-foreground text-xs">
+        ±0
+      </span>
+    );
+  }
+  const positive = delta > 0;
+  return (
+    <span
+      data-trend={positive ? "up" : "down"}
+      className={
+        positive
+          ? "font-medium text-emerald-600 text-xs"
+          : "font-medium text-destructive text-xs"
+      }
+    >
+      {positive ? "↑" : "↓"}
+      {positive ? "+" : ""}
+      {delta}
+    </span>
+  );
 }
 
 function formatLocalTime(d: Date): string {

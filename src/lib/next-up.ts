@@ -25,6 +25,14 @@ export function pickNextUp(
   signals: StoredSignal[],
   now: Date,
 ): NextUpMeeting | null {
+  return pickUpcoming(signals, now, 1)[0] ?? null;
+}
+
+export function pickUpcoming(
+  signals: StoredSignal[],
+  now: Date,
+  limit: number,
+): NextUpMeeting[] {
   const candidates: NextUpMeeting[] = [];
   for (const s of signals) {
     if (s.kind !== "meeting") continue;
@@ -50,7 +58,7 @@ export function pickNextUp(
     });
   }
   candidates.sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime());
-  return candidates[0] ?? null;
+  return candidates.slice(0, Math.max(0, limit));
 }
 
 const ALERT_WINDOW_MIN_MS = 9 * 60 * 1000;

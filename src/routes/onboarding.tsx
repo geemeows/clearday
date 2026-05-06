@@ -1,12 +1,10 @@
 import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
+import { Check } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { SourceGlyph, type SourceKind } from "#/components/SourceGlyph";
+import { Button } from "#/components/ui/button";
 import { apiFetch } from "#/lib/api-client";
 import { signOut, useAuth } from "#/lib/auth";
-import {
-  AiProviderPanel,
-  NotificationsPanel,
-  QuietHoursPanel,
-} from "#/routes/_app.settings";
 
 export const Route = createFileRoute("/onboarding")({
   beforeLoad: ({ context, location }) => {
@@ -18,61 +16,97 @@ export const Route = createFileRoute("/onboarding")({
   component: OnboardingPage,
 });
 
-const STEPS: Array<{ id: StepId; label: string }> = [
-  { id: "providers", label: "Connect providers" },
-  { id: "channels", label: "Alert channels" },
-  { id: "quiet", label: "Quiet hours" },
-  { id: "ai", label: "AI provider" },
-  { id: "slack-allowlist", label: "Slack channels" },
-];
-
-type StepId = "providers" | "channels" | "quiet" | "ai" | "slack-allowlist";
-
 function OnboardingPage() {
   const { rejected, session } = useAuth();
   const navigate = useNavigate();
 
   if (rejected) {
     return (
-      <main className="flex min-h-screen items-center justify-center p-8">
+      <main className="flex min-h-screen items-center justify-center bg-background p-8">
         <div className="w-full max-w-md space-y-4 text-center">
           <h1 className="text-xl font-semibold">
             Not authorized for this deployment
           </h1>
-          <p className="text-sm text-zinc-500">
+          <p className="text-sm text-muted-foreground">
             <code>{session?.user.email}</code> isn't the allowed email.
           </p>
-          <button
-            type="button"
-            onClick={() => signOut()}
-            className="rounded border px-3 py-1.5 text-sm hover:bg-zinc-50"
-          >
+          <Button variant="outline" onClick={() => signOut()}>
             Sign out
-          </button>
+          </Button>
         </div>
       </main>
     );
   }
 
   return (
-    <main className="min-h-screen bg-zinc-50 px-4 py-12">
-      <OnboardingWizard onFinish={() => navigate({ to: "/today" })} />
+    <main className="min-h-screen bg-background px-4 py-12">
+      <OnboardingHero onFinish={() => navigate({ to: "/today" })} />
     </main>
   );
 }
 
 export type CompleteFn = () => Promise<{ ok: true }>;
 
-export function OnboardingWizard({
+type ProviderId = "github" | "slack" | "google";
+
+type ProviderCardSpec = {
+  id: ProviderId;
+  label: string;
+  description: string;
+  glyph: SourceKind;
+  scopes: string;
+};
+
+const PROVIDER_CARDS: ProviderCardSpec[] = [
+  {
+    id: "github",
+    label: "GitHub",
+    description: "Pull requests, reviews, CI status, and @-mentions.",
+    glyph: "git",
+    scopes: "read:user, repo",
+  },
+  {
+    id: "slack",
+    label: "Slack",
+    description: "DMs, @-mentions, and allow-listed channel broadcasts.",
+    glyph: "slack",
+    scopes: "channels:read, chat:write, dnd:write",
+  },
+  {
+    id: "google",
+    label: "Google Calendar",
+    description: "Today's meetings, agenda, and focus-block scheduling.",
+    glyph: "cal",
+    scopes: "calendar.events",
+  },
+];
+
+type ApiSource = {
+  provider: string;
+  status: "connected" | "disconnected" | "rate_limited" | "auth_failed";
+};
+
+type SourcesLoader = () => Promise<{ sources: ApiSource[] }>;
+type ConnectUrlFn = (
+  provider: string,
+) => Promise<{ ok: boolean; url?: string; error?: string }>;
+
+export function OnboardingHero({
   onFinish,
   complete,
+  loader,
+  connectUrl,
+  openUrl,
 }: {
   onFinish: () => void;
   complete?: CompleteFn;
+  loader?: SourcesLoader;
+  connectUrl?: ConnectUrlFn;
+  openUrl?: (url: string) => void;
 }) {
-  const [stepIndex, setStepIndex] = useState(0);
+  const [sources, setSources] = useState<ApiSource[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const step = STEPS[stepIndex];
 
   const completeFn = useMemo(
     () =>
@@ -83,152 +117,6 @@ export function OnboardingWizard({
         }) as Promise<{ ok: true }>),
     [complete],
   );
-
-  const advance = useCallback(async () => {
-    if (stepIndex < STEPS.length - 1) {
-      setStepIndex(stepIndex + 1);
-      return;
-    }
-    setBusy(true);
-    try {
-      await completeFn();
-      onFinish();
-    } finally {
-      setBusy(false);
-    }
-  }, [stepIndex, completeFn, onFinish]);
-
-  return (
-    <div className="mx-auto w-full max-w-3xl">
-      <header className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight">
-          Welcome to Clearday
-        </h1>
-        <p className="mt-1 text-sm text-zinc-500">
-          A few minutes of setup turns this into your daily command center.
-        </p>
-      </header>
-
-      <ol
-        aria-label="Onboarding progress"
-        className="mb-6 flex items-center gap-2"
-      >
-        {STEPS.map((s, i) => (
-          <li
-            key={s.id}
-            aria-current={i === stepIndex ? "step" : undefined}
-            data-step={s.id}
-            className="flex items-center gap-2 text-xs"
-          >
-            <span
-              className={`h-2 w-2 rounded-full ${
-                i <= stepIndex ? "bg-zinc-900" : "bg-zinc-300"
-              }`}
-            />
-            <span
-              className={
-                i === stepIndex ? "font-medium text-zinc-900" : "text-zinc-500"
-              }
-            >
-              {s.label}
-            </span>
-            {i < STEPS.length - 1 && (
-              <span aria-hidden className="mx-1 text-zinc-300">
-                ›
-              </span>
-            )}
-          </li>
-        ))}
-      </ol>
-
-      <section
-        aria-label={`Step ${stepIndex + 1}: ${step.label}`}
-        className="rounded border border-zinc-200 bg-white p-6"
-      >
-        <StepBody step={step.id} />
-      </section>
-
-      <nav
-        aria-label="Wizard actions"
-        className="mt-4 flex items-center justify-between"
-      >
-        <button
-          type="button"
-          onClick={() => setStepIndex(Math.max(0, stepIndex - 1))}
-          disabled={stepIndex === 0 || busy}
-          className="rounded border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-100 disabled:opacity-50"
-        >
-          Back
-        </button>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={advance}
-            disabled={busy}
-            className="rounded border border-zinc-200 px-3 py-1.5 text-sm text-zinc-600 hover:bg-zinc-100 disabled:opacity-50"
-          >
-            Skip
-          </button>
-          <button
-            type="button"
-            onClick={advance}
-            disabled={busy}
-            className="rounded bg-zinc-900 px-4 py-1.5 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
-          >
-            {stepIndex === STEPS.length - 1 ? "Finish" : "Continue"}
-          </button>
-        </div>
-      </nav>
-    </div>
-  );
-}
-
-function StepBody({ step }: { step: StepId }) {
-  switch (step) {
-    case "providers":
-      return <ProvidersStep />;
-    case "channels":
-      return <NotificationsPanel />;
-    case "quiet":
-      return <QuietHoursPanel />;
-    case "ai":
-      return <AiProviderPanel />;
-    case "slack-allowlist":
-      return <SlackAllowlistPanel />;
-  }
-}
-
-type ApiSource = {
-  provider: string;
-  status: "connected" | "disconnected" | "rate_limited" | "auth_failed";
-};
-
-const PROVIDER_LABELS: Record<string, string> = {
-  github: "GitHub",
-  slack: "Slack",
-  google: "Google Calendar",
-  linear: "Linear",
-  jira: "Jira",
-};
-
-type ConnectUrlFn = (
-  provider: string,
-) => Promise<{ ok: boolean; url?: string; error?: string }>;
-
-type SourcesLoader = () => Promise<{ sources: ApiSource[] }>;
-
-export function ProvidersStep({
-  loader,
-  connectUrl,
-  openUrl,
-}: {
-  loader?: SourcesLoader;
-  connectUrl?: ConnectUrlFn;
-  openUrl?: (url: string) => void;
-} = {}) {
-  const [sources, setSources] = useState<ApiSource[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
   const load = useMemo(
     () =>
       loader ??
@@ -269,8 +157,6 @@ export function ProvidersStep({
         });
     };
     refresh();
-    // Re-fetch when the wizard tab regains visibility, so connection
-    // status updates after the user returns from the OAuth popup.
     const onVisibility = () => {
       if (document.visibilityState === "visible") refresh();
     };
@@ -282,7 +168,7 @@ export function ProvidersStep({
   }, [load]);
 
   const onConnect = useCallback(
-    async (provider: string) => {
+    async (provider: ProviderId) => {
       try {
         const out = await connect(provider);
         if (out.ok && out.url) openIt(out.url);
@@ -294,64 +180,111 @@ export function ProvidersStep({
     [connect, openIt],
   );
 
+  const isConnected = useCallback(
+    (id: ProviderId) => {
+      const s = sources?.find((x) => x.provider === id);
+      return !!s && s.status !== "disconnected";
+    },
+    [sources],
+  );
+
+  const anyConnected = !!sources?.some(
+    (s) =>
+      (s.provider === "github" ||
+        s.provider === "slack" ||
+        s.provider === "google") &&
+      s.status !== "disconnected",
+  );
+
+  const onContinue = useCallback(async () => {
+    setBusy(true);
+    try {
+      await completeFn();
+      onFinish();
+    } finally {
+      setBusy(false);
+    }
+  }, [completeFn, onFinish]);
+
   return (
-    <div>
-      <h2 className="text-base font-semibold text-zinc-900">
-        Connect your sources
-      </h2>
-      <p className="mt-1 text-sm text-zinc-500">
-        Clearday pulls actionable items from these. Connect at least GitHub,
-        Slack, and Google Calendar to get the full picture — Linear / Jira are
-        optional.
-      </p>
+    <div className="mx-auto w-full max-w-2xl">
+      <header className="mb-10 flex flex-col items-center gap-4 text-center">
+        <img
+          src="/brand/devy_logo.svg"
+          alt="Devy"
+          className="h-16 w-16"
+          width={64}
+          height={64}
+        />
+        <h1 className="text-3xl font-semibold tracking-tight">
+          Welcome to Devy
+        </h1>
+        <p className="max-w-md text-sm text-muted-foreground">
+          Connect your sources to start your daily command center. You can
+          change any of these later from Settings.
+        </p>
+      </header>
 
       {error && (
-        <p className="mt-3 rounded border border-red-200 bg-red-50 p-2 text-sm text-red-700">
+        <p
+          role="alert"
+          className="mb-4 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive"
+        >
           {error}
         </p>
       )}
 
-      {sources == null && !error && (
-        <p className="mt-3 text-sm text-zinc-500">Loading…</p>
-      )}
-
-      {sources && (
-        <ul className="mt-4 divide-y divide-zinc-100 rounded border border-zinc-200">
-          {Object.keys(PROVIDER_LABELS).map((id) => {
-            const match = sources.find((s) => s.provider === id);
-            // OAuth-complete includes rate_limited / auth_failed: those rows
-            // exist in provider_accounts, so the user finished the connect
-            // flow. Health detail belongs in the Sources rail, not here.
-            const connected = !!match && match.status !== "disconnected";
-            return (
-              <li
-                key={id}
-                className="flex items-center justify-between px-3 py-2 text-sm"
+      <ul aria-label="Connect providers" className="grid gap-3">
+        {PROVIDER_CARDS.map((card) => {
+          const connected = isConnected(card.id);
+          return (
+            <li
+              key={card.id}
+              aria-label={`${card.label} provider card`}
+              className="flex items-center gap-4 rounded-md border border-border bg-card p-4"
+            >
+              <SourceGlyph source={card.glyph} size={40} />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium text-foreground">
+                    {card.label}
+                  </span>
+                  {connected && (
+                    <span className="inline-flex items-center gap-1 text-xs text-emerald-600">
+                      <Check aria-hidden className="size-3" />
+                      Connected
+                    </span>
+                  )}
+                </div>
+                <p className="mt-0.5 text-sm text-muted-foreground">
+                  {card.description}
+                </p>
+                <p className="mt-1 font-mono text-xs text-muted-foreground">
+                  {card.scopes}
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant={connected ? "outline" : "default"}
+                onClick={() => onConnect(card.id)}
               >
-                <span className="font-medium">{PROVIDER_LABELS[id]}</span>
-                <span className="flex items-center gap-3">
-                  <output
-                    aria-label={`${PROVIDER_LABELS[id]} ${
-                      connected ? "connected" : "not connected"
-                    }`}
-                    data-status={connected ? "ok" : "neutral"}
-                    className={`h-2 w-2 rounded-full ${
-                      connected ? "bg-emerald-500" : "bg-zinc-300"
-                    }`}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => onConnect(id)}
-                    className="rounded border border-zinc-200 px-2 py-1 text-xs hover:bg-zinc-50"
-                  >
-                    {connected ? "Reauthorize" : "Connect"}
-                  </button>
-                </span>
-              </li>
-            );
-          })}
-        </ul>
-      )}
+                {connected ? "Reconnect" : "Connect"}
+              </Button>
+            </li>
+          );
+        })}
+      </ul>
+
+      <div className="mt-8 flex justify-end">
+        <Button
+          type="button"
+          size="lg"
+          onClick={onContinue}
+          disabled={!anyConnected || busy}
+        >
+          Continue to Devy
+        </Button>
+      </div>
     </div>
   );
 }

@@ -42,6 +42,7 @@ export type SelfHostInfo = {
   worker_url: string | null;
   supabase_url: string | null;
   auth_proxy_url: string | null;
+  allowed_email: string | null;
   worker_version: string;
   env_vars: EnvVarStatus[];
 };
@@ -68,6 +69,7 @@ export function getSelfHostInfo(
     worker_url: workerUrl ?? null,
     supabase_url: env.SUPABASE_URL ?? null,
     auth_proxy_url: env.AUTH_PROXY_URL ?? null,
+    allowed_email: env.ALLOWED_EMAIL ?? null,
     worker_version: env.WORKER_VERSION?.trim() || DEFAULT_WORKER_VERSION,
     env_vars: envVars,
   };

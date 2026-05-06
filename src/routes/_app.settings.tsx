@@ -1,8 +1,7 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, Outlet } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { AlertChannel } from "#/lib/alert-dispatcher";
 import { apiFetch } from "#/lib/api-client";
-import { signOut, useAuth } from "#/lib/auth";
 import {
   DEFAULT_RETENTION_DAYS,
   type ExportPayload,
@@ -18,8 +17,6 @@ import {
   type RulePredicate,
 } from "#/lib/inbox-rules-engine";
 import type { IntegrationView } from "#/lib/integrations-api";
-import { PROFILE_UPDATED_EVENT, type ProfileView } from "#/lib/profile-api";
-import type { HealthCheckResult, SelfHostInfo } from "#/lib/self-host-api";
 import type { StoredSignal } from "#/lib/signal";
 import {
   ACCENTS,
@@ -34,50 +31,68 @@ import {
 } from "#/lib/theme-api";
 
 export const Route = createFileRoute("/_app/settings")({
-  component: SettingsPage,
+  component: SettingsLayout,
 });
 
-function SettingsPage() {
-  const { session } = useAuth();
-  return (
-    <section className="p-8">
-      <h1 className="text-xl font-semibold">Settings</h1>
-      <p className="mt-2 text-sm text-zinc-500">
-        Signed in as <code>{session?.user.email}</code>
-      </p>
-      <div className="mt-4 flex gap-2">
-        <button
-          type="button"
-          onClick={() => signOut()}
-          className="rounded border px-3 py-1.5 text-sm hover:bg-zinc-50"
-        >
-          Sign out
-        </button>
-        <Link
-          to="/onboarding"
-          className="rounded border px-3 py-1.5 text-sm hover:bg-zinc-50"
-        >
-          Re-run onboarding
-        </Link>
-      </div>
+export const SETTINGS_TABS: ReadonlyArray<{ to: string; label: string }> = [
+  { to: "/settings/integrations", label: "Integrations" },
+  { to: "/settings/notifications", label: "Notifications" },
+  { to: "/settings/rules", label: "Inbox rules" },
+  { to: "/settings/ai", label: "AI provider" },
+  { to: "/settings/selfhost", label: "Self-host" },
+  { to: "/settings/profile", label: "Profile" },
+];
 
-      <ProfilePanel />
-      <IntegrationsPanel />
-      <ThemePanel />
-      <DataPrivacyPanel />
-      <SelfHostPanel />
-      <NotificationsPanel />
-      <InstallPwaPanel />
-      <WebPushDevicesPanel />
-      <EmailDigestPanel />
-      <NotificationMatrixPanel />
-      <QuietHoursPanel />
-      <FocusBlockPanel />
-      <FocusDefaultsPanel />
-      <AiProviderPanel />
-      <AiSafeguardsPanel />
-      <InboxRulesPanel />
+function SettingsLayout() {
+  return (
+    <section className="flex min-h-full">
+      <aside
+        aria-label="Settings"
+        className="w-[220px] shrink-0 border-border border-r bg-sidebar"
+      >
+        <h1 className="px-5 pt-6 pb-3 font-semibold text-base text-sidebar-foreground">
+          Settings
+        </h1>
+        <nav
+          aria-label="Settings sections"
+          className="flex flex-col gap-0.5 px-2"
+        >
+          {SETTINGS_TABS.map((tab) => (
+            <Link
+              key={tab.to}
+              to={tab.to}
+              className="rounded-md px-3 py-2 text-sidebar-foreground/80 text-sm hover:bg-sidebar-accent hover:text-sidebar-foreground"
+              activeProps={{
+                className:
+                  "bg-sidebar-accent font-medium text-sidebar-accent-foreground",
+              }}
+            >
+              {tab.label}
+            </Link>
+          ))}
+        </nav>
+      </aside>
+      <div className="min-w-0 flex-1 p-8">
+        <Outlet />
+      </div>
     </section>
+  );
+}
+
+export function SectionHead({
+  title,
+  comingInIssue,
+}: {
+  title: string;
+  comingInIssue: number;
+}) {
+  return (
+    <header>
+      <h2 className="font-semibold text-xl">{title}</h2>
+      <p className="mt-2 text-muted-foreground text-sm">
+        Coming in #issue-{comingInIssue}
+      </p>
+    </header>
   );
 }
 
@@ -2828,172 +2843,6 @@ export function EmailDigestPanel({
   );
 }
 
-type ProfileSaveResult =
-  | { ok: true; profile: ProfileView }
-  | { ok: false; error: string };
-
-const EMPTY_PROFILE: ProfileView = {
-  display_name: null,
-  timezone: null,
-  locale: null,
-  avatar_url: null,
-};
-
-export function ProfilePanel({
-  loader,
-  saver,
-}: {
-  loader?: () => Promise<ProfileView>;
-  saver?: (patch: ProfileView) => Promise<ProfileSaveResult>;
-} = {}) {
-  const [view, setView] = useState<ProfileView | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [status, setStatus] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  const load = useMemo(
-    () => loader ?? (() => apiFetch("/api/profile") as Promise<ProfileView>),
-    [loader],
-  );
-  const save = useMemo(
-    () =>
-      saver ??
-      ((patch: ProfileView) =>
-        apiFetch("/api/profile", {
-          method: "PUT",
-          body: patch,
-        }) as Promise<ProfileSaveResult>),
-    [saver],
-  );
-
-  useEffect(() => {
-    let cancelled = false;
-    load()
-      .then((p) => {
-        if (!cancelled) setView(p);
-      })
-      .catch((e) => {
-        if (!cancelled) setError(e instanceof Error ? e.message : String(e));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [load]);
-
-  const set = (patch: Partial<ProfileView>) => {
-    setView((v) => ({ ...(v ?? EMPTY_PROFILE), ...patch }));
-    setStatus(null);
-    setError(null);
-  };
-
-  const onSave = async () => {
-    if (!view) return;
-    setBusy(true);
-    setError(null);
-    setStatus(null);
-    try {
-      const out = await save(view);
-      if (!out.ok) {
-        setError(out.error);
-        return;
-      }
-      setView(out.profile);
-      setStatus("Saved.");
-      window.dispatchEvent(
-        new CustomEvent(PROFILE_UPDATED_EVENT, { detail: out.profile }),
-      );
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <section className="mt-8">
-      <h2 className="text-lg font-semibold">Profile</h2>
-      <p className="mt-1 text-sm text-zinc-500">
-        Display name, timezone, and locale used in the app shell and in
-        AI-generated copy.
-      </p>
-      {view === null ? (
-        <p className="mt-3 text-sm text-zinc-500">Loading…</p>
-      ) : (
-        <div className="mt-3 grid max-w-xl gap-3">
-          <label className="block text-sm">
-            <span className="text-zinc-700">Display name</span>
-            <input
-              type="text"
-              className="mt-1 block w-full rounded border border-zinc-300 px-2 py-1.5 text-sm"
-              value={view.display_name ?? ""}
-              onChange={(e) =>
-                set({
-                  display_name: e.target.value === "" ? null : e.target.value,
-                })
-              }
-            />
-          </label>
-          <label className="block text-sm">
-            <span className="text-zinc-700">Timezone</span>
-            <input
-              type="text"
-              placeholder="e.g. Europe/Paris"
-              className="mt-1 block w-full rounded border border-zinc-300 px-2 py-1.5 text-sm"
-              value={view.timezone ?? ""}
-              onChange={(e) =>
-                set({ timezone: e.target.value === "" ? null : e.target.value })
-              }
-            />
-          </label>
-          <label className="block text-sm">
-            <span className="text-zinc-700">Locale</span>
-            <input
-              type="text"
-              placeholder="e.g. en-US"
-              className="mt-1 block w-full rounded border border-zinc-300 px-2 py-1.5 text-sm"
-              value={view.locale ?? ""}
-              onChange={(e) =>
-                set({ locale: e.target.value === "" ? null : e.target.value })
-              }
-            />
-          </label>
-          <label className="block text-sm">
-            <span className="text-zinc-700">Avatar URL</span>
-            <input
-              type="text"
-              className="mt-1 block w-full rounded border border-zinc-300 px-2 py-1.5 text-sm"
-              value={view.avatar_url ?? ""}
-              onChange={(e) =>
-                set({
-                  avatar_url: e.target.value === "" ? null : e.target.value,
-                })
-              }
-            />
-          </label>
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={onSave}
-              disabled={busy}
-              className="rounded border px-3 py-1.5 text-sm hover:bg-zinc-50 disabled:opacity-50"
-            >
-              {busy ? "Saving…" : "Save"}
-            </button>
-            {status && (
-              <output className="text-sm text-emerald-700">{status}</output>
-            )}
-            {error && (
-              <p role="alert" className="text-sm text-red-700">
-                {error}
-              </p>
-            )}
-          </div>
-        </div>
-      )}
-    </section>
-  );
-}
-
 type ThemeSaveResult =
   | { ok: true; theme: ThemeView }
   | { ok: false; error: string };
@@ -3090,7 +2939,7 @@ export function ThemePanel({
       {view === null ? (
         <p className="mt-3 text-sm text-zinc-500">Loading…</p>
       ) : (
-        <div className="mt-3 grid max-w-xl gap-4">
+        <div className="mt-3 grid gap-4">
           <fieldset>
             <legend className="text-sm font-medium text-zinc-700">Theme</legend>
             <div className="mt-2 flex gap-2">
@@ -3340,7 +3189,7 @@ export function DataPrivacyPanel({
         Signals are retained before rollup.
       </p>
 
-      <div className="mt-4 grid max-w-xl gap-4">
+      <div className="mt-4 grid gap-4">
         <div>
           <h3 className="text-sm font-medium text-zinc-700">Export all data</h3>
           <p className="mt-1 text-xs text-zinc-500">
@@ -3476,185 +3325,6 @@ export function DataPrivacyPanel({
           )}
         </div>
       </div>
-    </section>
-  );
-}
-
-export function SelfHostPanel({
-  loader,
-  healthRunner,
-}: {
-  loader?: () => Promise<SelfHostInfo>;
-  healthRunner?: () => Promise<HealthCheckResult>;
-} = {}) {
-  const [info, setInfo] = useState<SelfHostInfo | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [health, setHealth] = useState<HealthCheckResult | null>(null);
-  const [healthError, setHealthError] = useState<string | null>(null);
-  const [healthBusy, setHealthBusy] = useState(false);
-
-  const load = useMemo(
-    () => loader ?? (() => apiFetch("/api/self-host") as Promise<SelfHostInfo>),
-    [loader],
-  );
-  const runHealth = useMemo(
-    () =>
-      healthRunner ??
-      (() =>
-        apiFetch("/api/self-host/health", {
-          method: "POST",
-        }) as Promise<HealthCheckResult>),
-    [healthRunner],
-  );
-
-  useEffect(() => {
-    let cancelled = false;
-    load()
-      .then((view) => {
-        if (!cancelled) setInfo(view);
-      })
-      .catch((e) => {
-        if (!cancelled)
-          setLoadError(e instanceof Error ? e.message : String(e));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [load]);
-
-  const onRunHealth = async () => {
-    setHealthBusy(true);
-    setHealth(null);
-    setHealthError(null);
-    try {
-      setHealth(await runHealth());
-    } catch (e) {
-      setHealthError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setHealthBusy(false);
-    }
-  };
-
-  return (
-    <section className="mt-8">
-      <h2 className="text-lg font-semibold">Self-host</h2>
-      <p className="mt-1 text-sm text-zinc-500">
-        Deployment URLs, Worker version, and required environment variables.
-        Values are never displayed — only whether each one is set.
-      </p>
-
-      {loadError && (
-        <p role="alert" className="mt-2 text-sm text-red-700">
-          {loadError}
-        </p>
-      )}
-
-      {info && (
-        <div className="mt-4 grid max-w-xl gap-4">
-          <dl className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1 text-sm">
-            <dt className="text-zinc-500">Worker URL</dt>
-            <dd>
-              <code className="font-mono">{info.worker_url ?? "—"}</code>
-            </dd>
-            <dt className="text-zinc-500">Supabase URL</dt>
-            <dd>
-              <code className="font-mono">{info.supabase_url ?? "—"}</code>
-            </dd>
-            <dt className="text-zinc-500">Auth proxy</dt>
-            <dd>
-              <code className="font-mono">{info.auth_proxy_url ?? "—"}</code>
-            </dd>
-            <dt className="text-zinc-500">Worker version</dt>
-            <dd>
-              <code className="font-mono">{info.worker_version}</code>
-            </dd>
-          </dl>
-
-          <div>
-            <h3 className="text-sm font-medium text-zinc-700">
-              Environment variables
-            </h3>
-            <ul className="mt-2 grid grid-cols-1 gap-1 text-sm sm:grid-cols-2">
-              {info.env_vars.map((v) => (
-                <li
-                  key={v.name}
-                  className="flex items-center justify-between gap-2 rounded border border-zinc-200 px-2 py-1"
-                >
-                  <code className="font-mono text-xs">{v.name}</code>
-                  <span className="flex items-center gap-2 text-xs">
-                    {v.required ? (
-                      <span className="text-zinc-500">required</span>
-                    ) : (
-                      <span className="text-zinc-400">optional</span>
-                    )}
-                    <output
-                      aria-label={`${v.name} ${v.present ? "set" : "unset"}`}
-                      className={
-                        v.present
-                          ? "text-emerald-700"
-                          : v.required
-                            ? "text-red-700"
-                            : "text-zinc-400"
-                      }
-                    >
-                      {v.present ? "set" : "unset"}
-                    </output>
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <div>
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={onRunHealth}
-                disabled={healthBusy}
-                className="rounded border px-3 py-1.5 text-sm hover:bg-zinc-50 disabled:opacity-50"
-              >
-                {healthBusy ? "Running…" : "Run health check"}
-              </button>
-              {healthError && (
-                <p role="alert" className="text-sm text-red-700">
-                  {healthError}
-                </p>
-              )}
-            </div>
-            {health && (
-              <output aria-label="Health check result" className="mt-2 block">
-                <p
-                  className={
-                    health.ok
-                      ? "text-sm text-emerald-700"
-                      : "text-sm text-red-700"
-                  }
-                >
-                  {health.ok ? "All checks passed." : "Some checks failed."}
-                </p>
-                <ul className="mt-1 space-y-0.5 text-sm">
-                  {health.checks.map((c) => (
-                    <li key={c.name} className="flex items-center gap-2">
-                      <span
-                        className={c.ok ? "text-emerald-700" : "text-red-700"}
-                        aria-hidden="true"
-                      >
-                        {c.ok ? "✓" : "✗"}
-                      </span>
-                      <code className="font-mono text-xs">{c.name}</code>
-                      {c.detail && (
-                        <span className="text-xs text-zinc-500">
-                          — {c.detail}
-                        </span>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              </output>
-            )}
-          </div>
-        </div>
-      )}
     </section>
   );
 }
@@ -3796,7 +3466,7 @@ export function IntegrationsPanel({
       )}
 
       {integrations && (
-        <ul className="mt-4 grid max-w-2xl gap-2">
+        <ul className="mt-4 grid gap-2">
           {integrations.map((i) => {
             const label = INTEGRATION_LABELS[i.provider] ?? i.provider;
             const busy = busyProvider === i.provider;

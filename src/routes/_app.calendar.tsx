@@ -1,36 +1,42 @@
 import { createFileRoute } from "@tanstack/react-router";
-import {
-  AlertTriangle,
-  ChevronLeft,
-  ChevronRight,
-  ExternalLink,
-  Focus,
-  Video,
-} from "lucide-react";
+import { AlertTriangle } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { apiFetch } from "#/lib/api-client";
+import { type ConflictPair, detectConflicts } from "#/lib/calendar-conflicts";
 import {
-  type Conflict,
-  type DayBucket,
   eventsByMonthGrid,
-  eventsByWeekDay,
-  eventsForDay,
-  localDayStart,
   type MeetingEvent,
   type MonthCell,
-  pickFocusBlocks,
-  pickNextConflict,
   toMeetingEvents,
-  weekStartFor,
 } from "#/lib/calendar-view";
 import { cn } from "#/lib/cn";
-import { formatCountdown, type StoredSignal } from "#/lib/next-up";
+import type { StoredSignal } from "#/lib/next-up";
+
+export type CalendarViewMode = "day" | "week" | "month";
 
 export const Route = createFileRoute("/_app/calendar")({
   component: CalendarPage,
 });
 
-type ViewMode = "day" | "week" | "month";
+const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri"] as const;
+const HOUR_START = 8;
+const HOUR_END = 18;
+const HOURS = HOUR_END - HOUR_START;
+const DAY_START_MIN = HOUR_START * 60;
+const DAY_END_MIN = HOUR_END * 60;
+const SLOT_PX = 48;
+const GRID_PX = HOURS * SLOT_PX;
+
+type EventKind = "focus" | "meeting" | "break";
+
+export type WeekEvent = {
+  id: string;
+  day: number;
+  start: number;
+  end: number;
+  kind: EventKind;
+  title: string;
+};
 
 function CalendarPage() {
   const [signals, setSignals] = useState<StoredSignal[] | null>(null);
@@ -54,691 +60,665 @@ function CalendarPage() {
     };
   }, []);
 
-  // Tick once a minute so the live-event ring, "Next: …" countdown, and
-  // FocusBlocks "upcoming" filter stay fresh without a page reload.
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 60_000);
     return () => clearInterval(t);
   }, []);
 
-  const events = useMemo(
+  const meetings = useMemo(
     () => (signals ? toMeetingEvents(signals) : []),
     [signals],
   );
+
   return (
     <CalendarView
-      events={events}
+      meetings={meetings}
       now={now}
       loading={signals == null}
       error={error}
-      onDeclined={(id) =>
-        setSignals((cur) => (cur ? cur.filter((s) => s.id !== id) : cur))
-      }
-      onRescheduled={(id) =>
-        setSignals((cur) => (cur ? cur.filter((s) => s.id !== id) : cur))
-      }
     />
   );
 }
 
-export type DeclineRequest = {
-  event_id: string;
-  signal_id: string;
-};
-
-export type DeclineResult = { ok: true } | { ok: false; error: string };
-
-export type RescheduleRequest = {
-  event_id: string;
-  signal_id: string;
-  shift_minutes: number;
-};
-
-export type RescheduleResult = { ok: true } | { ok: false; error: string };
-
-const defaultDecliner: (req: DeclineRequest) => Promise<DeclineResult> = async (
-  req,
-) => {
-  try {
-    const out = (await apiFetch("/api/calendar/decline", {
-      method: "POST",
-      body: JSON.stringify(req),
-    })) as DeclineResult;
-    return out;
-  } catch (e) {
-    return {
-      ok: false,
-      error: e instanceof Error ? e.message : "request failed",
-    };
-  }
-};
-
-const defaultRescheduler: (
-  req: RescheduleRequest,
-) => Promise<RescheduleResult> = async (req) => {
-  try {
-    const out = (await apiFetch("/api/calendar/reschedule", {
-      method: "POST",
-      body: JSON.stringify(req),
-    })) as RescheduleResult;
-    return out;
-  } catch (e) {
-    return {
-      ok: false,
-      error: e instanceof Error ? e.message : "request failed",
-    };
-  }
-};
-
-const RESCHEDULE_PRESETS: ReadonlyArray<{ label: string; minutes: number }> = [
-  { label: "+15m", minutes: 15 },
-  { label: "+30m", minutes: 30 },
-  { label: "+1h", minutes: 60 },
-];
-
 export function CalendarView({
   events,
-  now: nowProp,
+  meetings,
+  now,
   loading = false,
   error = null,
-  onDeclined,
-  onRescheduled,
-  decliner = defaultDecliner,
-  rescheduler = defaultRescheduler,
+  defaultMode = "week",
 }: {
-  events: MeetingEvent[];
-  now?: Date;
+  events?: WeekEvent[];
+  meetings?: MeetingEvent[];
+  now: Date;
   loading?: boolean;
   error?: string | null;
-  onDeclined?: (signalId: string) => void;
-  onRescheduled?: (signalId: string) => void;
-  decliner?: (req: DeclineRequest) => Promise<DeclineResult>;
-  rescheduler?: (req: RescheduleRequest) => Promise<RescheduleResult>;
+  defaultMode?: CalendarViewMode;
 }) {
-  const [mode, setMode] = useState<ViewMode>("day");
-  const [anchor, setAnchor] = useState<Date>(() =>
-    nowProp ? localDayStart(nowProp) : localDayStart(new Date()),
-  );
-  const now = nowProp ?? new Date();
+  const [mode, setMode] = useState<CalendarViewMode>(defaultMode);
 
-  const todayBucket = useMemo<DayBucket>(
-    () => ({ day: anchor, events: eventsForDay(events, anchor) }),
-    [events, anchor],
-  );
-  const weekBuckets = useMemo<DayBucket[]>(
-    () => eventsByWeekDay(events, weekStartFor(anchor)),
-    [events, anchor],
-  );
-  const monthCells = useMemo<MonthCell[]>(
-    () => eventsByMonthGrid(events, anchor),
-    [events, anchor],
-  );
-  const allWeekEvents = useMemo(
-    () => weekBuckets.flatMap((b) => b.events),
-    [weekBuckets],
-  );
-  const conflict = useMemo(
-    () => pickNextConflict(allWeekEvents, now),
-    [allWeekEvents, now],
-  );
-  const focusBlocks = useMemo(
-    () => pickFocusBlocks(allWeekEvents),
-    [allWeekEvents],
-  );
-  const todayEvents = useMemo(() => eventsForDay(events, now), [events, now]);
-  const nextEvent = useMemo(
-    () => todayEvents.find((e) => e.startsAt.getTime() > now.getTime()) ?? null,
-    [todayEvents, now],
-  );
+  const weekStart = useMemo(() => mondayOf(now), [now]);
+  const weekEvents = useMemo<WeekEvent[]>(() => {
+    if (events) return events;
+    if (meetings) return toWeekEvents(meetings, weekStart);
+    return [];
+  }, [events, meetings, weekStart]);
+  const conflicts = useMemo(() => detectConflicts(weekEvents), [weekEvents]);
+  const todayCol = mondayCol(now);
 
-  const goPrev = () => {
-    const d = new Date(anchor);
-    if (mode === "month") d.setMonth(d.getMonth() - 1);
-    else d.setDate(d.getDate() - (mode === "day" ? 1 : 7));
-    setAnchor(d);
-  };
-  const goNext = () => {
-    const d = new Date(anchor);
-    if (mode === "month") d.setMonth(d.getMonth() + 1);
-    else d.setDate(d.getDate() + (mode === "day" ? 1 : 7));
-    setAnchor(d);
-  };
-  const goToday = () => setAnchor(localDayStart(now));
+  const subtitle =
+    mode === "week"
+      ? `${weekRangeLabel(now)} · Mon–Fri, 8:00–18:00`
+      : mode === "day"
+        ? `${dayLongLabel(now)} · 8:00–18:00`
+        : monthLabel(now);
 
   return (
     <section className="p-8">
-      <header className="flex flex-wrap items-center gap-3">
-        <h1 className="text-xl font-semibold">Calendar</h1>
-        <div role="tablist" aria-label="View mode" className="ml-2 flex gap-1">
-          <ViewTab active={mode === "day"} onClick={() => setMode("day")}>
-            Day
-          </ViewTab>
-          <ViewTab active={mode === "week"} onClick={() => setMode("week")}>
-            Week
-          </ViewTab>
-          <ViewTab active={mode === "month"} onClick={() => setMode("month")}>
-            Month
-          </ViewTab>
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold">Calendar</h1>
+          <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>
         </div>
-        <div className="ml-auto flex items-center gap-1">
-          <button
-            type="button"
-            onClick={goPrev}
-            aria-label="Previous"
-            className="rounded p-1.5 text-zinc-600 hover:bg-zinc-100"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            onClick={goToday}
-            className="rounded border border-zinc-200 px-2.5 py-1 text-sm text-zinc-700 hover:bg-zinc-50"
-          >
-            Today
-          </button>
-          <button
-            type="button"
-            onClick={goNext}
-            aria-label="Next"
-            className="rounded p-1.5 text-zinc-600 hover:bg-zinc-100"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </button>
-        </div>
+        <ModeSwitch mode={mode} onChange={setMode} />
       </header>
-      <p className="mt-1 text-sm text-zinc-500">{anchorLabel(anchor, mode)}</p>
 
       {error && (
-        <p className="mt-6 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+        <p
+          role="alert"
+          className="mt-6 rounded-sm border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive"
+        >
           {error}
         </p>
       )}
 
       {loading && !error && (
-        <p className="mt-6 text-sm text-zinc-500">Loading…</p>
+        <p className="mt-6 text-sm text-muted-foreground">Loading…</p>
       )}
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_320px]">
-        <div>
-          {mode === "day" && <DayGrid bucket={todayBucket} now={now} />}
-          {mode === "week" && <WeekGrid buckets={weekBuckets} now={now} />}
-          {mode === "month" && (
-            <MonthGrid cells={monthCells} anchor={anchor} now={now} />
-          )}
-        </div>
-        <aside className="space-y-4">
-          <TodayPanel events={todayEvents} nextEvent={nextEvent} now={now} />
-          <ConflictCard
-            conflict={conflict}
+      {mode === "week" && (
+        <>
+          <WeekGrid
+            events={weekEvents}
+            conflicts={conflicts}
+            todayCol={todayCol}
             now={now}
-            onDeclined={onDeclined}
-            onRescheduled={onRescheduled}
-            decliner={decliner}
-            rescheduler={rescheduler}
           />
-          <FocusBlocksCard blocks={focusBlocks} now={now} />
-        </aside>
-      </div>
+          {conflicts.length > 0 && (
+            <ConflictBanner pairs={conflicts} now={now} />
+          )}
+        </>
+      )}
+
+      {mode === "day" && (
+        <DayGrid events={weekEvents} todayCol={todayCol} now={now} />
+      )}
+
+      {mode === "month" && (
+        <MonthGrid cells={eventsByMonthGrid(meetings ?? [], now)} now={now} />
+      )}
     </section>
   );
 }
 
-function ViewTab({
-  active,
-  children,
-  onClick,
+function ModeSwitch({
+  mode,
+  onChange,
 }: {
-  active: boolean;
-  children: React.ReactNode;
-  onClick: () => void;
+  mode: CalendarViewMode;
+  onChange: (m: CalendarViewMode) => void;
 }) {
+  const modes: CalendarViewMode[] = ["day", "week", "month"];
   return (
-    <button
-      type="button"
-      role="tab"
-      aria-selected={active}
-      onClick={onClick}
-      className={cn(
-        "rounded border px-2.5 py-1 text-sm",
-        active
-          ? "border-zinc-900 bg-zinc-900 text-white"
-          : "border-zinc-200 text-zinc-700 hover:bg-zinc-50",
-      )}
+    <div
+      role="tablist"
+      aria-label="View mode"
+      className="inline-flex items-center rounded-md border border-border bg-card p-0.5"
     >
-      {children}
-    </button>
-  );
-}
-
-function DayGrid({ bucket, now }: { bucket: DayBucket; now: Date }) {
-  if (bucket.events.length === 0) {
-    return (
-      <div className="rounded border border-zinc-200 bg-white p-5 text-sm text-zinc-500">
-        No meetings on this day.
-      </div>
-    );
-  }
-  return (
-    <ul aria-label="Day events" className="space-y-2">
-      {bucket.events.map((e) => (
-        <li key={e.signal.id}>
-          <EventBlock event={e} now={now} />
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function WeekGrid({ buckets, now }: { buckets: DayBucket[]; now: Date }) {
-  return (
-    <ul
-      aria-label="Week grid"
-      className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-7"
-    >
-      {buckets.map((b) => (
-        <li
-          key={b.day.toISOString()}
-          className="min-h-[120px] rounded border border-zinc-200 bg-white p-3"
-        >
-          <div className="text-xs font-medium uppercase tracking-wider text-zinc-500">
-            {b.day.toLocaleDateString(undefined, {
-              weekday: "short",
-              day: "numeric",
-            })}
-          </div>
-          {b.events.length === 0 ? (
-            <p className="mt-2 text-xs text-zinc-400">—</p>
-          ) : (
-            <ul className="mt-2 space-y-1.5">
-              {b.events.map((e) => (
-                <li key={e.signal.id}>
-                  <EventBlock event={e} now={now} compact />
-                </li>
-              ))}
-            </ul>
+      {modes.map((m) => (
+        <button
+          key={m}
+          type="button"
+          role="tab"
+          aria-selected={mode === m}
+          data-state={mode === m ? "active" : "inactive"}
+          onClick={() => onChange(m)}
+          className={cn(
+            "rounded-xs px-3 py-1 text-xs font-medium capitalize transition-colors",
+            mode === m
+              ? "bg-secondary text-foreground"
+              : "text-muted-foreground hover:text-foreground",
           )}
-        </li>
+        >
+          {m}
+        </button>
       ))}
-    </ul>
+    </div>
   );
 }
 
-function MonthGrid({
-  cells,
-  anchor,
+function WeekGrid({
+  events,
+  conflicts,
+  todayCol,
   now,
 }: {
-  cells: MonthCell[];
-  anchor: Date;
+  events: WeekEvent[];
+  conflicts: ConflictPair<WeekEvent>[];
+  todayCol: number | null;
   now: Date;
 }) {
-  const todayKey = localDayStart(now).toDateString();
-  const weekdayHeaders = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const conflictIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const p of conflicts) {
+      ids.add(p.a.id);
+      ids.add(p.b.id);
+    }
+    return ids;
+  }, [conflicts]);
+
+  const hours = Array.from({ length: HOURS + 1 }, (_, i) => HOUR_START + i);
+
   return (
-    <section aria-label="Month grid">
-      <ul className="grid grid-cols-7 gap-px text-xs font-medium uppercase tracking-wider text-zinc-500">
-        {weekdayHeaders.map((w) => (
-          <li key={w} className="px-2 py-1">
-            {w}
-          </li>
+    <section
+      aria-label="Week grid"
+      className="mt-6 overflow-hidden rounded-md border border-border bg-card"
+    >
+      <div
+        className="grid"
+        style={{ gridTemplateColumns: "64px repeat(5, 1fr)" }}
+      >
+        <div className="border-b border-border" />
+        {WEEKDAYS.map((label, i) => (
+          <div
+            key={label}
+            data-day-col={i}
+            data-today={todayCol === i || undefined}
+            className={cn(
+              "border-b border-l border-border px-3 py-2 text-xs font-medium uppercase tracking-wider text-muted-foreground",
+              todayCol === i && "text-foreground",
+            )}
+          >
+            {label}
+          </div>
         ))}
-      </ul>
-      <ul className="grid grid-cols-7 gap-px overflow-hidden rounded border border-zinc-200 bg-zinc-200">
-        {cells.map((c) => {
-          const isToday = c.day.toDateString() === todayKey;
-          const focusCount = c.events.filter((e) => e.isFocus).length;
-          return (
-            <li
-              key={c.day.toISOString()}
-              aria-label={`${c.day.toLocaleDateString(undefined, {
-                month: "short",
-                day: "numeric",
-              })}${c.events.length > 0 ? ` — ${c.events.length} events` : ""}`}
-              className={cn(
-                "min-h-[80px] bg-white p-1.5",
-                !c.inMonth && "bg-zinc-50 text-zinc-400",
-              )}
+      </div>
+      <div
+        className="relative grid"
+        style={{
+          gridTemplateColumns: "64px repeat(5, 1fr)",
+          height: `${GRID_PX}px`,
+        }}
+      >
+        <div className="relative">
+          {hours.map((h) => (
+            <div
+              key={`hour-${h}`}
+              className="absolute left-0 right-0 border-t border-hairline-soft px-2 text-[10px] text-muted-foreground"
+              style={{ top: `${(h - HOUR_START) * SLOT_PX}px` }}
             >
-              <div className="flex items-center justify-between">
-                <span
-                  className={cn(
-                    "text-xs",
-                    isToday &&
-                      "inline-flex h-5 w-5 items-center justify-center rounded-full bg-zinc-900 text-white",
-                  )}
-                >
-                  {c.day.getDate()}
-                </span>
-                {c.events.length > 0 && (
-                  <span className="rounded bg-zinc-100 px-1.5 text-[10px] font-medium text-zinc-700">
-                    {c.events.length}
-                  </span>
-                )}
-              </div>
-              {focusCount > 0 && (
-                <div className="mt-1 inline-flex items-center gap-1 rounded bg-violet-100 px-1 text-[10px] text-violet-800">
-                  <Focus className="h-2.5 w-2.5" />
-                  {focusCount}
-                </div>
-              )}
-            </li>
-          );
-        })}
-      </ul>
-      <p className="sr-only">
-        {anchor.toLocaleDateString(undefined, {
-          month: "long",
-          year: "numeric",
-        })}
-      </p>
+              {h}:00
+            </div>
+          ))}
+        </div>
+        {WEEKDAYS.map((label, dayIdx) => (
+          <DayColumn
+            key={label}
+            dayIdx={dayIdx}
+            events={events.filter((e) => e.day === dayIdx)}
+            conflictIds={conflictIds}
+            isToday={todayCol === dayIdx}
+            now={now}
+          />
+        ))}
+      </div>
     </section>
+  );
+}
+
+function DayColumn({
+  dayIdx,
+  events,
+  conflictIds,
+  isToday,
+  now,
+}: {
+  dayIdx: number;
+  events: WeekEvent[];
+  conflictIds: Set<string>;
+  isToday: boolean;
+  now: Date;
+}) {
+  const lanes = layoutLanes(events);
+  const slots = Array.from({ length: HOURS }, (_, i) => HOUR_START + i);
+  return (
+    <div
+      data-day-col={dayIdx}
+      data-today={isToday || undefined}
+      className="relative border-l border-border"
+    >
+      {slots.map((h) => (
+        <div
+          key={`slot-${h}`}
+          className="absolute left-0 right-0 border-t border-hairline-soft"
+          style={{
+            top: `${(h - HOUR_START) * SLOT_PX}px`,
+            height: `${SLOT_PX}px`,
+          }}
+        />
+      ))}
+      {events.map((e) => {
+        const lane = lanes.get(e.id) ?? { col: 0, of: 1 };
+        const isConflict = conflictIds.has(e.id);
+        return (
+          <EventBlock
+            key={e.id}
+            event={e}
+            lane={lane}
+            isConflict={isConflict}
+          />
+        );
+      })}
+      {isToday && <NowLine now={now} />}
+    </div>
   );
 }
 
 function EventBlock({
   event,
-  now,
-  compact = false,
+  lane,
+  isConflict,
 }: {
-  event: MeetingEvent;
-  now: Date;
-  compact?: boolean;
+  event: WeekEvent;
+  lane: { col: number; of: number };
+  isConflict: boolean;
 }) {
-  const live =
-    event.startsAt.getTime() <= now.getTime() &&
-    event.endsAt.getTime() > now.getTime();
+  const top = ((event.start - DAY_START_MIN) / 60) * SLOT_PX;
+  const height = Math.max(
+    16,
+    ((Math.min(event.end, DAY_END_MIN) - event.start) / 60) * SLOT_PX,
+  );
+  const widthPct = 100 / lane.of;
+  const leftPct = lane.col * widthPct;
+  const tone = kindClass(event.kind);
+  const hatched = isConflict
+    ? {
+        backgroundImage:
+          "repeating-linear-gradient(45deg, rgba(193,53,21,0.18) 0 6px, transparent 6px 12px)",
+      }
+    : undefined;
   return (
     <article
-      aria-label={event.signal.title}
+      aria-label={event.title}
+      data-event-id={event.id}
+      data-kind={event.kind}
+      data-conflict={isConflict || undefined}
       className={cn(
-        "rounded border bg-white p-3",
-        event.isFocus ? "border-violet-300 bg-violet-50" : "border-zinc-200",
-        live && "ring-2 ring-zinc-900",
+        "absolute mx-0.5 overflow-hidden rounded-xs px-2 py-1 text-[11px] leading-tight shadow-sm",
+        tone,
       )}
+      style={{
+        top: `${top}px`,
+        height: `${height}px`,
+        left: `calc(${leftPct}% + 2px)`,
+        width: `calc(${widthPct}% - 4px)`,
+        ...(hatched ?? {}),
+      }}
     >
-      <div className="flex items-center gap-2 text-xs text-zinc-500">
-        {event.isFocus && (
-          <span className="inline-flex items-center gap-1 rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-medium text-violet-800">
-            <Focus className="h-3 w-3" />
-            DND auto-on
-          </span>
-        )}
-        <span>
-          {formatLocalTime(event.startsAt)}–{formatLocalTime(event.endsAt)}
-        </span>
-      </div>
-      <p
-        className={cn(
-          "mt-1 font-medium text-zinc-900",
-          compact ? "text-xs" : "text-sm",
-        )}
-      >
-        {event.signal.title}
-      </p>
-      {!compact && event.videoLink && (
-        <a
-          href={event.videoLink}
-          target="_blank"
-          rel="noreferrer"
-          className="mt-2 inline-flex items-center gap-1 rounded bg-zinc-900 px-2.5 py-1 text-xs text-white hover:bg-zinc-800"
-        >
-          <Video className="h-3 w-3" />
-          Join
-        </a>
-      )}
+      <span className="block truncate font-medium">{event.title}</span>
+      <span className="block text-[10px] opacity-80">
+        {fmtMinutes(event.start)}–{fmtMinutes(event.end)}
+      </span>
     </article>
   );
 }
 
-function TodayPanel({
+function DayGrid({
   events,
-  nextEvent,
+  todayCol,
   now,
 }: {
-  events: MeetingEvent[];
-  nextEvent: MeetingEvent | null;
+  events: WeekEvent[];
+  todayCol: number | null;
   now: Date;
 }) {
+  const dayCol = todayCol ?? 0;
+  const dayEvents = events.filter((e) => e.day === dayCol);
+  const conflicts = useMemo(() => detectConflicts(dayEvents), [dayEvents]);
+  const conflictIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const p of conflicts) {
+      ids.add(p.a.id);
+      ids.add(p.b.id);
+    }
+    return ids;
+  }, [conflicts]);
+  const lanes = layoutLanes(dayEvents);
+  const slots = Array.from({ length: HOURS }, (_, i) => HOUR_START + i);
+  const hours = Array.from({ length: HOURS + 1 }, (_, i) => HOUR_START + i);
+
   return (
-    <article
-      aria-label="Today"
-      className="rounded border border-zinc-200 bg-white p-4"
+    <section
+      aria-label="Day grid"
+      className="mt-6 overflow-hidden rounded-md border border-border bg-card"
     >
-      <h2 className="text-xs font-medium uppercase tracking-wider text-zinc-500">
-        Today
-      </h2>
-      {nextEvent && (
-        <p className="mt-2 text-sm text-zinc-700">
-          Next: <span className="font-medium">{nextEvent.signal.title}</span>{" "}
-          {formatCountdown(nextEvent.startsAt, now)}
-        </p>
-      )}
-      {events.length === 0 ? (
-        <p className="mt-2 text-sm text-zinc-500">Nothing scheduled today.</p>
-      ) : (
-        <ul className="mt-2 space-y-2">
-          {events.map((e) => (
-            <li key={e.signal.id} className="flex items-center gap-2">
-              <span className="w-12 text-xs text-zinc-500">
-                {formatLocalTime(e.startsAt)}
-              </span>
-              <span className="flex-1 truncate text-sm text-zinc-900">
-                {e.signal.title}
-              </span>
-              {e.videoLink && (
-                <a
-                  href={e.videoLink}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="rounded p-1 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900"
-                  aria-label={`Join ${e.signal.title}`}
-                >
-                  <Video className="h-3.5 w-3.5" />
-                </a>
-              )}
-            </li>
+      <div
+        className="relative grid"
+        style={{
+          gridTemplateColumns: "64px 1fr",
+          height: `${GRID_PX}px`,
+        }}
+      >
+        <div className="relative">
+          {hours.map((h) => (
+            <div
+              key={`hour-${h}`}
+              className="absolute right-0 left-0 border-hairline-soft border-t px-2 text-[10px] text-muted-foreground"
+              style={{ top: `${(h - HOUR_START) * SLOT_PX}px` }}
+            >
+              {h}:00
+            </div>
           ))}
-        </ul>
-      )}
-    </article>
+        </div>
+        <div
+          data-day-col={dayCol}
+          data-today={todayCol === dayCol || undefined}
+          className="relative border-border border-l"
+        >
+          {slots.map((h) => (
+            <div
+              key={`slot-${h}`}
+              className="absolute right-0 left-0 border-hairline-soft border-t"
+              style={{
+                top: `${(h - HOUR_START) * SLOT_PX}px`,
+                height: `${SLOT_PX}px`,
+              }}
+            />
+          ))}
+          {dayEvents.map((e) => {
+            const lane = lanes.get(e.id) ?? { col: 0, of: 1 };
+            return (
+              <EventBlock
+                key={e.id}
+                event={e}
+                lane={lane}
+                isConflict={conflictIds.has(e.id)}
+              />
+            );
+          })}
+          {todayCol === dayCol && <NowLine now={now} />}
+        </div>
+      </div>
+    </section>
   );
 }
 
-function ConflictCard({
-  conflict,
+function MonthGrid({ cells, now }: { cells: MonthCell[]; now: Date }) {
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const headerDays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  return (
+    <section
+      aria-label="Month grid"
+      className="mt-6 overflow-hidden rounded-md border border-border bg-card"
+    >
+      <div className="grid grid-cols-7">
+        {headerDays.map((label) => (
+          <div
+            key={label}
+            className="border-border border-b px-2 py-2 font-medium text-muted-foreground text-xs uppercase tracking-wider"
+          >
+            {label}
+          </div>
+        ))}
+      </div>
+      <div className="grid grid-cols-7">
+        {cells.map((cell) => {
+          const isToday = cell.day.getTime() === today.getTime();
+          const dayNum = cell.day.getDate();
+          const count = cell.events.length;
+          return (
+            <div
+              key={cell.day.toISOString()}
+              data-in-month={cell.inMonth || undefined}
+              data-today={isToday || undefined}
+              className={cn(
+                "min-h-20 border-border border-b border-l p-2 first:border-l-0 [&:nth-child(7n+1)]:border-l-0",
+                !cell.inMonth && "bg-muted/40",
+              )}
+            >
+              <div
+                className={cn(
+                  "font-medium text-xs",
+                  cell.inMonth ? "text-foreground" : "text-muted-foreground",
+                  isToday && "text-primary",
+                )}
+              >
+                {dayNum}
+              </div>
+              {count > 0 && (
+                <ul className="mt-1 space-y-0.5">
+                  {cell.events.slice(0, 3).map((ev) => (
+                    <li
+                      key={ev.signal.id}
+                      className="truncate rounded-xs bg-primary/10 px-1 text-[10px] text-foreground"
+                    >
+                      {ev.signal.title}
+                    </li>
+                  ))}
+                  {count > 3 && (
+                    <li className="text-[10px] text-muted-foreground">
+                      +{count - 3} more
+                    </li>
+                  )}
+                </ul>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function NowLine({ now }: { now: Date }) {
+  const minutes = now.getHours() * 60 + now.getMinutes();
+  if (minutes < DAY_START_MIN || minutes > DAY_END_MIN) return null;
+  const top = ((minutes - DAY_START_MIN) / 60) * SLOT_PX;
+  return (
+    <>
+      <hr
+        data-testid="now-line"
+        aria-label="Now"
+        className="pointer-events-none absolute left-0 right-0 z-10 m-0 h-px border-0 bg-primary"
+        style={{ top: `${top}px` }}
+      />
+      <span
+        aria-hidden
+        className="pointer-events-none absolute z-10 h-2 w-2 -translate-x-1 -translate-y-1 rounded-full bg-primary"
+        style={{ top: `${top}px`, left: 0 }}
+      />
+    </>
+  );
+}
+
+function ConflictBanner({
+  pairs,
   now,
-  onDeclined,
-  onRescheduled,
-  decliner,
-  rescheduler,
 }: {
-  conflict: Conflict | null;
+  pairs: ConflictPair<WeekEvent>[];
   now: Date;
-  onDeclined?: (signalId: string) => void;
-  onRescheduled?: (signalId: string) => void;
-  decliner: (req: DeclineRequest) => Promise<DeclineResult>;
-  rescheduler: (req: RescheduleRequest) => Promise<RescheduleResult>;
 }) {
-  const [pending, setPending] = useState(false);
-  const [declineError, setDeclineError] = useState<string | null>(null);
-  if (!conflict) return null;
-  const laterSignal = conflict.b.signal;
-  const sourceId = laterSignal.source_id;
-  const handleDecline = async () => {
-    if (!sourceId || pending) return;
-    setPending(true);
-    setDeclineError(null);
-    const out = await decliner({
-      event_id: sourceId,
-      signal_id: laterSignal.id,
-    });
-    setPending(false);
-    if (out.ok) {
-      onDeclined?.(laterSignal.id);
-    } else {
-      setDeclineError(out.error);
-    }
-  };
-  const handleReschedule = async (minutes: number) => {
-    if (!sourceId || pending) return;
-    setPending(true);
-    setDeclineError(null);
-    const out = await rescheduler({
-      event_id: sourceId,
-      signal_id: laterSignal.id,
-      shift_minutes: minutes,
-    });
-    setPending(false);
-    if (out.ok) {
-      onRescheduled?.(laterSignal.id);
-    } else {
-      setDeclineError(out.error);
-    }
-  };
+  const weekStart = mondayOf(now);
   return (
     <article
       aria-label="Conflict"
-      className="rounded border border-amber-300 bg-amber-50 p-4"
+      className="mt-4 rounded-md border border-destructive/30 bg-destructive/10 p-4"
     >
-      <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-amber-800">
+      <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-destructive">
         <AlertTriangle className="h-3.5 w-3.5" />
         Conflict
       </div>
-      <p className="mt-2 text-sm text-amber-900">
-        Two events overlap {formatCountdown(conflict.b.startsAt, now)}.
-      </p>
-      <ul className="mt-2 space-y-1 text-sm text-amber-900">
-        <li className="truncate">
-          <span className="text-xs text-amber-800">
-            {formatLocalTime(conflict.a.startsAt)}–
-            {formatLocalTime(conflict.a.endsAt)}
-          </span>{" "}
-          {conflict.a.signal.title}
-        </li>
-        <li className="truncate">
-          <span className="text-xs text-amber-800">
-            {formatLocalTime(conflict.b.startsAt)}–
-            {formatLocalTime(conflict.b.endsAt)}
-          </span>{" "}
-          {conflict.b.signal.title}
-        </li>
-      </ul>
-      <div className="mt-3 flex flex-wrap gap-2">
-        {sourceId && (
-          <button
-            type="button"
-            onClick={handleDecline}
-            disabled={pending}
-            className="inline-flex items-center gap-1 rounded border border-amber-300 bg-white px-2.5 py-1 text-xs text-amber-900 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
+      <ul className="mt-2 space-y-2">
+        {pairs.map((p) => (
+          <li
+            key={`${p.a.id}-${p.b.id}`}
+            className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-foreground"
           >
-            {pending ? "Working…" : "Decline"}
-          </button>
-        )}
-        {sourceId &&
-          RESCHEDULE_PRESETS.map((preset) => (
+            <span className="text-destructive">
+              {dayLabel(weekStart, p.a.day)} · {fmtMinutes(p.a.start)} ·{" "}
+              <span className="font-medium">{p.a.title}</span> overlaps{" "}
+              <span className="font-medium">{p.b.title}</span>
+            </span>
             <button
-              key={preset.minutes}
               type="button"
-              onClick={() => handleReschedule(preset.minutes)}
-              disabled={pending}
-              aria-label={`Reschedule ${preset.label}`}
-              className="inline-flex items-center gap-1 rounded border border-amber-300 bg-white px-2.5 py-1 text-xs text-amber-900 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
+              className="ml-auto rounded-xs border border-destructive/30 bg-card px-2.5 py-1 text-xs text-foreground hover:bg-secondary"
             >
-              {preset.label}
+              Decline
             </button>
-          ))}
-        {laterSignal.url && (
-          <a
-            href={laterSignal.url}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1 rounded border border-amber-300 bg-white px-2.5 py-1 text-xs text-amber-900 hover:bg-amber-100"
-          >
-            <ExternalLink className="h-3 w-3" />
-            Open in Calendar
-          </a>
-        )}
-      </div>
-      {declineError && (
-        <p role="alert" className="mt-2 text-xs text-red-700">
-          {declineError}
-        </p>
-      )}
+            <button
+              type="button"
+              className="rounded-xs border border-destructive/30 bg-card px-2.5 py-1 text-xs text-foreground hover:bg-secondary"
+            >
+              Reschedule
+            </button>
+          </li>
+        ))}
+      </ul>
     </article>
   );
 }
 
-function FocusBlocksCard({
-  blocks,
-  now,
-}: {
-  blocks: MeetingEvent[];
-  now: Date;
-}) {
-  const upcoming = blocks.filter((b) => b.endsAt.getTime() > now.getTime());
-  return (
-    <article
-      aria-label="Focus blocks"
-      className="rounded border border-zinc-200 bg-white p-4"
-    >
-      <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-zinc-500">
-        <Focus className="h-3.5 w-3.5" />
-        Focus blocks
-      </div>
-      {upcoming.length === 0 ? (
-        <p className="mt-2 text-sm text-zinc-500">
-          No focus blocks scheduled this week.
-        </p>
-      ) : (
-        <ul className="mt-2 space-y-1.5">
-          {upcoming.map((b) => (
-            <li key={b.signal.id} className="text-sm text-zinc-700">
-              <span className="text-xs text-zinc-500">
-                {b.startsAt.toLocaleDateString(undefined, {
-                  weekday: "short",
-                })}{" "}
-                {formatLocalTime(b.startsAt)}–{formatLocalTime(b.endsAt)}
-              </span>{" "}
-              {b.signal.title}
-            </li>
-          ))}
-        </ul>
-      )}
-    </article>
-  );
+function kindClass(kind: EventKind): string {
+  if (kind === "focus") return "bg-foreground text-background";
+  if (kind === "break") return "bg-secondary text-foreground";
+  return "bg-primary text-primary-foreground";
 }
 
-function formatLocalTime(d: Date): string {
-  return d.toLocaleTimeString(undefined, {
-    hour: "numeric",
-    minute: "2-digit",
+function fmtMinutes(min: number): string {
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
+}
+
+/** Monday 00:00 local for the week containing `d`. */
+function mondayOf(d: Date): Date {
+  const start = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const offset = (start.getDay() + 6) % 7;
+  start.setDate(start.getDate() - offset);
+  return start;
+}
+
+/** 0..4 if `d` falls Mon–Fri, else null (weekend). */
+function mondayCol(d: Date): number | null {
+  const offset = (d.getDay() + 6) % 7;
+  if (offset > 4) return null;
+  return offset;
+}
+
+function dayLabel(weekStart: Date, dayIdx: number): string {
+  const day = new Date(weekStart);
+  day.setDate(weekStart.getDate() + dayIdx);
+  return day.toLocaleDateString(undefined, { weekday: "short" });
+}
+
+function dayLongLabel(d: Date): string {
+  return d.toLocaleDateString(undefined, {
+    weekday: "long",
+    month: "short",
+    day: "numeric",
   });
 }
 
-function anchorLabel(anchor: Date, mode: ViewMode): string {
-  if (mode === "day") {
-    return anchor.toLocaleDateString(undefined, {
-      weekday: "long",
-      month: "long",
-      day: "numeric",
-      year: "numeric",
-    });
-  }
-  if (mode === "month") {
-    return anchor.toLocaleDateString(undefined, {
-      month: "long",
-      year: "numeric",
-    });
-  }
-  const start = weekStartFor(anchor);
+function monthLabel(d: Date): string {
+  return d.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+}
+
+function weekRangeLabel(now: Date): string {
+  const start = mondayOf(now);
   const end = new Date(start);
-  end.setDate(start.getDate() + 6);
+  end.setDate(start.getDate() + 4);
   return `${start.toLocaleDateString(undefined, {
     month: "short",
     day: "numeric",
   })} – ${end.toLocaleDateString(undefined, {
     month: "short",
     day: "numeric",
-    year: "numeric",
   })}`;
+}
+
+function detectKind(e: MeetingEvent): EventKind {
+  if (e.isFocus) return "focus";
+  const t = e.signal.title?.toLowerCase() ?? "";
+  if (/\bbreak\b|\blunch\b/.test(t)) return "break";
+  return "meeting";
+}
+
+export function toWeekEvents(
+  events: MeetingEvent[],
+  weekStart: Date,
+): WeekEvent[] {
+  const start = weekStart.getTime();
+  const end = start + 5 * 24 * 60 * 60 * 1000;
+  const out: WeekEvent[] = [];
+  for (const e of events) {
+    const t = e.startsAt.getTime();
+    if (t < start || t >= end) continue;
+    const day = Math.floor((t - start) / (24 * 60 * 60 * 1000));
+    if (day < 0 || day > 4) continue;
+    const startMin = e.startsAt.getHours() * 60 + e.startsAt.getMinutes();
+    const endMin = e.endsAt.getHours() * 60 + e.endsAt.getMinutes();
+    if (endMin <= DAY_START_MIN || startMin >= DAY_END_MIN) continue;
+    out.push({
+      id: e.signal.id,
+      day,
+      start: Math.max(startMin, DAY_START_MIN),
+      end: Math.min(endMin, DAY_END_MIN),
+      kind: detectKind(e),
+      title: e.signal.title,
+    });
+  }
+  return out;
+}
+
+/**
+ * Pack same-day overlapping events into side-by-side lanes. Greedy: events
+ * sorted by start, each placed in the leftmost lane whose previous event
+ * has already ended.
+ */
+function layoutLanes(
+  events: WeekEvent[],
+): Map<string, { col: number; of: number }> {
+  const sorted = [...events].sort((a, b) => a.start - b.start);
+  const out = new Map<string, { col: number; of: number }>();
+  type Cluster = { items: WeekEvent[]; end: number };
+  const clusters: Cluster[] = [];
+  for (const e of sorted) {
+    const last = clusters[clusters.length - 1];
+    if (last && e.start < last.end) {
+      last.items.push(e);
+      last.end = Math.max(last.end, e.end);
+    } else {
+      clusters.push({ items: [e], end: e.end });
+    }
+  }
+  for (const cluster of clusters) {
+    const lanes: number[] = [];
+    const assigned = new Map<string, number>();
+    for (const e of cluster.items) {
+      let col = lanes.findIndex((endMin) => endMin <= e.start);
+      if (col === -1) {
+        col = lanes.length;
+        lanes.push(e.end);
+      } else {
+        lanes[col] = e.end;
+      }
+      assigned.set(e.id, col);
+    }
+    const of = lanes.length;
+    for (const e of cluster.items) {
+      const col = assigned.get(e.id) ?? 0;
+      out.set(e.id, { col, of });
+    }
+  }
+  return out;
 }

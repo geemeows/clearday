@@ -1,139 +1,94 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import {
-  OnboardingWizard,
-  ProvidersStep,
-  SlackAllowlistPanel,
-} from "#/routes/onboarding";
+import { OnboardingHero, SlackAllowlistPanel } from "#/routes/onboarding";
 
-describe("OnboardingWizard", () => {
-  it("walks Continue across all 5 steps and finishes by completing", async () => {
+describe("OnboardingHero", () => {
+  it("renders the Devy headline and one card per v1 provider", async () => {
+    const loader = vi.fn(async () => ({ sources: [] as never[] }));
+    render(
+      <OnboardingHero
+        onFinish={() => {}}
+        complete={async () => ({ ok: true as const })}
+        loader={loader}
+      />,
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: /welcome to devy/i }),
+    ).toBeTruthy();
+    expect(screen.getByLabelText(/github provider card/i)).toBeTruthy();
+    expect(screen.getByLabelText(/slack provider card/i)).toBeTruthy();
+    expect(
+      screen.getByLabelText(/google calendar provider card/i),
+    ).toBeTruthy();
+  });
+
+  it("disables Continue until at least one provider is connected", async () => {
+    const loader = vi.fn(async () => ({
+      sources: [
+        { provider: "github", status: "disconnected" as const },
+        { provider: "slack", status: "disconnected" as const },
+      ],
+    }));
+    render(
+      <OnboardingHero
+        onFinish={() => {}}
+        complete={async () => ({ ok: true as const })}
+        loader={loader}
+      />,
+    );
+
+    const cta = (await screen.findByRole("button", {
+      name: /continue to devy/i,
+    })) as HTMLButtonElement;
+    expect(cta.disabled).toBe(true);
+  });
+
+  it("enables Continue once a provider is connected", async () => {
+    const loader = vi.fn(async () => ({
+      sources: [{ provider: "github", status: "connected" as const }],
+    }));
+    render(
+      <OnboardingHero
+        onFinish={() => {}}
+        complete={async () => ({ ok: true as const })}
+        loader={loader}
+      />,
+    );
+
+    const cta = (await screen.findByRole("button", {
+      name: /continue to devy/i,
+    })) as HTMLButtonElement;
+    await waitFor(() => expect(cta.disabled).toBe(false));
+  });
+
+  it("Continue calls /api/onboarding/complete then onFinish", async () => {
     const complete = vi.fn(async () => ({ ok: true as const }));
     const onFinish = vi.fn();
-    render(<OnboardingWizard onFinish={onFinish} complete={complete} />);
+    const loader = vi.fn(async () => ({
+      sources: [{ provider: "github", status: "connected" as const }],
+    }));
+    render(
+      <OnboardingHero
+        onFinish={onFinish}
+        complete={complete}
+        loader={loader}
+      />,
+    );
 
-    // step 1 visible
-    expect(
-      screen.getByRole("region", { name: /Step 1: Connect providers/i }),
-    ).toBeTruthy();
+    const cta = await screen.findByRole("button", {
+      name: /continue to devy/i,
+    });
+    await waitFor(() =>
+      expect((cta as HTMLButtonElement).disabled).toBe(false),
+    );
+    fireEvent.click(cta);
 
-    const continueBtn = () =>
-      screen.getByRole("button", {
-        name: /^(continue|finish)$/i,
-      });
-
-    fireEvent.click(continueBtn()); // -> step 2 channels
-    expect(
-      await screen.findByRole("region", { name: /Step 2: Alert channels/i }),
-    ).toBeTruthy();
-
-    fireEvent.click(continueBtn()); // -> step 3 quiet
-    expect(
-      await screen.findByRole("region", { name: /Step 3: Quiet hours/i }),
-    ).toBeTruthy();
-
-    fireEvent.click(continueBtn()); // -> step 4 ai
-    expect(
-      await screen.findByRole("region", { name: /Step 4: AI provider/i }),
-    ).toBeTruthy();
-
-    fireEvent.click(continueBtn()); // -> step 5 slack-allowlist
-    expect(
-      await screen.findByRole("region", {
-        name: /Step 5: Slack channels/i,
-      }),
-    ).toBeTruthy();
-
-    // Finish
-    fireEvent.click(screen.getByRole("button", { name: /^finish$/i }));
     await waitFor(() => expect(complete).toHaveBeenCalledTimes(1));
     expect(onFinish).toHaveBeenCalledTimes(1);
   });
 
-  it("Back button moves to the previous step and disables on step 1", async () => {
-    render(
-      <OnboardingWizard
-        onFinish={() => {}}
-        complete={async () => ({ ok: true as const })}
-      />,
-    );
-    const back = screen.getByRole("button", { name: /^back$/i });
-    expect((back as HTMLButtonElement).disabled).toBe(true);
-    fireEvent.click(screen.getByRole("button", { name: /^continue$/i }));
-    expect(
-      await screen.findByRole("region", { name: /Step 2: Alert channels/i }),
-    ).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: /^back$/i }));
-    expect(
-      await screen.findByRole("region", { name: /Step 1: Connect providers/i }),
-    ).toBeTruthy();
-  });
-
-  it("Skip advances without persisting any step-specific state", async () => {
-    const complete = vi.fn(async () => ({ ok: true as const }));
-    render(<OnboardingWizard onFinish={() => {}} complete={complete} />);
-    fireEvent.click(screen.getByRole("button", { name: /^skip$/i }));
-    expect(
-      await screen.findByRole("region", { name: /Step 2: Alert channels/i }),
-    ).toBeTruthy();
-    expect(complete).not.toHaveBeenCalled();
-  });
-
-  it("re-entry: Skip-through all 5 steps then Finish re-stamps onboarded_at and signals navigation to /today", async () => {
-    // Simulates the Settings → Re-run onboarding → wizard → /today flow:
-    // a previously-onboarded user clicks the link, skips every step, and
-    // Finish should call POST /api/onboarding/complete (re-stamping
-    // onboarded_at) and then navigate to /today via onFinish.
-    const restamp = vi.fn(async () => ({ ok: true as const }));
-    const navigateToToday = vi.fn();
-    render(<OnboardingWizard onFinish={navigateToToday} complete={restamp} />);
-
-    fireEvent.click(screen.getByRole("button", { name: /^skip$/i })); // 1 -> 2
-    expect(
-      await screen.findByRole("region", { name: /Step 2: Alert channels/i }),
-    ).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: /^skip$/i })); // 2 -> 3
-    expect(
-      await screen.findByRole("region", { name: /Step 3: Quiet hours/i }),
-    ).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: /^skip$/i })); // 3 -> 4
-    expect(
-      await screen.findByRole("region", { name: /Step 4: AI provider/i }),
-    ).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: /^skip$/i })); // 4 -> 5
-    expect(
-      await screen.findByRole("region", { name: /Step 5: Slack channels/i }),
-    ).toBeTruthy();
-
-    expect(restamp).not.toHaveBeenCalled();
-    expect(navigateToToday).not.toHaveBeenCalled();
-
-    fireEvent.click(screen.getByRole("button", { name: /^finish$/i }));
-    await waitFor(() => expect(restamp).toHaveBeenCalledTimes(1));
-    expect(navigateToToday).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe("ProvidersStep", () => {
-  it("renders one row per known provider with status dots from /api/sources", async () => {
-    const loader = vi.fn(async () => ({
-      sources: [
-        { provider: "github", status: "connected" as const },
-        { provider: "slack", status: "disconnected" as const },
-      ],
-    }));
-    render(<ProvidersStep loader={loader} />);
-    expect(await screen.findByText("GitHub")).toBeTruthy();
-    expect(screen.getByText("Slack")).toBeTruthy();
-    expect(screen.getByText("Linear")).toBeTruthy();
-
-    const githubDot = screen.getByLabelText(/GitHub connected/i);
-    expect(githubDot.getAttribute("data-status")).toBe("ok");
-    const slackDot = screen.getByLabelText(/Slack not connected/i);
-    expect(slackDot.getAttribute("data-status")).toBe("neutral");
-  });
-
-  it("Connect button forwards through connect-url API and opens the URL", async () => {
+  it("Connect button forwards through connect-url and opens the URL", async () => {
     const loader = vi.fn(async () => ({ sources: [] as never[] }));
     const connectUrl = vi.fn(async () => ({
       ok: true,
@@ -141,30 +96,55 @@ describe("ProvidersStep", () => {
     }));
     const openUrl = vi.fn();
     render(
-      <ProvidersStep
+      <OnboardingHero
+        onFinish={() => {}}
+        complete={async () => ({ ok: true as const })}
         loader={loader}
         connectUrl={connectUrl}
         openUrl={openUrl}
       />,
     );
-    const button = (
-      await screen.findAllByRole("button", { name: /^connect$/i })
-    )[0];
-    fireEvent.click(button);
+
+    const buttons = await screen.findAllByRole("button", {
+      name: /^connect$/i,
+    });
+    fireEvent.click(buttons[0]);
     await waitFor(() => expect(connectUrl).toHaveBeenCalled());
     expect(openUrl).toHaveBeenCalledWith(
       "https://auth.example.com/start/github",
     );
   });
 
+  it("connected providers show a Reconnect button instead of Connect", async () => {
+    const loader = vi.fn(async () => ({
+      sources: [{ provider: "github", status: "connected" as const }],
+    }));
+    render(
+      <OnboardingHero
+        onFinish={() => {}}
+        complete={async () => ({ ok: true as const })}
+        loader={loader}
+      />,
+    );
+
+    expect(
+      await screen.findByRole("button", { name: /reconnect/i }),
+    ).toBeTruthy();
+  });
+
   it("re-fetches sources when the tab becomes visible again", async () => {
     const loader = vi.fn(async () => ({
       sources: [{ provider: "github", status: "disconnected" as const }],
     }));
-    render(<ProvidersStep loader={loader} />);
+    render(
+      <OnboardingHero
+        onFinish={() => {}}
+        complete={async () => ({ ok: true as const })}
+        loader={loader}
+      />,
+    );
     await waitFor(() => expect(loader).toHaveBeenCalledTimes(1));
 
-    // Simulate the user returning from an OAuth popup.
     Object.defineProperty(document, "visibilityState", {
       configurable: true,
       get: () => "visible",
@@ -181,16 +161,18 @@ describe("ProvidersStep", () => {
       error: "auth-proxy not configured",
     }));
     render(
-      <ProvidersStep
+      <OnboardingHero
+        onFinish={() => {}}
+        complete={async () => ({ ok: true as const })}
         loader={loader}
         connectUrl={connectUrl}
         openUrl={() => {}}
       />,
     );
-    const button = (
-      await screen.findAllByRole("button", { name: /^connect$/i })
-    )[0];
-    fireEvent.click(button);
+    const buttons = await screen.findAllByRole("button", {
+      name: /^connect$/i,
+    });
+    fireEvent.click(buttons[0]);
     await waitFor(() =>
       expect(screen.getByText(/auth-proxy not configured/i)).toBeTruthy(),
     );
