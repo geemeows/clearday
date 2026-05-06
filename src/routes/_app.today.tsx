@@ -19,19 +19,18 @@ import {
 import { Button as CossButton } from "#/components/coss/button";
 import type { BriefingResult } from "#/features/briefing/morning-briefing";
 import type { ProfileView } from "#/features/settings/profile/api";
-import { UpcomingEventsCard } from "#/features/signals/components/UpcomingEventsCard";
 import type { MeetingEvent } from "#/features/signals/views/calendar";
 import {
   computeWeekStats,
   filterMeetingsToToday,
-  type NextUpMeeting,
   pickInboxPreview,
   pickInProgressTickets,
   pickMeetingForAlert,
+  pickNextUp,
   pickTodaySchedule,
-  pickUpcoming,
   type WeekStats,
 } from "#/features/signals/views/today";
+import { NextUpHero } from "#/features/today/NextUpHero";
 import { useAutoRefresh } from "#/hooks/use-auto-refresh";
 import { apiFetch } from "#/lib/api-client";
 import { relAgo } from "#/routes/_app.inbox";
@@ -81,8 +80,8 @@ function TodayPage() {
     setActiveAlertId(due.id);
   }, [meetings, now]);
 
-  const upcoming = useMemo(
-    () => (meetings ? pickUpcoming(meetings, now, 5) : []),
+  const nextUp = useMemo(
+    () => (meetings ? pickNextUp(meetings, now) : null),
     [meetings, now],
   );
 
@@ -103,7 +102,6 @@ function TodayPage() {
   return (
     <TodayView
       meetings={meetings}
-      upcoming={upcoming}
       error={error}
       alertSignal={alertSignal}
       onDismissAlert={dismissAlert}
@@ -114,6 +112,16 @@ function TodayPage() {
           todaysMeetings={todaysMeetings}
           alertActive={activeAlertId != null}
         />
+      }
+      nextUp={
+        meetings != null && (
+          <NextUpHero
+            meeting={nextUp}
+            now={now}
+            alertArmed={activeAlertId != null}
+            onSkipAlert={dismissAlert}
+          />
+        )
       }
       briefing={<BriefingCard />}
       schedule={
@@ -128,12 +136,12 @@ function TodayPage() {
 
 export function TodayView({
   meetings,
-  upcoming,
   error,
   alertSignal,
   onDismissAlert,
   greeting,
   summary,
+  nextUp,
   briefing,
   schedule,
   inboxPreview,
@@ -141,12 +149,12 @@ export function TodayView({
   weekStats,
 }: {
   meetings: StoredSignal[] | null;
-  upcoming: NextUpMeeting[];
   error: string | null;
   alertSignal: StoredSignal | null;
   onDismissAlert: () => void;
   greeting?: string;
   summary?: ReactNode;
+  nextUp?: ReactNode;
   briefing?: ReactNode;
   schedule?: ReactNode;
   inboxPreview?: ReactNode;
@@ -174,7 +182,7 @@ export function TodayView({
         <p className="text-muted-foreground text-sm">Loading…</p>
       )}
 
-      {meetings != null && <UpcomingEventsCard meetings={upcoming} />}
+      {nextUp}
 
       {briefing}
 

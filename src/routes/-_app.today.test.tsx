@@ -104,7 +104,6 @@ describe("TodayView greeting + alerts", () => {
     render(
       <TodayView
         meetings={[]}
-        upcoming={[]}
         error={null}
         alertSignal={null}
         onDismissAlert={() => {}}
@@ -123,7 +122,6 @@ describe("TodayView greeting + alerts", () => {
     render(
       <TodayView
         meetings={[meetingSignal()]}
-        upcoming={[]}
         error={null}
         alertSignal={meetingSignal()}
         onDismissAlert={onDismissAlert}
@@ -139,7 +137,6 @@ describe("TodayView greeting + alerts", () => {
     render(
       <TodayView
         meetings={[]}
-        upcoming={[]}
         error={null}
         alertSignal={null}
         onDismissAlert={() => {}}
