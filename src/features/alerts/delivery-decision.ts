@@ -28,7 +28,7 @@ export type QuietHoursWindow = {
 export type AllowThroughRule = {
   kind?: SignalKind;
   threshold?: AlertThreshold;
-  /** Match against any string in payload.tags. */
+  /** Match against any string in the Signal's top-level `tags` column. */
   tag?: string;
 };
 
@@ -164,8 +164,7 @@ function matchesAllowThrough(
     if (rule.kind && signal.kind !== rule.kind) continue;
     if (rule.threshold && threshold !== rule.threshold) continue;
     if (rule.tag) {
-      const tags = (signal.payload?.tags ?? []) as unknown;
-      if (!Array.isArray(tags) || !tags.includes(rule.tag)) continue;
+      if (!signal.tags || !signal.tags.includes(rule.tag)) continue;
     }
     return true;
   }

@@ -315,10 +315,10 @@ describe("decideDelivery — quiet hours", () => {
     expect(result.action).toBe("deliver");
   });
 
-  it("allow_through={tag} matches when payload.tags contains the tag", () => {
+  it("allow_through={tag} matches when the Signal's tags column contains the tag", () => {
     const tagged = {
       ...baseMention,
-      payload: { tags: ["ci_red", "prod"] },
+      tags: ["ci_red", "prod"],
     };
     const result = decideDelivery(
       tagged,
