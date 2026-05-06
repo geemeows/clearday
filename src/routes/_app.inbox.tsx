@@ -232,7 +232,7 @@ export function InboxView({
             aria-pressed={filter === f.id}
             onClick={() => onFilterChange(f.id)}
             className={cn(
-              "rounded-full border px-3 py-1 text-sm",
+              "inline-flex items-center rounded-full border px-3 py-1 text-sm",
               filter === f.id
                 ? "border-foreground bg-foreground text-background"
                 : "border-border bg-background text-foreground hover:bg-muted",
