@@ -155,7 +155,10 @@ export function FocusButton({
       )}
 
       <Dialog open={open} onOpenChange={handleOpenChange}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent
+          className="max-w-none sm:max-w-none"
+          style={{ width: "min(28rem, calc(100vw - 2rem))" }}
+        >
           <DialogHeader>
             <DialogTitle>Start a focus session</DialogTitle>
             <DialogDescription>

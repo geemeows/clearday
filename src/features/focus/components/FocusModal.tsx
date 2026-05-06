@@ -60,7 +60,10 @@ export function FocusModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent
+        className="max-w-none sm:max-w-none"
+        style={{ width: "min(28rem, calc(100vw - 2rem))" }}
+      >
         <DialogHeader>
           <DialogTitle>Start focus session</DialogTitle>
           <DialogDescription>
