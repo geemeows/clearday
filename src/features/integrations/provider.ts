@@ -10,7 +10,7 @@ import type {
   FetchLike,
   RefreshedToken,
   TokenRecord,
-} from "#/lib/oauth-exchange";
+} from "#/features/integrations/oauth/types";
 import type { SupabaseLike } from "#/lib/signal-store";
 import type { AuthorizeProviderConfig } from "#/shared/oauth/scopes";
 import type { Signal, SignalProvider } from "#/shared/signal";

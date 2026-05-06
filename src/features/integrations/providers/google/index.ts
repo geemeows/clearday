@@ -10,8 +10,11 @@ import {
   type RescheduleEventResult,
   rescheduleCalendarEvent,
 } from "#/features/integrations/providers/google/capabilities/calendar-actions";
+import {
+  exchangeGoogle,
+  refreshGoogleToken,
+} from "#/features/integrations/providers/google/oauth";
 import { pollCalendarSignals } from "#/features/integrations/providers/google/poll";
-import { exchangeGoogle, refreshGoogleToken } from "#/lib/oauth-exchange";
 import { AUTHORIZE_PROVIDERS } from "#/shared/oauth/scopes";
 
 export type GoogleCapabilities = {

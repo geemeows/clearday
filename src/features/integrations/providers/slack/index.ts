@@ -16,13 +16,13 @@ import {
   type PostSlackReplyResult,
   postSlackReply,
 } from "#/features/integrations/providers/slack/capabilities/post-reply";
+import { exchangeSlack } from "#/features/integrations/providers/slack/oauth";
 import { pollSlackSignals } from "#/features/integrations/providers/slack/poll";
 import {
   type SlackDelta,
   type SlackState,
   saveSlackState,
 } from "#/features/integrations/providers/slack/state";
-import { exchangeSlack } from "#/lib/oauth-exchange";
 import { AUTHORIZE_PROVIDERS } from "#/shared/oauth/scopes";
 
 export type SlackCapabilities = {

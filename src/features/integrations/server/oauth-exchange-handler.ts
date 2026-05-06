@@ -5,16 +5,9 @@
 // proxy's published public key, then upserts into `provider_accounts` and
 // redirects to `return_to` (default `/today`).
 
-import type { Provider, TokenRecord } from "#/lib/oauth-exchange";
+import type { TokenRecord } from "#/features/integrations/oauth/types";
+import { isProviderId } from "#/features/integrations/providers";
 import { verifyEnvelope } from "#/shared/oauth/envelope";
-
-const KNOWN_PROVIDERS: ReadonlySet<Provider> = new Set([
-  "github",
-  "google",
-  "slack",
-  "linear",
-  "jira",
-]);
 
 export type OAuthExchangeEnv = {
   ENVELOPE_PUBLIC_KEY: string;
@@ -36,7 +29,7 @@ export async function handleOAuthExchange(
     return text(`invalid envelope: ${verified.reason}`, 400);
   }
   const { payload } = verified;
-  if (!isKnownProvider(payload.provider)) {
+  if (!isProviderId(payload.provider)) {
     return text(`unknown provider: ${payload.provider}`, 400);
   }
   const base = sanitizeReturnTo(payload.return_to ?? null);
@@ -83,10 +76,6 @@ function appendQuery(
     .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
     .join("&");
   return `${pathAndQuery}${sep}${qs}`;
-}
-
-function isKnownProvider(p: string): p is Provider {
-  return KNOWN_PROVIDERS.has(p as Provider);
 }
 
 function parseScope(scope: string): string[] {

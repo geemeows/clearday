@@ -7,14 +7,23 @@
 
 import type {
   AuthorizeProviderConfig,
+  ExchangeEnv,
+  FetchLike,
   Provider,
   ProviderId,
+  TokenRecord,
 } from "#/features/integrations/provider";
 import { github } from "#/features/integrations/providers/github";
 import { google } from "#/features/integrations/providers/google";
 import { jira } from "#/features/integrations/providers/jira";
 import { linear } from "#/features/integrations/providers/linear";
 import { slack } from "#/features/integrations/providers/slack";
+
+export type ExchangeFn = (
+  code: string,
+  env: ExchangeEnv,
+  fetchImpl: FetchLike,
+) => Promise<TokenRecord>;
 
 export const PROVIDERS = {
   github,
@@ -31,6 +40,17 @@ export const AUTHORIZE_CONFIGS: Record<ProviderId, AuthorizeProviderConfig> = {
   slack: PROVIDERS.slack.authorize,
   linear: PROVIDERS.linear.authorize,
   jira: PROVIDERS.jira.authorize,
+};
+
+// Slim adapter map for the auth-proxy Worker. Pulling EXCHANGES (instead of
+// the full PROVIDERS registry) keeps poll/capability code out of the
+// auth-proxy bundle.
+export const EXCHANGES: Record<ProviderId, ExchangeFn> = {
+  github: PROVIDERS.github.exchange,
+  google: PROVIDERS.google.exchange,
+  slack: PROVIDERS.slack.exchange,
+  linear: PROVIDERS.linear.exchange,
+  jira: PROVIDERS.jira.exchange,
 };
 
 export function isProviderId(p: string): p is ProviderId {

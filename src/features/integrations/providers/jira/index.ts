@@ -2,8 +2,11 @@
 // across all accessible Atlassian sites. v1: no capabilities.
 
 import type { Provider } from "#/features/integrations/provider";
+import {
+  exchangeJira,
+  refreshJiraToken,
+} from "#/features/integrations/providers/jira/oauth";
 import { pollJiraSignals } from "#/features/integrations/providers/jira/poll";
-import { exchangeJira, refreshJiraToken } from "#/lib/oauth-exchange";
 import { AUTHORIZE_PROVIDERS } from "#/shared/oauth/scopes";
 
 export const jira: Provider = {

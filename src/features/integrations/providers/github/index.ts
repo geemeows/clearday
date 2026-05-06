@@ -8,8 +8,8 @@ import {
   type SubmitPrReviewResult,
   submitPrReview,
 } from "#/features/integrations/providers/github/capabilities/submit-pr-review";
+import { exchangeGithub } from "#/features/integrations/providers/github/oauth";
 import { pollGithubSignals } from "#/features/integrations/providers/github/poll";
-import { exchangeGithub } from "#/lib/oauth-exchange";
 import { AUTHORIZE_PROVIDERS } from "#/shared/oauth/scopes";
 
 export type GithubCapabilities = {

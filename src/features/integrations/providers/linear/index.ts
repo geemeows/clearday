@@ -2,8 +2,11 @@
 // v1: no capabilities (no write actions).
 
 import type { Provider } from "#/features/integrations/provider";
+import {
+  exchangeLinear,
+  refreshLinearToken,
+} from "#/features/integrations/providers/linear/oauth";
 import { pollLinearSignals } from "#/features/integrations/providers/linear/poll";
-import { exchangeLinear, refreshLinearToken } from "#/lib/oauth-exchange";
 import { AUTHORIZE_PROVIDERS } from "#/shared/oauth/scopes";
 
 export const linear: Provider = {

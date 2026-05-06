@@ -56,6 +56,7 @@ import {
 import { runScheduledPoll } from "#/features/integrations/orchestrator";
 import { PROVIDERS } from "#/features/integrations/providers";
 import type { PrReviewEvent } from "#/features/integrations/providers/github";
+import { handleOAuthExchange } from "#/features/integrations/server/oauth-exchange-handler";
 import {
   type ExportDeps,
   exportData,
@@ -75,7 +76,6 @@ import {
   putInboxRules,
 } from "#/lib/inbox-rules-api";
 import type { InboxRule } from "#/lib/inbox-rules-engine";
-import { handleOAuthExchange } from "#/lib/oauth-exchange-handler";
 import {
   buildConnectUrl,
   completeOnboarding,

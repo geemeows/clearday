@@ -1,10 +1,10 @@
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import type { TokenRecord } from "#/lib/oauth-exchange";
+import type { TokenRecord } from "#/features/integrations/oauth/types";
 import {
   handleOAuthExchange,
   type OAuthExchangeEnv,
   type PersistTokens,
-} from "#/lib/oauth-exchange-handler";
+} from "#/features/integrations/server/oauth-exchange-handler";
 import {
   type EnvelopeKeypair,
   generateEnvelopeKeypair,

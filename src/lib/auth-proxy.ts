@@ -11,14 +11,13 @@
 // and persists the token. The proxy never reads/writes storage and never
 // hands the raw code or token to the user-Worker.
 
-import {
-  type ExchangeEnv,
-  ExchangeError,
-  exchangeCode,
-  type FetchLike,
-  type Provider,
-  type TokenRecord,
-} from "#/lib/oauth-exchange";
+import { ExchangeError } from "#/features/integrations/oauth/errors";
+import type {
+  ExchangeEnv,
+  FetchLike,
+  TokenRecord,
+} from "#/features/integrations/oauth/types";
+import { EXCHANGES, isProviderId } from "#/features/integrations/providers";
 import {
   type AuthorizeEnv,
   buildAuthorizeUrl,
@@ -39,13 +38,6 @@ export type AuthProxyEnv = AuthorizeEnv &
 
 export type AuthProxyDeps = { fetch: FetchLike };
 
-const KNOWN_PROVIDERS: ReadonlySet<Provider> = new Set([
-  "github",
-  "google",
-  "slack",
-  "linear",
-  "jira",
-]);
 const TEXT_HEADERS = { "content-type": "text/plain; charset=utf-8" };
 
 export async function handleAuthProxyRequest(
@@ -87,7 +79,7 @@ async function handleCallback(
   deps: AuthProxyDeps,
   now: number,
 ): Promise<Response> {
-  if (!isKnownProvider(provider)) {
+  if (!isProviderId(provider)) {
     return text(`unknown provider: ${provider}`, 400);
   }
   const state = url.searchParams.get("state");
@@ -136,7 +128,7 @@ async function handleCallback(
   }
   let record: TokenRecord;
   try {
-    record = await exchangeCode(provider, code, env, deps.fetch);
+    record = await EXCHANGES[provider](code, env, deps.fetch);
   } catch (err) {
     if (err instanceof ExchangeError) {
       const envelope = await buildErrorEnvelope({
@@ -182,10 +174,6 @@ async function buildErrorEnvelope(args: {
     error_description: args.error_description,
   };
   return signEnvelope(payload, args.keys, { now: args.now });
-}
-
-function isKnownProvider(p: string): p is Provider {
-  return KNOWN_PROVIDERS.has(p as Provider);
 }
 
 function expiresAtToUnix(iso: string | null): number | null {

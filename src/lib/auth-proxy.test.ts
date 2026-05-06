@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it, vi } from "vitest";
+import type { FetchLike } from "#/features/integrations/oauth/types";
 import { type AuthProxyEnv, handleAuthProxyRequest } from "#/lib/auth-proxy";
-import type { FetchLike } from "#/lib/oauth-exchange";
 import {
   type EnvelopeKeypair,
   generateEnvelopeKeypair,

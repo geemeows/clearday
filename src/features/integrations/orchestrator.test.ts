@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
+import type { ExchangeEnv } from "#/features/integrations/oauth/types";
 import {
   type OrchestratorDeps,
   runScheduledPoll,
 } from "#/features/integrations/orchestrator";
-import type { ExchangeEnv } from "#/lib/oauth-exchange";
 
 function makeStore(
   upsertResult: { error: { message: string } | null } = { error: null },
