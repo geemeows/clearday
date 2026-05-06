@@ -132,6 +132,14 @@
   /* Type — Airbnb Cereal VF with Circular + system fallbacks */
   --font-sans: 'Airbnb Cereal', Circular, -apple-system, system-ui, Roboto,
     'Helvetica Neue', sans-serif;
+  /* Mono accents (countdown rings, ticket ids, latency labels) — JetBrains
+     Mono per the Devy spec, with system mono fallbacks. */
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas,
+    monospace;
+
+  /* Surface card token from the Devy spec — explicit alias for `--card`
+     so token-driven primitives (COSS) read the same value. */
+  --surface-card: var(--card);
 
   /* Radius — shadcn reads --radius; component scale follows DESIGN.md */
   --radius: 0.5rem;             /* 8px = rounded.sm, the default button radius */
@@ -182,6 +190,8 @@
   --radius-xl: 32px;
 
   --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+  --color-surface-card: var(--surface-card);
 
   /* Sidebar Tailwind utility mappings (e.g. `bg-sidebar`, `text-sidebar-foreground`). */
   --color-sidebar: var(--sidebar);

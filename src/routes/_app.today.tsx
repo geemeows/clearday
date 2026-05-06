@@ -16,6 +16,7 @@ import {
   useMemo,
   useState,
 } from "react";
+import { Button as CossButton } from "#/components/coss/button";
 import type { BriefingResult } from "#/features/briefing/morning-briefing";
 import type { ProfileView } from "#/features/settings/profile/api";
 import { UpcomingEventsCard } from "#/features/signals/components/UpcomingEventsCard";
@@ -348,15 +349,15 @@ export function BriefingCard({ generator }: { generator?: Generator } = {}) {
             </span>
           )}
           {result?.ok && (
-            <button
-              type="button"
+            <CossButton
+              variant="outline"
+              size="xs"
               onClick={regenerate}
               disabled={busy}
-              className="inline-flex items-center gap-1 rounded-sm border border-border bg-card px-2.5 py-1 text-foreground text-xs hover:bg-accent disabled:opacity-50"
             >
-              <RefreshCw className="h-3 w-3" />
+              <RefreshCw aria-hidden="true" />
               Regenerate
-            </button>
+            </CossButton>
           )}
         </div>
       </header>
