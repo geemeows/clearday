@@ -1,11 +1,19 @@
-// Focus session launcher in the App Shell header. Click → prompt for
-// duration + optional message → POST /api/focus. The Worker fans the
+// Focus session launcher in the App Shell. Click → open a Dialog prompting
+// for duration + optional message → POST /api/focus. The Worker fans the
 // request out to Calendar (busy event), Slack profile (status with
 // auto-expiration), and Slack DND (snooze). Best-effort: per-provider
 // outcomes are surfaced so a partial success doesn't read as a failure.
 
 import { Moon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "#/components/ui/dialog";
 import { apiFetch } from "#/lib/api-client";
 import {
   type MeetingEvent,
@@ -89,6 +97,11 @@ export function FocusButton({
     if (activeFocus.endsAt.getTime() <= tick.getTime()) setActiveFocus(null);
   }, [activeFocus, tick]);
 
+  const handleOpenChange = useCallback((next: boolean) => {
+    setOpen(next);
+    if (!next) setStatus(null);
+  }, []);
+
   const submit = useCallback(async () => {
     if (!Number.isFinite(duration) || duration <= 0) {
       setStatus("Pick a positive duration.");
@@ -115,9 +128,9 @@ export function FocusButton({
     }
   }, [duration, message, start]);
 
-  if (!open) {
-    if (activeFocus) {
-      return (
+  return (
+    <>
+      {activeFocus ? (
         <button
           type="button"
           onClick={() => setOpen(true)}
@@ -129,94 +142,101 @@ export function FocusButton({
           <Moon className="h-4 w-4" />
           Focusing until {formatEndTime(activeFocus.endsAt)}
         </button>
-      );
-    }
-    return (
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="flex items-center gap-2 rounded border border-zinc-200 bg-white px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
-        aria-label="Start focus session"
-      >
-        <Moon className="h-4 w-4" />
-        Focus
-      </button>
-    );
-  }
-
-  return (
-    <div
-      role="dialog"
-      aria-label="Start focus session"
-      className="rounded border border-zinc-200 bg-white p-3 text-sm shadow-sm"
-    >
-      <div className="font-medium text-zinc-900">Start a focus session</div>
-      <fieldset className="mt-3 flex items-center gap-2">
-        <legend className="sr-only">Duration</legend>
-        {PRESETS.map((p) => (
-          <button
-            key={p}
-            type="button"
-            onClick={() => setDuration(p)}
-            aria-pressed={duration === p}
-            className={cn(
-              "rounded border px-2 py-1 text-xs",
-              duration === p
-                ? "border-zinc-900 bg-zinc-900 text-white"
-                : "border-zinc-200 text-zinc-700 hover:bg-zinc-50",
-            )}
-          >
-            {p}m
-          </button>
-        ))}
-        <label className="ml-2 flex items-center gap-1 text-xs text-zinc-600">
-          Custom
-          <input
-            type="number"
-            min={1}
-            value={duration}
-            onChange={(e) => setDuration(Number(e.target.value))}
-            className="w-16 rounded border border-zinc-200 px-1 py-0.5 text-right"
-            aria-label="Duration in minutes"
-          />
-          min
-        </label>
-      </fieldset>
-      <label className="mt-3 block">
-        <span className="text-xs text-zinc-600">Status message (optional)</span>
-        <input
-          type="text"
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          placeholder="Deep work"
-          className="mt-1 w-full rounded border border-zinc-200 px-2 py-1 text-sm"
-        />
-      </label>
-      <div className="mt-3 flex items-center gap-2">
+      ) : (
         <button
           type="button"
-          onClick={submit}
-          disabled={busy}
-          className="rounded bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-zinc-700 disabled:opacity-50"
+          onClick={() => setOpen(true)}
+          className="flex items-center gap-2 rounded border border-zinc-200 bg-white px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+          aria-label="Start focus session"
         >
-          {busy ? "Starting…" : "Start focus"}
+          <Moon className="h-4 w-4" />
+          Focus
         </button>
-        <button
-          type="button"
-          onClick={() => {
-            setOpen(false);
-            setStatus(null);
-          }}
-          disabled={busy}
-          className="rounded border border-zinc-200 px-3 py-1.5 text-xs hover:bg-zinc-50 disabled:opacity-50"
-        >
-          Cancel
-        </button>
-      </div>
-      {status && (
-        <output className="mt-2 block text-xs text-zinc-600">{status}</output>
       )}
-    </div>
+
+      <Dialog open={open} onOpenChange={handleOpenChange}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Start a focus session</DialogTitle>
+            <DialogDescription>
+              Block your calendar and silence Slack for the chosen window.
+            </DialogDescription>
+          </DialogHeader>
+
+          <fieldset>
+            <legend className="sr-only">Duration</legend>
+            <div className="flex flex-wrap items-center gap-2">
+              {PRESETS.map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => setDuration(p)}
+                  aria-pressed={duration === p}
+                  className={cn(
+                    "rounded-md border px-3 py-1.5 font-mono text-sm transition-colors",
+                    duration === p
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-border bg-background text-foreground hover:bg-accent",
+                  )}
+                >
+                  {p}m
+                </button>
+              ))}
+              <label className="ml-2 flex items-center gap-1 text-muted-foreground text-xs">
+                Custom
+                <input
+                  type="number"
+                  min={1}
+                  value={duration}
+                  onChange={(e) => setDuration(Number(e.target.value))}
+                  className="w-16 rounded-md border border-border bg-background px-2 py-1 text-right text-sm"
+                  aria-label="Duration in minutes"
+                />
+                min
+              </label>
+            </div>
+          </fieldset>
+
+          <label className="block">
+            <span className="text-muted-foreground text-xs">
+              Status message (optional)
+            </span>
+            <input
+              type="text"
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              placeholder="Deep work"
+              className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1 text-sm"
+            />
+          </label>
+
+          {status && (
+            <output className="block text-muted-foreground text-xs">
+              {status}
+            </output>
+          )}
+
+          <DialogFooter>
+            <button
+              type="button"
+              onClick={() => handleOpenChange(false)}
+              disabled={busy}
+              className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-accent disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={submit}
+              disabled={busy}
+              className="rounded-md bg-primary px-3 py-1.5 font-medium text-primary-foreground text-xs hover:bg-primary/90 disabled:opacity-50"
+            >
+              {busy ? "Starting…" : "Start focus"}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
