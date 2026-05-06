@@ -109,48 +109,68 @@ export function CalendarView({
   const conflicts = useMemo(() => detectConflicts(weekEvents), [weekEvents]);
   const todayCol = mondayCol(now);
 
-  const subtitle =
+  const focusHours = useMemo(() => {
+    let mins = 0;
+    for (const e of weekEvents) {
+      if (e.kind === "focus") mins += e.end - e.start;
+    }
+    return Math.round((mins / 60) * 10) / 10;
+  }, [weekEvents]);
+
+  const summary =
     mode === "week"
-      ? `${weekRangeLabel(now)} · Mon–Fri, 8:00–18:00`
+      ? `${conflicts.length} conflict${conflicts.length === 1 ? "" : "s"} · ${focusHours}h focus scheduled`
       : mode === "day"
-        ? `${dayLongLabel(now)} · 8:00–18:00`
+        ? "8:00–18:00"
+        : "Mon–Sun";
+  const rangeLabel =
+    mode === "week"
+      ? weekRangeLabel(now)
+      : mode === "day"
+        ? dayLongLabel(now)
         : monthLabel(now);
 
   return (
-    <section className="p-8">
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold">Calendar</h1>
-          <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>
-        </div>
+    <section className="mx-auto max-w-6xl space-y-5 p-8">
+      <header className="flex items-center gap-3">
+        <h1 className="font-semibold text-2xl text-foreground tracking-tight">
+          Calendar
+        </h1>
+        <span className="flex-1" />
         <ModeSwitch mode={mode} onChange={setMode} />
       </header>
+
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <span className="font-semibold text-foreground text-lg">
+          {rangeLabel}
+        </span>
+        <span className="font-mono text-muted-foreground text-xs">
+          {summary}
+        </span>
+      </div>
+
+      <Legend />
 
       {error && (
         <p
           role="alert"
-          className="mt-6 rounded-sm border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive"
+          className="rounded-sm border border-destructive/30 bg-destructive/10 p-3 text-destructive text-sm"
         >
           {error}
         </p>
       )}
 
       {loading && !error && (
-        <p className="mt-6 text-sm text-muted-foreground">Loading…</p>
+        <p className="text-muted-foreground text-sm">Loading…</p>
       )}
 
       {mode === "week" && (
-        <>
-          <WeekGrid
-            events={weekEvents}
-            conflicts={conflicts}
-            todayCol={todayCol}
-            now={now}
-          />
-          {conflicts.length > 0 && (
-            <ConflictBanner pairs={conflicts} now={now} />
-          )}
-        </>
+        <WeekGrid
+          events={weekEvents}
+          conflicts={conflicts}
+          todayCol={todayCol}
+          now={now}
+        />
       )}
 
       {mode === "day" && (
@@ -161,6 +181,45 @@ export function CalendarView({
         <MonthGrid cells={eventsByMonthGrid(meetings ?? [], now)} now={now} />
       )}
     </section>
+  );
+}
+
+function Legend() {
+  const items: { label: string; swatch: string; bordered?: boolean }[] = [
+    { label: "Focus", swatch: "var(--ink, var(--foreground))" },
+    { label: "Meeting", swatch: "var(--accent, var(--primary))" },
+    {
+      label: "Break",
+      swatch: "var(--surface-strong, var(--secondary))",
+      bordered: true,
+    },
+    {
+      label: "Conflict",
+      swatch:
+        "repeating-linear-gradient(45deg, rgba(193,53,21,0.18) 0 4px, transparent 4px 8px)",
+      bordered: true,
+    },
+  ];
+  return (
+    <div className="flex flex-wrap items-center gap-4">
+      {items.map((it) => (
+        <div key={it.label} className="flex items-center gap-1.5">
+          <span
+            aria-hidden
+            className="inline-block h-3.5 w-3.5 rounded-xs"
+            style={{
+              background: it.swatch,
+              border: it.bordered
+                ? "1px solid var(--hairline-soft, var(--border))"
+                : undefined,
+            }}
+          />
+          <span className="font-mono text-[11px] text-muted-foreground">
+            {it.label}
+          </span>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -176,7 +235,8 @@ function ModeSwitch({
     <div
       role="tablist"
       aria-label="View mode"
-      className="inline-flex items-center rounded-md border border-border bg-card p-0.5"
+      className="inline-flex items-center gap-1 rounded-full p-0.5"
+      style={{ background: "var(--surface-strong, var(--secondary))" }}
     >
       {modes.map((m) => (
         <button
@@ -187,11 +247,16 @@ function ModeSwitch({
           data-state={mode === m ? "active" : "inactive"}
           onClick={() => onChange(m)}
           className={cn(
-            "rounded-xs px-3 py-1 text-xs font-medium capitalize transition-colors",
+            "rounded-full px-3.5 py-1 font-medium text-xs capitalize transition-colors",
             mode === m
-              ? "bg-secondary text-foreground"
+              ? "text-foreground shadow-sm"
               : "text-muted-foreground hover:text-foreground",
           )}
+          style={
+            mode === m
+              ? { background: "var(--canvas, var(--background))" }
+              : undefined
+          }
         >
           {m}
         </button>
@@ -221,30 +286,55 @@ function WeekGrid({
   }, [conflicts]);
 
   const hours = Array.from({ length: HOURS + 1 }, (_, i) => HOUR_START + i);
+  const weekStart = mondayOf(now);
 
   return (
     <section
       aria-label="Week grid"
-      className="mt-6 overflow-hidden rounded-md border border-border bg-card"
+      className="overflow-hidden rounded-lg bg-card"
+      style={{ border: "1px solid var(--hairline-soft, var(--border))" }}
     >
       <div
         className="grid"
-        style={{ gridTemplateColumns: "64px repeat(5, 1fr)" }}
+        style={{
+          gridTemplateColumns: "64px repeat(5, 1fr)",
+          borderBottom: "1px solid var(--hairline-soft, var(--border))",
+        }}
       >
-        <div className="border-b border-border" />
-        {WEEKDAYS.map((label, i) => (
-          <div
-            key={label}
-            data-day-col={i}
-            data-today={todayCol === i || undefined}
-            className={cn(
-              "border-b border-l border-border px-3 py-2 text-xs font-medium uppercase tracking-wider text-muted-foreground",
-              todayCol === i && "text-foreground",
-            )}
-          >
-            {label}
-          </div>
-        ))}
+        <div />
+        {WEEKDAYS.map((label, i) => {
+          const dayDate = new Date(weekStart);
+          dayDate.setDate(weekStart.getDate() + i);
+          const isToday = todayCol === i;
+          return (
+            <div
+              key={label}
+              data-day-col={i}
+              data-today={isToday || undefined}
+              className="flex items-baseline gap-2 px-3.5 py-3"
+              style={{
+                borderLeft: "1px solid var(--hairline-soft, var(--border))",
+                background: isToday
+                  ? "var(--accent-tint, transparent)"
+                  : undefined,
+              }}
+            >
+              <span className="font-mono text-[10px] text-muted-foreground uppercase tracking-wider">
+                {label}
+              </span>
+              <span
+                className="font-semibold text-base"
+                style={{
+                  color: isToday
+                    ? "var(--accent-active, var(--primary))"
+                    : "var(--ink, var(--foreground))",
+                }}
+              >
+                {dayDate.getDate()}
+              </span>
+            </div>
+          );
+        })}
       </div>
       <div
         className="relative grid"
@@ -253,14 +343,29 @@ function WeekGrid({
           height: `${GRID_PX}px`,
         }}
       >
-        <div className="relative">
+        <div
+          className="relative"
+          style={{
+            borderRight: "1px solid var(--hairline-soft, var(--border))",
+          }}
+        >
           {hours.map((h) => (
             <div
               key={`hour-${h}`}
-              className="absolute left-0 right-0 border-t border-hairline-soft px-2 text-[10px] text-muted-foreground"
-              style={{ top: `${(h - HOUR_START) * SLOT_PX}px` }}
+              className="absolute right-0 left-0 px-2 text-right"
+              style={{
+                top: `${(h - HOUR_START) * SLOT_PX}px`,
+                borderTop:
+                  h === HOUR_START
+                    ? "none"
+                    : "1px solid var(--hairline-soft, var(--border))",
+              }}
             >
-              {h}:00
+              <span
+                className="inline-block translate-y-[-6px] font-mono text-[10px] text-muted-foreground"
+              >
+                {h}:00
+              </span>
             </div>
           ))}
         </div>
@@ -275,6 +380,7 @@ function WeekGrid({
           />
         ))}
       </div>
+      {conflicts.length > 0 && <ConflictBanner pairs={conflicts} now={now} />}
     </section>
   );
 }
@@ -298,15 +404,25 @@ function DayColumn({
     <div
       data-day-col={dayIdx}
       data-today={isToday || undefined}
-      className="relative border-l border-border"
+      className="relative"
+      style={{
+        borderLeft:
+          dayIdx === 0
+            ? "none"
+            : "1px solid var(--hairline-soft, var(--border))",
+      }}
     >
-      {slots.map((h) => (
+      {slots.map((h, hi) => (
         <div
           key={`slot-${h}`}
-          className="absolute left-0 right-0 border-t border-hairline-soft"
+          className="absolute right-0 left-0"
           style={{
             top: `${(h - HOUR_START) * SLOT_PX}px`,
             height: `${SLOT_PX}px`,
+            borderTop:
+              hi === 0
+                ? "none"
+                : "1px solid var(--hairline-soft, var(--border))",
           }}
         />
       ))}
@@ -357,19 +473,20 @@ function EventBlock({
       data-kind={event.kind}
       data-conflict={isConflict || undefined}
       className={cn(
-        "absolute mx-0.5 overflow-hidden rounded-xs px-2 py-1 text-[11px] leading-tight shadow-sm",
+        "absolute flex flex-col overflow-hidden rounded-md px-2 py-1.5 font-semibold text-[11px] leading-tight",
         tone,
+        isConflict && "ring-1 ring-destructive/40",
       )}
       style={{
-        top: `${top}px`,
-        height: `${height}px`,
-        left: `calc(${leftPct}% + 2px)`,
-        width: `calc(${widthPct}% - 4px)`,
+        top: `${top + 1}px`,
+        height: `${Math.max(16, height - 2)}px`,
+        left: `calc(${leftPct}% + 3px)`,
+        width: `calc(${widthPct}% - 6px)`,
         ...(hatched ?? {}),
       }}
     >
-      <span className="block truncate font-medium">{event.title}</span>
-      <span className="block text-[10px] opacity-80">
+      <span className="block truncate">{event.title}</span>
+      <span className="mt-auto block font-mono text-[10px] opacity-75">
         {fmtMinutes(event.start)}–{fmtMinutes(event.end)}
       </span>
     </article>
@@ -403,7 +520,8 @@ function DayGrid({
   return (
     <section
       aria-label="Day grid"
-      className="mt-6 overflow-hidden rounded-md border border-border bg-card"
+      className="overflow-hidden rounded-lg bg-card"
+      style={{ border: "1px solid var(--hairline-soft, var(--border))" }}
     >
       <div
         className="relative grid"
@@ -412,29 +530,46 @@ function DayGrid({
           height: `${GRID_PX}px`,
         }}
       >
-        <div className="relative">
+        <div
+          className="relative"
+          style={{
+            borderRight: "1px solid var(--hairline-soft, var(--border))",
+          }}
+        >
           {hours.map((h) => (
             <div
               key={`hour-${h}`}
-              className="absolute right-0 left-0 border-hairline-soft border-t px-2 text-[10px] text-muted-foreground"
-              style={{ top: `${(h - HOUR_START) * SLOT_PX}px` }}
+              className="absolute right-0 left-0 px-2 text-right"
+              style={{
+                top: `${(h - HOUR_START) * SLOT_PX}px`,
+                borderTop:
+                  h === HOUR_START
+                    ? "none"
+                    : "1px solid var(--hairline-soft, var(--border))",
+              }}
             >
-              {h}:00
+              <span className="inline-block translate-y-[-6px] font-mono text-[10px] text-muted-foreground">
+                {h}:00
+              </span>
             </div>
           ))}
         </div>
         <div
           data-day-col={dayCol}
           data-today={todayCol === dayCol || undefined}
-          className="relative border-border border-l"
+          className="relative"
         >
-          {slots.map((h) => (
+          {slots.map((h, hi) => (
             <div
               key={`slot-${h}`}
-              className="absolute right-0 left-0 border-hairline-soft border-t"
+              className="absolute right-0 left-0"
               style={{
                 top: `${(h - HOUR_START) * SLOT_PX}px`,
                 height: `${SLOT_PX}px`,
+                borderTop:
+                  hi === 0
+                    ? "none"
+                    : "1px solid var(--hairline-soft, var(--border))",
               }}
             />
           ))}
@@ -462,13 +597,19 @@ function MonthGrid({ cells, now }: { cells: MonthCell[]; now: Date }) {
   return (
     <section
       aria-label="Month grid"
-      className="mt-6 overflow-hidden rounded-md border border-border bg-card"
+      className="overflow-hidden rounded-lg bg-card"
+      style={{ border: "1px solid var(--hairline-soft, var(--border))" }}
     >
-      <div className="grid grid-cols-7">
+      <div
+        className="grid grid-cols-7"
+        style={{
+          borderBottom: "1px solid var(--hairline-soft, var(--border))",
+        }}
+      >
         {headerDays.map((label) => (
           <div
             key={label}
-            className="border-border border-b px-2 py-2 font-medium text-muted-foreground text-xs uppercase tracking-wider"
+            className="px-3 py-2.5 font-mono text-[10px] text-muted-foreground uppercase tracking-wider"
           >
             {label}
           </div>
@@ -484,32 +625,42 @@ function MonthGrid({ cells, now }: { cells: MonthCell[]; now: Date }) {
               key={cell.day.toISOString()}
               data-in-month={cell.inMonth || undefined}
               data-today={isToday || undefined}
-              className={cn(
-                "min-h-20 border-border border-b border-l p-2 first:border-l-0 [&:nth-child(7n+1)]:border-l-0",
-                !cell.inMonth && "bg-muted/40",
-              )}
+              className="min-h-24 p-2"
+              style={{
+                borderBottom: "1px solid var(--hairline-soft, var(--border))",
+                borderLeft: "1px solid var(--hairline-soft, var(--border))",
+                background: isToday
+                  ? "var(--accent-tint, transparent)"
+                  : !cell.inMonth
+                    ? "var(--surface-strong, var(--muted))"
+                    : undefined,
+              }}
             >
               <div
-                className={cn(
-                  "font-medium text-xs",
-                  cell.inMonth ? "text-foreground" : "text-muted-foreground",
-                  isToday && "text-primary",
-                )}
+                className="font-semibold text-xs"
+                style={{
+                  color: isToday
+                    ? "var(--accent-active, var(--primary))"
+                    : cell.inMonth
+                      ? "var(--ink, var(--foreground))"
+                      : "var(--muted-foreground)",
+                }}
               >
                 {dayNum}
               </div>
               {count > 0 && (
-                <ul className="mt-1 space-y-0.5">
+                <ul className="mt-1.5 space-y-1">
                   {cell.events.slice(0, 3).map((ev) => (
                     <li
                       key={ev.signal.id}
-                      className="truncate rounded-xs bg-primary/10 px-1 text-[10px] text-foreground"
+                      className="truncate rounded-xs px-1.5 py-0.5 font-medium text-[10px] text-primary-foreground"
+                      style={{ background: "var(--accent, var(--primary))" }}
                     >
                       {ev.signal.title}
                     </li>
                   ))}
                   {count > 3 && (
-                    <li className="text-[10px] text-muted-foreground">
+                    <li className="px-1 font-mono text-[10px] text-muted-foreground">
                       +{count - 3} more
                     </li>
                   )}
@@ -555,35 +706,52 @@ function ConflictBanner({
   return (
     <article
       aria-label="Conflict"
-      className="mt-4 rounded-md border border-destructive/30 bg-destructive/10 p-4"
+      style={{
+        borderTop: "1px solid var(--hairline-soft, var(--border))",
+        background: "var(--danger-soft, rgba(193,53,21,0.08))",
+      }}
     >
-      <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-destructive">
-        <AlertTriangle className="h-3.5 w-3.5" />
-        Conflict
-      </div>
-      <ul className="mt-2 space-y-2">
+      <ul className="divide-y" style={{ color: "var(--ink, var(--foreground))" }}>
         {pairs.map((p) => (
           <li
             key={`${p.a.id}-${p.b.id}`}
-            className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-foreground"
+            className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 text-sm"
+            style={{
+              borderColor: "var(--hairline-soft, var(--border))",
+            }}
           >
-            <span className="text-destructive">
-              {dayLabel(weekStart, p.a.day)} · {fmtMinutes(p.a.start)} ·{" "}
+            <span
+              className="inline-flex items-center gap-1 rounded-xs px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-primary-foreground"
+              style={{ background: "var(--destructive, #c13515)" }}
+            >
+              <AlertTriangle className="h-3 w-3" />
+              Conflict
+            </span>
+            <span className="font-semibold text-foreground">
+              {dayLabel(weekStart, p.a.day)} · {fmtMinutes(p.a.start)}
+            </span>
+            <span className="text-foreground">
               <span className="font-medium">{p.a.title}</span> overlaps{" "}
               <span className="font-medium">{p.b.title}</span>
             </span>
-            <button
-              type="button"
-              className="ml-auto rounded-xs border border-destructive/30 bg-card px-2.5 py-1 text-xs text-foreground hover:bg-secondary"
-            >
-              Decline
-            </button>
-            <button
-              type="button"
-              className="rounded-xs border border-destructive/30 bg-card px-2.5 py-1 text-xs text-foreground hover:bg-secondary"
-            >
-              Reschedule
-            </button>
+            <span className="ml-auto flex gap-2">
+              <button
+                type="button"
+                className="rounded-md px-2.5 py-1 text-xs text-foreground transition-colors hover:bg-secondary"
+              >
+                Decline
+              </button>
+              <button
+                type="button"
+                className="rounded-md px-2.5 py-1 font-medium text-xs text-foreground transition-colors hover:bg-secondary"
+                style={{
+                  background: "var(--canvas, var(--background))",
+                  border: "1px solid var(--hairline-soft, var(--border))",
+                }}
+              >
+                Reschedule
+              </button>
+            </span>
           </li>
         ))}
       </ul>
