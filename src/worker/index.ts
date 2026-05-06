@@ -7,19 +7,68 @@ import {
   type PutBody,
   putAiSettings,
   testAiConnection,
-} from "#/lib/ai-settings-api";
-import { type AlertChannel, fireChannels } from "#/lib/alert-dispatcher";
-import { runAlertQueueDrain } from "#/lib/alert-queue-drain";
-import { type AskAiDeps, handleAskAi } from "#/lib/ask-ai-api";
+} from "#/features/ai/api/settings";
+import {
+  type DeviceView,
+  listDevices,
+  renameDevice,
+  subscribe,
+  unsubscribe,
+  type WebPushSubscriptionStore,
+} from "#/features/alerts/channels/web-push/api";
+import { pruneStaleWebPushSubscriptions } from "#/features/alerts/channels/web-push/subscriptions";
+import type { VapidConfig } from "#/features/alerts/channels/web-push/vapid";
+import { type AlertChannel, fireChannels } from "#/features/alerts/dispatcher";
+import {
+  buildDispatcherDeps,
+  loadDueQueuedAlerts,
+  loadUpcomingMeetings,
+  removeQueuedAlert,
+} from "#/features/alerts/server/glue";
+import { runMeetingAlertTick } from "#/features/alerts/server/meeting-tick";
+import { runAlertQueueDrain } from "#/features/alerts/server/queue-drain";
+import { type AskAiDeps, handleAskAi } from "#/features/ask-ai/api";
 import {
   type BriefingDeps,
   handleBriefingGenerate,
   runBriefingTick,
-} from "#/lib/briefing-api";
+} from "#/features/briefing/api";
 import {
-  declineCalendarEvent,
-  rescheduleCalendarEvent,
-} from "#/lib/calendar-actions";
+  type DraftReplyDeps,
+  handleDraftReply,
+} from "#/features/draft-reply/api";
+import {
+  type EmailDigestDeps,
+  type EmailDigestPutBody,
+  type EmailDigestRow,
+  type EmailDigestStore,
+  getEmailDigestSettings,
+  putEmailDigestSettings,
+  runEmailDigestTick,
+  sendEmailDigestTest,
+} from "#/features/email-digest/api";
+import { startFocusSession } from "#/features/focus/session";
+import {
+  getInboxRules,
+  type InboxRulesStore,
+  putInboxRules,
+} from "#/features/inbox-rules/api";
+import type { InboxRule } from "#/features/inbox-rules/engine";
+import {
+  disconnectIntegration,
+  getIntegrations,
+  type IntegrationsStore,
+  type ProviderAccountRow,
+} from "#/features/integrations/api/integrations-api";
+import { runScheduledPoll } from "#/features/integrations/orchestrator";
+import { PROVIDERS } from "#/features/integrations/providers";
+import type { PrReviewEvent } from "#/features/integrations/providers/github";
+import { handleOAuthExchange } from "#/features/integrations/server/oauth-exchange-handler";
+import {
+  buildConnectUrl,
+  completeOnboarding,
+  getOnboardingStatus,
+} from "#/features/onboarding/api";
 import {
   type ExportDeps,
   exportData,
@@ -31,57 +80,19 @@ import {
   type RetentionPutBody,
   type RetentionStore,
   type RetentionView,
-} from "#/lib/data-privacy-api";
-import { type DraftReplyDeps, handleDraftReply } from "#/lib/draft-reply-api";
-import {
-  type EmailDigestDeps,
-  type EmailDigestPutBody,
-  type EmailDigestRow,
-  type EmailDigestStore,
-  getEmailDigestSettings,
-  putEmailDigestSettings,
-  runEmailDigestTick,
-  sendEmailDigestTest,
-} from "#/lib/email-digest-api";
-import { startFocusSession } from "#/lib/focus-session";
-import {
-  getInboxRules,
-  type InboxRulesStore,
-  putInboxRules,
-} from "#/lib/inbox-rules-api";
-import type { InboxRule } from "#/lib/inbox-rules-engine";
-import {
-  disconnectIntegration,
-  getIntegrations,
-  type IntegrationsStore,
-  type ProviderAccountRow,
-} from "#/lib/integrations-api";
-import { runMeetingAlertTick } from "#/lib/meeting-alert-tick";
-import { handleOAuthExchange } from "#/lib/oauth-exchange-handler";
-import {
-  buildConnectUrl,
-  completeOnboarding,
-  getOnboardingStatus,
-} from "#/lib/onboarding-api";
-import { type PrReviewEvent, submitPrReview } from "#/lib/pr-review";
+} from "#/features/settings/data-privacy/api";
 import {
   getProfile,
   type ProfilePutBody,
   type ProfileStore,
   type ProfileView,
   putProfile,
-} from "#/lib/profile-api";
+} from "#/features/settings/profile/api";
 import {
   getSelfHostInfo,
   runHealthCheck,
   type SelfHostEnv,
-} from "#/lib/self-host-api";
-import type { StoredSignal } from "#/lib/signal";
-import { runDueRollups } from "#/lib/signal-rollup";
-import { dismissSignal, markSignalReplied } from "#/lib/signal-store";
-import { listSlackChannels } from "#/lib/slack-channels";
-import { postSlackReply } from "#/lib/slack-reply";
-import { loadSlackThread } from "#/lib/slack-thread";
+} from "#/features/settings/self-host/api";
 import {
   DEFAULT_THEME,
   getTheme,
@@ -89,24 +100,15 @@ import {
   type ThemePutBody,
   type ThemeStore,
   type ThemeView,
-} from "#/lib/theme-api";
+} from "#/features/settings/theme/api";
+import { runDueRollups } from "#/features/signals/rollup";
 import {
-  type DeviceView,
-  listDevices,
-  renameDevice,
-  subscribe,
-  unsubscribe,
-  type WebPushSubscriptionStore,
-} from "#/lib/web-push-api";
-import { pruneStaleWebPushSubscriptions } from "#/lib/web-push-dispatcher";
-import type { VapidConfig } from "#/lib/web-push-vapid";
-import {
-  buildDispatcherDeps,
-  loadDueQueuedAlerts,
-  loadUpcomingMeetings,
-  removeQueuedAlert,
-} from "#/worker/alert-glue";
-import { runScheduledPoll } from "#/worker/cron-orchestrator";
+  handleDismissSignal,
+  handleListSignals,
+  handleSources,
+} from "#/features/signals/server/api";
+import { dismissSignal, markSignalReplied } from "#/features/signals/store";
+import type { StoredSignal } from "#/shared/signal";
 import {
   defaultGetUser,
   json,
@@ -114,11 +116,6 @@ import {
   type WorkerEnv,
 } from "#/worker/middleware";
 import { persistProviderAccount } from "#/worker/provider-accounts";
-import {
-  handleDismissSignal,
-  handleListSignals,
-  handleSources,
-} from "#/worker/signals-api";
 
 export default {
   async fetch(
@@ -202,6 +199,14 @@ export default {
 
     if (url.pathname === "/api/pr/review" && request.method === "POST") {
       return handleSubmitPrReview(request, service);
+    }
+
+    if (url.pathname === "/api/pr/files" && request.method === "GET") {
+      return handleGetPrFiles(url, service);
+    }
+
+    if (url.pathname === "/api/pr/overview" && request.method === "GET") {
+      return handleGetPrOverview(url, service);
     }
 
     if (url.pathname === "/api/slack/reply" && request.method === "POST") {
@@ -538,7 +543,7 @@ export default {
       if (error) return json({ ok: false, error: error.message }, 500);
       const token =
         (data as { access_token: string | null } | null)?.access_token ?? null;
-      const out = await listSlackChannels({
+      const out = await PROVIDERS.slack.capabilities.listChannels({
         token,
         fetch: (i, init) => fetch(i, init),
       });
@@ -576,31 +581,6 @@ export default {
     ctx.waitUntil(
       runScheduledPoll({
         loadInboxRules: () => loadInboxRulesFromService(service),
-        loadSlackParticipatedThreads: async () => {
-          const { data, error } = await service
-            .from("slack_participated_threads")
-            .select("channel, thread_ts");
-          if (error) throw new Error(error.message);
-          return (data ?? []) as Array<{
-            channel: string;
-            thread_ts: string;
-          }>;
-        },
-        loadSlackBroadcastAllowlist: () => loadSlackAllowlist(service),
-        saveSlackParticipatedThreads: async (threads) => {
-          if (threads.length === 0) return;
-          const rows = threads.map((t) => ({
-            channel: t.channel,
-            thread_ts: t.thread_ts,
-          }));
-          const { error } = await service
-            .from("slack_participated_threads")
-            .upsert(rows, {
-              onConflict: "channel,thread_ts",
-              ignoreDuplicates: true,
-            });
-          if (error) throw new Error(error.message);
-        },
         loadAccounts: async () => {
           const { data, error } = await service
             .from("provider_accounts")
@@ -968,6 +948,10 @@ async function handleTestNotification(
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
     dismissed_at: null,
+    priority: null,
+    snoozed_until: null,
+    alert_channels_override: null,
+    tags: null,
   };
   const result = await fireChannels(stub, candidates, dispatcher);
   const ok = result.fired.length > 0 && Object.keys(result.errors).length === 0;
@@ -1047,13 +1031,69 @@ async function handleSubmitPrReview(
   const token =
     (data as { access_token: string | null } | null)?.access_token ?? null;
 
-  const out = await submitPrReview(
+  const out = await PROVIDERS.github.capabilities.submitPrReview(
     { repo, number, event, body: message },
     { token, fetch: (i, init) => fetch(i, init) },
   );
   if (out.ok && signalId) {
     await markSignalReplied(service, signalId);
   }
+  return json(out, out.ok ? 200 : 400);
+}
+
+async function handleGetPrFiles(
+  url: URL,
+  service: SupabaseService,
+): Promise<Response> {
+  const repo = url.searchParams.get("repo") ?? "";
+  const number = Number(url.searchParams.get("number"));
+  if (!repo || !Number.isInteger(number) || number <= 0) {
+    return json(
+      { ok: false, error: "repo and number required", reason: "invalid_input" },
+      400,
+    );
+  }
+  const { data, error } = await service
+    .from("provider_accounts")
+    .select("access_token")
+    .eq("provider", "github")
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  const token =
+    (data as { access_token: string | null } | null)?.access_token ?? null;
+
+  const out = await PROVIDERS.github.capabilities.fetchPrFiles(
+    { repo, number },
+    { token, fetch: (i, init) => fetch(i, init) },
+  );
+  return json(out, out.ok ? 200 : 400);
+}
+
+async function handleGetPrOverview(
+  url: URL,
+  service: SupabaseService,
+): Promise<Response> {
+  const repo = url.searchParams.get("repo") ?? "";
+  const number = Number(url.searchParams.get("number"));
+  if (!repo || !Number.isInteger(number) || number <= 0) {
+    return json(
+      { ok: false, error: "repo and number required", reason: "invalid_input" },
+      400,
+    );
+  }
+  const { data, error } = await service
+    .from("provider_accounts")
+    .select("access_token")
+    .eq("provider", "github")
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  const token =
+    (data as { access_token: string | null } | null)?.access_token ?? null;
+
+  const out = await PROVIDERS.github.capabilities.fetchPrOverview(
+    { repo, number },
+    { token, fetch: (i, init) => fetch(i, init) },
+  );
   return json(out, out.ok ? 200 : 400);
 }
 
@@ -1092,7 +1132,7 @@ async function handlePostSlackReply(
   const token =
     (data as { access_token: string | null } | null)?.access_token ?? null;
 
-  const out = await postSlackReply(
+  const out = await PROVIDERS.slack.capabilities.postReply(
     { channel, text, thread_ts },
     { token, fetch: (i, init) => fetch(i, init) },
   );
@@ -1146,7 +1186,7 @@ async function handleGetSlackThread(
     } | null) ?? null;
   const token = row?.access_token ?? null;
   const selfUserId = row?.account_id ?? null;
-  const out = await loadSlackThread(
+  const out = await PROVIDERS.slack.capabilities.loadThread(
     { channel, thread_ts },
     { token, fetch: (i, init) => fetch(i, init) },
     selfUserId,
@@ -1187,7 +1227,7 @@ async function handleDeclineCalendarEvent(
   const token =
     (data as { access_token: string | null } | null)?.access_token ?? null;
 
-  const out = await declineCalendarEvent(
+  const out = await PROVIDERS.google.capabilities.decline(
     { event_id, calendar_id },
     { token, fetch: (i, init) => fetch(i, init) },
   );
@@ -1233,7 +1273,7 @@ async function handleRescheduleCalendarEvent(
   const token =
     (data as { access_token: string | null } | null)?.access_token ?? null;
 
-  const out = await rescheduleCalendarEvent(
+  const out = await PROVIDERS.google.capabilities.reschedule(
     { event_id, calendar_id, shift_minutes },
     { token, fetch: (i, init) => fetch(i, init) },
   );

@@ -1,6 +1,6 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
-import { AppShell } from "#/components/AppShell";
-import { signOut } from "#/lib/auth";
+import { AppShell } from "#/app/AppShell";
+import { signOut } from "#/features/auth/auth";
 
 export const Route = createFileRoute("/_app")({
   beforeLoad: ({ context, location }) => {

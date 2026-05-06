@@ -1,7 +1,4 @@
-import {
-  type AuthProxyEnv,
-  handleAuthProxyRequest,
-} from "../../../src/lib/auth-proxy";
+import { type AuthProxyEnv, handleAuthProxyRequest } from "./handler";
 
 export default {
   fetch(request: Request, env: AuthProxyEnv): Promise<Response> {

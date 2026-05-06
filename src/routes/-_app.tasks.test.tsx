@@ -1,6 +1,6 @@
 import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import type { TaskCard } from "#/components/TasksKanban";
+import type { TaskCard } from "#/features/signals/components/TasksKanban";
 import { buildCards, TasksView } from "#/routes/_app.tasks";
 
 const card = (overrides: Partial<TaskCard> = {}): TaskCard => ({

@@ -1,16 +1,19 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { AlertTriangle } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { apiFetch } from "#/lib/api-client";
-import { type ConflictPair, detectConflicts } from "#/lib/calendar-conflicts";
 import {
   eventsByMonthGrid,
   type MeetingEvent,
   type MonthCell,
   toMeetingEvents,
-} from "#/lib/calendar-view";
+} from "#/features/signals/views/calendar";
+import {
+  type ConflictPair,
+  detectConflicts,
+} from "#/features/signals/views/calendar-conflicts";
+import { apiFetch } from "#/lib/api-client";
 import { cn } from "#/lib/cn";
-import type { StoredSignal } from "#/lib/next-up";
+import type { StoredSignal } from "#/shared/signal";
 
 export type CalendarViewMode = "day" | "week" | "month";
 

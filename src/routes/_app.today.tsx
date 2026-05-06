@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   BarChart3,
   ExternalLink,
@@ -16,26 +16,25 @@ import {
   useMemo,
   useState,
 } from "react";
-import { UpcomingEventsCard } from "#/components/UpcomingEventsCard";
-import { apiFetch } from "#/lib/api-client";
-import type { MeetingEvent } from "#/lib/calendar-view";
-import type { BriefingResult } from "#/lib/morning-briefing";
-import {
-  type NextUpMeeting,
-  pickMeetingForAlert,
-  pickUpcoming,
-  type StoredSignal,
-} from "#/lib/next-up";
-import type { ProfileView } from "#/lib/profile-api";
+import type { BriefingResult } from "#/features/briefing/morning-briefing";
+import type { ProfileView } from "#/features/settings/profile/api";
+import { UpcomingEventsCard } from "#/features/signals/components/UpcomingEventsCard";
+import type { MeetingEvent } from "#/features/signals/views/calendar";
 import {
   computeWeekStats,
+  filterMeetingsToToday,
+  type NextUpMeeting,
   pickInboxPreview,
   pickInProgressTickets,
+  pickMeetingForAlert,
   pickTodaySchedule,
+  pickUpcoming,
   type WeekStats,
-} from "#/lib/today-cards";
-import { filterMeetingsToToday } from "#/lib/today-window";
-import { useAutoRefresh } from "#/lib/use-auto-refresh";
+} from "#/features/signals/views/today";
+import { useAutoRefresh } from "#/hooks/use-auto-refresh";
+import { apiFetch } from "#/lib/api-client";
+import { relAgo } from "#/routes/_app.inbox";
+import type { StoredSignal } from "#/shared/signal";
 
 export const Route = createFileRoute("/_app/today")({
   component: TodayPage,
@@ -677,29 +676,24 @@ export function InboxPreviewCard({
       {!error && preview.length > 0 && (
         <ul className="mt-3 divide-y divide-border">
           {preview.map((s) => (
-            <li
-              key={s.id}
-              className="flex items-center gap-3 py-2 first:pt-0 last:pb-0"
-            >
-              <span className="min-w-0 flex-1">
-                <p className="truncate font-medium text-foreground text-sm">
-                  {s.title}
-                </p>
-                <p className="truncate text-muted-foreground text-xs">
-                  {s.provider}
-                </p>
-              </span>
-              {s.url && (
-                <a
-                  href={s.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-1 rounded-sm border border-border bg-card px-2 py-1 text-foreground text-xs hover:bg-accent"
-                >
-                  <ExternalLink className="h-3 w-3" />
-                  Open
-                </a>
-              )}
+            <li key={s.id} className="first:-mt-2 last:-mb-2">
+              <Link
+                to="/inbox"
+                search={{ signal: s.id }}
+                className="-mx-2 flex items-center gap-3 rounded-sm px-2 py-2 hover:bg-accent"
+              >
+                <span className="min-w-0 flex-1">
+                  <p className="truncate font-medium text-foreground text-sm">
+                    {s.title}
+                  </p>
+                  <p className="truncate text-muted-foreground text-xs">
+                    {s.provider}
+                  </p>
+                </span>
+                <time className="shrink-0 text-muted-foreground text-xs tabular-nums">
+                  {relAgo(s.source_created_at, new Date().toISOString())}
+                </time>
+              </Link>
             </li>
           ))}
         </ul>

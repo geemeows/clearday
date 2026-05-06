@@ -1,6 +1,6 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { z } from "zod";
-import { signInWithGoogle } from "#/lib/auth";
+import { signInWithGoogle } from "#/features/auth/auth";
 
 const searchSchema = z.object({
   redirect: z.string().optional(),

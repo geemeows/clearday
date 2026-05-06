@@ -6,6 +6,33 @@
     <link rel="icon" href="/favicon.ico" />
     <link rel="manifest" href="/manifest.json" />
     <title>Devy</title>
+    <script>
+      // Pre-paint theme apply: read the cached theme written by the SPA into
+      // localStorage and stamp <html data-theme/data-density/data-accent>
+      // BEFORE any CSS runs. Without this, the first paint uses the default
+      // (light) tokens and a dark-mode user sees a white flash on refresh.
+      (() => {
+        try {
+          const raw = localStorage.getItem('clearday:theme');
+          const view = raw ? JSON.parse(raw) : null;
+          const theme = view?.theme ?? 'system';
+          const density = view?.density ?? 'comfortable';
+          const accent = view?.accent ?? 'rausch';
+          const effective =
+            theme === 'system'
+              ? window.matchMedia('(prefers-color-scheme: dark)').matches
+                ? 'dark'
+                : 'light'
+              : theme;
+          const root = document.documentElement;
+          root.dataset.theme = effective;
+          root.dataset.density = density;
+          root.dataset.accent = accent;
+        } catch {
+          // localStorage disabled / parse failure: fall through to defaults.
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

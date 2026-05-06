@@ -1,10 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { RulesPanel } from "#/components/RulesPanel";
+import { InboxRulesPanel } from "#/features/inbox-rules/components/InboxRulesPanel";
 
 export const Route = createFileRoute("/_app/settings/rules")({
   component: RulesRoute,
 });
 
 function RulesRoute() {
-  return <RulesPanel />;
+  return <InboxRulesPanel />;
 }

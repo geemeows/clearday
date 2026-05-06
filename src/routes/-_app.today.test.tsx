@@ -1,15 +1,22 @@
 import {
+  createMemoryHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+  RouterProvider,
+} from "@tanstack/react-router";
+import {
   act,
   fireEvent,
   render,
   screen,
   waitFor,
 } from "@testing-library/react";
+import type { ReactElement } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { UpcomingEventsCard } from "#/components/UpcomingEventsCard";
-import { toMeetingEvents } from "#/lib/calendar-view";
-import type { BriefingResult } from "#/lib/morning-briefing";
-import type { StoredSignal } from "#/lib/next-up";
+import type { BriefingResult } from "#/features/briefing/morning-briefing";
+import { UpcomingEventsCard } from "#/features/signals/components/UpcomingEventsCard";
+import { toMeetingEvents } from "#/features/signals/views/calendar";
 import {
   BriefingCard,
   formatGreeting,
@@ -20,6 +27,7 @@ import {
   TodayView,
   WeekStatsCard,
 } from "#/routes/_app.today";
+import type { StoredSignal } from "#/shared/signal";
 
 const meetingSignal = (id = "m1"): StoredSignal => ({
   id,
@@ -43,7 +51,14 @@ const meetingSignal = (id = "m1"): StoredSignal => ({
   },
   requires_action: false,
   source_created_at: "2026-05-04T12:30:00.000Z",
+  unread_count: 0,
+  created_at: "2026-05-04T12:30:00.000Z",
+  updated_at: "2026-05-04T12:30:00.000Z",
   dismissed_at: null,
+  priority: null,
+  snoozed_until: null,
+  alert_channels_override: null,
+  tags: null,
 });
 
 describe("UpcomingEventsCard", () => {
@@ -310,6 +325,24 @@ describe("TodaySchedule", () => {
   });
 });
 
+// Wraps a component tree in a minimal TanStack Router so <Link> calls have a
+// router context. Used by InboxPreviewCard tests where rows link to /inbox.
+async function renderWithRouter(node: ReactElement) {
+  const rootRoute = createRootRoute({ component: () => node });
+  const inboxRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/inbox",
+    component: () => null,
+  });
+  const router = createRouter({
+    routeTree: rootRoute.addChildren([inboxRoute]),
+    history: createMemoryHistory({ initialEntries: ["/today"] }),
+  });
+  await router.load();
+  // biome-ignore lint/suspicious/noExplicitAny: test-only router cast
+  render(<RouterProvider router={router as any} />);
+}
+
 describe("InboxPreviewCard", () => {
   const prSignal = (
     id: string,
@@ -326,6 +359,13 @@ describe("InboxPreviewCard", () => {
     requires_action,
     source_created_at: createdAt,
     dismissed_at: null,
+    unread_count: 0,
+    created_at: "2026-05-01T00:00:00.000Z",
+    updated_at: "2026-05-01T00:00:00.000Z",
+    priority: null,
+    snoozed_until: null,
+    alert_channels_override: null,
+    tags: null,
   });
 
   it("renders top actionable signals with an Open-all link", async () => {
@@ -333,7 +373,7 @@ describe("InboxPreviewCard", () => {
       prSignal("1", false, "2026-05-04T08:00:00.000Z"),
       prSignal("2", true, "2026-05-04T10:00:00.000Z"),
     ]);
-    render(<InboxPreviewCard loader={loader} limit={3} />);
+    await renderWithRouter(<InboxPreviewCard loader={loader} limit={3} />);
     await waitFor(() => screen.getByText("PR 2"));
     expect(screen.getByText("PR 1")).toBeTruthy();
     expect(
@@ -343,7 +383,7 @@ describe("InboxPreviewCard", () => {
 
   it("renders an empty-state when nothing is actionable", async () => {
     const loader = vi.fn(async () => [] as StoredSignal[]);
-    render(<InboxPreviewCard loader={loader} />);
+    await renderWithRouter(<InboxPreviewCard loader={loader} />);
     await waitFor(() => screen.getByText(/inbox zero/i));
   });
 
@@ -351,7 +391,7 @@ describe("InboxPreviewCard", () => {
     const loader = vi.fn(async () => {
       throw new Error("network down");
     });
-    render(<InboxPreviewCard loader={loader} />);
+    await renderWithRouter(<InboxPreviewCard loader={loader} />);
     await waitFor(() => screen.getByText(/network down/i));
   });
 });
@@ -375,6 +415,13 @@ describe("InProgressCard", () => {
     requires_action: kind !== "ticket_in_progress",
     source_created_at: "2026-05-04T08:00:00.000Z",
     dismissed_at: null,
+    unread_count: 0,
+    created_at: "2026-05-01T00:00:00.000Z",
+    updated_at: "2026-05-01T00:00:00.000Z",
+    priority: null,
+    snoozed_until: null,
+    alert_channels_override: null,
+    tags: null,
   });
 
   it("renders tickets with their status label and an Open link", async () => {

@@ -4,7 +4,7 @@
 // regular reads from the SPA via the anon client and the allowed-user check.
 
 import { createClient } from "@supabase/supabase-js";
-import type { TokenRecord } from "#/lib/oauth-exchange";
+import type { TokenRecord } from "#/features/integrations/oauth/types";
 
 export type PersistEnv = {
   SUPABASE_URL: string;
