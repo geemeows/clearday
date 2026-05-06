@@ -31,6 +31,7 @@ import {
 } from "#/features/settings/theme/api";
 import type { SourceKind } from "#/features/signals/components/SourceGlyph";
 import { apiFetch } from "#/lib/api-client";
+import type { Signal, SignalKind } from "#/shared/signal";
 
 const PAGES: NavPage[] = [
   { to: "/today", label: "Today", icon: Sun },
@@ -74,7 +75,7 @@ export function AppShell() {
   const router = useRouter();
   const path = useRouterState({ select: (s) => s.location.pathname });
   const sourceMeta = useSourceStatuses();
-  const inboxBadge = useInboxBadge();
+  const { inboxBadge, tasksBadge } = useNavBadges();
   const profile = useProfile();
   const theme = useEffectiveTheme();
 
@@ -101,6 +102,7 @@ export function AppShell() {
     page: path,
     onPage: (to) => router.navigate({ to }),
     inboxBadge,
+    tasksBadge,
     sources,
     focus,
     onStartFocus: () => {
@@ -251,15 +253,25 @@ function useProfile(): NavProfile {
   };
 }
 
-function useInboxBadge(): number {
-  const [count, setCount] = useState(0);
+// Pull both nav badges from the same signals payload so the sidebar fires a
+// single request: inbox = unread + requires_action; tasks = open work
+// (in-progress tickets + authored PRs).
+const TASK_KINDS: ReadonlySet<SignalKind> = new Set([
+  "ticket_in_progress",
+  "pr_authored",
+]);
+
+function useNavBadges(): { inboxBadge: number; tasksBadge: number } {
+  const [badges, setBadges] = useState({ inboxBadge: 0, tasksBadge: 0 });
   useEffect(() => {
     let cancelled = false;
     apiFetch("/api/signals?filter=all")
       .then((body) => {
         if (cancelled) return;
-        const signals = (body as { signals?: unknown[] }).signals ?? [];
-        setCount(signals.length);
+        const signals = (body as { signals?: Signal[] }).signals ?? [];
+        const inboxBadge = signals.filter((s) => s.requires_action).length;
+        const tasksBadge = signals.filter((s) => TASK_KINDS.has(s.kind)).length;
+        setBadges({ inboxBadge, tasksBadge });
       })
       .catch(() => {
         // Leave at 0 on auth/network failure.
@@ -268,7 +280,7 @@ function useInboxBadge(): number {
       cancelled = true;
     };
   }, []);
-  return count;
+  return badges;
 }
 
 function useSourceStatuses(): Record<string, SourceMeta> {
