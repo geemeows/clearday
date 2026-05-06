@@ -6,10 +6,12 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
+import { Calendar, Moon } from "lucide-react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   type Asker,
   CommandPalette,
+  type PaletteCommand,
   type Result,
   type Searcher,
 } from "#/components/CommandPalette";
@@ -218,6 +220,104 @@ describe("CommandPalette", () => {
         screen.getByText(/you're waiting on alice's review\./i),
       ).toBeTruthy();
     });
+  });
+
+  it("renders provided commands grouped by Navigation and Actions", async () => {
+    const navigate = vi.fn();
+    const toggleTheme = vi.fn();
+    const commands: PaletteCommand[] = [
+      {
+        id: "nav:/calendar",
+        group: "Navigation",
+        label: "Go to Calendar",
+        keywords: "Calendar",
+        icon: Calendar,
+        onSelect: () => navigate("/calendar"),
+      },
+      {
+        id: "action:theme-toggle",
+        group: "Actions",
+        label: "Switch to dark mode",
+        keywords: "theme dark light mode",
+        icon: Moon,
+        onSelect: toggleTheme,
+      },
+    ];
+    render(
+      <CommandPalette
+        searcher={fakeSearcher({})}
+        commands={commands}
+        initialOpen
+      />,
+    );
+    expect(screen.getByText("Navigation")).toBeTruthy();
+    expect(screen.getByText("Actions")).toBeTruthy();
+    expect(screen.getByText("Go to Calendar")).toBeTruthy();
+    expect(screen.getByText("Switch to dark mode")).toBeTruthy();
+  });
+
+  it("filters commands by typed query (label + keywords)", async () => {
+    vi.useFakeTimers();
+    const commands: PaletteCommand[] = [
+      {
+        id: "nav:/calendar",
+        group: "Navigation",
+        label: "Go to Calendar",
+        keywords: "Calendar",
+        icon: Calendar,
+        onSelect: () => {},
+      },
+      {
+        id: "action:theme-toggle",
+        group: "Actions",
+        label: "Switch to dark mode",
+        keywords: "theme appearance",
+        icon: Moon,
+        onSelect: () => {},
+      },
+    ];
+    render(
+      <CommandPalette
+        searcher={fakeSearcher({})}
+        commands={commands}
+        initialOpen
+      />,
+    );
+    fireEvent.change(screen.getByLabelText(/search signals/i), {
+      target: { value: "appearance" },
+    });
+    await flushDebounce();
+    expect(screen.queryByText("Go to Calendar")).toBeNull();
+    expect(screen.getByText("Switch to dark mode")).toBeTruthy();
+  });
+
+  it("selecting a command invokes onSelect and closes the palette", async () => {
+    vi.useFakeTimers();
+    const onSelect = vi.fn();
+    const commands: PaletteCommand[] = [
+      {
+        id: "action:theme-toggle",
+        group: "Actions",
+        label: "Switch to dark mode",
+        icon: Moon,
+        onSelect,
+      },
+    ];
+    render(
+      <CommandPalette
+        searcher={fakeSearcher({})}
+        commands={commands}
+        initialOpen
+      />,
+    );
+    await flushDebounce();
+    fireEvent.keyDown(screen.getByLabelText(/search signals/i), {
+      key: "Enter",
+    });
+    expect(onSelect).toHaveBeenCalledTimes(1);
+    expect(
+      screen.queryByRole("dialog", { name: /command palette/i }),
+    ).toBeNull();
   });
 
   it("Ask AI footer shows the typed query and the provider chip", async () => {

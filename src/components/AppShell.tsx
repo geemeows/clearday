@@ -1,7 +1,17 @@
 import { Outlet, useRouter, useRouterState } from "@tanstack/react-router";
-import { Calendar, CheckSquare, Inbox, Sun } from "lucide-react";
+import {
+  Calendar,
+  CheckSquare,
+  Inbox,
+  Moon,
+  Settings as SettingsIcon,
+  Sun,
+} from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { CommandPalette } from "#/components/CommandPalette";
+import {
+  CommandPalette,
+  type PaletteCommand,
+} from "#/components/CommandPalette";
 import {
   type FocusState,
   NavigationSidebar,
@@ -19,6 +29,12 @@ import {
   deriveSourceStatus,
   type SourceStatus,
 } from "#/lib/source-status";
+import {
+  DEFAULT_THEME,
+  resolveEffectiveTheme,
+  THEME_UPDATED_EVENT,
+  type ThemeView,
+} from "#/lib/theme-api";
 
 const PAGES: NavPage[] = [
   { to: "/today", label: "Today", icon: Sun },
@@ -64,6 +80,7 @@ export function AppShell() {
   const sourceMeta = useSourceStatuses();
   const inboxBadge = useInboxBadge();
   const profile = useProfile();
+  const theme = useEffectiveTheme();
 
   const sources = useMemo<NavSource[]>(
     () =>
@@ -98,15 +115,111 @@ export function AppShell() {
     profile,
   };
 
+  const commands: PaletteCommand[] = useMemo(() => {
+    const navItems: PaletteCommand[] = PAGES.map((p) => ({
+      id: `nav:${p.to}`,
+      group: "Navigation",
+      label: `Go to ${p.label}`,
+      keywords: p.label,
+      icon: p.icon,
+      onSelect: () => router.navigate({ to: p.to }),
+    }));
+    navItems.push({
+      id: "nav:/settings",
+      group: "Navigation",
+      label: "Go to Settings",
+      keywords: "settings preferences",
+      icon: SettingsIcon,
+      onSelect: () => router.navigate({ to: "/settings" }),
+    });
+    const actionItems: PaletteCommand[] = [
+      {
+        id: "action:theme-toggle",
+        group: "Actions",
+        label:
+          theme.effective === "dark"
+            ? "Switch to light mode"
+            : "Switch to dark mode",
+        keywords: "theme dark light mode appearance",
+        icon: theme.effective === "dark" ? Sun : Moon,
+        onSelect: () => void theme.toggle(),
+      },
+    ];
+    return [...navItems, ...actionItems];
+  }, [router, theme]);
+
   return (
     <div className="flex min-h-screen bg-background text-foreground">
       <NavigationSidebar {...props} />
       <main className="flex-1">
         <Outlet />
       </main>
-      <CommandPalette />
+      <CommandPalette commands={commands} />
     </div>
   );
+}
+
+type ThemeSaveResult =
+  | { ok: true; theme: ThemeView }
+  | { ok: false; error: string };
+
+function useEffectiveTheme(): {
+  effective: "light" | "dark";
+  toggle: () => Promise<void>;
+} {
+  const [view, setView] = useState<ThemeView>(DEFAULT_THEME);
+  const [prefersDark, setPrefersDark] = useState(
+    () => window.matchMedia("(prefers-color-scheme: dark)").matches,
+  );
+  useEffect(() => {
+    let cancelled = false;
+    (apiFetch("/api/theme") as Promise<ThemeView>)
+      .then((t) => {
+        if (!cancelled) setView(t);
+      })
+      .catch(() => {
+        // Pre-auth or worker error: stay on defaults.
+      });
+    const onUpdate = (e: Event) => {
+      const detail = (e as CustomEvent<ThemeView>).detail;
+      if (detail) setView(detail);
+    };
+    window.addEventListener(THEME_UPDATED_EVENT, onUpdate);
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const onMedia = () => setPrefersDark(media.matches);
+    media.addEventListener("change", onMedia);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(THEME_UPDATED_EVENT, onUpdate);
+      media.removeEventListener("change", onMedia);
+    };
+  }, []);
+
+  const effective = resolveEffectiveTheme(view.theme, prefersDark);
+
+  const toggle = async () => {
+    const next: ThemeView = {
+      ...view,
+      theme: effective === "dark" ? "light" : "dark",
+    };
+    setView(next);
+    try {
+      const out = (await apiFetch("/api/theme", {
+        method: "PUT",
+        body: { theme: next.theme },
+      })) as ThemeSaveResult;
+      if (out.ok) {
+        setView(out.theme);
+        window.dispatchEvent(
+          new CustomEvent(THEME_UPDATED_EVENT, { detail: out.theme }),
+        );
+      }
+    } catch {
+      // Save failed: revert optimistic state on next /api/theme load.
+    }
+  };
+
+  return { effective, toggle };
 }
 
 function useProfile(): NavProfile {

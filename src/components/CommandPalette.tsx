@@ -5,6 +5,7 @@
 
 import { CornerDownLeft, Sparkles } from "lucide-react";
 import {
+  type ComponentType,
   type KeyboardEvent as ReactKeyboardEvent,
   useCallback,
   useEffect,
@@ -41,6 +42,19 @@ export type Result = Signal & { id: string };
 export type Searcher = (query: string) => Promise<{ signals: Result[] }>;
 
 export type Asker = (q: string, signalIds: string[]) => Promise<AskAiResult>;
+
+export type PaletteCommandGroup = "Navigation" | "Actions";
+
+export type PaletteCommand = {
+  id: string;
+  label: string;
+  group: PaletteCommandGroup;
+  icon: ComponentType<{ className?: string }>;
+  keywords?: string;
+  onSelect: () => void;
+};
+
+const COMMAND_GROUPS: PaletteCommandGroup[] = ["Navigation", "Actions"];
 
 const defaultSearcher: Searcher = async (query) => {
   const params = new URLSearchParams({ filter: "all", limit: "20" });
@@ -83,10 +97,12 @@ function groupOf(s: Signal): GroupId | null {
 export function CommandPalette({
   searcher,
   asker,
+  commands,
   initialOpen = false,
 }: {
   searcher?: Searcher;
   asker?: Asker;
+  commands?: PaletteCommand[];
   initialOpen?: boolean;
 } = {}) {
   const [open, setOpen] = useState(initialOpen);
@@ -122,6 +138,7 @@ export function CommandPalette({
       onOpenChange={setOpen}
       searcher={searcher ?? defaultSearcher}
       asker={asker ?? defaultAsker}
+      commands={commands ?? []}
     />
   );
 }
@@ -136,11 +153,13 @@ function PaletteDialog({
   onOpenChange,
   searcher,
   asker,
+  commands,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   searcher: Searcher;
   asker: Asker;
+  commands: PaletteCommand[];
 }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Result[]>([]);
@@ -174,6 +193,30 @@ function PaletteDialog({
       clearTimeout(t);
     };
   }, [open, query, searcher]);
+
+  const filteredCommands = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const groups: Record<PaletteCommandGroup, PaletteCommand[]> = {
+      Navigation: [],
+      Actions: [],
+    };
+    for (const c of commands) {
+      if (q) {
+        const hay = `${c.label} ${c.keywords ?? ""}`.toLowerCase();
+        if (!hay.includes(q)) continue;
+      }
+      groups[c.group].push(c);
+    }
+    return groups;
+  }, [commands, query]);
+
+  const runCommand = useCallback(
+    (c: PaletteCommand) => {
+      c.onSelect();
+      onOpenChange(false);
+    },
+    [onOpenChange],
+  );
 
   const grouped = useMemo(() => {
     const buckets: Record<GroupId, Result[]> = {
@@ -258,6 +301,31 @@ function PaletteDialog({
           />
           <CommandList className="max-h-[360px]">
             <CommandEmpty>No matches yet. Try a different query.</CommandEmpty>
+            {COMMAND_GROUPS.map((heading) => {
+              const items = filteredCommands[heading];
+              if (items.length === 0) return null;
+              return (
+                <CommandGroup key={heading} heading={heading}>
+                  {items.map((c) => (
+                    <CommandItem
+                      key={c.id}
+                      value={`cmd:${c.id}:${c.label}`}
+                      onSelect={() => runCommand(c)}
+                      className="gap-3"
+                    >
+                      <c.icon className="h-4 w-4 text-muted-foreground" />
+                      <div className="min-w-0 flex-1 truncate font-medium text-foreground">
+                        {c.label}
+                      </div>
+                      <CornerDownLeft
+                        aria-hidden
+                        className="size-3 text-muted-foreground opacity-0 group-data-[selected=true]:opacity-100 data-[selected=true]:opacity-100"
+                      />
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              );
+            })}
             {GROUPS.map((g) => {
               const items = grouped[g.id];
               if (items.length === 0) return null;
