@@ -7,7 +7,7 @@ import {
   resolveEffectiveTheme,
   type ThemeStore,
   type ThemeView,
-} from "#/lib/theme-api";
+} from "#/features/settings/theme/api";
 
 function makeStore(initial: ThemeView = DEFAULT_THEME): ThemeStore {
   let row: ThemeView = { ...initial };

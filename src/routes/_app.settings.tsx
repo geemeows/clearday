@@ -8,7 +8,6 @@ import {
   type RulePredicate,
 } from "#/features/inbox-rules/engine";
 import type { IntegrationView } from "#/features/integrations/api/integrations-api";
-import { apiFetch } from "#/lib/api-client";
 import {
   DEFAULT_RETENTION_DAYS,
   type ExportPayload,
@@ -16,7 +15,7 @@ import {
   MIN_RETENTION_DAYS,
   PURGE_CONFIRMATION,
   type RetentionView,
-} from "#/lib/data-privacy-api";
+} from "#/features/settings/data-privacy/api";
 import {
   ACCENTS,
   type Accent,
@@ -27,7 +26,8 @@ import {
   THEMES,
   type Theme,
   type ThemeView,
-} from "#/lib/theme-api";
+} from "#/features/settings/theme/api";
+import { apiFetch } from "#/lib/api-client";
 import type { StoredSignal } from "#/shared/signal";
 
 export const Route = createFileRoute("/_app/settings")({

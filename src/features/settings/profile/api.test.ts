@@ -4,7 +4,7 @@ import {
   type ProfileStore,
   type ProfileView,
   putProfile,
-} from "#/lib/profile-api";
+} from "#/features/settings/profile/api";
 
 function makeStore(initial: ProfileView): ProfileStore {
   let row: ProfileView = { ...initial };

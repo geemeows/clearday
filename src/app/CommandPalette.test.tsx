@@ -14,7 +14,7 @@ import {
   type PaletteCommand,
   type Result,
   type Searcher,
-} from "#/components/CommandPalette";
+} from "#/app/CommandPalette";
 
 type SearcherResponse = Awaited<ReturnType<Searcher>>;
 

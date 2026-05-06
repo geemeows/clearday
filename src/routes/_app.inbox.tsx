@@ -6,9 +6,9 @@ import {
   type SourceKind,
 } from "#/features/signals/components/SourceGlyph";
 import { filterMeetingsToToday } from "#/features/signals/views/today";
+import { useAutoRefresh } from "#/hooks/use-auto-refresh";
 import { apiFetch } from "#/lib/api-client";
 import { cn } from "#/lib/cn";
-import { useAutoRefresh } from "#/lib/use-auto-refresh";
 import type { Signal, SignalKind, SignalProvider } from "#/shared/signal";
 
 export const Route = createFileRoute("/_app/inbox")({

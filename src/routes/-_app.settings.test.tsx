@@ -19,8 +19,11 @@ import {
   type ExportPayload,
   PURGE_CONFIRMATION,
   type RetentionView,
-} from "#/lib/data-privacy-api";
-import { THEME_UPDATED_EVENT, type ThemeView } from "#/lib/theme-api";
+} from "#/features/settings/data-privacy/api";
+import {
+  THEME_UPDATED_EVENT,
+  type ThemeView,
+} from "#/features/settings/theme/api";
 import {
   AiProviderPanel,
   AiSafeguardsPanel,

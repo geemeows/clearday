@@ -1,5 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import { isAllowedEmail } from "#/lib/auth-gate";
+import { isAllowedEmail } from "#/features/auth/gate";
 
 export type WorkerEnv = {
   ALLOWED_EMAIL: string;

@@ -10,7 +10,7 @@ import {
   putRetention,
   type RetentionStore,
   type RetentionView,
-} from "#/lib/data-privacy-api";
+} from "#/features/settings/data-privacy/api";
 
 describe("exportData", () => {
   it("returns a JSON-serializable payload with each table's rows", async () => {

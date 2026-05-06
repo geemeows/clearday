@@ -64,13 +64,11 @@ import { runScheduledPoll } from "#/features/integrations/orchestrator";
 import { PROVIDERS } from "#/features/integrations/providers";
 import type { PrReviewEvent } from "#/features/integrations/providers/github";
 import { handleOAuthExchange } from "#/features/integrations/server/oauth-exchange-handler";
-import { runDueRollups } from "#/features/signals/rollup";
 import {
-  handleDismissSignal,
-  handleListSignals,
-  handleSources,
-} from "#/features/signals/server/api";
-import { dismissSignal, markSignalReplied } from "#/features/signals/store";
+  buildConnectUrl,
+  completeOnboarding,
+  getOnboardingStatus,
+} from "#/features/onboarding/api";
 import {
   type ExportDeps,
   exportData,
@@ -82,24 +80,19 @@ import {
   type RetentionPutBody,
   type RetentionStore,
   type RetentionView,
-} from "#/lib/data-privacy-api";
-import {
-  buildConnectUrl,
-  completeOnboarding,
-  getOnboardingStatus,
-} from "#/lib/onboarding-api";
+} from "#/features/settings/data-privacy/api";
 import {
   getProfile,
   type ProfilePutBody,
   type ProfileStore,
   type ProfileView,
   putProfile,
-} from "#/lib/profile-api";
+} from "#/features/settings/profile/api";
 import {
   getSelfHostInfo,
   runHealthCheck,
   type SelfHostEnv,
-} from "#/lib/self-host-api";
+} from "#/features/settings/self-host/api";
 import {
   DEFAULT_THEME,
   getTheme,
@@ -107,7 +100,14 @@ import {
   type ThemePutBody,
   type ThemeStore,
   type ThemeView,
-} from "#/lib/theme-api";
+} from "#/features/settings/theme/api";
+import { runDueRollups } from "#/features/signals/rollup";
+import {
+  handleDismissSignal,
+  handleListSignals,
+  handleSources,
+} from "#/features/signals/server/api";
+import { dismissSignal, markSignalReplied } from "#/features/signals/store";
 import type { StoredSignal } from "#/shared/signal";
 import {
   defaultGetUser,

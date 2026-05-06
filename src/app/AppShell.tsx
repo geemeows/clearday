@@ -8,10 +8,7 @@ import {
   Sun,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import {
-  CommandPalette,
-  type PaletteCommand,
-} from "#/components/CommandPalette";
+import { CommandPalette, type PaletteCommand } from "#/app/CommandPalette";
 import {
   type FocusState,
   NavigationSidebar,
@@ -20,17 +17,20 @@ import {
   type NavProfile,
   type NavSource,
   OPEN_CMDK_EVENT,
-} from "#/components/NavigationSidebar";
+} from "#/app/NavigationSidebar";
 import type { ProviderAccountStatus } from "#/features/integrations/provider-account-status";
-import type { SourceKind } from "#/features/signals/components/SourceGlyph";
-import { apiFetch } from "#/lib/api-client";
-import { PROFILE_UPDATED_EVENT, type ProfileView } from "#/lib/profile-api";
+import {
+  PROFILE_UPDATED_EVENT,
+  type ProfileView,
+} from "#/features/settings/profile/api";
 import {
   DEFAULT_THEME,
   resolveEffectiveTheme,
   THEME_UPDATED_EVENT,
   type ThemeView,
-} from "#/lib/theme-api";
+} from "#/features/settings/theme/api";
+import type { SourceKind } from "#/features/signals/components/SourceGlyph";
+import { apiFetch } from "#/lib/api-client";
 
 const PAGES: NavPage[] = [
   { to: "/today", label: "Today", icon: Sun },

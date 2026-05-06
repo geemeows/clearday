@@ -6,13 +6,13 @@
 import { Moon, Sun } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "#/components/ui/button";
-import { apiFetch } from "#/lib/api-client";
 import {
   DEFAULT_THEME,
   resolveEffectiveTheme,
   THEME_UPDATED_EVENT,
   type ThemeView,
-} from "#/lib/theme-api";
+} from "#/features/settings/theme/api";
+import { apiFetch } from "#/lib/api-client";
 
 type ThemeSaveResult =
   | { ok: true; theme: ThemeView }

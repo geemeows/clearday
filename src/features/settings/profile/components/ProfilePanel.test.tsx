@@ -4,7 +4,7 @@ import {
   loadProfileFields,
   type ProfileFields,
   ProfilePanel,
-} from "#/components/ProfilePanel";
+} from "#/features/settings/profile/components/ProfilePanel";
 
 vi.mock("#/lib/api-client", () => ({
   apiFetch: vi.fn(),

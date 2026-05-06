@@ -1,6 +1,6 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
+import type { OnboardingStatus } from "#/features/onboarding/api";
 import { apiFetch } from "#/lib/api-client";
-import type { OnboardingStatus } from "#/lib/onboarding-api";
 
 export const Route = createFileRoute("/")({
   beforeLoad: async ({ context }) => {

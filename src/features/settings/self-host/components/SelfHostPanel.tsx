@@ -7,8 +7,8 @@
 import { Check, Copy } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "#/components/ui/button";
+import type { SelfHostInfo } from "#/features/settings/self-host/api";
 import { apiFetch } from "#/lib/api-client";
-import type { SelfHostInfo } from "#/lib/self-host-api";
 
 type Row = { label: string; value: string | null };
 

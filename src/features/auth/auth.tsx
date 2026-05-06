@@ -6,7 +6,7 @@ import {
   useEffect,
   useState,
 } from "react";
-import { isAllowedEmail } from "#/lib/auth-gate";
+import { isAllowedEmail } from "#/features/auth/gate";
 import { supabase } from "#/lib/supabase";
 
 export type AuthState = {

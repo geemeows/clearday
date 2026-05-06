@@ -1,7 +1,10 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ThemeToggle } from "#/components/ThemeToggle";
-import { THEME_UPDATED_EVENT, type ThemeView } from "#/lib/theme-api";
+import {
+  THEME_UPDATED_EVENT,
+  type ThemeView,
+} from "#/features/settings/theme/api";
+import { ThemeToggle } from "#/features/settings/theme/components/ThemeToggle";
 
 vi.mock("#/lib/api-client", () => ({
   apiFetch: vi.fn(),

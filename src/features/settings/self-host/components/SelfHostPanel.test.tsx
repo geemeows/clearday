@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { SelfHostPanel } from "#/components/SelfHostPanel";
-import type { SelfHostInfo } from "#/lib/self-host-api";
+import type { SelfHostInfo } from "#/features/settings/self-host/api";
+import { SelfHostPanel } from "#/features/settings/self-host/components/SelfHostPanel";
 
 const FIXTURE: SelfHostInfo = {
   worker_url: "https://worker.example.com",

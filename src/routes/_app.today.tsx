@@ -17,6 +17,7 @@ import {
   useState,
 } from "react";
 import type { BriefingResult } from "#/features/briefing/morning-briefing";
+import type { ProfileView } from "#/features/settings/profile/api";
 import { UpcomingEventsCard } from "#/features/signals/components/UpcomingEventsCard";
 import type { MeetingEvent } from "#/features/signals/views/calendar";
 import {
@@ -30,9 +31,8 @@ import {
   pickUpcoming,
   type WeekStats,
 } from "#/features/signals/views/today";
+import { useAutoRefresh } from "#/hooks/use-auto-refresh";
 import { apiFetch } from "#/lib/api-client";
-import type { ProfileView } from "#/lib/profile-api";
-import { useAutoRefresh } from "#/lib/use-auto-refresh";
 import type { StoredSignal } from "#/shared/signal";
 
 export const Route = createFileRoute("/_app/today")({

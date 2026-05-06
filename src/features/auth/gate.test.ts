@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isAllowedEmail } from "#/lib/auth-gate";
+import { isAllowedEmail } from "#/features/auth/gate";
 
 describe("isAllowedEmail", () => {
   it("accepts an exact match", () => {

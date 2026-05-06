@@ -2,12 +2,12 @@ import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { Check } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "#/components/ui/button";
+import { signOut, useAuth } from "#/features/auth/auth";
 import {
   SourceGlyph,
   type SourceKind,
 } from "#/features/signals/components/SourceGlyph";
 import { apiFetch } from "#/lib/api-client";
-import { signOut, useAuth } from "#/lib/auth";
 
 export const Route = createFileRoute("/onboarding")({
   beforeLoad: ({ context, location }) => {

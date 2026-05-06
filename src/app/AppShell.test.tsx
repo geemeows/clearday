@@ -7,8 +7,8 @@ import {
 } from "@tanstack/react-router";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { AppShell } from "#/components/AppShell";
-import { OPEN_CMDK_EVENT } from "#/components/NavigationSidebar";
+import { AppShell } from "#/app/AppShell";
+import { OPEN_CMDK_EVENT } from "#/app/NavigationSidebar";
 
 async function renderShell(initial = "/today") {
   const rootRoute = createRootRoute({ component: AppShell });

@@ -1,14 +1,14 @@
 import { RouterProvider } from "@tanstack/react-router";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { apiFetch } from "#/lib/api-client";
-import { AuthProvider, useAuth } from "#/lib/auth";
+import { AuthProvider, useAuth } from "#/features/auth/auth";
 import {
   applyThemeToDocument,
   DEFAULT_THEME,
   THEME_UPDATED_EVENT,
   type ThemeView,
-} from "#/lib/theme-api";
+} from "#/features/settings/theme/api";
+import { apiFetch } from "#/lib/api-client";
 import { router } from "#/router";
 import "#/styles.css";
 

@@ -6,7 +6,7 @@ import {
   REQUIRED_ENV_VARS,
   runHealthCheck,
   type SelfHostEnv,
-} from "#/lib/self-host-api";
+} from "#/features/settings/self-host/api";
 
 const FULL_ENV: SelfHostEnv = {
   ALLOWED_EMAIL: "owner@example.com",

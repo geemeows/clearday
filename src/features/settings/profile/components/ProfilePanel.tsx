@@ -9,9 +9,9 @@ import { LogOut } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "#/components/ui/avatar";
 import { Button } from "#/components/ui/button";
+import { signOut as defaultSignOut } from "#/features/auth/auth";
 import type { IntegrationView } from "#/features/integrations/api/integrations-api";
 import { apiFetch } from "#/lib/api-client";
-import { signOut as defaultSignOut } from "#/lib/auth";
 import { supabase } from "#/lib/supabase";
 
 export type ProfileFields = {

@@ -3,7 +3,7 @@ import {
   buildConnectUrl,
   completeOnboarding,
   getOnboardingStatus,
-} from "#/lib/onboarding-api";
+} from "#/features/onboarding/api";
 
 describe("getOnboardingStatus", () => {
   it("returns onboarded_at + connected count + auth proxy URL", async () => {
