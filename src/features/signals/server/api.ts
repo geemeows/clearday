@@ -7,11 +7,8 @@ import {
   deriveProviderAccountStatus,
   type ProviderAccountStatus,
 } from "#/features/integrations/provider-account-status";
-import {
-  dismissSignal,
-  listSignals,
-  type SupabaseLike,
-} from "#/lib/signal-store";
+import { dismissSignal, listSignals } from "#/features/signals/store";
+import type { SupabaseLike } from "#/shared/db";
 import type { SignalKind, SignalProvider } from "#/shared/signal";
 import { json } from "#/worker/middleware";
 

@@ -63,6 +63,13 @@ import { runScheduledPoll } from "#/features/integrations/orchestrator";
 import { PROVIDERS } from "#/features/integrations/providers";
 import type { PrReviewEvent } from "#/features/integrations/providers/github";
 import { handleOAuthExchange } from "#/features/integrations/server/oauth-exchange-handler";
+import { runDueRollups } from "#/features/signals/rollup";
+import {
+  handleDismissSignal,
+  handleListSignals,
+  handleSources,
+} from "#/features/signals/server/api";
+import { dismissSignal, markSignalReplied } from "#/features/signals/store";
 import {
   type ExportDeps,
   exportData,
@@ -93,8 +100,6 @@ import {
   runHealthCheck,
   type SelfHostEnv,
 } from "#/lib/self-host-api";
-import { runDueRollups } from "#/lib/signal-rollup";
-import { dismissSignal, markSignalReplied } from "#/lib/signal-store";
 import {
   DEFAULT_THEME,
   getTheme,
@@ -111,11 +116,6 @@ import {
   type WorkerEnv,
 } from "#/worker/middleware";
 import { persistProviderAccount } from "#/worker/provider-accounts";
-import {
-  handleDismissSignal,
-  handleListSignals,
-  handleSources,
-} from "#/worker/signals-api";
 
 export default {
   async fetch(

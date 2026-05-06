@@ -21,8 +21,8 @@ import {
   type NavSource,
   OPEN_CMDK_EVENT,
 } from "#/components/NavigationSidebar";
-import type { SourceKind } from "#/components/SourceGlyph";
 import type { ProviderAccountStatus } from "#/features/integrations/provider-account-status";
+import type { SourceKind } from "#/features/signals/components/SourceGlyph";
 import { apiFetch } from "#/lib/api-client";
 import { PROFILE_UPDATED_EVENT, type ProfileView } from "#/lib/profile-api";
 import {

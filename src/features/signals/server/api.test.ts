@@ -3,7 +3,7 @@ import {
   handleDismissSignal,
   handleListSignals,
   handleSources,
-} from "#/worker/signals-api";
+} from "#/features/signals/server/api";
 
 function listClient() {
   const limit = vi.fn(async () => ({ data: [], error: null }));

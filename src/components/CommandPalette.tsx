@@ -13,7 +13,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { SourceGlyph, type SourceKind } from "#/components/SourceGlyph";
 import {
   Command,
   CommandEmpty,
@@ -29,6 +28,10 @@ import {
   DialogTitle,
 } from "#/components/ui/dialog";
 import type { AskAiResult } from "#/features/ask-ai/api";
+import {
+  SourceGlyph,
+  type SourceKind,
+} from "#/features/signals/components/SourceGlyph";
 import { apiFetch } from "#/lib/api-client";
 import { cn } from "#/lib/cn";
 import type { Signal } from "#/shared/signal";

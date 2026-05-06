@@ -11,7 +11,7 @@ import type {
   RefreshedToken,
   TokenRecord,
 } from "#/features/integrations/oauth/types";
-import type { SupabaseLike } from "#/lib/signal-store";
+import type { SupabaseLike } from "#/shared/db";
 import type { AuthorizeProviderConfig } from "#/shared/oauth/scopes";
 import type { Signal, SignalProvider } from "#/shared/signal";
 

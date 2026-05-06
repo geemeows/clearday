@@ -3,7 +3,7 @@
 // returns a delta of newly-discovered threads which `saveState` upserts
 // back into `slack_participated_threads`.
 
-import type { SupabaseLike } from "#/lib/signal-store";
+import type { SupabaseLike } from "#/shared/db";
 
 export type SlackParticipatedThreadRef = {
   channel: string;

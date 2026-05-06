@@ -3,9 +3,9 @@ import {
   dismissSignal,
   listSignals,
   markSignalReplied,
-  type SupabaseLike,
   upsertSignal,
-} from "#/lib/signal-store";
+} from "#/features/signals/store";
+import type { SupabaseLike } from "#/shared/db";
 import type { Signal, StoredSignal } from "#/shared/signal";
 
 function makeClient(overrides: {

@@ -4,7 +4,7 @@ import {
   type TaskCard,
   type TaskStatus,
   TasksKanban,
-} from "#/components/TasksKanban";
+} from "#/features/signals/components/TasksKanban";
 import { apiFetch } from "#/lib/api-client";
 import type { Signal, SignalKind } from "#/shared/signal";
 

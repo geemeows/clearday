@@ -16,8 +16,8 @@ import {
   useMemo,
   useState,
 } from "react";
-import { UpcomingEventsCard } from "#/components/UpcomingEventsCard";
 import type { BriefingResult } from "#/features/briefing/morning-briefing";
+import { UpcomingEventsCard } from "#/features/signals/components/UpcomingEventsCard";
 import type { MeetingEvent } from "#/features/signals/views/calendar";
 import {
   computeWeekStats,

@@ -4,7 +4,10 @@
 // mock-padding.
 
 import { GitPullRequest } from "lucide-react";
-import { SourceGlyph, type SourceKind } from "#/components/SourceGlyph";
+import {
+  SourceGlyph,
+  type SourceKind,
+} from "#/features/signals/components/SourceGlyph";
 import { cn } from "#/lib/cn";
 
 export type TaskStatus = "todo" | "in_progress" | "in_review" | "done";

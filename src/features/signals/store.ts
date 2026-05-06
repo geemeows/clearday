@@ -7,43 +7,13 @@
 // client is used (RLS gates writes/reads to the allowed user).
 
 import { applyInboxRules, type InboxRule } from "#/features/inbox-rules/engine";
+import type { SupabaseLike } from "#/shared/db";
 import type {
   Signal,
   SignalKind,
   SignalProvider,
   StoredSignal,
 } from "#/shared/signal";
-
-type SupabaseLike = {
-  from: (table: string) => {
-    upsert: (
-      values: Record<string, unknown> | Record<string, unknown>[],
-      options: { onConflict: string },
-    ) => Promise<{ error: { message: string } | null }>;
-    select: (cols: string) => SelectChain;
-    update: (values: Record<string, unknown>) => UpdateChain;
-  };
-};
-
-type SelectChain = {
-  is: (col: string, val: null) => SelectChain;
-  in: (col: string, vals: string[]) => SelectChain;
-  ilike: (col: string, pattern: string) => SelectChain;
-  or: (filter: string) => SelectChain;
-  gte: (col: string, val: string) => SelectChain;
-  order: (col: string, opts: { ascending: boolean }) => SelectChain;
-  limit: (n: number) => Promise<{
-    data: StoredSignal[] | null;
-    error: { message: string } | null;
-  }>;
-};
-
-type UpdateChain = {
-  eq: (
-    col: string,
-    val: string,
-  ) => Promise<{ error: { message: string } | null }>;
-};
 
 export type UpsertSignalOptions = {
   /**
@@ -176,5 +146,3 @@ export async function markSignalReplied(
     .eq("id", id);
   if (error) throw new Error(`signal mark replied failed: ${error.message}`);
 }
-
-export type { SupabaseLike };

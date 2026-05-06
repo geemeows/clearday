@@ -11,11 +11,14 @@
 
 import { Plus, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { SourceGlyph, type SourceKind } from "#/components/SourceGlyph";
 import { Button } from "#/components/ui/button";
 import { Input } from "#/components/ui/input";
 import { Switch } from "#/components/ui/switch";
 import type { ProviderAccountStatus } from "#/features/integrations/provider-account-status";
+import {
+  SourceGlyph,
+  type SourceKind,
+} from "#/features/signals/components/SourceGlyph";
 import { apiFetch } from "#/lib/api-client";
 import { cn } from "#/lib/cn";
 

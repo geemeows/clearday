@@ -7,7 +7,7 @@ import {
   type RollupRow,
   rollup,
   runDueRollups,
-} from "#/lib/signal-rollup";
+} from "#/features/signals/rollup";
 
 function makeDeps(initial: {
   raw?: RawSignalForRollup[];

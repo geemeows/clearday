@@ -6,11 +6,14 @@ import { Settings as SettingsIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { FocusActiveBlock } from "#/components/FocusActiveBlock";
 import { FocusButton } from "#/components/FocusButton";
-import { SourceGlyph, type SourceKind } from "#/components/SourceGlyph";
 import { ThemeToggle } from "#/components/ThemeToggle";
 import { Avatar, AvatarFallback, AvatarImage } from "#/components/ui/avatar";
 import { Button } from "#/components/ui/button";
 import type { ProviderAccountStatus } from "#/features/integrations/provider-account-status";
+import {
+  SourceGlyph,
+  type SourceKind,
+} from "#/features/signals/components/SourceGlyph";
 import { cn } from "#/lib/cn";
 
 export const OPEN_CMDK_EVENT = "devy:open-cmdk";

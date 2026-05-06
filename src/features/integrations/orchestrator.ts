@@ -21,8 +21,8 @@ import {
   type ProviderId,
 } from "#/features/integrations/provider";
 import { isProviderId, PROVIDERS } from "#/features/integrations/providers";
-import type { SupabaseLike } from "#/lib/signal-store";
-import { upsertSignals } from "#/lib/signal-store";
+import { upsertSignals } from "#/features/signals/store";
+import type { SupabaseLike } from "#/shared/db";
 
 export type ProviderAccountRow = {
   provider: string;

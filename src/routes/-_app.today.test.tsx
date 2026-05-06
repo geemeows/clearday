@@ -6,8 +6,8 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { UpcomingEventsCard } from "#/components/UpcomingEventsCard";
 import type { BriefingResult } from "#/features/briefing/morning-briefing";
+import { UpcomingEventsCard } from "#/features/signals/components/UpcomingEventsCard";
 import { toMeetingEvents } from "#/features/signals/views/calendar";
 import {
   BriefingCard,

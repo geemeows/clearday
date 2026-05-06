@@ -1,6 +1,9 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { SourceGlyph, type SourceKind } from "#/components/SourceGlyph";
+import {
+  SourceGlyph,
+  type SourceKind,
+} from "#/features/signals/components/SourceGlyph";
 
 const CASES: Array<{ kind: SourceKind; label: string }> = [
   { kind: "git", label: "Git source" },
