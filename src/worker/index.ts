@@ -1,6 +1,15 @@
 /// <reference types="@cloudflare/workers-types" />
 import { createClient } from "@supabase/supabase-js";
 import {
+  disconnectIntegration,
+  getIntegrations,
+  type IntegrationsStore,
+  type ProviderAccountRow,
+} from "#/features/integrations/api/integrations-api";
+import { runScheduledPoll } from "#/features/integrations/orchestrator";
+import { PROVIDERS } from "#/features/integrations/providers";
+import type { PrReviewEvent } from "#/features/integrations/providers/github";
+import {
   type AiSettingsRow,
   type AiSettingsStore,
   getAiSettings,
@@ -16,10 +25,6 @@ import {
   handleBriefingGenerate,
   runBriefingTick,
 } from "#/lib/briefing-api";
-import {
-  declineCalendarEvent,
-  rescheduleCalendarEvent,
-} from "#/lib/calendar-actions";
 import {
   type ExportDeps,
   exportData,
@@ -50,12 +55,6 @@ import {
   putInboxRules,
 } from "#/lib/inbox-rules-api";
 import type { InboxRule } from "#/lib/inbox-rules-engine";
-import {
-  disconnectIntegration,
-  getIntegrations,
-  type IntegrationsStore,
-  type ProviderAccountRow,
-} from "#/lib/integrations-api";
 import { runMeetingAlertTick } from "#/lib/meeting-alert-tick";
 import { handleOAuthExchange } from "#/lib/oauth-exchange-handler";
 import {
@@ -63,7 +62,6 @@ import {
   completeOnboarding,
   getOnboardingStatus,
 } from "#/lib/onboarding-api";
-import { type PrReviewEvent, submitPrReview } from "#/lib/pr-review";
 import {
   getProfile,
   type ProfilePutBody,
@@ -76,12 +74,8 @@ import {
   runHealthCheck,
   type SelfHostEnv,
 } from "#/lib/self-host-api";
-import type { StoredSignal } from "#/lib/signal";
 import { runDueRollups } from "#/lib/signal-rollup";
 import { dismissSignal, markSignalReplied } from "#/lib/signal-store";
-import { listSlackChannels } from "#/lib/slack-channels";
-import { postSlackReply } from "#/lib/slack-reply";
-import { loadSlackThread } from "#/lib/slack-thread";
 import {
   DEFAULT_THEME,
   getTheme,
@@ -100,13 +94,13 @@ import {
 } from "#/lib/web-push-api";
 import { pruneStaleWebPushSubscriptions } from "#/lib/web-push-dispatcher";
 import type { VapidConfig } from "#/lib/web-push-vapid";
+import type { StoredSignal } from "#/shared/signal";
 import {
   buildDispatcherDeps,
   loadDueQueuedAlerts,
   loadUpcomingMeetings,
   removeQueuedAlert,
 } from "#/worker/alert-glue";
-import { runScheduledPoll } from "#/worker/cron-orchestrator";
 import {
   defaultGetUser,
   json,
@@ -538,7 +532,7 @@ export default {
       if (error) return json({ ok: false, error: error.message }, 500);
       const token =
         (data as { access_token: string | null } | null)?.access_token ?? null;
-      const out = await listSlackChannels({
+      const out = await PROVIDERS.slack.capabilities.listChannels({
         token,
         fetch: (i, init) => fetch(i, init),
       });
@@ -1047,7 +1041,7 @@ async function handleSubmitPrReview(
   const token =
     (data as { access_token: string | null } | null)?.access_token ?? null;
 
-  const out = await submitPrReview(
+  const out = await PROVIDERS.github.capabilities.submitPrReview(
     { repo, number, event, body: message },
     { token, fetch: (i, init) => fetch(i, init) },
   );
@@ -1092,7 +1086,7 @@ async function handlePostSlackReply(
   const token =
     (data as { access_token: string | null } | null)?.access_token ?? null;
 
-  const out = await postSlackReply(
+  const out = await PROVIDERS.slack.capabilities.postReply(
     { channel, text, thread_ts },
     { token, fetch: (i, init) => fetch(i, init) },
   );
@@ -1146,7 +1140,7 @@ async function handleGetSlackThread(
     } | null) ?? null;
   const token = row?.access_token ?? null;
   const selfUserId = row?.account_id ?? null;
-  const out = await loadSlackThread(
+  const out = await PROVIDERS.slack.capabilities.loadThread(
     { channel, thread_ts },
     { token, fetch: (i, init) => fetch(i, init) },
     selfUserId,
@@ -1187,7 +1181,7 @@ async function handleDeclineCalendarEvent(
   const token =
     (data as { access_token: string | null } | null)?.access_token ?? null;
 
-  const out = await declineCalendarEvent(
+  const out = await PROVIDERS.google.capabilities.decline(
     { event_id, calendar_id },
     { token, fetch: (i, init) => fetch(i, init) },
   );
@@ -1233,7 +1227,7 @@ async function handleRescheduleCalendarEvent(
   const token =
     (data as { access_token: string | null } | null)?.access_token ?? null;
 
-  const out = await rescheduleCalendarEvent(
+  const out = await PROVIDERS.google.capabilities.reschedule(
     { event_id, calendar_id, shift_minutes },
     { token, fetch: (i, init) => fetch(i, init) },
   );

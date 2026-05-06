@@ -3,12 +3,12 @@
 // queries if the SPA went direct, but routing through the Worker lets us
 // apply server-side filters and unify shapes).
 
-import type { SignalKind, SignalProvider } from "#/lib/signal";
 import {
   dismissSignal,
   listSignals,
   type SupabaseLike,
 } from "#/lib/signal-store";
+import type { SignalKind, SignalProvider } from "#/shared/signal";
 import { json } from "#/worker/middleware";
 
 const KIND_BY_FILTER: Record<string, SignalKind[]> = {

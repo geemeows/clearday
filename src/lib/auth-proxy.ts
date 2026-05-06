@@ -11,12 +11,6 @@
 // and persists the token. The proxy never reads/writes storage and never
 // hands the raw code or token to the user-Worker.
 
-import { type AuthorizeEnv, buildAuthorizeUrl } from "#/lib/authorize-url";
-import {
-  type EnvelopeKeypair,
-  type EnvelopePayload,
-  signEnvelope,
-} from "#/lib/oauth-envelope";
 import {
   type ExchangeEnv,
   ExchangeError,
@@ -25,7 +19,16 @@ import {
   type Provider,
   type TokenRecord,
 } from "#/lib/oauth-exchange";
-import { verifyState } from "#/lib/oauth-state";
+import {
+  type AuthorizeEnv,
+  buildAuthorizeUrl,
+} from "#/shared/oauth/authorize-url";
+import {
+  type EnvelopeKeypair,
+  type EnvelopePayload,
+  signEnvelope,
+} from "#/shared/oauth/envelope";
+import { verifyState } from "#/shared/oauth/state";
 
 export type AuthProxyEnv = AuthorizeEnv &
   ExchangeEnv & {

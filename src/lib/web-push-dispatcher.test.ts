@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from "vitest";
-import type { StoredSignal } from "#/lib/signal";
 import {
   dispatchWebPush,
   pruneStaleWebPushSubscriptions,
@@ -7,6 +6,7 @@ import {
   type WebPushDispatcherDeps,
 } from "#/lib/web-push-dispatcher";
 import { b64urlDecode, b64urlEncode } from "#/lib/web-push-vapid";
+import type { StoredSignal } from "#/shared/signal";
 
 async function vapidConfig() {
   const pair = await crypto.subtle.generateKey(

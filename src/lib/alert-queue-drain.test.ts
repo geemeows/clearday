@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { DispatcherDeps } from "#/lib/alert-dispatcher";
 import { runAlertQueueDrain } from "#/lib/alert-queue-drain";
-import type { StoredSignal } from "#/lib/signal";
+import type { StoredSignal } from "#/shared/signal";
 
 function signal(id: string, over?: Partial<StoredSignal>): StoredSignal {
   return {

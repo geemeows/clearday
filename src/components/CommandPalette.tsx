@@ -31,7 +31,7 @@ import {
 import { apiFetch } from "#/lib/api-client";
 import type { AskAiResult } from "#/lib/ask-ai-api";
 import { cn } from "#/lib/cn";
-import type { Signal } from "#/lib/signal";
+import type { Signal } from "#/shared/signal";
 
 const OPEN_CMDK_EVENT = "devy:open-cmdk";
 

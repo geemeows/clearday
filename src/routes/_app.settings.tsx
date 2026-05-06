@@ -1,5 +1,6 @@
 import { createFileRoute, Link, Outlet } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import type { IntegrationView } from "#/features/integrations/api/integrations-api";
 import type { AlertChannel } from "#/lib/alert-dispatcher";
 import { apiFetch } from "#/lib/api-client";
 import {
@@ -16,8 +17,6 @@ import {
   type RuleEffect,
   type RulePredicate,
 } from "#/lib/inbox-rules-engine";
-import type { IntegrationView } from "#/lib/integrations-api";
-import type { StoredSignal } from "#/lib/signal";
 import {
   ACCENTS,
   type Accent,
@@ -29,6 +28,7 @@ import {
   type Theme,
   type ThemeView,
 } from "#/lib/theme-api";
+import type { StoredSignal } from "#/shared/signal";
 
 export const Route = createFileRoute("/_app/settings")({
   component: SettingsLayout,

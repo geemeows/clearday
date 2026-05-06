@@ -14,13 +14,12 @@ import {
   within,
 } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import type { IntegrationView } from "#/features/integrations/api/integrations-api";
 import {
   type ExportPayload,
   PURGE_CONFIRMATION,
   type RetentionView,
 } from "#/lib/data-privacy-api";
-import type { IntegrationView } from "#/lib/integrations-api";
-import type { StoredSignal } from "#/lib/signal";
 import { THEME_UPDATED_EVENT, type ThemeView } from "#/lib/theme-api";
 import {
   AiProviderPanel,
@@ -40,6 +39,7 @@ import {
   ThemePanel,
   WebPushDevicesPanel,
 } from "#/routes/_app.settings";
+import type { StoredSignal } from "#/shared/signal";
 
 async function renderSettings(initial = "/settings") {
   const rootRoute = createRootRoute();

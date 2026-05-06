@@ -6,7 +6,6 @@ import {
   within,
 } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import type { Signal } from "#/lib/signal";
 import {
   computeFilterCounts,
   InboxDetailPane,
@@ -16,6 +15,7 @@ import {
   SlackReplyComposer,
   SlackThreadContext,
 } from "#/routes/_app.inbox";
+import type { Signal } from "#/shared/signal";
 
 const sample = (
   overrides: Partial<Signal & { id: string }> = {},

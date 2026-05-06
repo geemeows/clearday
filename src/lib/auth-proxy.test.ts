@@ -1,12 +1,12 @@
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { type AuthProxyEnv, handleAuthProxyRequest } from "#/lib/auth-proxy";
+import type { FetchLike } from "#/lib/oauth-exchange";
 import {
   type EnvelopeKeypair,
   generateEnvelopeKeypair,
   verifyEnvelope,
-} from "#/lib/oauth-envelope";
-import type { FetchLike } from "#/lib/oauth-exchange";
-import { signState } from "#/lib/oauth-state";
+} from "#/shared/oauth/envelope";
+import { signState } from "#/shared/oauth/state";
 
 let keys: EnvelopeKeypair;
 let env: AuthProxyEnv;

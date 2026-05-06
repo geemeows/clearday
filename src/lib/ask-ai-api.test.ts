@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { AiSettingsRow } from "#/lib/ai-settings-api";
 import { buildAskAiPrompt, handleAskAi } from "#/lib/ask-ai-api";
 import { encryptSecret } from "#/lib/llm-crypto";
-import type { StoredSignal } from "#/lib/signal";
+import type { StoredSignal } from "#/shared/signal";
 
 const KEY_SECRET = "deployment-secret-32-bytes-long!!";
 

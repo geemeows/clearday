@@ -2,7 +2,7 @@
 // in-app meeting alert. Kept module-local so the rendering layer stays a
 // thin shell over deterministic functions that are easy to test.
 
-import type { Signal } from "#/lib/signal";
+import type { Signal } from "#/shared/signal";
 
 export type StoredSignal = Signal & {
   id: string;

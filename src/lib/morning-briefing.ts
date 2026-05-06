@@ -13,7 +13,7 @@ import {
   runAiCall,
 } from "#/lib/ai-call";
 import type { ChatMessage } from "#/lib/llm-client";
-import type { StoredSignal } from "#/lib/signal";
+import type { StoredSignal } from "#/shared/signal";
 
 export type BriefingCacheEntry = {
   date: string; // local YYYY-MM-DD as supplied by the caller

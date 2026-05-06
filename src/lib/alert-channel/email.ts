@@ -8,7 +8,7 @@
 // the dispatcher records the error against this channel.
 
 import type { EmailTransport } from "#/lib/email-digest-api";
-import type { StoredSignal } from "#/lib/signal";
+import type { StoredSignal } from "#/shared/signal";
 
 export type EmailAlertDeps = {
   apiKey: string;

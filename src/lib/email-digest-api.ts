@@ -14,7 +14,7 @@
 // the alert-dispatcher is owned by `alert-channel/email.ts`.
 
 import { decryptSecret, encryptSecret } from "#/lib/llm-crypto";
-import type { StoredSignal } from "#/lib/signal";
+import type { StoredSignal } from "#/shared/signal";
 
 export type EmailTransport = "resend" | "postmark";
 

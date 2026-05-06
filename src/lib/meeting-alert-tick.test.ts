@@ -7,7 +7,7 @@ import {
   DEFAULT_QUIET_HOURS,
   type NotificationPrefs,
 } from "#/lib/quiet-hours";
-import type { StoredSignal } from "#/lib/signal";
+import type { StoredSignal } from "#/shared/signal";
 
 const permissivePrefs: NotificationPrefs = {
   enabledChannels: ["slack_dm"],

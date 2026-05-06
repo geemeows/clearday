@@ -7,7 +7,7 @@ import {
 } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { UpcomingEventsCard } from "#/components/UpcomingEventsCard";
-import { toMeetingEvents } from "#/lib/calendar-view";
+import { toMeetingEvents } from "#/features/signals/views/calendar";
 import type { BriefingResult } from "#/lib/morning-briefing";
 import type { StoredSignal } from "#/lib/next-up";
 import {

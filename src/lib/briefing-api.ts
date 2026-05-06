@@ -25,7 +25,7 @@ import {
   type BriefingResult,
   generateBriefing,
 } from "#/lib/morning-briefing";
-import type { StoredSignal } from "#/lib/signal";
+import type { StoredSignal } from "#/shared/signal";
 
 export type BriefingDeps = {
   aiStore: AiSettingsStore;

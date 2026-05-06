@@ -4,7 +4,7 @@ import {
   buildBriefingPrompt,
   generateBriefing,
 } from "#/lib/morning-briefing";
-import type { StoredSignal } from "#/lib/signal";
+import type { StoredSignal } from "#/shared/signal";
 
 const baseSettings = {
   provider: "openai" as const,

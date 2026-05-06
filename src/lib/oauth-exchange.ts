@@ -210,7 +210,7 @@ export async function exchangeCode(
   }
 }
 
-async function exchangeGithub(
+export async function exchangeGithub(
   code: string,
   env: ExchangeEnv,
   fetchImpl: FetchLike,
@@ -289,7 +289,7 @@ async function safeText(res: { text: () => Promise<string> }): Promise<string> {
   }
 }
 
-async function exchangeGoogle(
+export async function exchangeGoogle(
   code: string,
   env: ExchangeEnv,
   fetchImpl: FetchLike,
@@ -386,7 +386,7 @@ function b64urlDecodeToString(s: string): string {
   return new TextDecoder().decode(bytes);
 }
 
-async function exchangeSlack(
+export async function exchangeSlack(
   code: string,
   env: ExchangeEnv,
   fetchImpl: FetchLike,
@@ -466,7 +466,7 @@ async function fetchSlackAccountId(
   return body.user_id;
 }
 
-async function exchangeLinear(
+export async function exchangeLinear(
   code: string,
   env: ExchangeEnv,
   fetchImpl: FetchLike,
@@ -545,7 +545,7 @@ async function fetchLinearAccountId(
   return id;
 }
 
-async function exchangeJira(
+export async function exchangeJira(
   code: string,
   env: ExchangeEnv,
   fetchImpl: FetchLike,

@@ -6,7 +6,7 @@ import {
   TasksKanban,
 } from "#/components/TasksKanban";
 import { apiFetch } from "#/lib/api-client";
-import type { Signal, SignalKind } from "#/lib/signal";
+import type { Signal, SignalKind } from "#/shared/signal";
 
 export const Route = createFileRoute("/_app/tasks")({
   component: TasksPage,

@@ -24,8 +24,8 @@ import {
   type NotificationPrefs,
   type QuietHoursWindow,
 } from "#/lib/quiet-hours";
-import type { Signal, StoredSignal } from "#/lib/signal";
 import type { VapidConfig } from "#/lib/web-push-vapid";
+import type { Signal, StoredSignal } from "#/shared/signal";
 
 const KNOWN_CHANNELS: AlertChannel[] = [
   "slack_dm",

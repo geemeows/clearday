@@ -4,12 +4,12 @@
 // device errored) so the dispatcher records this channel as failed; partial
 // success is silent.
 
-import type { StoredSignal } from "#/lib/signal";
 import {
   dispatchWebPush,
   type WebPushDispatcherDeps,
   type WebPushPayload,
 } from "#/lib/web-push-dispatcher";
+import type { StoredSignal } from "#/shared/signal";
 
 export function buildWebPushPayload(signal: StoredSignal): WebPushPayload {
   const title = signal.title?.trim() || "New Clearday signal";

@@ -4,9 +4,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { SourceGlyph, type SourceKind } from "#/components/SourceGlyph";
 import { apiFetch } from "#/lib/api-client";
 import { cn } from "#/lib/cn";
-import type { Signal, SignalKind, SignalProvider } from "#/lib/signal";
 import { filterMeetingsToToday } from "#/lib/today-window";
 import { useAutoRefresh } from "#/lib/use-auto-refresh";
+import type { Signal, SignalKind, SignalProvider } from "#/shared/signal";
 
 export const Route = createFileRoute("/_app/inbox")({
   component: InboxPage,

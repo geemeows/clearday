@@ -10,7 +10,7 @@ import {
   type DispatcherDeps,
   fireChannels,
 } from "#/lib/alert-dispatcher";
-import type { StoredSignal } from "#/lib/signal";
+import type { StoredSignal } from "#/shared/signal";
 
 export type QueuedAlert = {
   signal_id: string;

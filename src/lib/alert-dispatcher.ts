@@ -20,7 +20,7 @@ import {
   type FocusBlockContext,
   type NotificationPrefs,
 } from "#/lib/quiet-hours";
-import type { StoredSignal } from "#/lib/signal";
+import type { StoredSignal } from "#/shared/signal";
 
 export type AlertChannel = "slack_dm" | "web_push" | "email" | "desktop";
 export type AlertThreshold = "new" | "10min";

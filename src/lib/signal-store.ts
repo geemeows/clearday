@@ -12,7 +12,7 @@ import type {
   SignalKind,
   SignalProvider,
   StoredSignal,
-} from "#/lib/signal";
+} from "#/shared/signal";
 
 type SupabaseLike = {
   from: (table: string) => {

@@ -6,7 +6,7 @@ import {
   handleDraftReply,
 } from "#/lib/draft-reply-api";
 import { encryptSecret } from "#/lib/llm-crypto";
-import type { StoredSignal } from "#/lib/signal";
+import type { StoredSignal } from "#/shared/signal";
 
 const KEY_SECRET = "deployment-secret-32-bytes-long!!";
 

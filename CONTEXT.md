@@ -128,6 +128,31 @@ to the underlying thing — new comments on a PR, new replies in a Slack
 thread — bump `updated_at` and an `unread_count` on the same row, never
 create duplicates. The inbox shows one row per real-world thing.
 
+### Provider
+
+A third-party source Clearday integrates with — currently `github`, `google`,
+`slack`, `linear`, `jira`. Each provider is one module that owns the full
+runtime surface for that source: authorize config, token exchange, token
+refresh (where applicable), the poll → Signal mapping, any per-provider state
+the poll depends on (e.g. Slack's `participated_threads` and broadcast
+allowlist), and the user-initiated **capabilities** Clearday exposes (e.g.
+Slack's `postReply`, GitHub's `submitPrReview`, Calendar's `decline` /
+`reschedule`).
+
+The cron orchestrator and the worker route handlers are provider-agnostic:
+they iterate the provider registry and call the same uniform interface. New
+providers are added by writing one folder, not by editing N switch
+statements.
+
+### Capability
+
+A user-initiated write action on a Signal that depends on a specific provider
+— "reply to this Slack thread", "submit this PR review", "decline this
+meeting". Capabilities are typed per-provider (a GitHub capability cannot be
+called on a Slack signal at compile time) and live on the Provider object's
+`capabilities` slot. Distinct from the `poll` verb, which is the read-side
+ingest path every provider must implement.
+
 ### Provider sync strategy
 
 Each provider gets the freshness mechanism that's actually practical for it,
@@ -138,9 +163,13 @@ not a one-size-fits-all rule:
   `author:@me`, `assignee:@me`. No per-repo enumeration, no webhook
   install (cross-repo webhooks need org-level rights most engineers
   don't have).
-- **Slack** — webhook via the **Events API**, terminating at the user's
-  Worker URL. Subscribes to DM messages, mentions, and replies in
-  threads the user has already participated in. Real-time.
+- **Slack** — cron-polled every 1–2 minutes via Web API
+  (`search.messages` / `conversations.history` / `conversations.replies`).
+  Three queries cover v1: DMs and mentions for the authed user, plus replies
+  in threads the user has already participated in (tracked via
+  `slack_participated_threads`). Webhook/Events API was considered but
+  dropped — polling avoids the publicly-reachable webhook URL requirement,
+  which is awkward for the per-user-Worker hybrid deployment model.
 - **Google Calendar** — cron-polled every 2 minutes. Push channels exist
   but expire weekly and aren't worth the renewal complexity for v1.
 

@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { StoredSignal } from "#/lib/next-up";
-import type { SignalKind } from "#/lib/signal";
 import {
   computeWeekStats,
   pickInboxPreview,
   pickInProgressTickets,
   pickTodaySchedule,
 } from "#/lib/today-cards";
+import type { SignalKind } from "#/shared/signal";
 
 const meeting = (
   id: string,

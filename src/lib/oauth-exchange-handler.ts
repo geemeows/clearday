@@ -5,8 +5,8 @@
 // proxy's published public key, then upserts into `provider_accounts` and
 // redirects to `return_to` (default `/today`).
 
-import { verifyEnvelope } from "#/lib/oauth-envelope";
 import type { Provider, TokenRecord } from "#/lib/oauth-exchange";
+import { verifyEnvelope } from "#/shared/oauth/envelope";
 
 const KNOWN_PROVIDERS: ReadonlySet<Provider> = new Set([
   "github",

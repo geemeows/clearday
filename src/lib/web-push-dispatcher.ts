@@ -8,9 +8,9 @@
 // the dispatcher falls back to a tickle (empty body) and the SW shows a
 // generic "New Clearday signal" notification — the same v1 behavior.
 
-import type { StoredSignal } from "#/lib/signal";
 import { encryptWebPushPayload } from "#/lib/web-push-encrypt";
 import { signVapidAuth, type VapidConfig } from "#/lib/web-push-vapid";
+import type { StoredSignal } from "#/shared/signal";
 
 export type WebPushSubscription = {
   id: string;

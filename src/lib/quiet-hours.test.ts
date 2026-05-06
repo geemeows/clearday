@@ -9,7 +9,7 @@ import {
   type NotificationPrefs,
   type QuietHoursWindow,
 } from "#/lib/quiet-hours";
-import type { StoredSignal } from "#/lib/signal";
+import type { StoredSignal } from "#/shared/signal";
 
 const baseMention: StoredSignal = {
   id: "m1",

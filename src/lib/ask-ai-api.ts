@@ -15,7 +15,7 @@ import {
 } from "#/lib/ai-settings-api";
 import type { ChatMessage } from "#/lib/llm-client";
 import { decryptSecret } from "#/lib/llm-crypto";
-import type { StoredSignal } from "#/lib/signal";
+import type { StoredSignal } from "#/shared/signal";
 
 export type AskAiResult =
   | {

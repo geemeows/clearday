@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from "vitest";
-import type { Signal, StoredSignal } from "#/lib/signal";
 import {
   dismissSignal,
   listSignals,
@@ -7,6 +6,7 @@ import {
   type SupabaseLike,
   upsertSignal,
 } from "#/lib/signal-store";
+import type { Signal, StoredSignal } from "#/shared/signal";
 
 function makeClient(overrides: {
   upsertResult?: { error: { message: string } | null };

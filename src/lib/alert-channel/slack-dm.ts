@@ -6,7 +6,7 @@
 // The channel is a thin function: build the message, call Slack, throw on a
 // non-ok response so the dispatcher records the error against this channel.
 
-import type { StoredSignal } from "#/lib/signal";
+import type { StoredSignal } from "#/shared/signal";
 
 export type SlackDmDeps = {
   /** OAuth user-token (xoxp-...) from provider_accounts. */

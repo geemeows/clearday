@@ -1,15 +1,15 @@
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import {
-  type EnvelopeKeypair,
-  generateEnvelopeKeypair,
-  signEnvelope,
-} from "#/lib/oauth-envelope";
 import type { TokenRecord } from "#/lib/oauth-exchange";
 import {
   handleOAuthExchange,
   type OAuthExchangeEnv,
   type PersistTokens,
 } from "#/lib/oauth-exchange-handler";
+import {
+  type EnvelopeKeypair,
+  generateEnvelopeKeypair,
+  signEnvelope,
+} from "#/shared/oauth/envelope";
 
 let keys: EnvelopeKeypair;
 let env: OAuthExchangeEnv;
