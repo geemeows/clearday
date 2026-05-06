@@ -47,6 +47,7 @@ import {
   runEmailDigestTick,
   sendEmailDigestTest,
 } from "#/features/email-digest/api";
+import { startFocusSession } from "#/features/focus/session";
 import {
   getInboxRules,
   type InboxRulesStore,
@@ -82,7 +83,6 @@ import {
   type RetentionStore,
   type RetentionView,
 } from "#/lib/data-privacy-api";
-import { startFocusSession } from "#/lib/focus-session";
 import {
   buildConnectUrl,
   completeOnboarding,

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { startFocusSession } from "#/lib/focus-session";
+import { startFocusSession } from "#/features/focus/session";
 
 type Call = { url: string; init: RequestInit };
 

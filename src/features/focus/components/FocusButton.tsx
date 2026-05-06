@@ -14,6 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "#/components/ui/dialog";
+import type { FocusStartResult } from "#/features/focus/session";
 import {
   type MeetingEvent,
   pickActiveFocus,
@@ -21,7 +22,6 @@ import {
 } from "#/features/signals/views/calendar";
 import { apiFetch } from "#/lib/api-client";
 import { cn } from "#/lib/cn";
-import type { FocusStartResult } from "#/lib/focus-session";
 import type { StoredSignal } from "#/shared/signal";
 
 const PRESETS = [25, 60, 90];

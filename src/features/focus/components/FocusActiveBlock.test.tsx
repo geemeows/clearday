@@ -1,6 +1,6 @@
 import { act, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { FocusActiveBlock } from "#/components/FocusActiveBlock";
+import { FocusActiveBlock } from "#/features/focus/components/FocusActiveBlock";
 
 describe("FocusActiveBlock", () => {
   beforeEach(() => {

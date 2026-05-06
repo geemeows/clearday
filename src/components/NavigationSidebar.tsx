@@ -4,11 +4,11 @@
 
 import { Settings as SettingsIcon } from "lucide-react";
 import type { ReactNode } from "react";
-import { FocusActiveBlock } from "#/components/FocusActiveBlock";
-import { FocusButton } from "#/components/FocusButton";
 import { ThemeToggle } from "#/components/ThemeToggle";
 import { Avatar, AvatarFallback, AvatarImage } from "#/components/ui/avatar";
 import { Button } from "#/components/ui/button";
+import { FocusActiveBlock } from "#/features/focus/components/FocusActiveBlock";
+import { FocusButton } from "#/features/focus/components/FocusButton";
 import type { ProviderAccountStatus } from "#/features/integrations/provider-account-status";
 import {
   SourceGlyph,

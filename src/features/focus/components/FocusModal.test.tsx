@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { FocusModal } from "#/components/FocusModal";
+import { FocusModal } from "#/features/focus/components/FocusModal";
 
 function renderOpen(
   overrides: Partial<React.ComponentProps<typeof FocusModal>> = {},

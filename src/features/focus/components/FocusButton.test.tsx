@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { FocusButton } from "#/components/FocusButton";
-import type { FocusStartResult } from "#/lib/focus-session";
+import { FocusButton } from "#/features/focus/components/FocusButton";
+import type { FocusStartResult } from "#/features/focus/session";
 import type { StoredSignal } from "#/shared/signal";
 
 const noMeetings = async (): Promise<StoredSignal[]> => [];
