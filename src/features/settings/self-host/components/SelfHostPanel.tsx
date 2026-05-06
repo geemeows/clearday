@@ -6,7 +6,7 @@
 
 import { Check, Copy } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { Button } from "#/components/ui/button";
+import { Button } from "#/components/coss/button";
 import type { SelfHostInfo } from "#/features/settings/self-host/api";
 import { apiFetch } from "#/lib/api-client";
 

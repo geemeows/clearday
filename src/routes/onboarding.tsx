@@ -1,7 +1,7 @@
 import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { Check } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Button } from "#/components/ui/button";
+import { Button } from "#/components/coss/button";
 import { signOut, useAuth } from "#/features/auth/auth";
 import {
   SourceGlyph,

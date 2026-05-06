@@ -7,10 +7,10 @@
 
 import { Check } from "lucide-react";
 import { useMemo, useState } from "react";
-import { Button } from "#/components/ui/button";
-import { Input } from "#/components/ui/input";
-import { Label } from "#/components/ui/label";
-import { Switch } from "#/components/ui/switch";
+import { Button } from "#/components/coss/button";
+import { Input } from "#/components/coss/input";
+import { Label } from "#/components/coss/label";
+import { Switch } from "#/components/coss/switch";
 import { AiBudgetCard } from "#/features/ai/components/AiBudgetCard";
 import { cn } from "#/lib/cn";
 

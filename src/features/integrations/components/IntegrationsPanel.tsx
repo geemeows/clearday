@@ -11,9 +11,9 @@
 
 import { Plus, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Button } from "#/components/ui/button";
-import { Input } from "#/components/ui/input";
-import { Switch } from "#/components/ui/switch";
+import { Button } from "#/components/coss/button";
+import { Input } from "#/components/coss/input";
+import { Switch } from "#/components/coss/switch";
 import type { ProviderAccountStatus } from "#/features/integrations/provider-account-status";
 import {
   SourceGlyph,

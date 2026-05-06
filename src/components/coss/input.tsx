@@ -1,10 +1,16 @@
+"use client";
+
+import { Input as InputPrimitive } from "@base-ui/react/input";
 import type * as React from "react";
+import { cn } from "#/lib/cn";
 
-import { cn } from "#/lib/utils";
-
-function Input({ className, type, ...props }: React.ComponentProps<"input">) {
+export function Input({
+  className,
+  type,
+  ...props
+}: React.ComponentProps<typeof InputPrimitive>): React.ReactElement {
   return (
-    <input
+    <InputPrimitive
       type={type}
       data-slot="input"
       className={cn(
@@ -17,5 +23,3 @@ function Input({ className, type, ...props }: React.ComponentProps<"input">) {
     />
   );
 }
-
-export { Input };

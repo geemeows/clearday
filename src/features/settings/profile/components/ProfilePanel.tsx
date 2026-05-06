@@ -7,8 +7,8 @@
 
 import { LogOut } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { Avatar, AvatarFallback, AvatarImage } from "#/components/ui/avatar";
-import { Button } from "#/components/ui/button";
+import { Avatar, AvatarFallback, AvatarImage } from "#/components/coss/avatar";
+import { Button } from "#/components/coss/button";
 import { signOut as defaultSignOut } from "#/features/auth/auth";
 import type { IntegrationView } from "#/features/integrations/api/integrations-api";
 import { ThemeToggle } from "#/features/settings/theme/components/ThemeToggle";

@@ -4,8 +4,8 @@
 
 import { Settings as SettingsIcon } from "lucide-react";
 import type { ReactNode } from "react";
-import { Avatar, AvatarFallback, AvatarImage } from "#/components/ui/avatar";
-import { Button } from "#/components/ui/button";
+import { Avatar, AvatarFallback, AvatarImage } from "#/components/coss/avatar";
+import { Button } from "#/components/coss/button";
 import { FocusActiveBlock } from "#/features/focus/components/FocusActiveBlock";
 import { FocusButton } from "#/features/focus/components/FocusButton";
 import type { ProviderAccountStatus } from "#/features/integrations/provider-account-status";
