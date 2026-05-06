@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   computeWeekStats,
+  filterMeetingsToToday,
   pickInboxPreview,
   pickInProgressTickets,
+  pickMeetingForAlert,
+  pickNextUp,
   pickTodaySchedule,
-} from "#/lib/today-cards";
+} from "#/features/signals/views/today";
 import type { SignalKind, StoredSignal } from "#/shared/signal";
 
 const STORED_DEFAULTS = {
@@ -16,6 +19,29 @@ const STORED_DEFAULTS = {
   alert_channels_override: null,
   tags: null,
 } as const;
+
+const meetingDetail = (args: {
+  id: string;
+  starts_at: string;
+  ends_at?: string;
+}): StoredSignal => ({
+  id: args.id,
+  provider: "google",
+  kind: "meeting",
+  source_id: args.id,
+  title: "Standup",
+  url: "https://calendar.google.com/event",
+  payload: {
+    starts_at: args.starts_at,
+    ends_at: args.ends_at,
+    video_link: "https://meet.google.com/abc-defg-hij",
+    linked_items: [],
+  },
+  requires_action: false,
+  source_created_at: args.starts_at,
+  dismissed_at: null,
+  ...STORED_DEFAULTS,
+});
 
 const meeting = (
   id: string,
@@ -55,6 +81,113 @@ const pr = (
   source_created_at: createdAt,
   dismissed_at: dismissed ? "2026-05-04T00:00:00.000Z" : null,
   ...STORED_DEFAULTS,
+});
+
+describe("pickNextUp", () => {
+  const now = new Date("2026-05-04T12:00:00.000Z");
+
+  it("selects the soonest upcoming meeting", () => {
+    const sigs: StoredSignal[] = [
+      meetingDetail({
+        id: "later",
+        starts_at: "2026-05-04T15:00:00.000Z",
+        ends_at: "2026-05-04T15:30:00.000Z",
+      }),
+      meetingDetail({
+        id: "soon",
+        starts_at: "2026-05-04T12:30:00.000Z",
+        ends_at: "2026-05-04T13:00:00.000Z",
+      }),
+    ];
+    const result = pickNextUp(sigs, now);
+    expect(result?.signal.id).toBe("soon");
+    expect(result?.videoLink).toBe("https://meet.google.com/abc-defg-hij");
+  });
+
+  it("skips meetings that have already ended", () => {
+    const sigs: StoredSignal[] = [
+      meetingDetail({
+        id: "past",
+        starts_at: "2026-05-04T10:00:00.000Z",
+        ends_at: "2026-05-04T10:30:00.000Z",
+      }),
+      meetingDetail({
+        id: "future",
+        starts_at: "2026-05-04T13:00:00.000Z",
+        ends_at: "2026-05-04T13:30:00.000Z",
+      }),
+    ];
+    expect(pickNextUp(sigs, now)?.signal.id).toBe("future");
+  });
+
+  it("skips dismissed meetings", () => {
+    const sigs: StoredSignal[] = [
+      {
+        ...meetingDetail({ id: "soon", starts_at: "2026-05-04T12:30:00.000Z" }),
+        dismissed_at: "2026-05-04T12:00:00.000Z",
+      },
+      meetingDetail({ id: "later", starts_at: "2026-05-04T15:00:00.000Z" }),
+    ];
+    expect(pickNextUp(sigs, now)?.signal.id).toBe("later");
+  });
+
+  it("returns null when there are no eligible meetings", () => {
+    const sigs: StoredSignal[] = [
+      {
+        ...meetingDetail({ id: "x", starts_at: "2026-05-04T12:30:00.000Z" }),
+        kind: "pr_authored",
+      },
+    ];
+    expect(pickNextUp(sigs, now)).toBeNull();
+  });
+});
+
+describe("pickMeetingForAlert", () => {
+  it("fires for a meeting starting in ~10 minutes", () => {
+    const now = new Date("2026-05-04T12:00:00.000Z");
+    const sig = meetingDetail({
+      id: "m",
+      starts_at: "2026-05-04T12:10:00.000Z",
+    });
+    expect(pickMeetingForAlert([sig], now)?.id).toBe("m");
+  });
+
+  it("fires anywhere in the [9min, 11min] window", () => {
+    const now = new Date("2026-05-04T12:00:00.000Z");
+    const earlyEdge = meetingDetail({
+      id: "e",
+      starts_at: "2026-05-04T12:09:00.000Z",
+    });
+    const lateEdge = meetingDetail({
+      id: "l",
+      starts_at: "2026-05-04T12:11:00.000Z",
+    });
+    expect(pickMeetingForAlert([earlyEdge], now)?.id).toBe("e");
+    expect(pickMeetingForAlert([lateEdge], now)?.id).toBe("l");
+  });
+
+  it("does not fire outside the window", () => {
+    const now = new Date("2026-05-04T12:00:00.000Z");
+    const tooEarly = meetingDetail({
+      id: "x",
+      starts_at: "2026-05-04T12:08:30.000Z",
+    });
+    const tooLate = meetingDetail({
+      id: "y",
+      starts_at: "2026-05-04T12:12:00.000Z",
+    });
+    expect(pickMeetingForAlert([tooEarly], now)).toBeNull();
+    expect(pickMeetingForAlert([tooLate], now)).toBeNull();
+  });
+
+  it("does not fire for dismissed meetings", () => {
+    const now = new Date("2026-05-04T12:00:00.000Z");
+    const sig = {
+      ...meetingDetail({ id: "m", starts_at: "2026-05-04T12:10:00.000Z" }),
+      dismissed_at: "2026-05-04T11:55:00.000Z",
+    };
+    expect(pickMeetingForAlert([sig], now)).toBeNull();
+  });
 });
 
 describe("pickTodaySchedule", () => {
@@ -341,5 +474,28 @@ describe("computeWeekStats", () => {
       focusHours: 0,
       inboxZeroedDays: 0,
     });
+  });
+});
+
+describe("filterMeetingsToToday", () => {
+  const today = new Date("2026-05-04T12:00:00.000Z");
+
+  it("keeps meetings whose start is today and drops those outside", () => {
+    const sigs = [
+      meeting("today", "2026-05-04T09:00:00.000Z"),
+      meeting("yesterday", "2026-05-03T09:00:00.000Z"),
+      meeting("tomorrow", "2026-05-05T09:00:00.000Z"),
+    ];
+    const out = filterMeetingsToToday(sigs, today);
+    expect(out.map((s) => s.id)).toEqual(["today"]);
+  });
+
+  it("passes non-meeting signals through unchanged", () => {
+    const sigs = [
+      meeting("today", "2026-05-04T09:00:00.000Z"),
+      pr("p1", "2026-05-03T09:00:00.000Z", true),
+    ];
+    const out = filterMeetingsToToday(sigs, today);
+    expect(out.map((s) => s.id)).toEqual(["today", "p1"]);
   });
 });

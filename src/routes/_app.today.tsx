@@ -19,21 +19,19 @@ import {
 import { UpcomingEventsCard } from "#/components/UpcomingEventsCard";
 import type { BriefingResult } from "#/features/briefing/morning-briefing";
 import type { MeetingEvent } from "#/features/signals/views/calendar";
-import { apiFetch } from "#/lib/api-client";
-import {
-  type NextUpMeeting,
-  pickMeetingForAlert,
-  pickUpcoming,
-} from "#/lib/next-up";
-import type { ProfileView } from "#/lib/profile-api";
 import {
   computeWeekStats,
+  filterMeetingsToToday,
+  type NextUpMeeting,
   pickInboxPreview,
   pickInProgressTickets,
+  pickMeetingForAlert,
   pickTodaySchedule,
+  pickUpcoming,
   type WeekStats,
-} from "#/lib/today-cards";
-import { filterMeetingsToToday } from "#/lib/today-window";
+} from "#/features/signals/views/today";
+import { apiFetch } from "#/lib/api-client";
+import type { ProfileView } from "#/lib/profile-api";
 import { useAutoRefresh } from "#/lib/use-auto-refresh";
 import type { StoredSignal } from "#/shared/signal";
 

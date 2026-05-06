@@ -1,13 +1,15 @@
-// Pure helpers backing the Today page's "Today schedule" and "Inbox preview"
-// cards. Selection is deterministic and timezone-explicit so behavioral
-// tests stay stable across CI zones.
+// Pure selectors backing the Today and Inbox surfaces. Every function here
+// reads StoredSignal[] and returns a derived view — no fetches, no I/O — so
+// the rendering layer stays a thin shell over deterministic logic that's
+// easy to test. Selection is timezone-explicit where it matters so behavior
+// stays stable across CI zones.
 
 import {
   eventsForDay,
   type MeetingEvent,
   toMeetingEvents,
 } from "#/features/signals/views/calendar";
-import type { SignalKind, StoredSignal } from "#/shared/signal";
+import type { LinkedItem, SignalKind, StoredSignal } from "#/shared/signal";
 
 const TICKET_KINDS: SignalKind[] = [
   "ticket_assigned",
@@ -26,6 +28,90 @@ const TICKET_KIND_RANK: Record<string, number> = {
   ticket_blocked: 2,
   ticket_assigned: 3,
 };
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const ALERT_WINDOW_MIN_MS = 9 * 60 * 1000;
+const ALERT_WINDOW_MAX_MS = 11 * 60 * 1000;
+
+export type NextUpMeeting = {
+  signal: StoredSignal;
+  startsAt: Date;
+  endsAt: Date | null;
+  videoLink: string | null;
+  linkedItems: LinkedItem[];
+};
+
+export type WeekStats = {
+  prsReviewed: number;
+  ticketsShipped: number;
+  focusHours: number;
+  inboxZeroedDays: number;
+};
+
+export function pickNextUp(
+  signals: StoredSignal[],
+  now: Date,
+): NextUpMeeting | null {
+  return pickUpcoming(signals, now, 1)[0] ?? null;
+}
+
+export function pickUpcoming(
+  signals: StoredSignal[],
+  now: Date,
+  limit: number,
+): NextUpMeeting[] {
+  const candidates: NextUpMeeting[] = [];
+  for (const s of signals) {
+    if (s.kind !== "meeting") continue;
+    if (s.dismissed_at) continue;
+    const startsAtRaw = s.payload?.starts_at;
+    if (typeof startsAtRaw !== "string") continue;
+    const startsAt = new Date(startsAtRaw);
+    if (Number.isNaN(startsAt.getTime())) continue;
+    const endsAtRaw = s.payload?.ends_at;
+    const endsAt = typeof endsAtRaw === "string" ? new Date(endsAtRaw) : null;
+    // Skip meetings that have already ended.
+    if (endsAt && !Number.isNaN(endsAt.getTime()) && endsAt < now) continue;
+    // For meetings without an end time, skip if the start was more than 2h ago.
+    if (!endsAt && now.getTime() - startsAt.getTime() > 2 * 60 * 60 * 1000) {
+      continue;
+    }
+    candidates.push({
+      signal: s,
+      startsAt,
+      endsAt: endsAt && !Number.isNaN(endsAt.getTime()) ? endsAt : null,
+      videoLink: stringOrNull(s.payload?.video_link),
+      linkedItems: (s.payload?.linked_items ?? []) as LinkedItem[],
+    });
+  }
+  candidates.sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime());
+  return candidates.slice(0, Math.max(0, limit));
+}
+
+/**
+ * Returns the meeting Signal that should fire a "starts in ~10 min" alert
+ * right now, or null. The window is [now+9min, now+11min] — symmetric around
+ * the 10-minute mark so a 1-minute-tick poller won't miss it.
+ */
+export function pickMeetingForAlert(
+  signals: StoredSignal[],
+  now: Date,
+): StoredSignal | null {
+  const t = now.getTime();
+  for (const s of signals) {
+    if (s.kind !== "meeting") continue;
+    if (s.dismissed_at) continue;
+    const startsAtRaw = s.payload?.starts_at;
+    if (typeof startsAtRaw !== "string") continue;
+    const ms = Date.parse(startsAtRaw);
+    if (Number.isNaN(ms)) continue;
+    const delta = ms - t;
+    if (delta >= ALERT_WINDOW_MIN_MS && delta <= ALERT_WINDOW_MAX_MS) {
+      return s;
+    }
+  }
+  return null;
+}
 
 /**
  * Today's meeting events in start-time order. Dismissed and non-meeting
@@ -86,15 +172,6 @@ export function pickInProgressTickets(
     : sorted;
 }
 
-export type WeekStats = {
-  prsReviewed: number;
-  ticketsShipped: number;
-  focusHours: number;
-  inboxZeroedDays: number;
-};
-
-const DAY_MS = 24 * 60 * 60 * 1000;
-
 /**
  * Aggregate counts over the rolling 7-day window ending at `now`. Caller is
  * responsible for fetching the raw signals (with dismissed rows included)
@@ -153,6 +230,43 @@ export function computeWeekStats(
   return { prsReviewed, ticketsShipped, focusHours, inboxZeroedDays };
 }
 
+/**
+ * Restricts meeting Signals to ones whose start time is in the user's current
+ * local day. The cron ingests a 30-day Calendar window so the Calendar route
+ * can render Week/Month, but the Inbox + /today widgets are for "what's
+ * happening now/next" — a month of meetings would drown out everything else.
+ *
+ * Non-meeting Signals (PRs, mentions, tickets) pass through untouched.
+ */
+export function filterMeetingsToToday<T extends MeetingFilterShape>(
+  signals: T[],
+  now: Date = new Date(),
+): T[] {
+  const start = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate(),
+  ).getTime();
+  const end = start + DAY_MS;
+  return signals.filter((s) => {
+    if (s.kind !== "meeting") return true;
+    const startsAt =
+      typeof s.payload?.starts_at === "string"
+        ? Date.parse(s.payload.starts_at)
+        : s.source_created_at
+          ? Date.parse(s.source_created_at)
+          : Number.NaN;
+    if (Number.isNaN(startsAt)) return true;
+    return startsAt >= start && startsAt < end;
+  });
+}
+
+type MeetingFilterShape = {
+  kind: string;
+  payload?: Record<string, unknown> | null;
+  source_created_at?: string | null;
+};
+
 function countInboxZeroedDays(signals: StoredSignal[], now: Date): number {
   const todayUtcStart = Math.floor(now.getTime() / DAY_MS) * DAY_MS;
   let count = 0;
@@ -178,4 +292,8 @@ function countInboxZeroedDays(signals: StoredSignal[], now: Date): number {
     if (receivedToday && !unhandledCarry) count += 1;
   }
   return count;
+}
+
+function stringOrNull(v: unknown): string | null {
+  return typeof v === "string" ? v : null;
 }

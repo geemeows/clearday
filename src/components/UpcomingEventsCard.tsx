@@ -2,7 +2,7 @@
 // without any countdown — see issue #47 (revision of PRD #29 mockup #2).
 
 import { CalendarClock, ExternalLink, Video } from "lucide-react";
-import type { NextUpMeeting } from "#/lib/next-up";
+import type { NextUpMeeting } from "#/features/signals/views/today";
 
 export function UpcomingEventsCard({
   meetings,

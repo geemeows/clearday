@@ -2,9 +2,9 @@ import { createFileRoute } from "@tanstack/react-router";
 import { Calendar as CalIcon, ExternalLink, Video, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { SourceGlyph, type SourceKind } from "#/components/SourceGlyph";
+import { filterMeetingsToToday } from "#/features/signals/views/today";
 import { apiFetch } from "#/lib/api-client";
 import { cn } from "#/lib/cn";
-import { filterMeetingsToToday } from "#/lib/today-window";
 import { useAutoRefresh } from "#/lib/use-auto-refresh";
 import type { Signal, SignalKind, SignalProvider } from "#/shared/signal";
 
