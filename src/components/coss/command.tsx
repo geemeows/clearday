@@ -60,8 +60,11 @@ function CommandDialog({
 
 function CommandInput({
   className,
+  trailing,
   ...props
-}: React.ComponentProps<typeof CommandPrimitive.Input>) {
+}: React.ComponentProps<typeof CommandPrimitive.Input> & {
+  trailing?: React.ReactNode;
+}) {
   return (
     <div
       data-slot="command-input-wrapper"
@@ -76,6 +79,7 @@ function CommandInput({
         )}
         {...props}
       />
+      {trailing}
     </div>
   );
 }
