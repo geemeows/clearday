@@ -40,11 +40,16 @@ function SettingsLayout() {
     <section className="flex min-h-full">
       <aside
         aria-label="Settings"
-        className="w-[220px] shrink-0 border-border border-r bg-sidebar"
+        className="w-[220px] shrink-0 border-border border-r bg-muted/30"
       >
-        <h1 className="px-5 pt-6 pb-3 font-semibold text-base text-sidebar-foreground">
-          Settings
-        </h1>
+        <div className="px-4 pt-7 pb-4">
+          <p className="font-mono text-[10px] text-muted-foreground tracking-[0.12em] uppercase">
+            Settings
+          </p>
+          <h1 className="mt-1 font-semibold text-sidebar-foreground text-xl tracking-tight">
+            Workspace
+          </h1>
+        </div>
         <nav
           aria-label="Settings sections"
           className="flex flex-col gap-0.5 px-2"
@@ -53,7 +58,7 @@ function SettingsLayout() {
             <Link
               key={tab.to}
               to={tab.to}
-              className="rounded-md px-3 py-2 text-sidebar-foreground/80 text-sm hover:bg-sidebar-accent hover:text-sidebar-foreground"
+              className="rounded-md px-3 py-2 text-sidebar-foreground/75 text-sm hover:bg-sidebar-accent hover:text-sidebar-foreground"
               activeProps={{
                 className:
                   "bg-sidebar-accent font-medium text-sidebar-accent-foreground",
@@ -64,8 +69,10 @@ function SettingsLayout() {
           ))}
         </nav>
       </aside>
-      <div className="min-w-0 flex-1 p-8">
-        <Outlet />
+      <div className="min-w-0 flex-1">
+        <div className="mx-auto max-w-[1100px] space-y-6 p-8">
+          <Outlet />
+        </div>
       </div>
     </section>
   );

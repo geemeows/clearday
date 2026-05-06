@@ -85,16 +85,18 @@ export function ProfilePanel({ loader, onSignOut }: ProfilePanelProps = {}) {
   );
 
   return (
-    <section>
+    <section className="space-y-6">
       <header>
-        <h2 className="font-semibold text-xl">Profile</h2>
-        <p className="mt-2 text-muted-foreground text-sm">Your Devy account.</p>
+        <h2 className="font-semibold text-2xl tracking-tight">Profile</h2>
+        <p className="mt-1 font-mono text-[11px] text-muted-foreground">
+          Used for greeting, AI context, and the avatar.
+        </p>
       </header>
 
       {fields === null ? (
-        <p className="mt-6 text-muted-foreground text-sm">Loading…</p>
+        <p className="text-muted-foreground text-sm">Loading…</p>
       ) : (
-        <div className="mt-6 flex max-w-xl items-center gap-5">
+        <div className="flex max-w-xl items-center gap-5 rounded-lg border border-border bg-card p-5">
           <Avatar className="size-16">
             {fields.avatarUrl ? (
               <AvatarImage
@@ -125,14 +127,14 @@ export function ProfilePanel({ loader, onSignOut }: ProfilePanelProps = {}) {
         </div>
       )}
 
-      <div className="mt-8 flex items-center gap-3">
+      <div className="flex items-center gap-3 rounded-lg border border-border bg-card p-4">
         <ThemeToggle />
         <span className="text-muted-foreground text-sm">
           Toggle light / dark mode
         </span>
       </div>
 
-      <div className="mt-8">
+      <div>
         <Button
           type="button"
           variant="outline"

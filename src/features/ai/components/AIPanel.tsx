@@ -98,17 +98,16 @@ export function AIPanel({ validator }: AIPanelProps = {}) {
   };
 
   return (
-    <section>
+    <section className="space-y-8">
       <header>
-        <h2 className="font-semibold text-xl">AI provider</h2>
-        <p className="mt-2 text-muted-foreground text-sm">
-          Pick the model that powers Devy's briefings, summaries, and Cmd-K Ask
-          AI.
+        <h2 className="font-semibold text-2xl tracking-tight">AI provider</h2>
+        <p className="mt-1 font-mono text-[11px] text-muted-foreground">
+          Bring your own key. Devy never stores prompts.
         </p>
       </header>
 
-      <section className="mt-6">
-        <h3 className="font-semibold text-base">Provider</h3>
+      <section>
+        <h3 className="font-semibold text-base tracking-tight">Provider</h3>
         <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
           {PROVIDERS.map((p) => {
             const selected = providerId === p.id;
@@ -119,8 +118,10 @@ export function AIPanel({ validator }: AIPanelProps = {}) {
                 aria-pressed={selected}
                 onClick={() => setProviderId(p.id)}
                 className={cn(
-                  "rounded-md border bg-card p-4 text-left shadow-sm transition-colors hover:bg-accent",
-                  selected ? "border-primary bg-primary/5" : "border-border",
+                  "rounded-lg border p-4 text-left transition-colors",
+                  selected
+                    ? "border-primary bg-primary/10 ring-1 ring-primary/30"
+                    : "border-border bg-card hover:bg-accent",
                 )}
               >
                 <div className="font-medium text-sm">{p.name}</div>
@@ -133,8 +134,8 @@ export function AIPanel({ validator }: AIPanelProps = {}) {
         </div>
       </section>
 
-      <section className="mt-8">
-        <h3 className="font-semibold text-base">API key</h3>
+      <section>
+        <h3 className="font-semibold text-base tracking-tight">API key</h3>
         <div className="mt-3 flex items-center gap-2">
           <Label htmlFor="ai-key" className="sr-only">
             API key
@@ -173,16 +174,16 @@ export function AIPanel({ validator }: AIPanelProps = {}) {
         )}
       </section>
 
-      <section className="mt-8">
+      <section>
         <AiBudgetCard used={6.42} cap={20} fallbackPct={80} hardStopPct={100} />
       </section>
 
-      <section className="mt-8">
-        <h3 className="font-semibold text-base">Privacy</h3>
+      <section>
+        <h3 className="font-semibold text-base tracking-tight">Privacy</h3>
         <p className="mt-1 text-muted-foreground text-sm">
           Control what leaves your machine before AI calls.
         </p>
-        <ul className="mt-3 divide-y divide-border rounded-md border border-border">
+        <ul className="mt-3 divide-y divide-border overflow-hidden rounded-lg border border-border bg-card">
           {PRIVACY_TOGGLES.map(({ key, label }) => {
             const id = `privacy-${key}`;
             return (
