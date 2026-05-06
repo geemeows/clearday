@@ -1,10 +1,18 @@
 import {
+  createMemoryHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+  RouterProvider,
+} from "@tanstack/react-router";
+import {
   act,
   fireEvent,
   render,
   screen,
   waitFor,
 } from "@testing-library/react";
+import type { ReactElement } from "react";
 import { describe, expect, it, vi } from "vitest";
 import type { BriefingResult } from "#/features/briefing/morning-briefing";
 import { UpcomingEventsCard } from "#/features/signals/components/UpcomingEventsCard";
@@ -317,6 +325,24 @@ describe("TodaySchedule", () => {
   });
 });
 
+// Wraps a component tree in a minimal TanStack Router so <Link> calls have a
+// router context. Used by InboxPreviewCard tests where rows link to /inbox.
+async function renderWithRouter(node: ReactElement) {
+  const rootRoute = createRootRoute({ component: () => node });
+  const inboxRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/inbox",
+    component: () => null,
+  });
+  const router = createRouter({
+    routeTree: rootRoute.addChildren([inboxRoute]),
+    history: createMemoryHistory({ initialEntries: ["/today"] }),
+  });
+  await router.load();
+  // biome-ignore lint/suspicious/noExplicitAny: test-only router cast
+  render(<RouterProvider router={router as any} />);
+}
+
 describe("InboxPreviewCard", () => {
   const prSignal = (
     id: string,
@@ -347,7 +373,7 @@ describe("InboxPreviewCard", () => {
       prSignal("1", false, "2026-05-04T08:00:00.000Z"),
       prSignal("2", true, "2026-05-04T10:00:00.000Z"),
     ]);
-    render(<InboxPreviewCard loader={loader} limit={3} />);
+    await renderWithRouter(<InboxPreviewCard loader={loader} limit={3} />);
     await waitFor(() => screen.getByText("PR 2"));
     expect(screen.getByText("PR 1")).toBeTruthy();
     expect(
@@ -357,7 +383,7 @@ describe("InboxPreviewCard", () => {
 
   it("renders an empty-state when nothing is actionable", async () => {
     const loader = vi.fn(async () => [] as StoredSignal[]);
-    render(<InboxPreviewCard loader={loader} />);
+    await renderWithRouter(<InboxPreviewCard loader={loader} />);
     await waitFor(() => screen.getByText(/inbox zero/i));
   });
 
@@ -365,7 +391,7 @@ describe("InboxPreviewCard", () => {
     const loader = vi.fn(async () => {
       throw new Error("network down");
     });
-    render(<InboxPreviewCard loader={loader} />);
+    await renderWithRouter(<InboxPreviewCard loader={loader} />);
     await waitFor(() => screen.getByText(/network down/i));
   });
 });

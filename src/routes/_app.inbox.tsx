@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Calendar as CalIcon, ExternalLink, Video, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { z } from "zod";
 import {
   providerOpenLabel,
   providerSourceKind,
@@ -13,7 +14,12 @@ import { apiFetch } from "#/lib/api-client";
 import { cn } from "#/lib/cn";
 import type { Signal, SignalKind } from "#/shared/signal";
 
+const inboxSearchSchema = z.object({
+  signal: z.string().optional(),
+});
+
 export const Route = createFileRoute("/_app/inbox")({
+  validateSearch: inboxSearchSchema,
   component: InboxPage,
 });
 
@@ -36,11 +42,22 @@ const FILTERS: Array<{ id: Filter; label: string }> = [
 ];
 
 function InboxPage() {
+  const search = Route.useSearch();
+  const navigate = Route.useNavigate();
   const [filter, setFilter] = useState<Filter>("all");
   const [showSnoozed, setShowSnoozed] = useState(false);
   const [signals, setSignals] = useState<StoredSignal[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selectedId = search.signal ?? null;
+  const setSelectedId = useCallback(
+    (next: string | null) => {
+      navigate({
+        search: (prev) => ({ ...prev, signal: next ?? undefined }),
+        replace: true,
+      });
+    },
+    [navigate],
+  );
   const [repliedIds, setRepliedIds] = useState<Set<string>>(() => new Set());
 
   const reload = useCallback(async (includeSnoozed: boolean) => {
@@ -72,7 +89,7 @@ function InboxPage() {
   const dismiss = useCallback(
     async (id: string) => {
       setSignals((current) => current?.filter((s) => s.id !== id) ?? null);
-      setSelectedId((prev) => (prev === id ? null : prev));
+      if (selectedId === id) setSelectedId(null);
       setRepliedIds((prev) => {
         if (!prev.has(id)) return prev;
         const next = new Set(prev);
@@ -82,7 +99,7 @@ function InboxPage() {
       await apiFetch(`/api/signals/${id}/dismiss`, { method: "POST" });
       reload(showSnoozed);
     },
-    [showSnoozed, reload],
+    [showSnoozed, reload, selectedId, setSelectedId],
   );
 
   const handleReplyStart = useCallback((id: string) => {

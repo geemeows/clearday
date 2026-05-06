@@ -145,9 +145,9 @@ export function AppShell() {
   }, [router, theme]);
 
   return (
-    <div className="flex min-h-screen bg-background text-foreground">
+    <div className="flex h-screen overflow-hidden bg-background text-foreground">
       <NavigationSidebar {...props} />
-      <main className="flex-1">
+      <main className="flex-1 overflow-y-auto">
         <Outlet />
       </main>
       <CommandPalette commands={commands} />

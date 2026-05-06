@@ -16,23 +16,51 @@ import "#/styles.css";
 // stamps data-theme/data-density/data-accent on <html>; also subscribes to
 // system color-scheme changes so theme="system" tracks the OS live, and to
 // the THEME_UPDATED_EVENT so saves in Settings apply without reload.
+//
+// The pre-paint script in index.html stamps these attributes before CSS runs
+// using the THEME_STORAGE_KEY cache; the controller below keeps that cache
+// in sync (boot fetch + every update) so the next refresh has fresh data.
+const THEME_STORAGE_KEY = "clearday:theme";
+
+function readCachedTheme(): ThemeView | null {
+  try {
+    const raw = localStorage.getItem(THEME_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<ThemeView>;
+    if (!parsed.theme || !parsed.density || !parsed.accent) return null;
+    return parsed as ThemeView;
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedTheme(view: ThemeView): void {
+  try {
+    localStorage.setItem(THEME_STORAGE_KEY, JSON.stringify(view));
+  } catch {
+    // localStorage disabled / quota: pre-paint will fall back to defaults.
+  }
+}
+
 function startThemeController() {
   const root = document.documentElement;
-  let view: ThemeView = DEFAULT_THEME;
+  let view: ThemeView = readCachedTheme() ?? DEFAULT_THEME;
   const media = window.matchMedia("(prefers-color-scheme: dark)");
   const apply = () => applyThemeToDocument(view, root, media.matches);
   apply();
   apiFetch("/api/theme")
     .then((body) => {
       view = body as ThemeView;
+      writeCachedTheme(view);
       apply();
     })
     .catch(() => {
-      // Pre-auth or worker error: leave defaults applied.
+      // Pre-auth or worker error: keep the cached/default view.
     });
   media.addEventListener("change", apply);
   window.addEventListener(THEME_UPDATED_EVENT, ((e: Event) => {
     view = (e as CustomEvent<ThemeView>).detail;
+    writeCachedTheme(view);
     apply();
   }) as EventListener);
 }
