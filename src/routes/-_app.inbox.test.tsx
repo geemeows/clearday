@@ -1206,7 +1206,7 @@ describe("Optimistic reply UI", () => {
 describe("PrDiffViewer", () => {
   const PATCH = "@@ -1,2 +1,3 @@\n hi\n+added\n-removed";
 
-  it("loads files and renders patch lines on demand with tone classification", async () => {
+  it("auto-fetches the diff on mount and renders each file collapsed", async () => {
     const load = vi.fn(async () => ({
       ok: true as const,
       files: [
@@ -1221,7 +1221,6 @@ describe("PrDiffViewer", () => {
     }));
     render(<PrDiffViewer repo="o/r" number={1} load={load} />);
 
-    fireEvent.click(screen.getByRole("button", { name: /show diff/i }));
     await waitFor(() => screen.getByText("src/a.ts"));
 
     expect(load).toHaveBeenCalledWith({ repo: "o/r", number: 1 });
@@ -1262,7 +1261,6 @@ describe("PrDiffViewer", () => {
       ],
     }));
     render(<PrDiffViewer repo="o/r" number={1} load={load} />);
-    fireEvent.click(screen.getByRole("button", { name: /show diff/i }));
     await waitFor(() => screen.getByText("a.ts"));
 
     const articleA = screen
@@ -1277,30 +1275,29 @@ describe("PrDiffViewer", () => {
     expect(articleB.getAttribute("data-open")).toBeNull();
   });
 
-  it("toggles closed without re-fetching", async () => {
-    const load = vi.fn(async () => ({
-      ok: true as const,
-      files: [
-        {
-          filename: "f.ts",
-          status: "modified",
-          additions: 0,
-          deletions: 0,
-          patch: PATCH,
-        },
-      ],
-    }));
-    render(<PrDiffViewer repo="o/r" number={1} load={load} />);
+  it("re-fetches when the repo or number changes", async () => {
+    const load = vi.fn(
+      async ({ number }: { repo: string; number: number }) => ({
+        ok: true as const,
+        files: [
+          {
+            filename: `f-${number}.ts`,
+            status: "modified",
+            additions: 0,
+            deletions: 0,
+            patch: PATCH,
+          },
+        ],
+      }),
+    );
+    const { rerender } = render(
+      <PrDiffViewer repo="o/r" number={1} load={load} />,
+    );
+    await waitFor(() => screen.getByText("f-1.ts"));
 
-    fireEvent.click(screen.getByRole("button", { name: /show diff/i }));
-    await waitFor(() => screen.getByText("f.ts"));
-
-    fireEvent.click(screen.getByRole("button", { name: /hide diff/i }));
-    expect(screen.queryByText("f.ts")).toBeNull();
-
-    fireEvent.click(screen.getByRole("button", { name: /show diff/i }));
-    await waitFor(() => screen.getByText("f.ts"));
-    expect(load).toHaveBeenCalledTimes(1);
+    rerender(<PrDiffViewer repo="o/r" number={2} load={load} />);
+    await waitFor(() => screen.getByText("f-2.ts"));
+    expect(load).toHaveBeenCalledTimes(2);
   });
 
   it("shows a fallback when a file's patch is unavailable", async () => {
@@ -1317,7 +1314,6 @@ describe("PrDiffViewer", () => {
       ],
     }));
     render(<PrDiffViewer repo="o/r" number={1} load={load} />);
-    fireEvent.click(screen.getByRole("button", { name: /show diff/i }));
     await waitFor(() => screen.getByText("logo.png"));
     const article = screen
       .getByText("logo.png")
@@ -1332,7 +1328,6 @@ describe("PrDiffViewer", () => {
       error: "github HTTP 401",
     }));
     render(<PrDiffViewer repo="o/r" number={1} load={load} />);
-    fireEvent.click(screen.getByRole("button", { name: /show diff/i }));
     await waitFor(() => screen.getByRole("alert"));
     expect(screen.getByRole("alert").textContent).toMatch(/github HTTP 401/);
   });

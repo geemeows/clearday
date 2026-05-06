@@ -1062,77 +1062,66 @@ export function PrDiffViewer({
   number: number;
   load?: PrFilesLoader;
 }) {
-  const [open, setOpen] = useState(false);
   const [state, setState] = useState<
-    | { kind: "idle" }
     | { kind: "loading" }
     | { kind: "ok"; files: PrFile[] }
     | { kind: "error"; message: string }
-  >({ kind: "idle" });
+  >({ kind: "loading" });
 
-  const reveal = async () => {
-    if (open) {
-      setOpen(false);
-      return;
-    }
-    setOpen(true);
-    if (state.kind === "ok") return;
+  useEffect(() => {
+    let cancelled = false;
     setState({ kind: "loading" });
-    try {
-      const out = await load({ repo, number });
-      if (out.ok) setState({ kind: "ok", files: out.files });
-      else setState({ kind: "error", message: out.error });
-    } catch (e) {
-      setState({
-        kind: "error",
-        message: e instanceof Error ? e.message : "failed to load diff",
+    load({ repo, number })
+      .then((out) => {
+        if (cancelled) return;
+        if (out.ok) setState({ kind: "ok", files: out.files });
+        else setState({ kind: "error", message: out.error });
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        setState({
+          kind: "error",
+          message: e instanceof Error ? e.message : "failed to load diff",
+        });
       });
-    }
-  };
+    return () => {
+      cancelled = true;
+    };
+  }, [repo, number, load]);
 
   return (
     <section aria-label="PR diff">
-      <button
-        type="button"
-        onClick={reveal}
-        className="inline-flex items-center rounded-md hover:bg-(--surface-soft)"
+      <header
+        className="font-bold uppercase tracking-wider"
         style={{
-          height: 30,
-          padding: "0 12px",
-          fontSize: 12,
+          fontSize: 9,
           color: "var(--muted-foreground)",
-          border: "1px solid var(--hairline-soft)",
+          marginBottom: 8,
         }}
       >
-        {open ? "Hide diff" : "Show diff"}
-      </button>
-      {open && state.kind === "loading" && (
-        <p
-          className="mt-2 text-xs"
-          style={{ color: "var(--muted-foreground)" }}
-        >
+        Diff
+      </header>
+      {state.kind === "loading" && (
+        <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>
           Loading diff…
         </p>
       )}
-      {open && state.kind === "error" && (
+      {state.kind === "error" && (
         <p
           role="alert"
-          className="mt-2 text-xs"
+          className="text-xs"
           style={{ color: "var(--destructive)" }}
         >
           Couldn't load diff: {state.message}
         </p>
       )}
-      {open && state.kind === "ok" && state.files.length === 0 && (
-        <p
-          className="mt-2 text-xs"
-          style={{ color: "var(--muted-foreground)" }}
-        >
+      {state.kind === "ok" && state.files.length === 0 && (
+        <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>
           No files changed.
         </p>
       )}
-      {open && state.kind === "ok" && state.files.length > 0 && (
-        <div className="mt-3 flex flex-col" style={{ gap: 12 }}>
+      {state.kind === "ok" && state.files.length > 0 && (
+        <div className="flex flex-col" style={{ gap: 8 }}>
           {state.files.map((f) => (
             <PrFilePatch key={f.filename} file={f} />
           ))}
