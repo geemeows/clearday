@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
-import { sendWebPush } from "#/lib/alert-channel/web-push";
-import type { WebPushDispatcherDeps } from "#/lib/web-push-dispatcher";
-import { b64urlDecode, b64urlEncode } from "#/lib/web-push-vapid";
+import { sendWebPush } from "#/features/alerts/channels/web-push";
+import type { WebPushDispatcherDeps } from "#/features/alerts/channels/web-push/subscriptions";
+import {
+  b64urlDecode,
+  b64urlEncode,
+} from "#/features/alerts/channels/web-push/vapid";
 import type { StoredSignal } from "#/shared/signal";
 
 async function vapidConfig() {

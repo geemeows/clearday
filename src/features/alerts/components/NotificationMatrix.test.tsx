@@ -5,7 +5,7 @@ import {
   type MatrixKind,
   type MatrixValue,
   NotificationMatrix,
-} from "#/components/NotificationMatrix";
+} from "#/features/alerts/components/NotificationMatrix";
 
 const KINDS: MatrixKind[] = [
   { id: "pr_review", label: "PR review" },

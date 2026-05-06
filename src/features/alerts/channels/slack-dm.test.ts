@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { formatAlertText, sendSlackDm } from "#/lib/alert-channel/slack-dm";
+import {
+  formatAlertText,
+  sendSlackDm,
+} from "#/features/alerts/channels/slack-dm";
 import type { StoredSignal } from "#/shared/signal";
 
 const meeting: StoredSignal = {

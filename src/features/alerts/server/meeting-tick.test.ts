@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
-import type { DispatcherDeps } from "#/lib/alert-dispatcher";
-import { runMeetingAlertTick } from "#/lib/meeting-alert-tick";
 import {
   DEFAULT_FOCUS_BLOCK,
   DEFAULT_MATRIX,
   DEFAULT_QUIET_HOURS,
   type NotificationPrefs,
-} from "#/lib/quiet-hours";
+} from "#/features/alerts/delivery-decision";
+import type { DispatcherDeps } from "#/features/alerts/dispatcher";
+import { runMeetingAlertTick } from "#/features/alerts/server/meeting-tick";
 import type { StoredSignal } from "#/shared/signal";
 
 const permissivePrefs: NotificationPrefs = {

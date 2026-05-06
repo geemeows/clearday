@@ -11,7 +11,7 @@
 // last-write-wins for its own slot (auto_dismiss is sticky once set; snooze
 // uses the longest window seen; tags accumulate).
 
-import type { AlertChannel } from "#/lib/alert-dispatcher";
+import type { AlertChannel } from "#/features/alerts/dispatcher";
 import type { Signal, SignalPriority } from "#/shared/signal";
 
 const ALERT_CHANNELS: readonly AlertChannel[] = [

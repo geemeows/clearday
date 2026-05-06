@@ -6,15 +6,15 @@
 
 import { Plus, X } from "lucide-react";
 import { useState } from "react";
+import { Button } from "#/components/ui/button";
+import { Input } from "#/components/ui/input";
+import { Switch } from "#/components/ui/switch";
 import {
   type MatrixChannel,
   type MatrixKind,
   type MatrixValue,
   NotificationMatrix,
-} from "#/components/NotificationMatrix";
-import { Button } from "#/components/ui/button";
-import { Input } from "#/components/ui/input";
-import { Switch } from "#/components/ui/switch";
+} from "#/features/alerts/components/NotificationMatrix";
 import { cn } from "#/lib/cn";
 
 type ChannelDef = {

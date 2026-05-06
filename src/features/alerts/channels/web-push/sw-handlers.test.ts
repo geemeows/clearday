@@ -1,7 +1,10 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { buildPushNotification, notificationClickUrl } from "#/lib/sw-handlers";
+import {
+  buildPushNotification,
+  notificationClickUrl,
+} from "#/features/alerts/channels/web-push/sw-handlers";
 
 describe("buildPushNotification", () => {
   it("renders a generic notification for tickle pushes", () => {

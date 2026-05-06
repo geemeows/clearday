@@ -11,7 +11,7 @@
 // `p256dh` is the subscription's b64url uncompressed P-256 public key (65 B).
 // `auth`   is the subscription's b64url 16-byte auth secret.
 
-import { b64urlDecode } from "#/lib/web-push-vapid";
+import { b64urlDecode } from "#/features/alerts/channels/web-push/vapid";
 
 const TEXT = new TextEncoder();
 

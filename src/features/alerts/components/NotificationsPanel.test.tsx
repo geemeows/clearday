@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { NotificationsPanel } from "#/components/NotificationsPanel";
+import { NotificationsPanel } from "#/features/alerts/components/NotificationsPanel";
 
 describe("NotificationsPanel", () => {
   it("renders the four channel rows with Test + Switch", () => {

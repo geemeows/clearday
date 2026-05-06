@@ -1,16 +1,16 @@
 import { describe, expect, it, vi } from "vitest";
 import {
-  type AlertChannel,
-  type AlertThreshold,
-  type DispatcherDeps,
-  dispatchAlert,
-} from "#/lib/alert-dispatcher";
-import {
   DEFAULT_FOCUS_BLOCK,
   DEFAULT_MATRIX,
   DEFAULT_QUIET_HOURS,
   type NotificationPrefs,
-} from "#/lib/quiet-hours";
+} from "#/features/alerts/delivery-decision";
+import {
+  type AlertChannel,
+  type AlertThreshold,
+  type DispatcherDeps,
+  dispatchAlert,
+} from "#/features/alerts/dispatcher";
 import type { StoredSignal } from "#/shared/signal";
 
 const meeting: StoredSignal = {

@@ -8,7 +8,7 @@ import {
   type FocusBlockContext,
   type NotificationPrefs,
   type QuietHoursWindow,
-} from "#/lib/quiet-hours";
+} from "#/features/alerts/delivery-decision";
 import type { StoredSignal } from "#/shared/signal";
 
 const baseMention: StoredSignal = {

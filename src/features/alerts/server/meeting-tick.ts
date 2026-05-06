@@ -9,7 +9,7 @@ import {
   type DispatcherDeps,
   type DispatchResult,
   dispatchAlert,
-} from "#/lib/alert-dispatcher";
+} from "#/features/alerts/dispatcher";
 import type { StoredSignal } from "#/shared/signal";
 
 const LOOKAHEAD_MS = 11 * 60 * 1000;

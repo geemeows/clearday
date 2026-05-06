@@ -3,17 +3,13 @@
 // active focus block) and turns idempotency / queue inserts into the
 // dispatcher's `alreadyRecorded` / `enqueueDelivery` contracts.
 
-import { sendEmailAlert } from "#/lib/alert-channel/email";
-import { sendSlackDm } from "#/lib/alert-channel/slack-dm";
-import { buildWebPushPayload, sendWebPush } from "#/lib/alert-channel/web-push";
-import type {
-  AlertChannel,
-  AlertThreshold,
-  DispatcherDeps,
-} from "#/lib/alert-dispatcher";
-import { dispatchAlert } from "#/lib/alert-dispatcher";
-import type { EmailDigestRow } from "#/lib/email-digest-api";
-import { decryptSecret } from "#/lib/llm-crypto";
+import { sendEmailAlert } from "#/features/alerts/channels/email";
+import { sendSlackDm } from "#/features/alerts/channels/slack-dm";
+import {
+  buildWebPushPayload,
+  sendWebPush,
+} from "#/features/alerts/channels/web-push";
+import type { VapidConfig } from "#/features/alerts/channels/web-push/vapid";
 import {
   DEFAULT_FOCUS_BLOCK,
   DEFAULT_MATRIX,
@@ -23,8 +19,15 @@ import {
   type NotificationMatrix,
   type NotificationPrefs,
   type QuietHoursWindow,
-} from "#/lib/quiet-hours";
-import type { VapidConfig } from "#/lib/web-push-vapid";
+} from "#/features/alerts/delivery-decision";
+import type {
+  AlertChannel,
+  AlertThreshold,
+  DispatcherDeps,
+} from "#/features/alerts/dispatcher";
+import { dispatchAlert } from "#/features/alerts/dispatcher";
+import type { EmailDigestRow } from "#/lib/email-digest-api";
+import { decryptSecret } from "#/lib/llm-crypto";
 import type { Signal, StoredSignal } from "#/shared/signal";
 
 const KNOWN_CHANNELS: AlertChannel[] = [

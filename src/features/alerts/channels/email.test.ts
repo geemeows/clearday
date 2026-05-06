@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { formatAlertEmail, sendEmailAlert } from "#/lib/alert-channel/email";
+import {
+  formatAlertEmail,
+  sendEmailAlert,
+} from "#/features/alerts/channels/email";
 import type { StoredSignal } from "#/shared/signal";
 
 const meeting: StoredSignal = {

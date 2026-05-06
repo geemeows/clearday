@@ -5,7 +5,10 @@
 // matrix gating, allow-through, focus-block suppression, and weekly
 // schedule all live here so the rules are easy to test in isolation.
 
-import type { AlertChannel, AlertThreshold } from "#/lib/alert-dispatcher";
+import type {
+  AlertChannel,
+  AlertThreshold,
+} from "#/features/alerts/dispatcher";
 import type { SignalKind, StoredSignal } from "#/shared/signal";
 
 export type QuietHoursWindow = {

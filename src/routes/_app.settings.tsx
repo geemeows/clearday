@@ -1,7 +1,7 @@
 import { createFileRoute, Link, Outlet } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import type { AlertChannel } from "#/features/alerts/dispatcher";
 import type { IntegrationView } from "#/features/integrations/api/integrations-api";
-import type { AlertChannel } from "#/lib/alert-dispatcher";
 import { apiFetch } from "#/lib/api-client";
 import {
   DEFAULT_RETENTION_DAYS,

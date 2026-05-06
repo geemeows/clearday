@@ -7,7 +7,7 @@ import {
   subscribe,
   unsubscribe,
   type WebPushSubscriptionStore,
-} from "#/lib/web-push-api";
+} from "#/features/alerts/channels/web-push/api";
 
 function memoryStore(initial: DeviceView[] = []): WebPushSubscriptionStore {
   let devices = [...initial];

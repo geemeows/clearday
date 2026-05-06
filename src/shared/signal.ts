@@ -2,7 +2,7 @@
 // thing Clearday surfaces. Identity = (provider, kind, source_id); updates
 // upsert into the same row, never duplicate. See ADR-0002.
 
-import type { AlertChannel } from "#/lib/alert-dispatcher";
+import type { AlertChannel } from "#/features/alerts/dispatcher";
 
 export type SignalProvider = "github" | "google" | "slack" | "linear" | "jira";
 

@@ -6,7 +6,7 @@ import {
   decodeJwtForTest,
   signVapidAuth,
   type VapidConfig,
-} from "#/lib/web-push-vapid";
+} from "#/features/alerts/channels/web-push/vapid";
 
 async function generateVapidKeyPair(): Promise<VapidConfig> {
   const pair = await crypto.subtle.generateKey(

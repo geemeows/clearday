@@ -19,7 +19,7 @@ import {
   decideDelivery,
   type FocusBlockContext,
   type NotificationPrefs,
-} from "#/lib/quiet-hours";
+} from "#/features/alerts/delivery-decision";
 import type { StoredSignal } from "#/shared/signal";
 
 export type AlertChannel = "slack_dm" | "web_push" | "email" | "desktop";

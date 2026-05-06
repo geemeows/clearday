@@ -1,6 +1,25 @@
 /// <reference types="@cloudflare/workers-types" />
 import { createClient } from "@supabase/supabase-js";
 import {
+  type DeviceView,
+  listDevices,
+  renameDevice,
+  subscribe,
+  unsubscribe,
+  type WebPushSubscriptionStore,
+} from "#/features/alerts/channels/web-push/api";
+import { pruneStaleWebPushSubscriptions } from "#/features/alerts/channels/web-push/subscriptions";
+import type { VapidConfig } from "#/features/alerts/channels/web-push/vapid";
+import { type AlertChannel, fireChannels } from "#/features/alerts/dispatcher";
+import {
+  buildDispatcherDeps,
+  loadDueQueuedAlerts,
+  loadUpcomingMeetings,
+  removeQueuedAlert,
+} from "#/features/alerts/server/glue";
+import { runMeetingAlertTick } from "#/features/alerts/server/meeting-tick";
+import { runAlertQueueDrain } from "#/features/alerts/server/queue-drain";
+import {
   disconnectIntegration,
   getIntegrations,
   type IntegrationsStore,
@@ -17,8 +36,6 @@ import {
   putAiSettings,
   testAiConnection,
 } from "#/lib/ai-settings-api";
-import { type AlertChannel, fireChannels } from "#/lib/alert-dispatcher";
-import { runAlertQueueDrain } from "#/lib/alert-queue-drain";
 import { type AskAiDeps, handleAskAi } from "#/lib/ask-ai-api";
 import {
   type BriefingDeps,
@@ -55,7 +72,6 @@ import {
   putInboxRules,
 } from "#/lib/inbox-rules-api";
 import type { InboxRule } from "#/lib/inbox-rules-engine";
-import { runMeetingAlertTick } from "#/lib/meeting-alert-tick";
 import { handleOAuthExchange } from "#/lib/oauth-exchange-handler";
 import {
   buildConnectUrl,
@@ -84,23 +100,7 @@ import {
   type ThemeStore,
   type ThemeView,
 } from "#/lib/theme-api";
-import {
-  type DeviceView,
-  listDevices,
-  renameDevice,
-  subscribe,
-  unsubscribe,
-  type WebPushSubscriptionStore,
-} from "#/lib/web-push-api";
-import { pruneStaleWebPushSubscriptions } from "#/lib/web-push-dispatcher";
-import type { VapidConfig } from "#/lib/web-push-vapid";
 import type { StoredSignal } from "#/shared/signal";
-import {
-  buildDispatcherDeps,
-  loadDueQueuedAlerts,
-  loadUpcomingMeetings,
-  removeQueuedAlert,
-} from "#/worker/alert-glue";
 import {
   defaultGetUser,
   json,

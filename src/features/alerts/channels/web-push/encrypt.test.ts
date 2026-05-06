@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { encryptWebPushPayload } from "#/lib/web-push-encrypt";
-import { b64urlEncode } from "#/lib/web-push-vapid";
+import { encryptWebPushPayload } from "#/features/alerts/channels/web-push/encrypt";
+import { b64urlEncode } from "#/features/alerts/channels/web-push/vapid";
 
 const TEXT = new TextEncoder();
 

@@ -9,7 +9,7 @@ import {
   type AlertThreshold,
   type DispatcherDeps,
   fireChannels,
-} from "#/lib/alert-dispatcher";
+} from "#/features/alerts/dispatcher";
 import type { StoredSignal } from "#/shared/signal";
 
 export type QueuedAlert = {

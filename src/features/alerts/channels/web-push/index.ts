@@ -8,7 +8,7 @@ import {
   dispatchWebPush,
   type WebPushDispatcherDeps,
   type WebPushPayload,
-} from "#/lib/web-push-dispatcher";
+} from "#/features/alerts/channels/web-push/subscriptions";
 import type { StoredSignal } from "#/shared/signal";
 
 export function buildWebPushPayload(signal: StoredSignal): WebPushPayload {
