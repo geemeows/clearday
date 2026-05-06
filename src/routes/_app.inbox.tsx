@@ -2459,7 +2459,7 @@ export function kindGroup(kind: SignalKind): SignalGroup {
   return "pr";
 }
 
-function secondaryLabel(s: StoredSignal): string {
+export function secondaryLabel(s: StoredSignal): string {
   if (s.provider === "slack") {
     const channelType = s.payload?.channel_type as string | undefined;
     const channel = s.payload?.channel as string | undefined;

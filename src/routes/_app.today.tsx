@@ -1,13 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import {
-  ExternalLink,
-  Inbox,
-  RefreshCw,
-  Sparkles,
-  SquareKanban,
-  Video,
-  X,
-} from "lucide-react";
+import { ExternalLink, RefreshCw, Video, X } from "lucide-react";
+import { SourceGlyph } from "#/features/signals/components/SourceGlyph";
+import { InboxPreviewRow } from "#/features/signals/components/InboxPreviewRow";
 import {
   type ReactNode,
   useCallback,
@@ -31,7 +25,6 @@ import { NextUpHero } from "#/features/today/NextUpHero";
 import { PulseCard } from "#/features/today/PulseCard";
 import { useAutoRefresh } from "#/hooks/use-auto-refresh";
 import { apiFetch } from "#/lib/api-client";
-import { relAgo } from "#/routes/_app.inbox";
 import type { StoredSignal } from "#/shared/signal";
 
 export const Route = createFileRoute("/_app/today")({
@@ -341,46 +334,46 @@ export function BriefingCard({ generator }: { generator?: Generator } = {}) {
   return (
     <article
       aria-label="Morning briefing"
-      className="rounded-lg border border-border bg-card p-5"
+      className="rounded-lg border border-border bg-card p-6"
     >
-      <header className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 text-muted-foreground text-xs uppercase tracking-wider">
-          <Sparkles className="h-4 w-4" />
+      <header className="flex items-center gap-2">
+        <SourceGlyph source="ai" size={20} />
+        <span className="font-semibold text-base text-foreground">
           Morning briefing
-        </div>
-        <div className="flex items-center gap-2">
-          {result?.ok && result.used_fallback && (
-            <span className="inline-flex items-center rounded-sm border border-amber-200 bg-amber-50 px-2 py-0.5 font-medium text-[11px] text-amber-800">
-              Running on fallback model
-            </span>
-          )}
-          {result?.ok && (
-            <CossButton
-              variant="outline"
-              size="xs"
-              onClick={regenerate}
-              disabled={busy}
-            >
-              <RefreshCw aria-hidden="true" />
-              Regenerate
-            </CossButton>
-          )}
-        </div>
+        </span>
+        {result?.ok && (
+          <span className="font-mono text-[11px] text-muted-foreground uppercase tracking-wider">
+            {result.model.toUpperCase()}
+            {latencyMs != null && ` · ${formatLatency(latencyMs)}`}
+            {" · $0.000"}
+            {result.cached && " · cached"}
+          </span>
+        )}
+        <span className="flex-1" />
+        {result?.ok && result.used_fallback && (
+          <span className="inline-flex items-center rounded-sm border border-amber-200 bg-amber-50 px-2 py-0.5 font-medium text-[11px] text-amber-800">
+            Running on fallback model
+          </span>
+        )}
+        {result?.ok && (
+          <CossButton
+            variant="ghost"
+            size="xs"
+            onClick={regenerate}
+            disabled={busy}
+          >
+            <RefreshCw aria-hidden="true" />
+            Regenerate
+          </CossButton>
+        )}
       </header>
-      <div className="mt-3 text-foreground text-sm">
+      <div className="mt-3 text-foreground text-sm leading-relaxed">
         {busy && !result && (
           <p className="text-muted-foreground">Generating your briefing…</p>
         )}
         {result?.ok && (
           <>
             <p className="whitespace-pre-line">{renderBold(result.text)}</p>
-            <p className="mt-3 font-mono text-[11px] text-muted-foreground uppercase tracking-wider">
-              {result.model.toUpperCase()}
-              {latencyMs != null && ` · ${formatLatency(latencyMs)}`}
-              {/* TODO(post-redesign): wire to real cost telemetry — see PRD #29 */}
-              {" · $0.000"}
-              {result.cached && " · cached"}
-            </p>
             {regenWarning && (
               <p className="mt-2 text-amber-700 text-xs">{regenWarning}</p>
             )}
@@ -531,58 +524,91 @@ export function TodaySchedule({
       aria-label="Today schedule"
       className="rounded-lg border border-border bg-card p-5"
     >
-      <header className="text-muted-foreground text-xs uppercase tracking-wider">
-        Today's schedule
+      <header className="flex items-baseline gap-2">
+        <span className="font-semibold text-base text-foreground">Today</span>
+        <span className="text-muted-foreground text-xs">
+          {formatHeaderDate(now)}
+        </span>
+        <span className="flex-1" />
+        <span className="font-mono text-[11px] text-muted-foreground tabular-nums">
+          {formatHeaderTime(now)}
+        </span>
       </header>
       {events.length === 0 ? (
         <p className="mt-3 text-muted-foreground text-sm">No meetings today.</p>
       ) : (
-        <ul className="mt-3 divide-y divide-border">
+        <ul className="mt-3 flex flex-col">
           {events.map((e) => {
             const isNow = isCurrentBlock(e, now);
             const focus = e.isFocus;
+            const barColor = focus
+              ? "var(--ink, var(--foreground))"
+              : "var(--primary)";
             return (
               <li
                 key={e.signal.id}
                 aria-current={isNow ? "true" : undefined}
                 className={
                   focus
-                    ? "flex items-start gap-3 bg-foreground py-2 px-2 text-background first:pt-2 last:pb-2"
-                    : "flex items-start gap-3 py-2 first:pt-0 last:pb-0"
+                    ? "grid items-center gap-3 bg-foreground px-2 py-2 text-background first:rounded-t-md last:rounded-b-md"
+                    : "grid items-center gap-3 py-2"
                 }
+                style={{ gridTemplateColumns: "84px 6px 1fr auto" }}
               >
                 <time
                   dateTime={e.startsAt.toISOString()}
                   className={
                     focus
-                      ? "w-20 shrink-0 font-mono text-background/80 text-xs"
-                      : "w-20 shrink-0 font-mono text-muted-foreground text-xs"
+                      ? "text-right font-mono text-[11px] text-background/80 tabular-nums"
+                      : "text-right font-mono text-[11px] text-muted-foreground tabular-nums"
                   }
                 >
-                  {formatLocalTime(e.startsAt)}
+                  {formatRangeShort(e.startsAt, e.endsAt)}
                 </time>
-                <div className="min-w-0 flex-1">
+                <span
+                  aria-hidden="true"
+                  className="block h-full min-h-[28px] w-1.5 rounded-full"
+                  style={{ background: barColor }}
+                />
+                <div className="min-w-0">
                   <p
                     className={
                       focus
-                        ? "truncate font-medium text-background text-sm"
-                        : "truncate font-medium text-foreground text-sm"
+                        ? "flex items-center gap-2 truncate font-semibold text-background text-sm"
+                        : isNow
+                          ? "flex items-center gap-2 truncate font-semibold text-foreground text-sm"
+                          : "flex items-center gap-2 truncate font-medium text-foreground text-sm"
                     }
                   >
-                    {e.signal.title}
+                    <span className="truncate">{e.signal.title}</span>
+                    {isNow && (
+                      <span
+                        className="inline-flex shrink-0 items-center rounded-full px-2 py-px font-semibold text-[10px] uppercase tracking-wider"
+                        style={{
+                          background: "var(--accent-tint, var(--secondary))",
+                          color: "var(--primary-active, var(--primary))",
+                        }}
+                      >
+                        NOW
+                      </span>
+                    )}
+                  </p>
+                  <p
+                    className={
+                      focus
+                        ? "truncate font-mono text-[11px] text-background/70"
+                        : "truncate font-mono text-[11px] text-muted-foreground"
+                    }
+                  >
+                    {focus ? "deep work · DND" : "google meet"}
                   </p>
                 </div>
-                {isNow && (
-                  <span className="inline-flex items-center rounded-sm bg-primary px-1.5 py-0.5 font-semibold text-[10px] text-primary-foreground uppercase tracking-wider">
-                    NOW
-                  </span>
-                )}
                 {!isNow && e.videoLink && (
                   <a
                     href={e.videoLink}
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-flex items-center gap-1 rounded-sm border border-border bg-card px-2 py-1 text-foreground text-xs hover:bg-accent"
+                    className="inline-flex items-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-foreground text-xs hover:bg-accent"
                   >
                     <Video className="h-3 w-3" />
                     Join
@@ -595,6 +621,34 @@ export function TodaySchedule({
       )}
     </article>
   );
+}
+
+function formatHeaderDate(d: Date): string {
+  return d.toLocaleString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function formatHeaderTime(d: Date): string {
+  return d.toLocaleString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function formatRangeShort(start: Date, end: Date | null): string {
+  const s = start.toLocaleString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+  if (!end) return s;
+  const e = end.toLocaleString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+  return `${s} – ${e}`;
 }
 
 function isCurrentBlock(e: MeetingEvent, now: Date): boolean {
@@ -654,52 +708,50 @@ export function InboxPreviewCard({
     [signals, limit],
   );
 
+  const nowIso = new Date().toISOString();
+  const unreadCount = preview.length;
   return (
     <article
       aria-label="Inbox preview"
       className="rounded-lg border border-border bg-card p-5"
     >
-      <header className="flex items-center justify-between">
-        <div className="flex items-center gap-2 text-muted-foreground text-xs uppercase tracking-wider">
-          <Inbox className="h-4 w-4" />
+      <header className="flex items-baseline gap-2 px-1.5">
+        <span className="font-semibold text-base text-foreground">
           Needs you
-        </div>
+        </span>
+        {unreadCount > 0 && (
+          <span className="text-muted-foreground text-xs">
+            {unreadCount} unread
+          </span>
+        )}
+        <span className="flex-1" />
         <a
           href="/inbox"
-          className="text-foreground text-xs underline hover:text-primary"
+          aria-label="Open all"
+          className="rounded-sm px-2.5 py-1 font-medium text-foreground text-xs hover:bg-accent"
         >
-          Open all
+          Open all →
         </a>
       </header>
-      {error && <p className="mt-3 text-destructive text-sm">{error}</p>}
+      {error && <p className="mt-3 px-1.5 text-destructive text-sm">{error}</p>}
       {!error && signals == null && (
-        <p className="mt-3 text-muted-foreground text-sm">Loading…</p>
+        <p className="mt-3 px-1.5 text-muted-foreground text-sm">Loading…</p>
       )}
       {!error && signals != null && preview.length === 0 && (
-        <p className="mt-3 text-muted-foreground text-sm">
+        <p className="mt-3 px-1.5 text-muted-foreground text-sm">
           Nothing actionable. Inbox zero.
         </p>
       )}
       {!error && preview.length > 0 && (
-        <ul className="mt-3 divide-y divide-border">
+        <ul className="mt-2 flex flex-col">
           {preview.map((s) => (
-            <li key={s.id} className="first:-mt-2 last:-mb-2">
+            <li key={s.id}>
               <Link
                 to="/inbox"
                 search={{ signal: s.id }}
-                className="-mx-2 flex items-center gap-3 rounded-sm px-2 py-2 hover:bg-accent"
+                className="block rounded-md hover:bg-accent"
               >
-                <span className="min-w-0 flex-1">
-                  <p className="truncate font-medium text-foreground text-sm">
-                    {s.title}
-                  </p>
-                  <p className="truncate text-muted-foreground text-xs">
-                    {s.provider}
-                  </p>
-                </span>
-                <time className="shrink-0 text-muted-foreground text-xs tabular-nums">
-                  {relAgo(s.source_created_at, new Date().toISOString())}
-                </time>
+                <InboxPreviewRow signal={s} nowIso={nowIso} />
               </Link>
             </li>
           ))}
@@ -773,9 +825,15 @@ export function InProgressCard({
       aria-label="In progress"
       className="rounded-lg border border-border bg-card p-5"
     >
-      <header className="flex items-center gap-2 text-muted-foreground text-xs uppercase tracking-wider">
-        <SquareKanban className="h-4 w-4" />
-        In progress
+      <header className="flex items-baseline gap-2">
+        <span className="font-semibold text-base text-foreground">
+          In progress
+        </span>
+        {tickets != null && top.length > 0 && (
+          <span className="text-muted-foreground text-xs">
+            {top.length} {plural(top.length, "ticket")}
+          </span>
+        )}
       </header>
       {error && <p className="mt-3 text-destructive text-sm">{error}</p>}
       {!error && tickets == null && (
@@ -791,43 +849,69 @@ export function InProgressCard({
         </p>
       )}
       {!error && top.length > 0 && (
-        <ul className="mt-3 divide-y divide-border">
-          {top.map((s) => (
-            <li
-              key={s.id}
-              className="flex items-center gap-3 py-2 first:pt-0 last:pb-0"
-            >
-              <span className="rounded-sm bg-secondary px-2 py-0.5 font-mono text-foreground text-xs">
-                {TICKET_STATUS_LABEL[s.kind] ?? s.kind}
-              </span>
-              <span className="min-w-0 flex-1 truncate font-medium text-foreground text-sm">
-                {s.title}
-              </span>
-              {s.url && (
-                <a
-                  href={s.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-1 rounded-sm border border-border bg-card px-2 py-1 text-foreground text-xs hover:bg-accent"
-                >
-                  <ExternalLink className="h-3 w-3" />
-                  Open
-                </a>
-              )}
-            </li>
-          ))}
+        <ul className="mt-2 flex flex-col">
+          {top.map((s) => {
+            const days = daysInProgress(s);
+            const prRef = prRefOf(s);
+            return (
+              <li
+                key={s.id}
+                className="flex items-center gap-3 border-border border-b py-3 last:border-0"
+              >
+                <span className="rounded-md bg-secondary px-2 py-0.5 font-mono font-semibold text-[11px] text-foreground">
+                  {TICKET_STATUS_LABEL[s.kind] ?? s.kind}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate font-medium text-foreground text-sm">
+                    {s.title}
+                  </span>
+                  <span className="block truncate font-mono text-[11px] text-muted-foreground">
+                    {[
+                      days != null && `${days}d in progress`,
+                      prRef && `PR ${prRef}`,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </span>
+                </span>
+                <span
+                  aria-hidden="true"
+                  className="inline-block h-1.5 w-1.5 shrink-0 rounded-full"
+                  style={{ background: "var(--good, #0a8754)" }}
+                />
+                {s.url && (
+                  <a
+                    href={s.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-foreground text-xs hover:bg-accent"
+                  >
+                    <ExternalLink className="h-3 w-3" />
+                    Open
+                  </a>
+                )}
+              </li>
+            );
+          })}
         </ul>
       )}
     </article>
   );
 }
 
-function formatLocalTime(d: Date): string {
-  return d.toLocaleString(undefined, {
-    weekday: "short",
-    hour: "numeric",
-    minute: "2-digit",
-  });
+function daysInProgress(s: StoredSignal): number | null {
+  const iso = s.source_created_at;
+  if (!iso) return null;
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return null;
+  const days = Math.max(0, Math.floor((Date.now() - t) / (24 * 60 * 60 * 1000)));
+  return days;
+}
+
+function prRefOf(s: StoredSignal): string | null {
+  const num = s.payload?.pr_number ?? s.payload?.number;
+  if (typeof num === "number") return `#${num}`;
+  return null;
 }
 
 const ALERT_STORAGE_PREFIX = "clearday:meeting-alert:";
