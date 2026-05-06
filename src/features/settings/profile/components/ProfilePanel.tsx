@@ -11,6 +11,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "#/components/ui/avatar";
 import { Button } from "#/components/ui/button";
 import { signOut as defaultSignOut } from "#/features/auth/auth";
 import type { IntegrationView } from "#/features/integrations/api/integrations-api";
+import { ThemeToggle } from "#/features/settings/theme/components/ThemeToggle";
 import { apiFetch } from "#/lib/api-client";
 import { supabase } from "#/lib/supabase";
 
@@ -123,6 +124,13 @@ export function ProfilePanel({ loader, onSignOut }: ProfilePanelProps = {}) {
           </dl>
         </div>
       )}
+
+      <div className="mt-8 flex items-center gap-3">
+        <ThemeToggle />
+        <span className="text-muted-foreground text-sm">
+          Toggle light / dark mode
+        </span>
+      </div>
 
       <div className="mt-8">
         <Button
