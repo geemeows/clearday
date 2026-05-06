@@ -24,7 +24,6 @@ import {
   type NextUpMeeting,
   pickMeetingForAlert,
   pickUpcoming,
-  type StoredSignal,
 } from "#/lib/next-up";
 import type { ProfileView } from "#/lib/profile-api";
 import {
@@ -36,6 +35,7 @@ import {
 } from "#/lib/today-cards";
 import { filterMeetingsToToday } from "#/lib/today-window";
 import { useAutoRefresh } from "#/lib/use-auto-refresh";
+import type { StoredSignal } from "#/shared/signal";
 
 export const Route = createFileRoute("/_app/today")({
   component: TodayPage,

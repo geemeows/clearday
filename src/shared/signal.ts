@@ -36,13 +36,18 @@ export type Signal = {
 
 export type SignalPriority = "low" | "high";
 
+export type LinkedItem =
+  | { kind: "pr"; url: string; repo: string; number: number }
+  | { kind: "ticket"; url: string; key: string };
+
 export type StoredSignal = Signal & {
   id: string;
   unread_count: number;
   created_at: string;
   updated_at: string;
   dismissed_at: string | null;
-  priority?: SignalPriority | null;
-  snoozed_until?: string | null;
-  alert_channels_override?: AlertChannel[] | null;
+  priority: SignalPriority | null;
+  snoozed_until: string | null;
+  alert_channels_override: AlertChannel[] | null;
+  tags: string[] | null;
 };

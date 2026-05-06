@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { FocusButton } from "#/components/FocusButton";
 import type { FocusStartResult } from "#/lib/focus-session";
-import type { StoredSignal } from "#/lib/next-up";
+import type { StoredSignal } from "#/shared/signal";
 
 const noMeetings = async (): Promise<StoredSignal[]> => [];
 
@@ -20,7 +20,14 @@ function focusMeeting(
     url: null,
     source_created_at: startsAt,
     requires_action: false,
+    unread_count: 0,
+    created_at: startsAt,
+    updated_at: startsAt,
     dismissed_at: null,
+    priority: null,
+    snoozed_until: null,
+    alert_channels_override: null,
+    tags: null,
     payload: { starts_at: startsAt, ends_at: endsAt, is_focus: true },
     ...overrides,
   };

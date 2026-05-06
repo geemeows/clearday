@@ -77,6 +77,10 @@ const prSignal: StoredSignal = {
   created_at: "2026-05-01T10:00:00Z",
   updated_at: "2026-05-01T10:00:00Z",
   dismissed_at: null,
+  priority: null,
+  snoozed_until: null,
+  alert_channels_override: null,
+  tags: null,
 };
 
 const slackSignal: StoredSignal = {
@@ -98,6 +102,10 @@ const slackSignal: StoredSignal = {
   created_at: "2026-05-01T10:00:00Z",
   updated_at: "2026-05-01T10:00:00Z",
   dismissed_at: null,
+  priority: null,
+  snoozed_until: null,
+  alert_channels_override: null,
+  tags: null,
 };
 
 const meetingSignal: StoredSignal = {

@@ -22,7 +22,7 @@ import {
 import { apiFetch } from "#/lib/api-client";
 import { cn } from "#/lib/cn";
 import type { FocusStartResult } from "#/lib/focus-session";
-import type { StoredSignal } from "#/lib/next-up";
+import type { StoredSignal } from "#/shared/signal";
 
 const PRESETS = [25, 60, 90];
 

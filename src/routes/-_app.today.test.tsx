@@ -9,7 +9,6 @@ import { describe, expect, it, vi } from "vitest";
 import { UpcomingEventsCard } from "#/components/UpcomingEventsCard";
 import type { BriefingResult } from "#/features/briefing/morning-briefing";
 import { toMeetingEvents } from "#/features/signals/views/calendar";
-import type { StoredSignal } from "#/lib/next-up";
 import {
   BriefingCard,
   formatGreeting,
@@ -20,6 +19,7 @@ import {
   TodayView,
   WeekStatsCard,
 } from "#/routes/_app.today";
+import type { StoredSignal } from "#/shared/signal";
 
 const meetingSignal = (id = "m1"): StoredSignal => ({
   id,
@@ -43,7 +43,14 @@ const meetingSignal = (id = "m1"): StoredSignal => ({
   },
   requires_action: false,
   source_created_at: "2026-05-04T12:30:00.000Z",
+  unread_count: 0,
+  created_at: "2026-05-04T12:30:00.000Z",
+  updated_at: "2026-05-04T12:30:00.000Z",
   dismissed_at: null,
+  priority: null,
+  snoozed_until: null,
+  alert_channels_override: null,
+  tags: null,
 });
 
 describe("UpcomingEventsCard", () => {
@@ -326,6 +333,13 @@ describe("InboxPreviewCard", () => {
     requires_action,
     source_created_at: createdAt,
     dismissed_at: null,
+    unread_count: 0,
+    created_at: "2026-05-01T00:00:00.000Z",
+    updated_at: "2026-05-01T00:00:00.000Z",
+    priority: null,
+    snoozed_until: null,
+    alert_channels_override: null,
+    tags: null,
   });
 
   it("renders top actionable signals with an Open-all link", async () => {
@@ -375,6 +389,13 @@ describe("InProgressCard", () => {
     requires_action: kind !== "ticket_in_progress",
     source_created_at: "2026-05-04T08:00:00.000Z",
     dismissed_at: null,
+    unread_count: 0,
+    created_at: "2026-05-01T00:00:00.000Z",
+    updated_at: "2026-05-01T00:00:00.000Z",
+    priority: null,
+    snoozed_until: null,
+    alert_channels_override: null,
+    tags: null,
   });
 
   it("renders tickets with their status label and an Open link", async () => {

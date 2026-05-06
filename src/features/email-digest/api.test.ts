@@ -62,6 +62,10 @@ function fakeSignal(overrides: Partial<StoredSignal> = {}): StoredSignal {
     created_at: "2026-05-04T08:00:00.000Z",
     updated_at: "2026-05-04T08:00:00.000Z",
     dismissed_at: null,
+    priority: null,
+    snoozed_until: null,
+    alert_channels_override: null,
+    tags: null,
     ...overrides,
   };
 }

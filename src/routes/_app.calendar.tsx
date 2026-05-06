@@ -13,7 +13,7 @@ import {
 } from "#/features/signals/views/calendar-conflicts";
 import { apiFetch } from "#/lib/api-client";
 import { cn } from "#/lib/cn";
-import type { StoredSignal } from "#/lib/next-up";
+import type { StoredSignal } from "#/shared/signal";
 
 export type CalendarViewMode = "day" | "week" | "month";
 

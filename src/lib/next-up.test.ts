@@ -3,8 +3,8 @@ import {
   formatCountdown,
   pickMeetingForAlert,
   pickNextUp,
-  type StoredSignal,
 } from "#/lib/next-up";
+import type { StoredSignal } from "#/shared/signal";
 
 const meeting = (args: {
   id: string;
@@ -25,7 +25,14 @@ const meeting = (args: {
   },
   requires_action: false,
   source_created_at: args.starts_at,
+  unread_count: 0,
+  created_at: args.starts_at,
+  updated_at: args.starts_at,
   dismissed_at: null,
+  priority: null,
+  snoozed_until: null,
+  alert_channels_override: null,
+  tags: null,
 });
 
 describe("pickNextUp", () => {

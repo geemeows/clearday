@@ -2,16 +2,7 @@
 // in-app meeting alert. Kept module-local so the rendering layer stays a
 // thin shell over deterministic functions that are easy to test.
 
-import type { Signal } from "#/shared/signal";
-
-export type StoredSignal = Signal & {
-  id: string;
-  dismissed_at: string | null;
-};
-
-export type LinkedItem =
-  | { kind: "pr"; url: string; repo: string; number: number }
-  | { kind: "ticket"; url: string; key: string };
+import type { LinkedItem, StoredSignal } from "#/shared/signal";
 
 export type NextUpMeeting = {
   signal: StoredSignal;

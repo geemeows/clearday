@@ -1,12 +1,21 @@
 import { describe, expect, it } from "vitest";
-import type { StoredSignal } from "#/lib/next-up";
 import {
   computeWeekStats,
   pickInboxPreview,
   pickInProgressTickets,
   pickTodaySchedule,
 } from "#/lib/today-cards";
-import type { SignalKind } from "#/shared/signal";
+import type { SignalKind, StoredSignal } from "#/shared/signal";
+
+const STORED_DEFAULTS = {
+  unread_count: 0,
+  created_at: "2026-05-01T00:00:00.000Z",
+  updated_at: "2026-05-01T00:00:00.000Z",
+  priority: null,
+  snoozed_until: null,
+  alert_channels_override: null,
+  tags: null,
+} as const;
 
 const meeting = (
   id: string,
@@ -26,6 +35,7 @@ const meeting = (
   requires_action: false,
   source_created_at: startsAt,
   dismissed_at: dismissed ? "2026-05-04T00:00:00.000Z" : null,
+  ...STORED_DEFAULTS,
 });
 
 const pr = (
@@ -44,6 +54,7 @@ const pr = (
   requires_action,
   source_created_at: createdAt,
   dismissed_at: dismissed ? "2026-05-04T00:00:00.000Z" : null,
+  ...STORED_DEFAULTS,
 });
 
 describe("pickTodaySchedule", () => {
@@ -131,6 +142,7 @@ const ticket = (
   requires_action: kind !== "ticket_in_progress",
   source_created_at: createdAt,
   dismissed_at: dismissedAt,
+  ...STORED_DEFAULTS,
 });
 
 describe("pickInProgressTickets", () => {
@@ -185,6 +197,7 @@ describe("computeWeekStats", () => {
       requires_action,
       source_created_at: createdAt,
       dismissed_at,
+      ...STORED_DEFAULTS,
     });
     const out = computeWeekStats(
       [
@@ -235,6 +248,7 @@ describe("computeWeekStats", () => {
       requires_action: false,
       source_created_at: startsAt,
       dismissed_at: null,
+      ...STORED_DEFAULTS,
     });
     const out = computeWeekStats(
       [
@@ -273,6 +287,7 @@ describe("computeWeekStats", () => {
       requires_action: true,
       source_created_at: createdAt,
       dismissed_at: dismissedAt,
+      ...STORED_DEFAULTS,
     });
     // now = 2026-05-04T12:00 UTC; completed days evaluated: 2026-05-03 .. 2026-04-27.
     const out = computeWeekStats(
@@ -308,6 +323,7 @@ describe("computeWeekStats", () => {
       requires_action: true,
       source_created_at: createdAt,
       dismissed_at: dismissedAt,
+      ...STORED_DEFAULTS,
     });
     const out = computeWeekStats(
       [actionable("a", "2026-05-03T08:00:00.000Z", "2026-05-03T20:00:00.000Z")],

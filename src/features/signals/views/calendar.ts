@@ -7,7 +7,7 @@
 // so this is the right thing here. Tests construct Dates explicitly so they
 // stay stable across CI zones (TZ=UTC in CI).
 
-import type { LinkedItem, StoredSignal } from "#/lib/next-up";
+import type { LinkedItem, StoredSignal } from "#/shared/signal";
 
 export type MeetingEvent = {
   signal: StoredSignal;

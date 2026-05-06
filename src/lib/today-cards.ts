@@ -7,8 +7,7 @@ import {
   type MeetingEvent,
   toMeetingEvents,
 } from "#/features/signals/views/calendar";
-import type { StoredSignal } from "#/lib/next-up";
-import type { SignalKind } from "#/shared/signal";
+import type { SignalKind, StoredSignal } from "#/shared/signal";
 
 const TICKET_KINDS: SignalKind[] = [
   "ticket_assigned",

@@ -702,6 +702,10 @@ describe("InboxRulesPanel", () => {
         created_at: "2026-05-04T10:00:00.000Z",
         updated_at: "2026-05-04T10:00:00.000Z",
         dismissed_at: null,
+        priority: null,
+        snoozed_until: null,
+        alert_channels_override: null,
+        tags: null,
       },
       {
         id: "s-2",
@@ -717,6 +721,10 @@ describe("InboxRulesPanel", () => {
         created_at: "2026-05-04T10:00:00.000Z",
         updated_at: "2026-05-04T10:00:00.000Z",
         dismissed_at: null,
+        priority: null,
+        snoozed_until: null,
+        alert_channels_override: null,
+        tags: null,
       },
     ];
     const signalsLoader = vi.fn(async () => previewSignals);

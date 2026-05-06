@@ -31,6 +31,10 @@ function meeting(id: string, startsAt: string): StoredSignal {
     created_at: startsAt,
     updated_at: startsAt,
     dismissed_at: null,
+    priority: null,
+    snoozed_until: null,
+    alert_channels_override: null,
+    tags: null,
   };
 }
 

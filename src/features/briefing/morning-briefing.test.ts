@@ -33,6 +33,10 @@ function meetingSignal(title: string, startsAt: string): StoredSignal {
     created_at: startsAt,
     updated_at: startsAt,
     dismissed_at: null,
+    priority: null,
+    snoozed_until: null,
+    alert_channels_override: null,
+    tags: null,
   };
 }
 
@@ -51,6 +55,10 @@ function prSignal(kind: StoredSignal["kind"], title: string): StoredSignal {
     created_at: "2026-05-04T08:00:00Z",
     updated_at: "2026-05-04T08:00:00Z",
     dismissed_at: null,
+    priority: null,
+    snoozed_until: null,
+    alert_channels_override: null,
+    tags: null,
   };
 }
 

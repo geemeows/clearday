@@ -965,6 +965,10 @@ async function handleTestNotification(
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
     dismissed_at: null,
+    priority: null,
+    snoozed_until: null,
+    alert_channels_override: null,
+    tags: null,
   };
   const result = await fireChannels(stub, candidates, dispatcher);
   const ok = result.fired.length > 0 && Object.keys(result.errors).length === 0;
