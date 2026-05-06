@@ -173,7 +173,7 @@ describe("handleDismissSignal", () => {
 });
 
 describe("handleSources", () => {
-  it("returns one row per known provider with connected/disconnected", async () => {
+  it("returns one row per known provider with ok/neutral", async () => {
     const res = await handleSources(async () => [
       {
         provider: "github",
@@ -190,11 +190,11 @@ describe("handleSources", () => {
     const map = Object.fromEntries(
       body.sources.map((s) => [s.provider, s.status]),
     );
-    expect(map.github).toBe("connected");
-    expect(map.google).toBe("disconnected");
-    expect(map.slack).toBe("disconnected");
-    expect(map.linear).toBe("disconnected");
-    expect(map.jira).toBe("disconnected");
+    expect(map.github).toBe("ok");
+    expect(map.google).toBe("neutral");
+    expect(map.slack).toBe("neutral");
+    expect(map.linear).toBe("neutral");
+    expect(map.jira).toBe("neutral");
   });
 
   it("surfaces rate_limited from provider_accounts.status", async () => {
@@ -269,7 +269,7 @@ describe("handleSources", () => {
     }
   });
 
-  it("treats null/unknown status as connected when a row exists", async () => {
+  it("treats null/unknown status as ok when a row exists", async () => {
     const res = await handleSources(async () => [
       {
         provider: "linear",
@@ -282,6 +282,28 @@ describe("handleSources", () => {
       sources: Array<{ provider: string; status: string }>;
     };
     const linear = body.sources.find((s) => s.provider === "linear");
-    expect(linear?.status).toBe("connected");
+    expect(linear?.status).toBe("ok");
+  });
+
+  it("returns stale for slack when last_polled_at is older than 24h", async () => {
+    const NOW = Date.parse("2026-05-05T12:00:00Z");
+    const stale = new Date(NOW - 25 * 60 * 60 * 1000).toISOString();
+    const res = await handleSources(
+      async () => [
+        {
+          provider: "slack",
+          account_id: "U1",
+          updated_at: "2026-05-01T00:00:00Z",
+          status: "ok",
+          last_polled_at: stale,
+        },
+      ],
+      NOW,
+    );
+    const body = (await res.json()) as {
+      sources: Array<{ provider: string; status: string }>;
+    };
+    const slack = body.sources.find((s) => s.provider === "slack");
+    expect(slack?.status).toBe("stale");
   });
 });

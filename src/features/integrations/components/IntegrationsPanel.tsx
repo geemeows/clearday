@@ -1,9 +1,10 @@
 // Settings → Integrations panel (per PRD #29 mockup #2).
 //
 // Lists each provider as a row with SourceGlyph, name, description, scopes,
-// live status (driven by /api/sources via deriveSourceStatus), Reauthorize
-// button, and an on/off Switch. Below the list, a Slack channel allowlist
-// renders existing channels as removable chips with a "+ Add channel" input.
+// live status (read off /api/sources — derivation is server-side, see
+// features/integrations/provider-account-status.ts), Reauthorize button, and
+// an on/off Switch. Below the list, a Slack channel allowlist renders
+// existing channels as removable chips with a "+ Add channel" input.
 //
 // Backend persistence for the on/off toggle and allowlist is deferred —
 // edits update local state only, matching the per-section slice pattern.
@@ -14,17 +15,13 @@ import { SourceGlyph, type SourceKind } from "#/components/SourceGlyph";
 import { Button } from "#/components/ui/button";
 import { Input } from "#/components/ui/input";
 import { Switch } from "#/components/ui/switch";
+import type { ProviderAccountStatus } from "#/features/integrations/provider-account-status";
 import { apiFetch } from "#/lib/api-client";
 import { cn } from "#/lib/cn";
-import {
-  type ApiSourceStatus,
-  deriveSourceStatus,
-  type SourceStatus,
-} from "#/lib/source-status";
 
 type ApiSource = {
   provider: string;
-  status: ApiSourceStatus;
+  status: ProviderAccountStatus;
   last_polled_at?: string | null;
 };
 
@@ -148,7 +145,6 @@ export function IntegrationsPanel({
     load()
       .then((body) => {
         if (cancelled) return;
-        const ts = now ?? Date.now();
         const next: Record<string, RowStatus> = {};
         for (const row of ROWS) {
           if (row.isMock) {
@@ -158,15 +154,9 @@ export function IntegrationsPanel({
           const match = body.sources.find(
             (s) => s.provider === row.providerKey,
           );
-          const lastPolledAt = match?.last_polled_at ?? null;
           next[row.id] = {
-            status: deriveSourceStatus({
-              providerId: row.providerKey,
-              apiStatus: match?.status,
-              lastPolledAt,
-              now: ts,
-            }),
-            lastPolledAt,
+            status: match?.status ?? "neutral",
+            lastPolledAt: match?.last_polled_at ?? null,
           };
         }
         setStatuses(next);
@@ -177,7 +167,7 @@ export function IntegrationsPanel({
     return () => {
       cancelled = true;
     };
-  }, [load, now]);
+  }, [load]);
 
   useEffect(() => refresh(), [refresh]);
 
@@ -249,8 +239,8 @@ export function IntegrationsPanel({
         className="mt-6 divide-y divide-border rounded-md border border-border"
       >
         {ROWS.map((row) => {
-          const meta = statuses[row.id] ?? {
-            status: "neutral" as SourceStatus,
+          const meta: RowStatus = statuses[row.id] ?? {
+            status: "neutral",
             lastPolledAt: null,
           };
           const isEnabled = enabled[row.id] ?? true;
@@ -377,11 +367,11 @@ export function IntegrationsPanel({
 }
 
 type RowStatus = {
-  status: SourceStatus;
+  status: ProviderAccountStatus;
   lastPolledAt: string | null;
 };
 
-function statusLabel(status: SourceStatus): string {
+function statusLabel(status: ProviderAccountStatus): string {
   switch (status) {
     case "ok":
       return "connected";
@@ -417,7 +407,7 @@ function statusText(row: RowDef, meta: RowStatus, now?: number): string {
   }
 }
 
-function dotClass(status: SourceStatus): string {
+function dotClass(status: ProviderAccountStatus): string {
   switch (status) {
     case "ok":
       return "bg-emerald-500";

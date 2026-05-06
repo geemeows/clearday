@@ -7,13 +7,13 @@ import {
 } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { IntegrationsPanel } from "#/features/integrations/components/IntegrationsPanel";
-import type { ApiSourceStatus } from "#/lib/source-status";
+import type { ProviderAccountStatus } from "#/features/integrations/provider-account-status";
 
 const NOW = Date.parse("2026-05-05T12:00:00Z");
 
 type ApiSource = {
   provider: string;
-  status: ApiSourceStatus;
+  status: ProviderAccountStatus;
   last_polled_at?: string | null;
 };
 
@@ -23,17 +23,17 @@ function loaderWith(sources: ApiSource[]) {
 
 const FRESH_GITHUB = {
   provider: "github",
-  status: "connected" as const,
+  status: "ok" as const,
   last_polled_at: new Date(NOW - 32_000).toISOString(),
 };
 const FRESH_SLACK = {
   provider: "slack",
-  status: "connected" as const,
+  status: "ok" as const,
   last_polled_at: new Date(NOW - 60_000).toISOString(),
 };
 const FRESH_GOOGLE = {
   provider: "google",
-  status: "connected" as const,
+  status: "ok" as const,
   last_polled_at: new Date(NOW - 90_000).toISOString(),
 };
 

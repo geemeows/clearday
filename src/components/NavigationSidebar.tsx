@@ -10,8 +10,8 @@ import { SourceGlyph, type SourceKind } from "#/components/SourceGlyph";
 import { ThemeToggle } from "#/components/ThemeToggle";
 import { Avatar, AvatarFallback, AvatarImage } from "#/components/ui/avatar";
 import { Button } from "#/components/ui/button";
+import type { ProviderAccountStatus } from "#/features/integrations/provider-account-status";
 import { cn } from "#/lib/cn";
-import type { SourceStatus } from "#/lib/source-status";
 
 export const OPEN_CMDK_EVENT = "devy:open-cmdk";
 
@@ -26,7 +26,7 @@ export type NavSource = {
   label: string;
   kind: SourceKind;
   count: number;
-  status: SourceStatus;
+  status: ProviderAccountStatus;
 };
 
 export type FocusState =
@@ -231,7 +231,7 @@ function AccountRow({
   );
 }
 
-function statusLabel(status: SourceStatus): string {
+function statusLabel(status: ProviderAccountStatus): string {
   switch (status) {
     case "ok":
       return "connected";
@@ -246,7 +246,7 @@ function statusLabel(status: SourceStatus): string {
   }
 }
 
-function dotClass(status: SourceStatus): string {
+function dotClass(status: ProviderAccountStatus): string {
   switch (status) {
     case "ok":
       return "bg-emerald-500";

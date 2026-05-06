@@ -4,6 +4,10 @@
 // apply server-side filters and unify shapes).
 
 import {
+  deriveProviderAccountStatus,
+  type ProviderAccountStatus,
+} from "#/features/integrations/provider-account-status";
+import {
   dismissSignal,
   listSignals,
   type SupabaseLike,
@@ -81,15 +85,9 @@ export type SourceStatusRow = {
   last_polled_at?: string | null;
 };
 
-export type SourceHealth =
-  | "connected"
-  | "rate_limited"
-  | "auth_failed"
-  | "disconnected";
-
 export type SourceStatus = {
   provider: SignalProvider;
-  status: SourceHealth;
+  status: ProviderAccountStatus;
   account_id: string | null;
   updated_at: string | null;
   last_polled_at: string | null;
@@ -97,6 +95,7 @@ export type SourceStatus = {
 
 export async function handleSources(
   loadAccounts: () => Promise<SourceStatusRow[]>,
+  now: number = Date.now(),
 ): Promise<Response> {
   const rows = await loadAccounts();
   const byProvider = new Map(rows.map((r) => [r.provider, r]));
@@ -104,18 +103,17 @@ export async function handleSources(
     const row = byProvider.get(provider);
     return {
       provider,
-      status: rowStatus(row),
+      status: deriveProviderAccountStatus({
+        providerId: provider,
+        rowPresent: row !== undefined,
+        rowStatus: row?.status ?? null,
+        lastPolledAt: row?.last_polled_at ?? null,
+        now,
+      }),
       account_id: row?.account_id ?? null,
       updated_at: row?.updated_at ?? null,
       last_polled_at: row?.last_polled_at ?? null,
     };
   });
   return json({ sources });
-}
-
-function rowStatus(row: SourceStatusRow | undefined): SourceHealth {
-  if (!row) return "disconnected";
-  if (row.status === "rate_limited") return "rate_limited";
-  if (row.status === "auth_failed") return "auth_failed";
-  return "connected";
 }

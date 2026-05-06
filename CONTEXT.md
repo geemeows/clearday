@@ -144,6 +144,18 @@ they iterate the provider registry and call the same uniform interface. New
 providers are added by writing one folder, not by editing N switch
 statements.
 
+### Provider account
+
+A single user's connection to one **Provider** — the row in `provider_accounts`
+holding the access/refresh tokens, the upstream account id, and a derived
+health status (`ok`, `stale`, `rate_limited`, `auth_failed`, `neutral`) used
+by the UI's Source rail and Integrations panel. "Stale" is currently
+Slack-only: connected but no successful poll inside the last 24h. The UI
+calls a Provider account a "Source" — same concept, UI vocabulary.
+
+A deployment has at most one Provider account per Provider (single-tenant —
+see **Allowed user**).
+
 ### Capability
 
 A user-initiated write action on a Signal that depends on a specific provider

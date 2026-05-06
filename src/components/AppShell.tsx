@@ -22,13 +22,9 @@ import {
   OPEN_CMDK_EVENT,
 } from "#/components/NavigationSidebar";
 import type { SourceKind } from "#/components/SourceGlyph";
+import type { ProviderAccountStatus } from "#/features/integrations/provider-account-status";
 import { apiFetch } from "#/lib/api-client";
 import { PROFILE_UPDATED_EVENT, type ProfileView } from "#/lib/profile-api";
-import {
-  type ApiSourceStatus,
-  deriveSourceStatus,
-  type SourceStatus,
-} from "#/lib/source-status";
 import {
   DEFAULT_THEME,
   resolveEffectiveTheme,
@@ -65,12 +61,12 @@ const SOURCE_PROVIDER: Record<string, string> = {
 
 type ApiSource = {
   provider: string;
-  status: ApiSourceStatus;
+  status: ProviderAccountStatus;
   last_polled_at?: string | null;
 };
 
 type SourceMeta = {
-  status: SourceStatus;
+  status: ProviderAccountStatus;
   lastPolledAt: string | null;
 };
 
@@ -91,7 +87,7 @@ export function AppShell() {
         count: 0,
         // TODO(post-redesign): Linear/Jira live counts ship with the adapters
         // (see PRD #29 provider-scope decision).
-        status: sourceMeta[def.id]?.status ?? ("neutral" as SourceStatus),
+        status: sourceMeta[def.id]?.status ?? "neutral",
       })),
     [sourceMeta],
   );
@@ -283,19 +279,12 @@ function useSourceStatuses(): Record<string, SourceMeta> {
       .then((body) => {
         if (cancelled) return;
         const sources = (body as { sources: ApiSource[] }).sources;
-        const now = Date.now();
         const next: Record<string, SourceMeta> = {};
         for (const id of Object.keys(SOURCE_PROVIDER)) {
           const match = sources.find((s) => s.provider === SOURCE_PROVIDER[id]);
-          const lastPolledAt = match?.last_polled_at ?? null;
           next[id] = {
-            status: deriveSourceStatus({
-              providerId: id,
-              apiStatus: match?.status,
-              lastPolledAt,
-              now,
-            }),
-            lastPolledAt,
+            status: match?.status ?? "neutral",
+            lastPolledAt: match?.last_polled_at ?? null,
           };
         }
         setMeta(next);
