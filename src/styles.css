@@ -156,17 +156,6 @@
   --radius-lg: 20px;
   --radius-xl: 32px;
 
-  /* Spacing scale — matches DESIGN.md `spacing` tokens */
-  --spacing-xxs: 2px;
-  --spacing-xs: 4px;
-  --spacing-sm: 8px;
-  --spacing-md: 12px;
-  --spacing-base: 16px;
-  --spacing-lg: 24px;
-  --spacing-xl: 32px;
-  --spacing-xxl: 48px;
-  --spacing-section: 64px;
-
   --font-sans: var(--font-sans);
 
   /* Sidebar Tailwind utility mappings (e.g. `bg-sidebar`, `text-sidebar-foreground`). */
@@ -237,19 +226,6 @@ html[data-accent="plum"] {
   --primary: #92174d;
   --primary-active: #75123e;
   --primary-disabled: #e7c4d3;
-}
-
-/*
- * Compact density — shrink the spacing scale so cards and rows pack tighter.
- * Selected by `<html data-density="compact">`.
- */
-html[data-density="compact"] {
-  --spacing-sm: 6px;
-  --spacing-md: 10px;
-  --spacing-base: 12px;
-  --spacing-lg: 18px;
-  --spacing-xl: 24px;
-  --spacing-xxl: 36px;
 }
 
 body {

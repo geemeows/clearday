@@ -95,7 +95,8 @@ describe("ThemeToggle", () => {
         method: "PUT",
         body: { theme: "dark" },
       });
-      expect(onUpdate).toHaveBeenCalledTimes(1);
+      // Optimistic dispatch on click + confirmation dispatch after PUT resolves.
+      expect(onUpdate).toHaveBeenCalledTimes(2);
     } finally {
       window.removeEventListener(THEME_UPDATED_EVENT, onUpdate);
     }

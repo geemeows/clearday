@@ -19,4 +19,17 @@ export const Route = createFileRoute("/")({
     }
     throw redirect({ to: "/today" });
   },
+  component: IndexPending,
 });
+
+// Rendered only while auth is still resolving — beforeLoad redirects
+// in every other case. Without a component, the user sees a blank screen
+// until the auth context updates and the router re-evaluates beforeLoad.
+function IndexPending() {
+  return (
+    <main
+      aria-busy="true"
+      className="flex min-h-screen items-center justify-center"
+    />
+  );
+}

@@ -1,5 +1,5 @@
 import { RouterProvider } from "@tanstack/react-router";
-import { StrictMode } from "react";
+import { StrictMode, useEffect, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import { AuthProvider, useAuth } from "#/features/auth/auth";
 import {
@@ -40,6 +40,17 @@ startThemeController();
 
 function App() {
   const auth = useAuth();
+  // TanStack Router caches beforeLoad results — passing a new context prop
+  // alone won't re-run route guards. Invalidate when auth transitions out
+  // of `loading` so routes like `/` (which short-circuits while loading)
+  // re-evaluate and redirect to /login or /today.
+  const wasLoading = useRef(auth.loading);
+  useEffect(() => {
+    if (wasLoading.current && !auth.loading) {
+      router.invalidate();
+    }
+    wasLoading.current = auth.loading;
+  }, [auth.loading]);
   return <RouterProvider router={router} context={{ auth }} />;
 }
 

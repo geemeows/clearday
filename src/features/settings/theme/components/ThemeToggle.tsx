@@ -57,7 +57,13 @@ export function ThemeToggle() {
     effective === "dark" ? "Switch to light mode" : "Switch to dark mode";
 
   const onClick = async () => {
+    const previous = view;
     setView(next);
+    // Drive <html data-theme> immediately so the swap is instant; the network
+    // PUT below confirms (or, on failure, we revert to the prior value).
+    window.dispatchEvent(
+      new CustomEvent(THEME_UPDATED_EVENT, { detail: next }),
+    );
     try {
       const out = (await apiFetch("/api/theme", {
         method: "PUT",
@@ -70,7 +76,10 @@ export function ThemeToggle() {
         );
       }
     } catch {
-      // Save failed: revert optimistic state on next /api/theme load.
+      setView(previous);
+      window.dispatchEvent(
+        new CustomEvent(THEME_UPDATED_EVENT, { detail: previous }),
+      );
     }
   };
 

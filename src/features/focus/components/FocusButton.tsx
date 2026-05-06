@@ -4,7 +4,7 @@
 // auto-expiration), and Slack DND (snooze). Best-effort: per-provider
 // outcomes are surfaced so a partial success doesn't read as a failure.
 
-import { Moon } from "lucide-react";
+import { Moon, Target } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import {
   Dialog,
@@ -134,7 +134,7 @@ export function FocusButton({
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="flex items-center gap-2 rounded border border-violet-300 bg-violet-50 px-3 py-1.5 text-sm font-medium text-violet-900 hover:bg-violet-100"
+          className="flex w-full items-center justify-center gap-2 rounded-sm border border-violet-300 bg-violet-50 px-3 py-1.5 text-sm font-medium text-violet-900 hover:bg-violet-100"
           aria-label="Start focus session"
           aria-pressed="true"
           data-focus-active="true"
@@ -146,11 +146,11 @@ export function FocusButton({
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="flex items-center gap-2 rounded border border-zinc-200 bg-white px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+          className="flex w-full items-center justify-center gap-2 rounded-sm bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary-active"
           aria-label="Start focus session"
         >
-          <Moon className="h-4 w-4" />
-          Focus
+          <Target className="h-4 w-4" />
+          Start focus session
         </button>
       )}
 
