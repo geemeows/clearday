@@ -39,9 +39,25 @@ export type CapabilityCtx = {
   accessToken: string;
 };
 
-/** Storage handle for loadState / saveState. */
+/**
+ * Per-account row passed to the orchestrator and into loadState/saveState so
+ * provider modules can read fields like `account_id` without leaking the row
+ * shape into every consumer.
+ */
+export type ProviderAccountRow = {
+  provider: string;
+  access_token: string | null;
+  refresh_token: string | null;
+  expires_at: string | null;
+  /** Provider-side user id (e.g. Slack `authed_user.id`). Required for the
+   *  Slack poll's `<@self>` query; unused by other providers. */
+  account_id?: string | null;
+};
+
+/** Storage + account context for loadState / saveState. */
 export type StateDeps = {
   supabase: SupabaseLike;
+  account: ProviderAccountRow;
 };
 
 /**

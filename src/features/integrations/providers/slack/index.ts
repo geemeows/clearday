@@ -19,6 +19,7 @@ import {
 import { exchangeSlack } from "#/features/integrations/providers/slack/oauth";
 import { pollSlackSignals } from "#/features/integrations/providers/slack/poll";
 import {
+  loadSlackState,
   type SlackDelta,
   type SlackState,
   saveSlackState,
@@ -56,6 +57,17 @@ export const slack: Provider<SlackState, SlackDelta, SlackCapabilities> = {
   authorize: AUTHORIZE_PROVIDERS.slack,
   exchange: (code, env, fetchImpl) => exchangeSlack(code, env, fetchImpl),
   refresh: null,
+  loadState: (deps) => {
+    if (!deps.account.account_id) {
+      throw new Error(
+        "slack account_id missing — cannot scan history for self mentions",
+      );
+    }
+    return loadSlackState({
+      supabase: deps.supabase,
+      accountId: deps.account.account_id,
+    });
+  },
   poll: async (token, ctx, state) => {
     const result = await pollSlackSignals(
       token,

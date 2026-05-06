@@ -28,6 +28,7 @@ import {
   DialogTitle,
 } from "#/components/ui/dialog";
 import type { AskAiResult } from "#/features/ask-ai/api";
+import { signalKindLabel } from "#/features/integrations/display";
 import {
   SourceGlyph,
   type SourceKind,
@@ -496,7 +497,7 @@ function AnswerPanel({
 }
 
 function secondaryLabel(s: Result): string {
-  const kind = kindLabel(s.kind);
+  const kind = signalKindLabel(s.kind);
   if (s.provider === "slack") {
     const channelType = s.payload?.channel_type as string | undefined;
     const channel = s.payload?.channel as string | undefined;
@@ -522,33 +523,4 @@ function secondaryLabel(s: Result): string {
   }
   const repo = (s.payload?.repo as string | undefined) ?? "";
   return [kind, repo].filter(Boolean).join(" · ");
-}
-
-function kindLabel(kind: string): string {
-  switch (kind) {
-    case "pr_review_requested":
-      return "Review requested";
-    case "pr_authored":
-      return "Authored PR";
-    case "pr_assigned":
-      return "Assigned PR";
-    case "meeting":
-      return "Meeting";
-    case "dm":
-      return "Direct message";
-    case "mention":
-      return "Mention";
-    case "thread_reply":
-      return "Thread reply";
-    case "ticket_assigned":
-      return "Todo";
-    case "ticket_in_progress":
-      return "In progress";
-    case "ticket_in_review":
-      return "In review";
-    case "ticket_blocked":
-      return "Blocked";
-    default:
-      return kind;
-  }
 }

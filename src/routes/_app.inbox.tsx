@@ -2,14 +2,16 @@ import { createFileRoute } from "@tanstack/react-router";
 import { Calendar as CalIcon, ExternalLink, Video, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  SourceGlyph,
-  type SourceKind,
-} from "#/features/signals/components/SourceGlyph";
+  providerOpenLabel,
+  providerSourceKind,
+  signalKindLabel,
+} from "#/features/integrations/display";
+import { SourceGlyph } from "#/features/signals/components/SourceGlyph";
 import { filterMeetingsToToday } from "#/features/signals/views/today";
 import { useAutoRefresh } from "#/hooks/use-auto-refresh";
 import { apiFetch } from "#/lib/api-client";
 import { cn } from "#/lib/cn";
-import type { Signal, SignalKind, SignalProvider } from "#/shared/signal";
+import type { Signal, SignalKind } from "#/shared/signal";
 
 export const Route = createFileRoute("/_app/inbox")({
   component: InboxPage,
@@ -325,7 +327,7 @@ export function InboxRow({
         (replied || snoozed) && "opacity-60",
       )}
     >
-      <SourceGlyph source={providerToSource(signal.provider)} size={28} />
+      <SourceGlyph source={providerSourceKind(signal.provider)} size={28} />
       <button
         type="button"
         onClick={onSelect}
@@ -376,7 +378,7 @@ export function InboxRow({
         </div>
         <div className="mt-0.5 flex items-baseline justify-between gap-2 text-xs text-muted-foreground">
           <span className="truncate">
-            {kindLabel(signal.kind)} · {secondaryLabel(signal)}
+            {signalKindLabel(signal.kind)} · {secondaryLabel(signal)}
           </span>
           <time className="shrink-0 tabular-nums">
             {relAgo(signal.source_created_at, nowIso)}
@@ -496,9 +498,9 @@ export function InboxDetailPane({
     >
       <header className="flex items-start justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
-          <SourceGlyph source={providerToSource(signal.provider)} size={28} />
+          <SourceGlyph source={providerSourceKind(signal.provider)} size={28} />
           <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            {kindLabel(signal.kind)}
+            {signalKindLabel(signal.kind)}
           </span>
         </div>
         <button
@@ -539,7 +541,7 @@ export function InboxDetailPane({
             className="inline-flex items-center gap-1 rounded-sm bg-primary px-3 py-1.5 text-sm text-primary-foreground hover:bg-primary-active"
           >
             <ExternalLink className="h-4 w-4" />
-            {openLabel(signal.provider)}
+            {providerOpenLabel(signal.provider)}
           </a>
         )}
         <button
@@ -1554,51 +1556,6 @@ export function kindGroup(kind: SignalKind): SignalGroup {
   )
     return "ticket";
   return "pr";
-}
-
-function providerToSource(provider: SignalProvider): SourceKind {
-  if (provider === "github") return "git";
-  if (provider === "slack") return "slack";
-  if (provider === "google") return "cal";
-  // linear / jira
-  return "task";
-}
-
-function openLabel(provider: SignalProvider): string {
-  if (provider === "github") return "Open in GitHub";
-  if (provider === "slack") return "Open in Slack";
-  if (provider === "linear") return "Open in Linear";
-  if (provider === "jira") return "Open in Jira";
-  return "Open in Calendar";
-}
-
-function kindLabel(kind: string): string {
-  switch (kind) {
-    case "pr_review_requested":
-      return "Review requested";
-    case "pr_authored":
-      return "Authored PR";
-    case "pr_assigned":
-      return "Assigned PR";
-    case "meeting":
-      return "Meeting";
-    case "dm":
-      return "Direct message";
-    case "mention":
-      return "Mention";
-    case "thread_reply":
-      return "Thread reply";
-    case "ticket_assigned":
-      return "Todo";
-    case "ticket_in_progress":
-      return "In progress";
-    case "ticket_in_review":
-      return "In review";
-    case "ticket_blocked":
-      return "Blocked";
-    default:
-      return kind;
-  }
 }
 
 function secondaryLabel(s: StoredSignal): string {

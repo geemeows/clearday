@@ -4,22 +4,46 @@ import {
   type OrchestratorDeps,
   runScheduledPoll,
 } from "#/features/integrations/orchestrator";
+import type { SupabaseLike } from "#/shared/db";
 
 function makeStore(
-  upsertResult: { error: { message: string } | null } = { error: null },
+  opts: {
+    upsertResult?: { error: { message: string } | null };
+    participatedThreads?: Array<{ channel: string; thread_ts: string }>;
+    broadcastAllowlist?: string[];
+  } = {},
 ) {
-  const upsert = vi.fn(async () => upsertResult);
-  return {
-    upsert,
-    client: {
-      from: () => ({
+  const upsert = vi.fn(async () => opts.upsertResult ?? { error: null });
+  const slackThreadsUpsert = vi.fn(async () => ({ error: null }));
+  const client = {
+    from: (table: string) => {
+      if (table === "slack_participated_threads") {
+        return {
+          select: async () => ({
+            data: opts.participatedThreads ?? [],
+            error: null,
+          }),
+          upsert: slackThreadsUpsert,
+        };
+      }
+      if (table === "slack_channel_allowlist") {
+        return {
+          select: async () => ({
+            data: (opts.broadcastAllowlist ?? []).map((channel_id) => ({
+              channel_id,
+            })),
+            error: null,
+          }),
+        };
+      }
+      return {
         upsert,
-        // unused in this test
         select: () => ({}) as never,
         update: () => ({}) as never,
-      }),
+      };
     },
-  };
+  } as unknown as SupabaseLike;
+  return { upsert, slackThreadsUpsert, client };
 }
 
 const githubItem = {
@@ -543,7 +567,6 @@ describe("runScheduledPoll", () => {
   });
 
   it("loads slack participated threads and pulls conversations.replies for each", async () => {
-    const store = makeStore();
     const fetchImpl = vi.fn(async (url: string) => {
       if (url.includes("conversations.replies")) {
         return new Response(
@@ -572,9 +595,9 @@ describe("runScheduledPoll", () => {
         status: 200,
       });
     });
-    const loadSlackParticipatedThreads = vi.fn(async () => [
-      { channel: "C1", thread_ts: "1714820000.000100" },
-    ]);
+    const store = makeStore({
+      participatedThreads: [{ channel: "C1", thread_ts: "1714820000.000100" }],
+    });
     const deps: OrchestratorDeps = {
       loadAccounts: async () => [
         {
@@ -585,13 +608,11 @@ describe("runScheduledPoll", () => {
           account_id: "U_SELF",
         },
       ],
-      loadSlackParticipatedThreads,
       store: store.client,
       fetch: fetchImpl as unknown as typeof fetch,
     };
     const reports = await runScheduledPoll(deps);
     expect(reports).toEqual([{ provider: "slack", upserted: 1 }]);
-    expect(loadSlackParticipatedThreads).toHaveBeenCalledTimes(1);
     const urls = (fetchImpl.mock.calls as unknown as Array<[string]>).map(
       (c) => c[0],
     );
@@ -609,7 +630,6 @@ describe("runScheduledPoll", () => {
   });
 
   it("loads the slack broadcast allowlist and emits broadcast mentions only for allowlisted channels", async () => {
-    const store = makeStore();
     const fetchImpl = vi.fn(async (url: string) => {
       if (url.includes("users.conversations")) {
         const isIm = /types=im(&|$|%26)/.test(url) || url.includes("=im&");
@@ -640,7 +660,7 @@ describe("runScheduledPoll", () => {
       }
       return new Response(JSON.stringify({ ok: true }), { status: 200 });
     });
-    const loadSlackBroadcastAllowlist = vi.fn(async () => ["C_ANNOUNCE"]);
+    const store = makeStore({ broadcastAllowlist: ["C_ANNOUNCE"] });
     const deps: OrchestratorDeps = {
       loadAccounts: async () => [
         {
@@ -651,13 +671,11 @@ describe("runScheduledPoll", () => {
           account_id: "U_SELF",
         },
       ],
-      loadSlackBroadcastAllowlist,
       store: store.client,
       fetch: fetchImpl as unknown as typeof fetch,
     };
     const reports = await runScheduledPoll(deps);
     expect(reports).toEqual([{ provider: "slack", upserted: 1 }]);
-    expect(loadSlackBroadcastAllowlist).toHaveBeenCalledTimes(1);
     const upserted = (
       store.upsert.mock.calls as unknown as Array<
         [Array<{ kind: string; source_id: string }>]
@@ -701,7 +719,6 @@ describe("runScheduledPoll", () => {
       }
       return new Response(JSON.stringify({ ok: true }), { status: 200 });
     });
-    const saveSlackParticipatedThreads = vi.fn(async () => {});
     const deps: OrchestratorDeps = {
       loadAccounts: async () => [
         {
@@ -712,14 +729,16 @@ describe("runScheduledPoll", () => {
           account_id: "U_SELF",
         },
       ],
-      saveSlackParticipatedThreads,
       store: store.client,
       fetch: fetchImpl as unknown as typeof fetch,
     };
     await runScheduledPoll(deps);
-    expect(saveSlackParticipatedThreads).toHaveBeenCalledWith([
-      { channel: "C1", thread_ts: "5.0" },
-    ]);
+    expect(store.slackThreadsUpsert).toHaveBeenCalledTimes(1);
+    const args = store.slackThreadsUpsert.mock.calls[0] as unknown as [
+      Array<{ channel: string; thread_ts: string }>,
+      unknown,
+    ];
+    expect(args[0]).toEqual([{ channel: "C1", thread_ts: "5.0" }]);
   });
 
   it("does not call saveSlackParticipatedThreads when no self replies are discovered", async () => {
@@ -727,7 +746,6 @@ describe("runScheduledPoll", () => {
     const fetchImpl = vi.fn(
       async () => new Response(JSON.stringify({ ok: true }), { status: 200 }),
     );
-    const saveSlackParticipatedThreads = vi.fn(async () => {});
     const deps: OrchestratorDeps = {
       loadAccounts: async () => [
         {
@@ -738,12 +756,11 @@ describe("runScheduledPoll", () => {
           account_id: "U_SELF",
         },
       ],
-      saveSlackParticipatedThreads,
       store: store.client,
       fetch: fetchImpl as unknown as typeof fetch,
     };
     await runScheduledPoll(deps);
-    expect(saveSlackParticipatedThreads).not.toHaveBeenCalled();
+    expect(store.slackThreadsUpsert).not.toHaveBeenCalled();
   });
 
   it("flags slack accounts with no account_id (poll requires <@self>)", async () => {

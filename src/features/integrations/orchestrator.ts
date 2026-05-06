@@ -17,22 +17,14 @@ import {
   type FetchLike,
   type PollCtx,
   type Provider,
+  type ProviderAccountRow,
   type ProviderHealthStatus,
-  type ProviderId,
 } from "#/features/integrations/provider";
 import { isProviderId, PROVIDERS } from "#/features/integrations/providers";
 import { upsertSignals } from "#/features/signals/store";
 import type { SupabaseLike } from "#/shared/db";
 
-export type ProviderAccountRow = {
-  provider: string;
-  access_token: string | null;
-  refresh_token: string | null;
-  expires_at: string | null;
-  /** Provider-side user id (e.g. Slack `authed_user.id`). Required for the
-   *  Slack poll's `<@self>` query; unused by other providers. */
-  account_id?: string | null;
-};
+export type { ProviderAccountRow };
 
 export type RefreshedAccountUpdate = {
   provider: string;
@@ -80,16 +72,6 @@ export type OrchestratorDeps = {
    * engine can apply overrides at the write seam.
    */
   loadInboxRules?: () => Promise<InboxRule[]>;
-  /** Loads `slack_participated_threads` for the slack poll. */
-  loadSlackParticipatedThreads?: () => Promise<
-    Array<{ channel: string; thread_ts: string }>
-  >;
-  /** Loads `slack_channel_allowlist` ids for the slack poll. */
-  loadSlackBroadcastAllowlist?: () => Promise<string[]>;
-  /** Records discovered participated threads. Best-effort. */
-  saveSlackParticipatedThreads?: (
-    threads: ReadonlyArray<{ channel: string; thread_ts: string }>,
-  ) => Promise<void>;
 };
 
 export type OrchestratorReport = {
@@ -175,7 +157,10 @@ async function pollOne(
     ? await ensureFreshToken(provider, account, deps)
     : account.access_token;
 
-  const state = await loadProviderState(provider.id, account, deps);
+  const stateDeps = { supabase: deps.store, account };
+  const state = provider.loadState
+    ? await provider.loadState(stateDeps)
+    : (undefined as never);
   const ctx: PollCtx = {
     fetch: deps.fetch,
     now: deps.now?.() ?? new Date(),
@@ -183,59 +168,14 @@ async function pollOne(
 
   const { signals, delta } = await provider.poll(accessToken, ctx, state);
   await upsertSignals(deps.store, signals, { rules });
-  await saveProviderState(provider.id, delta, deps);
+  if (provider.saveState) {
+    try {
+      await provider.saveState(stateDeps, delta);
+    } catch {
+      // Best-effort: state writeback failures must not mask the signals upserted.
+    }
+  }
   return signals.length;
-}
-
-/**
- * Bridges the existing OrchestratorDeps state-load callbacks into the
- * provider's typed state shape. Today only Slack has state. New providers
- * with state should add their bridge here OR the deps shape can grow a
- * generic state-load callback in a follow-up.
- */
-async function loadProviderState(
-  providerId: ProviderId,
-  account: ProviderAccountRow,
-  deps: OrchestratorDeps,
-): Promise<unknown> {
-  if (providerId === "slack") {
-    if (!account.account_id) {
-      throw new Error(
-        "slack account_id missing — cannot scan history for self mentions",
-      );
-    }
-    const threads = deps.loadSlackParticipatedThreads
-      ? await deps.loadSlackParticipatedThreads()
-      : [];
-    const allowlist = deps.loadSlackBroadcastAllowlist
-      ? await deps.loadSlackBroadcastAllowlist()
-      : [];
-    return {
-      accountId: account.account_id,
-      threads,
-      allowlist,
-    };
-  }
-  return undefined;
-}
-
-async function saveProviderState(
-  providerId: ProviderId,
-  delta: unknown,
-  deps: OrchestratorDeps,
-): Promise<void> {
-  if (providerId === "slack" && delta) {
-    const d = delta as {
-      discoveredThreads: Array<{ channel: string; thread_ts: string }>;
-    };
-    if (deps.saveSlackParticipatedThreads && d.discoveredThreads.length > 0) {
-      try {
-        await deps.saveSlackParticipatedThreads(d.discoveredThreads);
-      } catch {
-        // Best-effort: writeback failures must not mask the signals upserted.
-      }
-    }
-  }
 }
 
 async function ensureFreshToken(

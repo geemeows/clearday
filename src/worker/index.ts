@@ -573,31 +573,6 @@ export default {
     ctx.waitUntil(
       runScheduledPoll({
         loadInboxRules: () => loadInboxRulesFromService(service),
-        loadSlackParticipatedThreads: async () => {
-          const { data, error } = await service
-            .from("slack_participated_threads")
-            .select("channel, thread_ts");
-          if (error) throw new Error(error.message);
-          return (data ?? []) as Array<{
-            channel: string;
-            thread_ts: string;
-          }>;
-        },
-        loadSlackBroadcastAllowlist: () => loadSlackAllowlist(service),
-        saveSlackParticipatedThreads: async (threads) => {
-          if (threads.length === 0) return;
-          const rows = threads.map((t) => ({
-            channel: t.channel,
-            thread_ts: t.thread_ts,
-          }));
-          const { error } = await service
-            .from("slack_participated_threads")
-            .upsert(rows, {
-              onConflict: "channel,thread_ts",
-              ignoreDuplicates: true,
-            });
-          if (error) throw new Error(error.message);
-        },
         loadAccounts: async () => {
           const { data, error } = await service
             .from("provider_accounts")
