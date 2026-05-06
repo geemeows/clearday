@@ -28,8 +28,8 @@ import {
   DialogDescription,
   DialogTitle,
 } from "#/components/ui/dialog";
+import type { AskAiResult } from "#/features/ask-ai/api";
 import { apiFetch } from "#/lib/api-client";
-import type { AskAiResult } from "#/lib/ask-ai-api";
 import { cn } from "#/lib/cn";
 import type { Signal } from "#/shared/signal";
 

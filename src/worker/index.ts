@@ -1,6 +1,14 @@
 /// <reference types="@cloudflare/workers-types" />
 import { createClient } from "@supabase/supabase-js";
 import {
+  type AiSettingsRow,
+  type AiSettingsStore,
+  getAiSettings,
+  type PutBody,
+  putAiSettings,
+  testAiConnection,
+} from "#/features/ai/api/settings";
+import {
   type DeviceView,
   listDevices,
   renameDevice,
@@ -19,6 +27,26 @@ import {
 } from "#/features/alerts/server/glue";
 import { runMeetingAlertTick } from "#/features/alerts/server/meeting-tick";
 import { runAlertQueueDrain } from "#/features/alerts/server/queue-drain";
+import { type AskAiDeps, handleAskAi } from "#/features/ask-ai/api";
+import {
+  type BriefingDeps,
+  handleBriefingGenerate,
+  runBriefingTick,
+} from "#/features/briefing/api";
+import {
+  type DraftReplyDeps,
+  handleDraftReply,
+} from "#/features/draft-reply/api";
+import {
+  type EmailDigestDeps,
+  type EmailDigestPutBody,
+  type EmailDigestRow,
+  type EmailDigestStore,
+  getEmailDigestSettings,
+  putEmailDigestSettings,
+  runEmailDigestTick,
+  sendEmailDigestTest,
+} from "#/features/email-digest/api";
 import {
   disconnectIntegration,
   getIntegrations,
@@ -28,20 +56,6 @@ import {
 import { runScheduledPoll } from "#/features/integrations/orchestrator";
 import { PROVIDERS } from "#/features/integrations/providers";
 import type { PrReviewEvent } from "#/features/integrations/providers/github";
-import {
-  type AiSettingsRow,
-  type AiSettingsStore,
-  getAiSettings,
-  type PutBody,
-  putAiSettings,
-  testAiConnection,
-} from "#/lib/ai-settings-api";
-import { type AskAiDeps, handleAskAi } from "#/lib/ask-ai-api";
-import {
-  type BriefingDeps,
-  handleBriefingGenerate,
-  runBriefingTick,
-} from "#/lib/briefing-api";
 import {
   type ExportDeps,
   exportData,
@@ -54,17 +68,6 @@ import {
   type RetentionStore,
   type RetentionView,
 } from "#/lib/data-privacy-api";
-import { type DraftReplyDeps, handleDraftReply } from "#/lib/draft-reply-api";
-import {
-  type EmailDigestDeps,
-  type EmailDigestPutBody,
-  type EmailDigestRow,
-  type EmailDigestStore,
-  getEmailDigestSettings,
-  putEmailDigestSettings,
-  runEmailDigestTick,
-  sendEmailDigestTest,
-} from "#/lib/email-digest-api";
 import { startFocusSession } from "#/lib/focus-session";
 import {
   getInboxRules,

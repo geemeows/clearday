@@ -26,8 +26,8 @@ import type {
   DispatcherDeps,
 } from "#/features/alerts/dispatcher";
 import { dispatchAlert } from "#/features/alerts/dispatcher";
-import type { EmailDigestRow } from "#/lib/email-digest-api";
-import { decryptSecret } from "#/lib/llm-crypto";
+import type { EmailDigestRow } from "#/features/email-digest/api";
+import { decryptSecret } from "#/shared/crypto";
 import type { Signal, StoredSignal } from "#/shared/signal";
 
 const KNOWN_CHANNELS: AlertChannel[] = [

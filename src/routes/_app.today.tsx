@@ -17,9 +17,9 @@ import {
   useState,
 } from "react";
 import { UpcomingEventsCard } from "#/components/UpcomingEventsCard";
+import type { BriefingResult } from "#/features/briefing/morning-briefing";
 import type { MeetingEvent } from "#/features/signals/views/calendar";
 import { apiFetch } from "#/lib/api-client";
-import type { BriefingResult } from "#/lib/morning-briefing";
 import {
   type NextUpMeeting,
   pickMeetingForAlert,

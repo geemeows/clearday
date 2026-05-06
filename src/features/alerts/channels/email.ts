@@ -7,7 +7,7 @@
 // module renders a single-Signal email and throws on transport failure so
 // the dispatcher records the error against this channel.
 
-import type { EmailTransport } from "#/lib/email-digest-api";
+import type { EmailTransport } from "#/features/email-digest/api";
 import type { StoredSignal } from "#/shared/signal";
 
 export type EmailAlertDeps = {
