@@ -215,7 +215,7 @@ export function NotificationsPanel() {
         </div>
       </section>
 
-      <section className="mt-8 max-w-2xl">
+      <section className="mt-8">
         <div className="flex items-center justify-between">
           <h3 className="font-semibold text-base">Quiet hours</h3>
           <Switch

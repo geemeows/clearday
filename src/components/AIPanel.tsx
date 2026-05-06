@@ -133,7 +133,7 @@ export function AIPanel({ validator }: AIPanelProps = {}) {
         </div>
       </section>
 
-      <section className="mt-8 max-w-xl">
+      <section className="mt-8">
         <h3 className="font-semibold text-base">API key</h3>
         <div className="mt-3 flex items-center gap-2">
           <Label htmlFor="ai-key" className="sr-only">
@@ -173,11 +173,11 @@ export function AIPanel({ validator }: AIPanelProps = {}) {
         )}
       </section>
 
-      <section className="mt-8 max-w-xl">
+      <section className="mt-8">
         <AiBudgetCard used={6.42} cap={20} fallbackPct={80} hardStopPct={100} />
       </section>
 
-      <section className="mt-8 max-w-xl">
+      <section className="mt-8">
         <h3 className="font-semibold text-base">Privacy</h3>
         <p className="mt-1 text-muted-foreground text-sm">
           Control what leaves your machine before AI calls.

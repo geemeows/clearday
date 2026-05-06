@@ -237,7 +237,7 @@ export function IntegrationsPanel({
         })}
       </ul>
 
-      <section className="mt-8 max-w-xl">
+      <section className="mt-8">
         <h3 className="font-semibold text-base">Slack channel allowlist</h3>
         <p className="mt-1 text-muted-foreground text-sm">
           <code>@here</code> / <code>@channel</code> only become Signals in

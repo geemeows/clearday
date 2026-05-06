@@ -2939,7 +2939,7 @@ export function ThemePanel({
       {view === null ? (
         <p className="mt-3 text-sm text-zinc-500">Loading…</p>
       ) : (
-        <div className="mt-3 grid max-w-xl gap-4">
+        <div className="mt-3 grid gap-4">
           <fieldset>
             <legend className="text-sm font-medium text-zinc-700">Theme</legend>
             <div className="mt-2 flex gap-2">
@@ -3189,7 +3189,7 @@ export function DataPrivacyPanel({
         Signals are retained before rollup.
       </p>
 
-      <div className="mt-4 grid max-w-xl gap-4">
+      <div className="mt-4 grid gap-4">
         <div>
           <h3 className="text-sm font-medium text-zinc-700">Export all data</h3>
           <p className="mt-1 text-xs text-zinc-500">
@@ -3466,7 +3466,7 @@ export function IntegrationsPanel({
       )}
 
       {integrations && (
-        <ul className="mt-4 grid max-w-2xl gap-2">
+        <ul className="mt-4 grid gap-2">
           {integrations.map((i) => {
             const label = INTEGRATION_LABELS[i.provider] ?? i.provider;
             const busy = busyProvider === i.provider;
