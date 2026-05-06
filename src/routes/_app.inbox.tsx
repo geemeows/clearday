@@ -1,15 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
-import {
-  Calendar as CalIcon,
-  ExternalLink,
-  Github,
-  Slack,
-  SquareKanban,
-  Trello,
-  Video,
-  X,
-} from "lucide-react";
+import { Calendar as CalIcon, ExternalLink, Video, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { SourceGlyph, type SourceKind } from "#/components/SourceGlyph";
 import { apiFetch } from "#/lib/api-client";
 import { cn } from "#/lib/cn";
 import type { Signal, SignalKind, SignalProvider } from "#/lib/signal";
@@ -25,16 +17,17 @@ type StoredSignal = Signal & {
   dismissed_at: string | null;
   priority?: "low" | "high" | null;
   snoozed_until?: string | null;
+  unread_count?: number;
 };
 
 type Filter = "all" | "prs" | "tickets" | "mentions" | "meetings";
 
-const FILTERS: Array<{ id: Filter; label: string; enabled: boolean }> = [
-  { id: "all", label: "All", enabled: true },
-  { id: "prs", label: "PRs", enabled: true },
-  { id: "tickets", label: "Tickets", enabled: true },
-  { id: "mentions", label: "Mentions", enabled: true },
-  { id: "meetings", label: "Meetings", enabled: true },
+const FILTERS: Array<{ id: Filter; label: string }> = [
+  { id: "all", label: "All" },
+  { id: "prs", label: "PRs" },
+  { id: "tickets", label: "Tickets" },
+  { id: "mentions", label: "Mentions" },
+  { id: "meetings", label: "Meetings" },
 ];
 
 function InboxPage() {
@@ -45,31 +38,30 @@ function InboxPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [repliedIds, setRepliedIds] = useState<Set<string>>(() => new Set());
 
-  const reload = useCallback(
-    async (current: Filter, includeSnoozed: boolean) => {
-      try {
-        const qs = includeSnoozed
-          ? `filter=${current}&include_snoozed=true`
-          : `filter=${current}`;
-        const body = (await apiFetch(`/api/signals?${qs}`)) as {
-          signals: StoredSignal[];
-        };
-        setSignals(body.signals);
-        setError(null);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "failed to load");
-      }
-    },
-    [],
-  );
+  const reload = useCallback(async (includeSnoozed: boolean) => {
+    try {
+      // Always fetch the full set so filter chips can render live counts.
+      // Filter selection is applied client-side in InboxView.
+      const qs = includeSnoozed
+        ? "filter=all&include_snoozed=true"
+        : "filter=all";
+      const body = (await apiFetch(`/api/signals?${qs}`)) as {
+        signals: StoredSignal[];
+      };
+      setSignals(body.signals);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "failed to load");
+    }
+  }, []);
 
   useEffect(() => {
-    reload(filter, showSnoozed);
-  }, [filter, showSnoozed, reload]);
+    reload(showSnoozed);
+  }, [showSnoozed, reload]);
 
   const refresh = useCallback(() => {
-    reload(filter, showSnoozed);
-  }, [filter, showSnoozed, reload]);
+    reload(showSnoozed);
+  }, [showSnoozed, reload]);
   useAutoRefresh(refresh);
 
   const dismiss = useCallback(
@@ -83,9 +75,9 @@ function InboxPage() {
         return next;
       });
       await apiFetch(`/api/signals/${id}/dismiss`, { method: "POST" });
-      reload(filter, showSnoozed);
+      reload(showSnoozed);
     },
-    [filter, showSnoozed, reload],
+    [showSnoozed, reload],
   );
 
   const handleReplyStart = useCallback((id: string) => {
@@ -106,9 +98,8 @@ function InboxPage() {
     });
   }, []);
 
-  // The cron ingests a 30-day window so Calendar can render Week/Month, but
-  // the Inbox is for "what's happening now/next". Always restrict meetings
-  // (on any tab) to today; non-meeting signals are unaffected.
+  // Inbox is "what's happening now/next" — clip meetings to today regardless
+  // of the active filter; non-meeting signals are unaffected.
   const visibleSignals = signals ? filterMeetingsToToday(signals) : signals;
 
   return (
@@ -127,6 +118,34 @@ function InboxPage() {
       onReplyRollback={handleReplyRollback}
     />
   );
+}
+
+export function filterToGroup(f: Filter): SignalGroup | null {
+  if (f === "prs") return "pr";
+  if (f === "tickets") return "ticket";
+  if (f === "mentions") return "slack";
+  if (f === "meetings") return "meeting";
+  return null;
+}
+
+export function computeFilterCounts(
+  signals: ReadonlyArray<StoredSignal>,
+): Record<Filter, number> {
+  const counts: Record<Filter, number> = {
+    all: signals.length,
+    prs: 0,
+    tickets: 0,
+    mentions: 0,
+    meetings: 0,
+  };
+  for (const s of signals) {
+    const g = kindGroup(s.kind);
+    if (g === "pr") counts.prs += 1;
+    else if (g === "ticket") counts.tickets += 1;
+    else if (g === "slack") counts.mentions += 1;
+    else if (g === "meeting") counts.meetings += 1;
+  }
+  return counts;
 }
 
 export function InboxView({
@@ -157,15 +176,25 @@ export function InboxView({
   onReplyRollback?: (id: string) => void;
 }) {
   const nowIso = new Date().toISOString();
+  const counts = useMemo(
+    () => (signals ? computeFilterCounts(signals) : null),
+    [signals],
+  );
+  const visible = useMemo(() => {
+    if (!signals) return null;
+    const group = filterToGroup(filter);
+    if (group == null) return signals;
+    return signals.filter((s) => kindGroup(s.kind) === group);
+  }, [signals, filter]);
   const selected = useMemo(
-    () => signals?.find((s) => s.id === selectedId) ?? null,
-    [signals, selectedId],
+    () => visible?.find((s) => s.id === selectedId) ?? null,
+    [visible, selectedId],
   );
   return (
-    <section className="p-8">
+    <section className="flex h-full min-h-0 flex-col p-8">
       <header>
         <h1 className="text-xl font-semibold">Inbox</h1>
-        <p className="mt-1 text-sm text-zinc-500">
+        <p className="mt-1 text-sm text-muted-foreground">
           Unified Signals from your sources.
         </p>
       </header>
@@ -178,136 +207,258 @@ export function InboxView({
           <button
             type="button"
             key={f.id}
-            disabled={!f.enabled}
             aria-pressed={filter === f.id}
             onClick={() => onFilterChange(f.id)}
             className={cn(
               "rounded-full border px-3 py-1 text-sm",
               filter === f.id
-                ? "border-zinc-900 bg-zinc-900 text-white"
-                : "border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50",
-              !f.enabled && "cursor-not-allowed opacity-50",
+                ? "border-foreground bg-foreground text-background"
+                : "border-border bg-background text-foreground hover:bg-muted",
             )}
           >
             {f.label}
+            {counts && (
+              <span
+                data-slot="filter-count"
+                className={cn(
+                  "ml-1.5 rounded-full px-1.5 py-px text-[10px] tabular-nums",
+                  filter === f.id
+                    ? "bg-background/20 text-background"
+                    : "bg-muted text-muted-foreground",
+                )}
+              >
+                {counts[f.id]}
+              </span>
+            )}
           </button>
         ))}
-        <label className="ml-2 inline-flex cursor-pointer items-center gap-1.5 text-xs text-zinc-600">
+        <label className="ml-2 inline-flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground">
           <input
             type="checkbox"
             checked={showSnoozed}
             onChange={(e) => onShowSnoozedChange?.(e.target.checked)}
-            className="h-3.5 w-3.5 rounded border-zinc-300"
+            className="h-3.5 w-3.5 rounded border-border"
           />
           Show snoozed
         </label>
       </nav>
 
       {error && (
-        <p className="mt-6 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+        <p className="mt-6 rounded border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
           {error}
         </p>
       )}
 
-      {signals == null && !error && (
-        <p className="mt-6 text-sm text-zinc-500">Loading…</p>
+      {visible == null && !error && (
+        <p className="mt-6 text-sm text-muted-foreground">Loading…</p>
       )}
 
-      {signals && signals.length === 0 && (
-        <p className="mt-6 text-sm text-zinc-500">
+      {visible && visible.length === 0 && (
+        <p className="mt-6 text-sm text-muted-foreground">
           Nothing here. New Signals show up automatically.
         </p>
       )}
 
-      {signals && signals.length > 0 && (
-        <div className="mt-4 flex flex-col gap-4 lg:flex-row">
-          <ul className="flex-1 divide-y divide-zinc-200 rounded border border-zinc-200 bg-white">
-            {signals.map((s) => {
-              const replied = repliedIds?.has(s.id) ?? false;
-              const snoozed = !!s.snoozed_until && s.snoozed_until > nowIso;
-              return (
-                <li
-                  key={s.id}
-                  className={cn(
-                    "flex items-center gap-3 px-4 py-3",
-                    selectedId === s.id && "bg-zinc-50",
-                    (replied || snoozed) && "opacity-60",
-                  )}
-                >
-                  <ProviderBadge provider={s.provider} />
-                  <button
-                    type="button"
-                    onClick={() => onSelect?.(s.id)}
-                    className="min-w-0 flex-1 text-left"
-                  >
-                    <div className="flex items-center gap-2">
-                      <div className="truncate text-sm font-medium text-zinc-900">
-                        {s.title}
-                      </div>
-                      {replied && (
-                        <span className="shrink-0 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-emerald-700">
-                          Replied
-                        </span>
-                      )}
-                      {s.priority === "high" && (
-                        <span className="shrink-0 rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-red-700">
-                          High
-                        </span>
-                      )}
-                      {s.priority === "low" && (
-                        <span className="shrink-0 rounded-full border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-zinc-500">
-                          Low
-                        </span>
-                      )}
-                      {snoozed && (
-                        <span
-                          className="shrink-0 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700"
-                          title={`Returns at ${formatSnoozeReturn(s.snoozed_until)}`}
-                        >
-                          Snoozed · returns{" "}
-                          {formatSnoozeReturn(s.snoozed_until)}
-                        </span>
-                      )}
-                    </div>
-                    <div className="truncate text-xs text-zinc-500">
-                      {kindLabel(s.kind)} · {secondaryLabel(s)}
-                    </div>
-                  </button>
-                  {s.url && (
-                    <a
-                      href={s.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-1 rounded border border-zinc-200 px-2 py-1 text-xs text-zinc-700 hover:bg-zinc-50"
-                    >
-                      <ExternalLink className="h-3 w-3" />
-                      Open
-                    </a>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => onDismiss(s.id)}
-                    className="rounded border border-zinc-200 px-2 py-1 text-xs text-zinc-700 hover:bg-zinc-50"
-                  >
-                    Dismiss
-                  </button>
-                </li>
-              );
-            })}
+      {visible && visible.length > 0 && (
+        <div className="mt-4 grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-[420px_1fr]">
+          <ul className="flex min-h-0 flex-col divide-y divide-border overflow-y-auto rounded-md border border-border bg-card">
+            {visible.map((s) => (
+              <InboxRow
+                key={s.id}
+                signal={s}
+                selected={selectedId === s.id}
+                replied={repliedIds?.has(s.id) ?? false}
+                snoozed={!!s.snoozed_until && s.snoozed_until > nowIso}
+                onSelect={() => onSelect?.(s.id)}
+                onDismiss={() => onDismiss(s.id)}
+                nowIso={nowIso}
+              />
+            ))}
           </ul>
-          {selected && (
-            <InboxDetailPane
-              signal={selected}
-              onClose={() => onSelect?.(null)}
-              onDismiss={onDismiss}
-              onReplyStart={onReplyStart}
-              onReplyRollback={onReplyRollback}
-            />
-          )}
+          <InboxDetailPane
+            signal={selected}
+            onClose={() => onSelect?.(null)}
+            onDismiss={onDismiss}
+            onReplyStart={onReplyStart}
+            onReplyRollback={onReplyRollback}
+          />
         </div>
       )}
     </section>
   );
+}
+
+export function InboxRow({
+  signal,
+  selected,
+  replied,
+  snoozed,
+  onSelect,
+  onDismiss,
+  nowIso,
+}: {
+  signal: StoredSignal;
+  selected: boolean;
+  replied: boolean;
+  snoozed: boolean;
+  onSelect: () => void;
+  onDismiss: () => void;
+  nowIso: string;
+}) {
+  const severity = severityOf(signal);
+  const isAutoRule = signal.payload?.badge === "auto-rule";
+  const unread =
+    typeof signal.unread_count === "number" && signal.unread_count > 0
+      ? signal.unread_count
+      : null;
+  return (
+    <li
+      data-selected={selected || undefined}
+      className={cn(
+        "relative flex items-center gap-3 px-4 py-3",
+        // Rausch left-border accent on selected row (mockup #2).
+        "before:pointer-events-none before:absolute before:inset-y-0 before:left-0 before:w-[3px] before:bg-primary before:opacity-0",
+        selected && "bg-muted/40 before:opacity-100",
+        (replied || snoozed) && "opacity-60",
+      )}
+    >
+      <SourceGlyph source={providerToSource(signal.provider)} size={28} />
+      <button
+        type="button"
+        onClick={onSelect}
+        className="min-w-0 flex-1 text-left"
+      >
+        <div className="flex items-center gap-2">
+          {unread && (
+            <span
+              role="img"
+              data-slot="unread"
+              aria-label={`${unread} unread`}
+              className="inline-flex h-1.5 w-1.5 shrink-0 rounded-full bg-primary"
+            />
+          )}
+          <div className="truncate text-sm font-medium text-foreground">
+            {signal.title}
+          </div>
+          {severity === "ci_fail" && (
+            <SeverityChip tone="danger">CI FAIL</SeverityChip>
+          )}
+          {severity === "conflict" && (
+            <SeverityChip tone="warning">CONFLICT</SeverityChip>
+          )}
+          {isAutoRule && <SeverityChip tone="muted">RULE</SeverityChip>}
+          {replied && (
+            <SeverityChip tone="success" className="uppercase tracking-wide">
+              Replied
+            </SeverityChip>
+          )}
+          {signal.priority === "high" && (
+            <SeverityChip tone="danger" className="uppercase tracking-wide">
+              High
+            </SeverityChip>
+          )}
+          {signal.priority === "low" && (
+            <SeverityChip tone="muted" className="uppercase tracking-wide">
+              Low
+            </SeverityChip>
+          )}
+          {snoozed && (
+            <SeverityChip
+              tone="warning"
+              title={`Returns at ${formatSnoozeReturn(signal.snoozed_until)}`}
+            >
+              Snoozed · returns {formatSnoozeReturn(signal.snoozed_until)}
+            </SeverityChip>
+          )}
+        </div>
+        <div className="mt-0.5 flex items-baseline justify-between gap-2 text-xs text-muted-foreground">
+          <span className="truncate">
+            {kindLabel(signal.kind)} · {secondaryLabel(signal)}
+          </span>
+          <time className="shrink-0 tabular-nums">
+            {relAgo(signal.source_created_at, nowIso)}
+          </time>
+        </div>
+      </button>
+      <button
+        type="button"
+        onClick={onDismiss}
+        className="rounded border border-border px-2 py-1 text-xs text-foreground hover:bg-muted"
+      >
+        Dismiss
+      </button>
+    </li>
+  );
+}
+
+function SeverityChip({
+  tone,
+  className,
+  children,
+  title,
+}: {
+  tone: "danger" | "warning" | "muted" | "success";
+  className?: string;
+  children: React.ReactNode;
+  title?: string;
+}) {
+  const toneClass =
+    tone === "danger"
+      ? "border-destructive/40 bg-destructive/10 text-destructive"
+      : tone === "warning"
+        ? "border-amber-300 bg-amber-50 text-amber-700"
+        : tone === "success"
+          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+          : "border-border bg-muted text-muted-foreground";
+  return (
+    <span
+      data-slot="severity-chip"
+      data-tone={tone}
+      title={title}
+      className={cn(
+        "shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-medium",
+        toneClass,
+        className,
+      )}
+    >
+      {children}
+    </span>
+  );
+}
+
+export function severityOf(
+  signal: StoredSignal,
+): "ci_fail" | "conflict" | null {
+  const explicit = signal.payload?.severity as string | undefined;
+  if (explicit === "ci_fail") return "ci_fail";
+  if (explicit === "conflict") return "conflict";
+  if (signal.payload?.ci_failed === true) return "ci_fail";
+  if (signal.payload?.has_conflict === true) return "conflict";
+  return null;
+}
+
+export function relAgo(iso: string | null, nowIso: string): string {
+  if (!iso) return "";
+  const t = new Date(iso).getTime();
+  const now = new Date(nowIso).getTime();
+  if (!Number.isFinite(t) || !Number.isFinite(now)) return "";
+  const diffMs = now - t;
+  const future = diffMs < 0;
+  const abs = Math.abs(diffMs);
+  const minute = 60_000;
+  const hour = 60 * minute;
+  const day = 24 * hour;
+  if (abs < minute) return future ? "now" : "now";
+  if (abs < hour) {
+    const m = Math.round(abs / minute);
+    return future ? `in ${m}m` : `${m}m ago`;
+  }
+  if (abs < day) {
+    const h = Math.round(abs / hour);
+    return future ? `in ${h}h` : `${h}h ago`;
+  }
+  const d = Math.round(abs / day);
+  return future ? `in ${d}d` : `${d}d ago`;
 }
 
 export function InboxDetailPane({
@@ -317,21 +468,33 @@ export function InboxDetailPane({
   onReplyStart,
   onReplyRollback,
 }: {
-  signal: StoredSignal;
+  signal: StoredSignal | null;
   onClose: () => void;
   onDismiss: (id: string) => void;
   onReplyStart?: (id: string) => void;
   onReplyRollback?: (id: string) => void;
 }) {
+  if (!signal) {
+    return (
+      <aside
+        aria-label="Signal detail"
+        className="hidden items-center justify-center rounded-md border border-dashed border-border bg-card p-5 text-sm text-muted-foreground lg:flex"
+      >
+        Select a signal to see details.
+      </aside>
+    );
+  }
+  const group = kindGroup(signal.kind);
   return (
     <aside
       aria-label="Signal detail"
-      className="w-full rounded border border-zinc-200 bg-white p-5 lg:w-[360px] lg:shrink-0"
+      data-detail-kind={group}
+      className="rounded-md border border-border bg-card p-5"
     >
       <header className="flex items-start justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
-          <ProviderBadge provider={signal.provider} />
-          <span className="text-xs font-medium uppercase tracking-wider text-zinc-500">
+          <SourceGlyph source={providerToSource(signal.provider)} size={28} />
+          <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
             {kindLabel(signal.kind)}
           </span>
         </div>
@@ -339,26 +502,38 @@ export function InboxDetailPane({
           type="button"
           aria-label="Close detail"
           onClick={onClose}
-          className="rounded p-1 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700"
+          className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
         >
           <X className="h-4 w-4" />
         </button>
       </header>
-      <h2 className="mt-3 text-base font-semibold text-zinc-900">
+      <h2 className="mt-3 text-base font-semibold text-foreground">
         {signal.title}
       </h2>
-      <DetailBody
-        signal={signal}
-        onReplyStart={onReplyStart}
-        onReplyRollback={onReplyRollback}
-      />
+      {group === "pr" && (
+        <PRDetail
+          signal={signal}
+          onReplyStart={onReplyStart}
+          onReplyRollback={onReplyRollback}
+        />
+      )}
+      {group === "slack" && (
+        <SlackDetail
+          signal={signal}
+          onReplyStart={onReplyStart}
+          onReplyRollback={onReplyRollback}
+        />
+      )}
+      {group === "meeting" && <MeetingDetail signal={signal} />}
+      {group === "ticket" && <TaskDetail signal={signal} />}
       <div className="mt-5 flex flex-wrap gap-2">
-        {signal.url && (
+        {/* MeetingDetail carries its own Join meeting / Open invite buttons. */}
+        {signal.url && group !== "meeting" && (
           <a
             href={signal.url}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex items-center gap-1 rounded bg-zinc-900 px-3 py-1.5 text-sm text-white hover:bg-zinc-800"
+            className="inline-flex items-center gap-1 rounded-sm bg-primary px-3 py-1.5 text-sm text-primary-foreground hover:bg-primary-active"
           >
             <ExternalLink className="h-4 w-4" />
             {openLabel(signal.provider)}
@@ -367,7 +542,7 @@ export function InboxDetailPane({
         <button
           type="button"
           onClick={() => onDismiss(signal.id)}
-          className="rounded border border-zinc-200 px-3 py-1.5 text-sm text-zinc-700 hover:bg-zinc-50"
+          className="rounded border border-border px-3 py-1.5 text-sm text-foreground hover:bg-muted"
         >
           Dismiss
         </button>
@@ -376,72 +551,45 @@ export function InboxDetailPane({
   );
 }
 
-function DetailBody({
-  signal,
-  onReplyStart,
-  onReplyRollback,
-}: {
-  signal: StoredSignal;
-  onReplyStart?: (id: string) => void;
-  onReplyRollback?: (id: string) => void;
-}) {
-  const group = kindGroup(signal.kind);
-  if (group === "pr")
-    return (
-      <PrBody
-        signal={signal}
-        onReplyStart={onReplyStart}
-        onReplyRollback={onReplyRollback}
-      />
-    );
-  if (group === "slack")
-    return (
-      <SlackBody
-        signal={signal}
-        onReplyStart={onReplyStart}
-        onReplyRollback={onReplyRollback}
-      />
-    );
-  if (group === "ticket") return <TicketBody signal={signal} />;
-  return <MeetingBody signal={signal} />;
-}
-
-function TicketBody({ signal }: { signal: StoredSignal }) {
+export function TaskDetail({ signal }: { signal: StoredSignal }) {
   const identifier = signal.payload?.identifier as string | undefined;
   const stateName = signal.payload?.state_name as string | undefined;
   const priority = signal.payload?.priority_label as string | undefined;
   const teamKey = signal.payload?.team_key as string | undefined;
   return (
-    <dl className="mt-3 grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1.5 text-sm">
+    <dl
+      data-slot="task-detail"
+      className="mt-3 grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1.5 text-sm"
+    >
       {identifier && (
         <>
-          <dt className="text-zinc-500">Ticket</dt>
-          <dd className="font-mono text-zinc-900">{identifier}</dd>
+          <dt className="text-muted-foreground">Ticket</dt>
+          <dd className="font-mono text-foreground">{identifier}</dd>
         </>
       )}
       {teamKey && (
         <>
-          <dt className="text-zinc-500">Team</dt>
-          <dd className="text-zinc-900">{teamKey}</dd>
+          <dt className="text-muted-foreground">Team</dt>
+          <dd className="text-foreground">{teamKey}</dd>
         </>
       )}
       {stateName && (
         <>
-          <dt className="text-zinc-500">Status</dt>
-          <dd className="text-zinc-900">{stateName}</dd>
+          <dt className="text-muted-foreground">Status</dt>
+          <dd className="text-foreground">{stateName}</dd>
         </>
       )}
       {priority && (
         <>
-          <dt className="text-zinc-500">Priority</dt>
-          <dd className="text-zinc-900">{priority}</dd>
+          <dt className="text-muted-foreground">Priority</dt>
+          <dd className="text-foreground">{priority}</dd>
         </>
       )}
     </dl>
   );
 }
 
-function PrBody({
+export function PRDetail({
   signal,
   onReplyStart,
   onReplyRollback,
@@ -453,14 +601,26 @@ function PrBody({
   const repo = signal.payload?.repo as string | undefined;
   const number = signal.payload?.number as number | undefined;
   const author = signal.payload?.author as string | undefined;
+  const authorAvatar = signal.payload?.author_avatar_url as string | undefined;
+  const additions = signal.payload?.additions as number | undefined;
+  const deletions = signal.payload?.deletions as number | undefined;
   const draft = Boolean(signal.payload?.draft);
+  const aiSummary = signal.payload?.ai_summary as string | undefined;
+  const filesChanged =
+    (signal.payload?.files_changed as
+      | Array<{ path: string; additions?: number; deletions?: number }>
+      | undefined) ?? [];
+  const recentComments =
+    (signal.payload?.recent_comments as
+      | Array<{ author: string; body: string; created_at?: string }>
+      | undefined) ?? [];
   return (
-    <div className="mt-3 space-y-4">
+    <div data-slot="pr-detail" className="mt-3 space-y-4">
       <dl className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1.5 text-sm">
         {repo && (
           <>
-            <dt className="text-zinc-500">Repo</dt>
-            <dd className="text-zinc-900">
+            <dt className="text-muted-foreground">Repo</dt>
+            <dd className="text-foreground">
               {repo}
               {typeof number === "number" ? `#${number}` : ""}
             </dd>
@@ -468,12 +628,30 @@ function PrBody({
         )}
         {author && (
           <>
-            <dt className="text-zinc-500">Author</dt>
-            <dd className="text-zinc-900">@{author}</dd>
+            <dt className="text-muted-foreground">Author</dt>
+            <dd className="flex items-center gap-2 text-foreground">
+              <AuthorAvatar handle={author} src={authorAvatar} />
+              <span>@{author}</span>
+            </dd>
           </>
         )}
-        <dt className="text-zinc-500">Status</dt>
-        <dd className="text-zinc-900">
+        {(typeof additions === "number" || typeof deletions === "number") && (
+          <>
+            <dt className="text-muted-foreground">Diff</dt>
+            <dd className="font-mono text-xs">
+              {typeof additions === "number" && (
+                <span className="text-emerald-600">+{additions}</span>
+              )}
+              {typeof additions === "number" &&
+                typeof deletions === "number" && <span> </span>}
+              {typeof deletions === "number" && (
+                <span className="text-destructive">-{deletions}</span>
+              )}
+            </dd>
+          </>
+        )}
+        <dt className="text-muted-foreground">Status</dt>
+        <dd className="text-foreground">
           {draft
             ? "Draft"
             : signal.requires_action
@@ -481,6 +659,68 @@ function PrBody({
               : "Tracking"}
         </dd>
       </dl>
+      {aiSummary && (
+        <section
+          aria-label="AI summary"
+          className="rounded-md border border-border bg-muted/40 p-3"
+        >
+          <header className="mb-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+            AI summary
+          </header>
+          <p className="whitespace-pre-line text-sm text-foreground">
+            {aiSummary}
+          </p>
+        </section>
+      )}
+      {filesChanged.length > 0 && (
+        <section aria-label="Files changed">
+          <header className="mb-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+            Files changed
+          </header>
+          <ul className="divide-y divide-border rounded-md border border-border">
+            {filesChanged.map((f) => (
+              <li
+                key={f.path}
+                className="flex items-center justify-between gap-3 px-3 py-1.5 text-xs"
+              >
+                <span className="truncate font-mono text-foreground">
+                  {f.path}
+                </span>
+                <span className="shrink-0 font-mono">
+                  {typeof f.additions === "number" && (
+                    <span className="text-emerald-600">+{f.additions}</span>
+                  )}
+                  {typeof f.additions === "number" &&
+                    typeof f.deletions === "number" && <span> </span>}
+                  {typeof f.deletions === "number" && (
+                    <span className="text-destructive">-{f.deletions}</span>
+                  )}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+      {recentComments.length > 0 && (
+        <section aria-label="Recent comments">
+          <header className="mb-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+            Recent comments
+          </header>
+          <ol className="space-y-2">
+            {recentComments.map((c, i) => (
+              <li
+                key={`${c.author}-${c.created_at ?? i}`}
+                className="rounded-md border border-border bg-background p-2 text-xs"
+              >
+                <div className="font-medium text-foreground">@{c.author}</div>
+                <p className="mt-0.5 whitespace-pre-line text-muted-foreground">
+                  {c.body}
+                </p>
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
       {repo && typeof number === "number" && !draft && (
         <PrReviewActions
           repo={repo}
@@ -491,6 +731,26 @@ function PrBody({
         />
       )}
     </div>
+  );
+}
+
+function AuthorAvatar({ handle, src }: { handle: string; src?: string }) {
+  if (src) {
+    return (
+      <img
+        src={src}
+        alt={`@${handle}`}
+        className="h-5 w-5 rounded-full border border-border object-cover"
+      />
+    );
+  }
+  return (
+    <span
+      aria-hidden="true"
+      className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-muted text-[10px] font-medium uppercase text-muted-foreground"
+    >
+      {handle.slice(0, 1)}
+    </span>
   );
 }
 
@@ -666,7 +926,7 @@ export function PrReviewActions({
   return (
     <section
       aria-label="PR review actions"
-      className="space-y-2 rounded border border-zinc-200 bg-zinc-50 p-3"
+      className="space-y-2 rounded-md border border-border bg-muted/40 p-3"
     >
       <textarea
         value={body}
@@ -674,7 +934,7 @@ export function PrReviewActions({
         placeholder="Leave a comment (required for Request changes / Comment)"
         aria-label="Review comment"
         rows={3}
-        className="w-full resize-y rounded border border-zinc-200 bg-white px-2 py-1.5 text-sm text-zinc-900 outline-none focus:border-zinc-400"
+        className="w-full resize-y rounded border border-border bg-background px-2 py-1.5 text-sm text-foreground outline-none focus:border-foreground/40"
       />
       <div className="flex flex-wrap gap-2">
         <button
@@ -697,7 +957,7 @@ export function PrReviewActions({
           type="button"
           onClick={() => run("COMMENT")}
           disabled={pending !== null || body.trim().length === 0}
-          className="rounded border border-zinc-300 bg-white px-3 py-1.5 text-sm text-zinc-800 hover:bg-zinc-100 disabled:opacity-60"
+          className="rounded border border-border bg-background px-3 py-1.5 text-sm text-foreground hover:bg-muted disabled:opacity-60"
         >
           {pending === "COMMENT" ? "Sending…" : "Comment"}
         </button>
@@ -706,7 +966,7 @@ export function PrReviewActions({
             type="button"
             onClick={draft}
             disabled={drafting || pending !== null}
-            className="ml-auto rounded border border-zinc-300 bg-white px-3 py-1.5 text-sm text-zinc-700 hover:bg-zinc-100 disabled:opacity-60"
+            className="ml-auto rounded border border-border bg-background px-3 py-1.5 text-sm text-foreground hover:bg-muted disabled:opacity-60"
           >
             {drafting ? "Drafting…" : "Draft with AI"}
           </button>
@@ -744,7 +1004,7 @@ export function PrReviewActions({
   );
 }
 
-function SlackBody({
+export function SlackDetail({
   signal,
   onReplyStart,
   onReplyRollback,
@@ -770,25 +1030,25 @@ function SlackBody({
           ? `#${channel}`
           : null;
   return (
-    <div className="mt-3 space-y-4 text-sm">
+    <div data-slot="slack-detail" className="mt-3 space-y-4 text-sm">
       <dl className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1.5">
         {where && (
           <>
-            <dt className="text-zinc-500">Where</dt>
-            <dd className="text-zinc-900">{where}</dd>
+            <dt className="text-muted-foreground">Where</dt>
+            <dd className="text-foreground">{where}</dd>
           </>
         )}
         {author && (
           <>
-            <dt className="text-zinc-500">From</dt>
-            <dd className="text-zinc-900">
+            <dt className="text-muted-foreground">From</dt>
+            <dd className="text-foreground">
               {authorName ? authorName : `<@${author}>`}
             </dd>
           </>
         )}
       </dl>
       {text && !threadTs && (
-        <blockquote className="whitespace-pre-line border-l-2 border-zinc-200 pl-3 text-zinc-700">
+        <blockquote className="whitespace-pre-line border-l-2 border-border pl-3 text-muted-foreground">
           {text}
         </blockquote>
       )}
@@ -876,7 +1136,7 @@ export function SlackThreadContext({
   }, [channel, thread_ts, load]);
 
   if (state.kind === "loading") {
-    return <p className="text-xs text-zinc-500">Loading thread…</p>;
+    return <p className="text-xs text-muted-foreground">Loading thread…</p>;
   }
   if (state.kind === "error") {
     return (
@@ -891,9 +1151,9 @@ export function SlackThreadContext({
   return (
     <section
       aria-label="Thread context"
-      className="space-y-2 rounded border border-zinc-200 bg-white p-3"
+      className="space-y-2 rounded-md border border-border bg-background p-3"
     >
-      <header className="text-xs font-medium uppercase tracking-wider text-zinc-500">
+      <header className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
         Thread
       </header>
       <ol className="space-y-2">
@@ -902,17 +1162,19 @@ export function SlackThreadContext({
             key={m.ts}
             className={cn(
               "rounded px-2 py-1.5 text-xs",
-              m.is_self ? "bg-zinc-100" : "bg-zinc-50",
+              m.is_self ? "bg-muted" : "bg-muted/40",
             )}
           >
-            <div className="flex items-baseline justify-between gap-2 text-zinc-500">
-              <span className="font-medium text-zinc-900">
+            <div className="flex items-baseline justify-between gap-2 text-muted-foreground">
+              <span className="font-medium text-foreground">
                 {m.user_name ?? (m.user_id ? `<@${m.user_id}>` : "(unknown)")}
-                {m.is_self && <span className="ml-1 text-zinc-500">(you)</span>}
+                {m.is_self && (
+                  <span className="ml-1 text-muted-foreground">(you)</span>
+                )}
               </span>
               <time className="tabular-nums">{formatSlackTs(m.ts)}</time>
             </div>
-            <p className="mt-0.5 whitespace-pre-line text-zinc-800">
+            <p className="mt-0.5 whitespace-pre-line text-foreground">
               {m.text || "(empty message)"}
             </p>
           </li>
@@ -981,8 +1243,6 @@ export function SlackReplyComposer({
     | null
   >(null);
   // When the signal lives inside a thread, default to replying in-thread.
-  // The user can flip to "send as new message in #channel" if they'd rather
-  // start a fresh top-level message instead of nesting under the parent.
   const [asNewMessage, setAsNewMessage] = useState(false);
   const effectiveThreadTs = asNewMessage ? undefined : thread_ts;
 
@@ -1070,7 +1330,7 @@ export function SlackReplyComposer({
   return (
     <section
       aria-label="Slack reply composer"
-      className="space-y-2 rounded border border-zinc-200 bg-zinc-50 p-3"
+      className="space-y-2 rounded-md border border-border bg-muted/40 p-3"
     >
       <textarea
         value={text}
@@ -1082,10 +1342,10 @@ export function SlackReplyComposer({
         }
         aria-label="Slack reply"
         rows={3}
-        className="w-full resize-y rounded border border-zinc-200 bg-white px-2 py-1.5 text-sm text-zinc-900 outline-none focus:border-zinc-400"
+        className="w-full resize-y rounded border border-border bg-background px-2 py-1.5 text-sm text-foreground outline-none focus:border-foreground/40"
       />
       {thread_ts && (
-        <label className="flex items-center gap-2 text-xs text-zinc-600">
+        <label className="flex items-center gap-2 text-xs text-muted-foreground">
           <input
             type="checkbox"
             checked={asNewMessage}
@@ -1100,7 +1360,7 @@ export function SlackReplyComposer({
           type="button"
           onClick={send}
           disabled={pending || text.trim().length === 0}
-          className="rounded bg-zinc-900 px-3 py-1.5 text-sm text-white hover:bg-zinc-800 disabled:opacity-60"
+          className="rounded bg-foreground px-3 py-1.5 text-sm text-background hover:bg-foreground/90 disabled:opacity-60"
         >
           {pending ? "Sending…" : "Send"}
         </button>
@@ -1109,7 +1369,7 @@ export function SlackReplyComposer({
             type="button"
             onClick={draft}
             disabled={drafting || pending}
-            className="ml-auto rounded border border-zinc-300 bg-white px-3 py-1.5 text-sm text-zinc-700 hover:bg-zinc-100 disabled:opacity-60"
+            className="ml-auto rounded border border-border bg-background px-3 py-1.5 text-sm text-foreground hover:bg-muted disabled:opacity-60"
           >
             {drafting ? "Drafting…" : "Draft with AI"}
           </button>
@@ -1141,11 +1401,13 @@ export function SlackReplyComposer({
   );
 }
 
-function MeetingBody({ signal }: { signal: StoredSignal }) {
+export function MeetingDetail({ signal }: { signal: StoredSignal }) {
   const startsAt = signal.payload?.starts_at as string | undefined;
   const endsAt = signal.payload?.ends_at as string | undefined;
   const videoLink = signal.payload?.video_link as string | undefined;
   const organizer = signal.payload?.organizer as string | undefined;
+  const description = signal.payload?.description as string | undefined;
+  const agenda = parseAgenda(description);
   const linkedItems =
     (signal.payload?.linked_items as
       | Array<{
@@ -1157,37 +1419,62 @@ function MeetingBody({ signal }: { signal: StoredSignal }) {
         }>
       | undefined) ?? [];
   return (
-    <div className="mt-3 space-y-3 text-sm">
+    <div data-slot="meeting-detail" className="mt-3 space-y-3 text-sm">
       <dl className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1.5">
         {startsAt && (
           <>
-            <dt className="text-zinc-500">When</dt>
-            <dd className="text-zinc-900">
+            <dt className="text-muted-foreground">When</dt>
+            <dd className="text-foreground">
               {formatMeetingTime(startsAt, endsAt)}
             </dd>
           </>
         )}
         {organizer && (
           <>
-            <dt className="text-zinc-500">Organizer</dt>
-            <dd className="text-zinc-900">{organizer}</dd>
+            <dt className="text-muted-foreground">Organizer</dt>
+            <dd className="text-foreground">{organizer}</dd>
           </>
         )}
       </dl>
-      {videoLink && (
-        <a
-          href={videoLink}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex items-center gap-1 rounded bg-zinc-900 px-3 py-1.5 text-sm text-white hover:bg-zinc-800"
-        >
-          <Video className="h-4 w-4" />
-          Join
-        </a>
+      {agenda.length > 0 && (
+        <section aria-label="Agenda">
+          <header className="mb-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+            Agenda
+          </header>
+          <ul className="ml-4 list-disc space-y-1 text-sm text-foreground">
+            {agenda.map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+        </section>
       )}
+      <div className="flex flex-wrap gap-2">
+        {videoLink && (
+          <a
+            href={videoLink}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1 rounded-sm bg-primary px-3 py-1.5 text-sm text-primary-foreground hover:bg-primary-active"
+          >
+            <Video className="h-4 w-4" />
+            Join meeting
+          </a>
+        )}
+        {signal.url && (
+          <a
+            href={signal.url}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1 rounded border border-border px-3 py-1.5 text-sm text-foreground hover:bg-muted"
+          >
+            <CalIcon className="h-4 w-4" />
+            Open invite
+          </a>
+        )}
+      </div>
       {linkedItems.length > 0 && (
         <div>
-          <p className="text-xs font-medium uppercase tracking-wider text-zinc-500">
+          <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
             Linked items
           </p>
           <ul className="mt-1 space-y-1">
@@ -1197,7 +1484,7 @@ function MeetingBody({ signal }: { signal: StoredSignal }) {
                   href={item.url}
                   target="_blank"
                   rel="noreferrer"
-                  className="text-sm text-zinc-700 underline hover:text-zinc-900"
+                  className="text-sm text-foreground underline hover:text-foreground/80"
                 >
                   {item.kind === "pr" && item.repo
                     ? `${item.repo}#${item.number}`
@@ -1210,6 +1497,15 @@ function MeetingBody({ signal }: { signal: StoredSignal }) {
       )}
     </div>
   );
+}
+
+function parseAgenda(description: string | undefined): string[] {
+  if (!description) return [];
+  return description
+    .split("\n")
+    .map((l) => l.trim().replace(/^[-*•]\s*/, ""))
+    .filter((l) => l.length > 0)
+    .slice(0, 6);
 }
 
 function formatMeetingTime(startsAt: string, endsAt?: string): string {
@@ -1241,7 +1537,9 @@ function formatSnoozeReturn(iso: string | null | undefined): string {
   });
 }
 
-function kindGroup(kind: SignalKind): "pr" | "slack" | "meeting" | "ticket" {
+type SignalGroup = "pr" | "slack" | "meeting" | "ticket";
+
+export function kindGroup(kind: SignalKind): SignalGroup {
   if (kind === "meeting") return "meeting";
   if (kind === "dm" || kind === "mention" || kind === "thread_reply")
     return "slack";
@@ -1255,34 +1553,20 @@ function kindGroup(kind: SignalKind): "pr" | "slack" | "meeting" | "ticket" {
   return "pr";
 }
 
+function providerToSource(provider: SignalProvider): SourceKind {
+  if (provider === "github") return "git";
+  if (provider === "slack") return "slack";
+  if (provider === "google") return "cal";
+  // linear / jira
+  return "task";
+}
+
 function openLabel(provider: SignalProvider): string {
   if (provider === "github") return "Open in GitHub";
   if (provider === "slack") return "Open in Slack";
   if (provider === "linear") return "Open in Linear";
   if (provider === "jira") return "Open in Jira";
   return "Open in Calendar";
-}
-
-function ProviderBadge({ provider }: { provider: SignalProvider }) {
-  const Icon =
-    provider === "github"
-      ? Github
-      : provider === "slack"
-        ? Slack
-        : provider === "linear"
-          ? SquareKanban
-          : provider === "jira"
-            ? Trello
-            : CalIcon;
-  return (
-    <span
-      role="img"
-      aria-label={`Source: ${provider}`}
-      className="flex h-7 w-7 items-center justify-center rounded bg-zinc-100 text-zinc-700"
-    >
-      <Icon className="h-4 w-4" />
-    </span>
-  );
 }
 
 function kindLabel(kind: string): string {
