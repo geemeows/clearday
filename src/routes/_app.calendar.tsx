@@ -3,9 +3,16 @@ import { AlertTriangle } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { apiFetch } from "#/lib/api-client";
 import { type ConflictPair, detectConflicts } from "#/lib/calendar-conflicts";
-import { type MeetingEvent, toMeetingEvents } from "#/lib/calendar-view";
+import {
+  eventsByMonthGrid,
+  type MeetingEvent,
+  type MonthCell,
+  toMeetingEvents,
+} from "#/lib/calendar-view";
 import { cn } from "#/lib/cn";
 import type { StoredSignal } from "#/lib/next-up";
+
+export type CalendarViewMode = "day" | "week" | "month";
 
 export const Route = createFileRoute("/_app/calendar")({
   component: CalendarPage,
@@ -58,15 +65,14 @@ function CalendarPage() {
     return () => clearInterval(t);
   }, []);
 
-  const weekStart = useMemo(() => mondayOf(now), [now]);
-  const events = useMemo(
-    () => (signals ? toWeekEvents(toMeetingEvents(signals), weekStart) : []),
-    [signals, weekStart],
+  const meetings = useMemo(
+    () => (signals ? toMeetingEvents(signals) : []),
+    [signals],
   );
 
   return (
     <CalendarView
-      events={events}
+      meetings={meetings}
       now={now}
       loading={signals == null}
       error={error}
@@ -76,25 +82,45 @@ function CalendarPage() {
 
 export function CalendarView({
   events,
+  meetings,
   now,
   loading = false,
   error = null,
+  defaultMode = "week",
 }: {
-  events: WeekEvent[];
+  events?: WeekEvent[];
+  meetings?: MeetingEvent[];
   now: Date;
   loading?: boolean;
   error?: string | null;
+  defaultMode?: CalendarViewMode;
 }) {
-  const conflicts = useMemo(() => detectConflicts(events), [events]);
+  const [mode, setMode] = useState<CalendarViewMode>(defaultMode);
+
+  const weekStart = useMemo(() => mondayOf(now), [now]);
+  const weekEvents = useMemo<WeekEvent[]>(() => {
+    if (events) return events;
+    if (meetings) return toWeekEvents(meetings, weekStart);
+    return [];
+  }, [events, meetings, weekStart]);
+  const conflicts = useMemo(() => detectConflicts(weekEvents), [weekEvents]);
   const todayCol = mondayCol(now);
+
+  const subtitle =
+    mode === "week"
+      ? `${weekRangeLabel(now)} · Mon–Fri, 8:00–18:00`
+      : mode === "day"
+        ? `${dayLongLabel(now)} · 8:00–18:00`
+        : monthLabel(now);
 
   return (
     <section className="p-8">
-      <header>
-        <h1 className="text-xl font-semibold">Calendar</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {weekRangeLabel(now)} · Mon–Fri, 8:00–18:00
-        </p>
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold">Calendar</h1>
+          <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>
+        </div>
+        <ModeSwitch mode={mode} onChange={setMode} />
       </header>
 
       {error && (
@@ -110,15 +136,64 @@ export function CalendarView({
         <p className="mt-6 text-sm text-muted-foreground">Loading…</p>
       )}
 
-      <WeekGrid
-        events={events}
-        conflicts={conflicts}
-        todayCol={todayCol}
-        now={now}
-      />
+      {mode === "week" && (
+        <>
+          <WeekGrid
+            events={weekEvents}
+            conflicts={conflicts}
+            todayCol={todayCol}
+            now={now}
+          />
+          {conflicts.length > 0 && (
+            <ConflictBanner pairs={conflicts} now={now} />
+          )}
+        </>
+      )}
 
-      {conflicts.length > 0 && <ConflictBanner pairs={conflicts} now={now} />}
+      {mode === "day" && (
+        <DayGrid events={weekEvents} todayCol={todayCol} now={now} />
+      )}
+
+      {mode === "month" && (
+        <MonthGrid cells={eventsByMonthGrid(meetings ?? [], now)} now={now} />
+      )}
     </section>
+  );
+}
+
+function ModeSwitch({
+  mode,
+  onChange,
+}: {
+  mode: CalendarViewMode;
+  onChange: (m: CalendarViewMode) => void;
+}) {
+  const modes: CalendarViewMode[] = ["day", "week", "month"];
+  return (
+    <div
+      role="tablist"
+      aria-label="View mode"
+      className="inline-flex items-center rounded-md border border-border bg-card p-0.5"
+    >
+      {modes.map((m) => (
+        <button
+          key={m}
+          type="button"
+          role="tab"
+          aria-selected={mode === m}
+          data-state={mode === m ? "active" : "inactive"}
+          onClick={() => onChange(m)}
+          className={cn(
+            "rounded-xs px-3 py-1 text-xs font-medium capitalize transition-colors",
+            mode === m
+              ? "bg-secondary text-foreground"
+              : "text-muted-foreground hover:text-foreground",
+          )}
+        >
+          {m}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -298,6 +373,153 @@ function EventBlock({
   );
 }
 
+function DayGrid({
+  events,
+  todayCol,
+  now,
+}: {
+  events: WeekEvent[];
+  todayCol: number | null;
+  now: Date;
+}) {
+  const dayCol = todayCol ?? 0;
+  const dayEvents = events.filter((e) => e.day === dayCol);
+  const conflicts = useMemo(() => detectConflicts(dayEvents), [dayEvents]);
+  const conflictIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const p of conflicts) {
+      ids.add(p.a.id);
+      ids.add(p.b.id);
+    }
+    return ids;
+  }, [conflicts]);
+  const lanes = layoutLanes(dayEvents);
+  const slots = Array.from({ length: HOURS }, (_, i) => HOUR_START + i);
+  const hours = Array.from({ length: HOURS + 1 }, (_, i) => HOUR_START + i);
+
+  return (
+    <section
+      aria-label="Day grid"
+      className="mt-6 overflow-hidden rounded-md border border-border bg-card"
+    >
+      <div
+        className="relative grid"
+        style={{
+          gridTemplateColumns: "64px 1fr",
+          height: `${GRID_PX}px`,
+        }}
+      >
+        <div className="relative">
+          {hours.map((h) => (
+            <div
+              key={`hour-${h}`}
+              className="absolute right-0 left-0 border-hairline-soft border-t px-2 text-[10px] text-muted-foreground"
+              style={{ top: `${(h - HOUR_START) * SLOT_PX}px` }}
+            >
+              {h}:00
+            </div>
+          ))}
+        </div>
+        <div
+          data-day-col={dayCol}
+          data-today={todayCol === dayCol || undefined}
+          className="relative border-border border-l"
+        >
+          {slots.map((h) => (
+            <div
+              key={`slot-${h}`}
+              className="absolute right-0 left-0 border-hairline-soft border-t"
+              style={{
+                top: `${(h - HOUR_START) * SLOT_PX}px`,
+                height: `${SLOT_PX}px`,
+              }}
+            />
+          ))}
+          {dayEvents.map((e) => {
+            const lane = lanes.get(e.id) ?? { col: 0, of: 1 };
+            return (
+              <EventBlock
+                key={e.id}
+                event={e}
+                lane={lane}
+                isConflict={conflictIds.has(e.id)}
+              />
+            );
+          })}
+          {todayCol === dayCol && <NowLine now={now} />}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function MonthGrid({ cells, now }: { cells: MonthCell[]; now: Date }) {
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const headerDays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  return (
+    <section
+      aria-label="Month grid"
+      className="mt-6 overflow-hidden rounded-md border border-border bg-card"
+    >
+      <div className="grid grid-cols-7">
+        {headerDays.map((label) => (
+          <div
+            key={label}
+            className="border-border border-b px-2 py-2 font-medium text-muted-foreground text-xs uppercase tracking-wider"
+          >
+            {label}
+          </div>
+        ))}
+      </div>
+      <div className="grid grid-cols-7">
+        {cells.map((cell) => {
+          const isToday = cell.day.getTime() === today.getTime();
+          const dayNum = cell.day.getDate();
+          const count = cell.events.length;
+          return (
+            <div
+              key={cell.day.toISOString()}
+              data-in-month={cell.inMonth || undefined}
+              data-today={isToday || undefined}
+              className={cn(
+                "min-h-20 border-border border-b border-l p-2 first:border-l-0 [&:nth-child(7n+1)]:border-l-0",
+                !cell.inMonth && "bg-muted/40",
+              )}
+            >
+              <div
+                className={cn(
+                  "font-medium text-xs",
+                  cell.inMonth ? "text-foreground" : "text-muted-foreground",
+                  isToday && "text-primary",
+                )}
+              >
+                {dayNum}
+              </div>
+              {count > 0 && (
+                <ul className="mt-1 space-y-0.5">
+                  {cell.events.slice(0, 3).map((ev) => (
+                    <li
+                      key={ev.signal.id}
+                      className="truncate rounded-xs bg-primary/10 px-1 text-[10px] text-foreground"
+                    >
+                      {ev.signal.title}
+                    </li>
+                  ))}
+                  {count > 3 && (
+                    <li className="text-[10px] text-muted-foreground">
+                      +{count - 3} more
+                    </li>
+                  )}
+                </ul>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 function NowLine({ now }: { now: Date }) {
   const minutes = now.getHours() * 60 + now.getMinutes();
   if (minutes < DAY_START_MIN || minutes > DAY_END_MIN) return null;
@@ -397,6 +619,18 @@ function dayLabel(weekStart: Date, dayIdx: number): string {
   const day = new Date(weekStart);
   day.setDate(weekStart.getDate() + dayIdx);
   return day.toLocaleDateString(undefined, { weekday: "short" });
+}
+
+function dayLongLabel(d: Date): string {
+  return d.toLocaleDateString(undefined, {
+    weekday: "long",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function monthLabel(d: Date): string {
+  return d.toLocaleDateString(undefined, { month: "long", year: "numeric" });
 }
 
 function weekRangeLabel(now: Date): string {
