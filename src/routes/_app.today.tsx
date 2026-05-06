@@ -16,14 +16,14 @@ import {
   useMemo,
   useState,
 } from "react";
-import { NextUpHero } from "#/components/NextUpHero";
+import { UpcomingEventsCard } from "#/components/UpcomingEventsCard";
 import { apiFetch } from "#/lib/api-client";
 import type { MeetingEvent } from "#/lib/calendar-view";
 import type { BriefingResult } from "#/lib/morning-briefing";
 import {
   type NextUpMeeting,
   pickMeetingForAlert,
-  pickNextUp,
+  pickUpcoming,
   type StoredSignal,
 } from "#/lib/next-up";
 import type { ProfileView } from "#/lib/profile-api";
@@ -81,8 +81,8 @@ function TodayPage() {
     setActiveAlertId(due.id);
   }, [meetings, now]);
 
-  const nextUp = useMemo(
-    () => (meetings ? pickNextUp(meetings, now) : null),
+  const upcoming = useMemo(
+    () => (meetings ? pickUpcoming(meetings, now, 5) : []),
     [meetings, now],
   );
 
@@ -103,7 +103,7 @@ function TodayPage() {
   return (
     <TodayView
       meetings={meetings}
-      nextUp={nextUp}
+      upcoming={upcoming}
       error={error}
       alertSignal={alertSignal}
       onDismissAlert={dismissAlert}
@@ -128,7 +128,7 @@ function TodayPage() {
 
 export function TodayView({
   meetings,
-  nextUp,
+  upcoming,
   error,
   alertSignal,
   onDismissAlert,
@@ -141,7 +141,7 @@ export function TodayView({
   weekStats,
 }: {
   meetings: StoredSignal[] | null;
-  nextUp: NextUpMeeting | null;
+  upcoming: NextUpMeeting[];
   error: string | null;
   alertSignal: StoredSignal | null;
   onDismissAlert: () => void;
@@ -174,7 +174,7 @@ export function TodayView({
         <p className="text-muted-foreground text-sm">Loading…</p>
       )}
 
-      {meetings != null && <NextUpHero meeting={nextUp} />}
+      {meetings != null && <UpcomingEventsCard meetings={upcoming} />}
 
       {briefing}
 

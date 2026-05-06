@@ -6,7 +6,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { NextUpHero } from "#/components/NextUpHero";
+import { UpcomingEventsCard } from "#/components/UpcomingEventsCard";
 import { toMeetingEvents } from "#/lib/calendar-view";
 import type { BriefingResult } from "#/lib/morning-briefing";
 import type { StoredSignal } from "#/lib/next-up";
@@ -46,72 +46,40 @@ const meetingSignal = (id = "m1"): StoredSignal => ({
   dismissed_at: null,
 });
 
-describe("NextUpHero", () => {
-  it("renders title, mm:ss countdown, Join meeting, and linked PR chip", () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-05-04T12:00:00.000Z"));
+describe("UpcomingEventsCard", () => {
+  it("renders a list of upcoming meetings with Join links and no countdown", () => {
     render(
-      <NextUpHero
-        meeting={{
-          signal: meetingSignal(),
-          startsAt: new Date("2026-05-04T12:30:00.000Z"),
-          endsAt: new Date("2026-05-04T12:45:00.000Z"),
-          videoLink: "https://meet.google.com/abc-defg-hij",
-          linkedItems: [
-            {
-              kind: "pr",
-              url: "https://github.com/acme/web/pull/123",
-              repo: "acme/web",
-              number: 123,
-            },
-          ],
-        }}
+      <UpcomingEventsCard
+        meetings={[
+          {
+            signal: meetingSignal("m1"),
+            startsAt: new Date("2026-05-04T12:30:00.000Z"),
+            endsAt: new Date("2026-05-04T12:45:00.000Z"),
+            videoLink: "https://meet.google.com/abc-defg-hij",
+            linkedItems: [],
+          },
+          {
+            signal: { ...meetingSignal("m2"), title: "Design review" },
+            startsAt: new Date("2026-05-04T15:00:00.000Z"),
+            endsAt: null,
+            videoLink: null,
+            linkedItems: [],
+          },
+        ]}
       />,
     );
-    const card = screen.getByRole("article", { name: /next up/i });
+    const card = screen.getByRole("article", { name: /upcoming events/i });
     expect(card.textContent).toContain("Standup");
-    const timer = screen.getByRole("timer", { name: /time until/i });
-    expect(timer.textContent).toContain("30:00");
-    const join = screen.getByRole("link", { name: /^join meeting$/i });
+    expect(card.textContent).toContain("Design review");
+    expect(screen.queryByRole("timer")).toBeNull();
+    const join = screen.getByRole("link", { name: /^join$/i });
     expect(join.getAttribute("href")).toBe(
       "https://meet.google.com/abc-defg-hij",
     );
-    const pr = screen.getByRole("link", { name: "acme/web#123" });
-    expect(pr.getAttribute("href")).toBe(
-      "https://github.com/acme/web/pull/123",
-    );
-    vi.useRealTimers();
-  });
-
-  it("countdown decrements every second", () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-05-04T12:00:00.000Z"));
-    render(
-      <NextUpHero
-        meeting={{
-          signal: meetingSignal(),
-          startsAt: new Date("2026-05-04T12:00:30.000Z"),
-          endsAt: new Date("2026-05-04T12:30:00.000Z"),
-          videoLink: null,
-          linkedItems: [],
-        }}
-      />,
-    );
-    const timer = screen.getByRole("timer");
-    expect(timer.textContent).toContain("00:30");
-    act(() => {
-      vi.advanceTimersByTime(1000);
-    });
-    expect(timer.textContent).toContain("00:29");
-    act(() => {
-      vi.advanceTimersByTime(1000);
-    });
-    expect(timer.textContent).toContain("00:28");
-    vi.useRealTimers();
   });
 
   it("shows an empty-state copy when nothing is upcoming", () => {
-    render(<NextUpHero meeting={null} />);
+    render(<UpcomingEventsCard meetings={[]} />);
     expect(screen.getByText(/Nothing on your calendar/i)).toBeTruthy();
   });
 });
@@ -121,7 +89,7 @@ describe("TodayView greeting + alerts", () => {
     render(
       <TodayView
         meetings={[]}
-        nextUp={null}
+        upcoming={[]}
         error={null}
         alertSignal={null}
         onDismissAlert={() => {}}
@@ -140,7 +108,7 @@ describe("TodayView greeting + alerts", () => {
     render(
       <TodayView
         meetings={[meetingSignal()]}
-        nextUp={null}
+        upcoming={[]}
         error={null}
         alertSignal={meetingSignal()}
         onDismissAlert={onDismissAlert}
@@ -156,7 +124,7 @@ describe("TodayView greeting + alerts", () => {
     render(
       <TodayView
         meetings={[]}
-        nextUp={null}
+        upcoming={[]}
         error={null}
         alertSignal={null}
         onDismissAlert={() => {}}
