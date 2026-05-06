@@ -1,7 +1,9 @@
 // Settings → Profile panel (per PRD #29 mockup #2).
 //
-// Composes the existing /api/profile, /api/integrations, and Supabase
-// session into a single read-only view with a Sign out action.
+// Pulls name / email / avatar from the signed-in Google account
+// (Supabase session user_metadata) and joins the GitHub handle from
+// /api/integrations. No DB profile read — what you see is what
+// Google sent at sign-in.
 
 import { LogOut } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -10,7 +12,6 @@ import { Button } from "#/components/ui/button";
 import { apiFetch } from "#/lib/api-client";
 import { signOut as defaultSignOut } from "#/lib/auth";
 import type { IntegrationView } from "#/lib/integrations-api";
-import type { ProfileView } from "#/lib/profile-api";
 import { supabase } from "#/lib/supabase";
 
 export type ProfileFields = {
@@ -47,9 +48,8 @@ export function useProfile(
   return fields;
 }
 
-async function loadProfileFields(): Promise<ProfileFields> {
-  const [profile, integrations, session] = await Promise.all([
-    (apiFetch("/api/profile") as Promise<ProfileView>).catch(() => null),
+export async function loadProfileFields(): Promise<ProfileFields> {
+  const [integrations, session] = await Promise.all([
     (
       apiFetch("/api/integrations") as Promise<{
         integrations: IntegrationView[];
@@ -58,10 +58,15 @@ async function loadProfileFields(): Promise<ProfileFields> {
     supabase.auth.getSession().then((r) => r.data.session),
   ]);
   const github = integrations.integrations.find((i) => i.provider === "github");
+  const meta = (session?.user?.user_metadata ?? {}) as Record<string, unknown>;
+  const str = (k: string): string | null => {
+    const v = meta[k];
+    return typeof v === "string" && v.length > 0 ? v : null;
+  };
   return {
-    displayName: profile?.display_name ?? null,
-    email: session?.user?.email ?? null,
-    avatarUrl: profile?.avatar_url ?? null,
+    displayName: str("full_name") ?? str("name") ?? null,
+    email: session?.user?.email ?? str("email") ?? null,
+    avatarUrl: str("avatar_url") ?? str("picture") ?? null,
     githubHandle: github?.account_id ?? null,
   };
 }
