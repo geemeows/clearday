@@ -48,6 +48,12 @@ import {
   sendEmailDigestTest,
 } from "#/features/email-digest/api";
 import {
+  getInboxRules,
+  type InboxRulesStore,
+  putInboxRules,
+} from "#/features/inbox-rules/api";
+import type { InboxRule } from "#/features/inbox-rules/engine";
+import {
   disconnectIntegration,
   getIntegrations,
   type IntegrationsStore,
@@ -70,12 +76,6 @@ import {
   type RetentionView,
 } from "#/lib/data-privacy-api";
 import { startFocusSession } from "#/lib/focus-session";
-import {
-  getInboxRules,
-  type InboxRulesStore,
-  putInboxRules,
-} from "#/lib/inbox-rules-api";
-import type { InboxRule } from "#/lib/inbox-rules-engine";
 import {
   buildConnectUrl,
   completeOnboarding,

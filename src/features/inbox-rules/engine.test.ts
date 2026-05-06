@@ -4,7 +4,7 @@ import {
   type InboxRule,
   previewInboxRules,
   validateInboxRules,
-} from "#/lib/inbox-rules-engine";
+} from "#/features/inbox-rules/engine";
 import type { Signal } from "#/shared/signal";
 
 function makeSignal(overrides: Partial<Signal> = {}): Signal {

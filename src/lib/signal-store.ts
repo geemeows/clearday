@@ -6,7 +6,7 @@
 // the service-role client; in SPA context the user's session-scoped anon
 // client is used (RLS gates writes/reads to the allowed user).
 
-import { applyInboxRules, type InboxRule } from "#/lib/inbox-rules-engine";
+import { applyInboxRules, type InboxRule } from "#/features/inbox-rules/engine";
 import type {
   Signal,
   SignalKind,

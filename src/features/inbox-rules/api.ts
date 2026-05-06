@@ -3,7 +3,10 @@
 // Settings panel sends the full rule set on every save, which sidesteps the
 // per-id concurrency dance for v1.
 
-import { type InboxRule, validateInboxRules } from "#/lib/inbox-rules-engine";
+import {
+  type InboxRule,
+  validateInboxRules,
+} from "#/features/inbox-rules/engine";
 
 export type InboxRulesStore = {
   load: () => Promise<InboxRule[]>;

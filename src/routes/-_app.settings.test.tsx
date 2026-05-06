@@ -616,7 +616,7 @@ describe("FocusDefaultsPanel", () => {
   });
 });
 
-import type { InboxRule } from "#/lib/inbox-rules-engine";
+import type { InboxRule } from "#/features/inbox-rules/engine";
 import { InboxRulesPanel } from "#/routes/_app.settings";
 
 describe("InboxRulesPanel", () => {

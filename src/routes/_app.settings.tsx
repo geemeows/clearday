@@ -1,6 +1,12 @@
 import { createFileRoute, Link, Outlet } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { AlertChannel } from "#/features/alerts/dispatcher";
+import {
+  type InboxRule,
+  previewInboxRules,
+  type RuleEffect,
+  type RulePredicate,
+} from "#/features/inbox-rules/engine";
 import type { IntegrationView } from "#/features/integrations/api/integrations-api";
 import { apiFetch } from "#/lib/api-client";
 import {
@@ -11,12 +17,6 @@ import {
   PURGE_CONFIRMATION,
   type RetentionView,
 } from "#/lib/data-privacy-api";
-import {
-  type InboxRule,
-  previewInboxRules,
-  type RuleEffect,
-  type RulePredicate,
-} from "#/lib/inbox-rules-engine";
 import {
   ACCENTS,
   type Accent,

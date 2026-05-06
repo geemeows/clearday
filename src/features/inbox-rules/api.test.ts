@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { getInboxRules, putInboxRules } from "#/lib/inbox-rules-api";
-import type { InboxRule } from "#/lib/inbox-rules-engine";
+import { getInboxRules, putInboxRules } from "#/features/inbox-rules/api";
+import type { InboxRule } from "#/features/inbox-rules/engine";
 
 function memoryStore(initial: InboxRule[] = []) {
   let rules = initial;

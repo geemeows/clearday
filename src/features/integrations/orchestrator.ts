@@ -10,6 +10,7 @@
 // The orchestrator is provider-agnostic: adding a new provider is one folder
 // under features/integrations/providers/<id>/ + one entry in the registry.
 
+import type { InboxRule } from "#/features/inbox-rules/engine";
 import {
   defaultClassifyError,
   type ExchangeEnv,
@@ -20,7 +21,6 @@ import {
   type ProviderId,
 } from "#/features/integrations/provider";
 import { isProviderId, PROVIDERS } from "#/features/integrations/providers";
-import type { InboxRule } from "#/lib/inbox-rules-engine";
 import type { SupabaseLike } from "#/lib/signal-store";
 import { upsertSignals } from "#/lib/signal-store";
 
