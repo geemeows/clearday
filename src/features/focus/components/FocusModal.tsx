@@ -16,7 +16,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "#/components/ui/dialog";
+} from "#/components/coss/dialog";
 import { Input } from "#/components/coss/input";
 import { Label } from "#/components/coss/label";
 import { cn } from "#/lib/cn";

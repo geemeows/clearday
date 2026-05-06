@@ -20,13 +20,13 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
-} from "#/components/ui/command";
+} from "#/components/coss/command";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogTitle,
-} from "#/components/ui/dialog";
+} from "#/components/coss/dialog";
 import type { AskAiResult } from "#/features/ask-ai/api";
 import { signalKindLabel } from "#/features/integrations/display";
 import {

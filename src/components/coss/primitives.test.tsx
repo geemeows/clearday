@@ -2,6 +2,20 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { Avatar, AvatarFallback, AvatarImage } from "#/components/coss/avatar";
 import { Checkbox } from "#/components/coss/checkbox";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "#/components/coss/command";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "#/components/coss/dialog";
 import { Input } from "#/components/coss/input";
 import { Label } from "#/components/coss/label";
 import { Progress } from "#/components/coss/progress";
@@ -68,5 +82,76 @@ describe("coss Progress", () => {
     const root = document.querySelector("[data-slot='progress']");
     expect(root).toBeTruthy();
     expect(root?.getAttribute("aria-valuenow")).toBe("42");
+  });
+});
+
+describe("coss Dialog", () => {
+  it("renders content when open and unmounts when closed", () => {
+    const { rerender } = render(
+      <Dialog open={true}>
+        <DialogContent aria-label="settings">
+          <DialogTitle>Settings</DialogTitle>
+          <DialogDescription>Configure preferences</DialogDescription>
+          <p>Body</p>
+        </DialogContent>
+      </Dialog>,
+    );
+    expect(screen.getByRole("dialog", { name: /settings/i })).toBeTruthy();
+    expect(screen.getByText("Body")).toBeTruthy();
+
+    rerender(
+      <Dialog open={false}>
+        <DialogContent aria-label="settings">
+          <DialogTitle>Settings</DialogTitle>
+          <DialogDescription>Configure preferences</DialogDescription>
+          <p>Body</p>
+        </DialogContent>
+      </Dialog>,
+    );
+    expect(screen.queryByRole("dialog", { name: /settings/i })).toBeNull();
+  });
+
+  it("forwards onOpenChange when the close button is clicked", () => {
+    const onOpenChange = vi.fn();
+    render(
+      <Dialog open={true} onOpenChange={onOpenChange}>
+        <DialogContent aria-label="dlg">
+          <DialogTitle>Title</DialogTitle>
+        </DialogContent>
+      </Dialog>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /close/i }));
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+});
+
+describe("coss Command", () => {
+  it("filters items by typed query and forwards onSelect", () => {
+    const onSelect = vi.fn();
+    render(
+      <Command>
+        <CommandInput aria-label="search" placeholder="Search" />
+        <CommandList>
+          <CommandEmpty>None</CommandEmpty>
+          <CommandGroup heading="Items">
+            <CommandItem value="alpha" onSelect={() => onSelect("alpha")}>
+              Alpha
+            </CommandItem>
+            <CommandItem value="beta" onSelect={() => onSelect("beta")}>
+              Beta
+            </CommandItem>
+          </CommandGroup>
+        </CommandList>
+      </Command>,
+    );
+    expect(screen.getByText("Alpha")).toBeTruthy();
+    expect(screen.getByText("Beta")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText(/search/i), {
+      target: { value: "alp" },
+    });
+    expect(screen.getByText("Alpha")).toBeTruthy();
+    expect(screen.queryByText("Beta")).toBeNull();
+    fireEvent.keyDown(screen.getByLabelText(/search/i), { key: "Enter" });
+    expect(onSelect).toHaveBeenCalledWith("alpha");
   });
 });

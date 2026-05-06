@@ -13,7 +13,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "#/components/ui/dialog";
+} from "#/components/coss/dialog";
 import type { FocusStartResult } from "#/features/focus/session";
 import {
   type MeetingEvent,
