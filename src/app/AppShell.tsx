@@ -18,6 +18,7 @@ import {
   type NavSource,
   OPEN_CMDK_EVENT,
 } from "#/app/NavigationSidebar";
+import { FocusModal } from "#/features/focus/components/FocusModal";
 import type { ProviderAccountStatus } from "#/features/integrations/provider-account-status";
 import {
   PROFILE_UPDATED_EVENT,
@@ -29,9 +30,13 @@ import {
   THEME_UPDATED_EVENT,
   type ThemeView,
 } from "#/features/settings/theme/api";
+import {
+  pickActiveFocus,
+  toMeetingEvents,
+} from "#/features/signals/views/calendar";
 import type { SourceKind } from "#/features/signals/components/SourceGlyph";
 import { apiFetch } from "#/lib/api-client";
-import type { Signal, SignalKind } from "#/shared/signal";
+import type { Signal, SignalKind, StoredSignal } from "#/shared/signal";
 
 const PAGES: NavPage[] = [
   { to: "/today", label: "Today", icon: Sun },
@@ -93,9 +98,8 @@ export function AppShell() {
     [sourceMeta],
   );
 
-  // focus.active is stubbed to false until the focus session slice (#39)
-  // wires the live countdown.
-  const focus: FocusState = { active: false };
+  const focus = useActiveFocus();
+  const [focusModalOpen, setFocusModalOpen] = useState(false);
 
   const props: NavigationSidebarProps = {
     pages: PAGES,
@@ -105,12 +109,29 @@ export function AppShell() {
     tasksBadge,
     sources,
     focus,
-    onStartFocus: () => {
-      // Inline FocusButton owns its own dialog for now.
-    },
+    onStartFocus: () => setFocusModalOpen(true),
     onOpenSettings: () => router.navigate({ to: "/settings" }),
     onOpenCmdk: () => window.dispatchEvent(new CustomEvent(OPEN_CMDK_EVENT)),
     profile,
+  };
+
+  const startFocusSession = async ({
+    minutes,
+    message,
+  }: {
+    minutes: number;
+    message: string;
+  }) => {
+    try {
+      await apiFetch("/api/focus", {
+        method: "POST",
+        body: { duration_minutes: minutes, message: message.trim() || undefined },
+      });
+    } catch {
+      // Best-effort; the FocusActiveBlock will reflect calendar state on the
+      // next refresh once the busy event lands. Errors here are surfaced via
+      // the existing toast/log layer in apiFetch.
+    }
   };
 
   const commands: PaletteCommand[] = useMemo(() => {
@@ -153,8 +174,60 @@ export function AppShell() {
         <Outlet />
       </main>
       <CommandPalette commands={commands} />
+      <FocusModal
+        open={focusModalOpen}
+        onOpenChange={setFocusModalOpen}
+        onStart={startFocusSession}
+      />
     </div>
   );
+}
+
+// Polls /api/signals?filter=meetings each minute to detect a currently-active
+// focus block (calendar event with payload.is_focus or a focus-shaped title).
+// Returns the FocusState shape consumed by NavigationSidebar.
+function useActiveFocus(): FocusState {
+  const [state, setState] = useState<FocusState>({ active: false });
+  useEffect(() => {
+    let cancelled = false;
+    const refresh = async () => {
+      try {
+        const body = (await apiFetch(
+          "/api/signals?filter=meetings",
+        )) as { signals: StoredSignal[] };
+        if (cancelled) return;
+        const events = toMeetingEvents(body.signals);
+        const block = pickActiveFocus(events, new Date());
+        if (!block) {
+          setState({ active: false });
+          return;
+        }
+        const now = Date.now();
+        const total = Math.max(
+          1,
+          Math.round((block.endsAt.getTime() - block.startsAt.getTime()) / 1000),
+        );
+        const remaining = Math.max(
+          0,
+          Math.round((block.endsAt.getTime() - now) / 1000),
+        );
+        setState({
+          active: true,
+          remainingSeconds: remaining,
+          totalSeconds: total,
+        });
+      } catch {
+        if (!cancelled) setState({ active: false });
+      }
+    };
+    refresh();
+    const t = setInterval(refresh, 60_000);
+    return () => {
+      cancelled = true;
+      clearInterval(t);
+    };
+  }, []);
+  return state;
 }
 
 type ThemeSaveResult =
