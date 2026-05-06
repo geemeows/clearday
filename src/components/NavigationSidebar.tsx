@@ -7,6 +7,7 @@ import type { ReactNode } from "react";
 import { FocusActiveBlock } from "#/components/FocusActiveBlock";
 import { FocusButton } from "#/components/FocusButton";
 import { SourceGlyph, type SourceKind } from "#/components/SourceGlyph";
+import { ThemeToggle } from "#/components/ThemeToggle";
 import { Avatar, AvatarFallback, AvatarImage } from "#/components/ui/avatar";
 import { Button } from "#/components/ui/button";
 import { cn } from "#/lib/cn";
@@ -216,6 +217,7 @@ function AccountRow({
           </div>
         ) : null}
       </div>
+      <ThemeToggle />
       <Button
         type="button"
         variant="ghost"

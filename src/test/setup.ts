@@ -19,3 +19,20 @@ if (
 ) {
   Element.prototype.scrollIntoView = () => {};
 }
+
+// jsdom doesn't ship matchMedia; ThemeToggle and the theme controller read
+// (prefers-color-scheme: dark) at render time. Default to light so tests have
+// a stable baseline; individual tests can override per-suite.
+if (typeof window !== "undefined" && typeof window.matchMedia !== "function") {
+  window.matchMedia = (query: string) =>
+    ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    }) as MediaQueryList;
+}
