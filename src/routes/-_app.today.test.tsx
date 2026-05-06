@@ -6,15 +6,17 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import { NextUpHero } from "#/components/NextUpHero";
 import { toMeetingEvents } from "#/lib/calendar-view";
 import type { BriefingResult } from "#/lib/morning-briefing";
 import type { StoredSignal } from "#/lib/next-up";
 import {
   BriefingCard,
+  formatGreeting,
   InboxPreviewCard,
   InProgressCard,
-  NextUpCard,
-  TodayScheduleCard,
+  renderBold,
+  TodaySchedule,
   TodayView,
   WeekStatsCard,
 } from "#/routes/_app.today";
@@ -44,12 +46,12 @@ const meetingSignal = (id = "m1"): StoredSignal => ({
   dismissed_at: null,
 });
 
-describe("NextUpCard", () => {
-  it("renders title, countdown, Join, and linked PR", () => {
-    const now = new Date("2026-05-04T12:00:00.000Z");
+describe("NextUpHero", () => {
+  it("renders title, mm:ss countdown, Join meeting, and linked PR chip", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-04T12:00:00.000Z"));
     render(
-      <NextUpCard
-        now={now}
+      <NextUpHero
         meeting={{
           signal: meetingSignal(),
           startsAt: new Date("2026-05-04T12:30:00.000Z"),
@@ -68,8 +70,9 @@ describe("NextUpCard", () => {
     );
     const card = screen.getByRole("article", { name: /next up/i });
     expect(card.textContent).toContain("Standup");
-    expect(card.textContent).toContain("in 30m");
-    const join = screen.getByRole("link", { name: /^join$/i });
+    const timer = screen.getByRole("timer", { name: /time until/i });
+    expect(timer.textContent).toContain("30:00");
+    const join = screen.getByRole("link", { name: /^join meeting$/i });
     expect(join.getAttribute("href")).toBe(
       "https://meet.google.com/abc-defg-hij",
     );
@@ -77,24 +80,67 @@ describe("NextUpCard", () => {
     expect(pr.getAttribute("href")).toBe(
       "https://github.com/acme/web/pull/123",
     );
+    vi.useRealTimers();
+  });
+
+  it("countdown decrements every second", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-04T12:00:00.000Z"));
+    render(
+      <NextUpHero
+        meeting={{
+          signal: meetingSignal(),
+          startsAt: new Date("2026-05-04T12:00:30.000Z"),
+          endsAt: new Date("2026-05-04T12:30:00.000Z"),
+          videoLink: null,
+          linkedItems: [],
+        }}
+      />,
+    );
+    const timer = screen.getByRole("timer");
+    expect(timer.textContent).toContain("00:30");
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+    expect(timer.textContent).toContain("00:29");
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+    expect(timer.textContent).toContain("00:28");
+    vi.useRealTimers();
   });
 
   it("shows an empty-state copy when nothing is upcoming", () => {
-    render(
-      <NextUpCard meeting={null} now={new Date("2026-05-04T12:00:00.000Z")} />,
-    );
+    render(<NextUpHero meeting={null} />);
     expect(screen.getByText(/Nothing on your calendar/i)).toBeTruthy();
   });
 });
 
-describe("TodayView 10-min alert", () => {
+describe("TodayView greeting + alerts", () => {
+  it("renders the greeting heading and the summary line", () => {
+    render(
+      <TodayView
+        meetings={[]}
+        nextUp={null}
+        error={null}
+        alertSignal={null}
+        onDismissAlert={() => {}}
+        greeting="Good afternoon, Erin"
+        summary="No meetings today"
+      />,
+    );
+    expect(
+      screen.getByRole("heading", { name: /good afternoon, erin/i }),
+    ).toBeTruthy();
+    expect(screen.getByText(/no meetings today/i)).toBeTruthy();
+  });
+
   it("renders the alert toast when an alertSignal is supplied and dismisses on click", () => {
     const onDismissAlert = vi.fn();
     render(
       <TodayView
         meetings={[meetingSignal()]}
         nextUp={null}
-        now={new Date("2026-05-04T12:20:00.000Z")}
         error={null}
         alertSignal={meetingSignal()}
         onDismissAlert={onDismissAlert}
@@ -111,7 +157,6 @@ describe("TodayView 10-min alert", () => {
       <TodayView
         meetings={[]}
         nextUp={null}
-        now={new Date("2026-05-04T12:00:00.000Z")}
         error={null}
         alertSignal={null}
         onDismissAlert={() => {}}
@@ -121,22 +166,54 @@ describe("TodayView 10-min alert", () => {
   });
 });
 
+describe("formatGreeting", () => {
+  it("includes the user's first name when known", () => {
+    const at = (h: number) => new Date(2026, 4, 4, h, 0, 0);
+    expect(formatGreeting(at(8), "Erin")).toBe("Good morning, Erin");
+    expect(formatGreeting(at(14), "Erin")).toBe("Good afternoon, Erin");
+    expect(formatGreeting(at(20), "Erin")).toBe("Good evening, Erin");
+  });
+
+  it("falls back to a name-less greeting", () => {
+    const at = (h: number) => new Date(2026, 4, 4, h, 0, 0);
+    expect(formatGreeting(at(10), null)).toBe("Good morning");
+  });
+});
+
+describe("renderBold", () => {
+  it("wraps **bold** markers in <strong>", () => {
+    const out = renderBold("Lead with **design review**, then PRs.");
+    const { container } = render(<p>{out}</p>);
+    const strong = container.querySelector("strong");
+    expect(strong?.textContent).toBe("design review");
+    expect(container.textContent).toBe("Lead with design review, then PRs.");
+  });
+
+  it("passes plain text through untouched", () => {
+    const { container } = render(<p>{renderBold("nothing here")}</p>);
+    expect(container.textContent).toBe("nothing here");
+    expect(container.querySelector("strong")).toBeNull();
+  });
+});
+
 describe("BriefingCard", () => {
   const okResult: BriefingResult = {
     ok: true,
-    text: "Lead with the design review at 10:30, then knock out the two PRs awaiting your review.",
+    text: "Lead with the **design review** at 10:30, then knock out the two PRs awaiting your review.",
     provider: "openai",
-    model: "gpt-4o-mini",
+    model: "haiku-4-5",
     used_fallback: false,
     generated_at: "2026-05-04T08:00:00.000Z",
     cached: false,
   };
 
-  it("renders the briefing text and provider/model attribution on success", async () => {
+  it("renders briefing text with **bold** parsed and a model footer", async () => {
     const generator = vi.fn(async () => okResult);
-    render(<BriefingCard generator={generator} />);
-    await waitFor(() => screen.getByText(/Lead with the design review/));
-    expect(screen.getByText(/openai · gpt-4o-mini/)).toBeTruthy();
+    const { container } = render(<BriefingCard generator={generator} />);
+    await waitFor(() => screen.getByText(/Lead with the/i));
+    const strong = container.querySelector("strong");
+    expect(strong?.textContent).toBe("design review");
+    expect(screen.getByText(/HAIKU-4-5/)).toBeTruthy();
     expect(generator).toHaveBeenCalledWith(false);
   });
 
@@ -181,13 +258,13 @@ describe("BriefingCard", () => {
       .mockResolvedValueOnce(okResult)
       .mockResolvedValueOnce({ ok: false, reason: "regenerate_limit" });
     render(<BriefingCard generator={generator} />);
-    await waitFor(() => screen.getByText(/Lead with the design review/));
+    await waitFor(() => screen.getByText(/Lead with the/));
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: /regenerate/i }));
     });
     await waitFor(() => screen.getByText(/Daily regenerate limit reached/i));
     // Cached briefing text stays visible alongside the warning.
-    expect(screen.getByText(/Lead with the design review/)).toBeTruthy();
+    expect(screen.getByText(/Lead with the/)).toBeTruthy();
   });
 
   it("calls generator with force=true when Regenerate is clicked", async () => {
@@ -196,7 +273,7 @@ describe("BriefingCard", () => {
       .mockResolvedValueOnce(okResult)
       .mockResolvedValueOnce({ ...okResult, text: "Refreshed briefing." });
     render(<BriefingCard generator={generator} />);
-    await waitFor(() => screen.getByText(/Lead with the design review/));
+    await waitFor(() => screen.getByText(/Lead with the/));
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: /regenerate/i }));
     });
@@ -205,11 +282,11 @@ describe("BriefingCard", () => {
   });
 });
 
-describe("TodayScheduleCard", () => {
-  it("renders today's meetings with Join links and a time range", () => {
+describe("TodaySchedule", () => {
+  it("renders today's meetings with a Join link and a time label", () => {
     const events = toMeetingEvents([meetingSignal("evt-1")]);
     render(
-      <TodayScheduleCard
+      <TodaySchedule
         events={events}
         now={new Date("2026-05-04T12:00:00.000Z")}
       />,
@@ -223,12 +300,45 @@ describe("TodayScheduleCard", () => {
 
   it("renders an empty-state when nothing is scheduled today", () => {
     render(
-      <TodayScheduleCard
-        events={[]}
+      <TodaySchedule events={[]} now={new Date("2026-05-04T12:00:00.000Z")} />,
+    );
+    expect(screen.getByText(/no meetings today/i)).toBeTruthy();
+  });
+
+  it("highlights the current block with a NOW chip", () => {
+    const events = toMeetingEvents([meetingSignal("evt-1")]);
+    render(
+      <TodaySchedule
+        events={events}
+        // 12:35 is between starts (12:30) and ends (12:45).
+        now={new Date("2026-05-04T12:35:00.000Z")}
+      />,
+    );
+    const now = screen.getByText("NOW");
+    expect(now).toBeTruthy();
+    const item = now.closest("li");
+    expect(item?.getAttribute("aria-current")).toBe("true");
+  });
+
+  it("renders focus blocks in solid ink", () => {
+    const focusSignal: StoredSignal = {
+      ...meetingSignal("focus-1"),
+      title: "Focus: deep work",
+      payload: {
+        starts_at: "2026-05-04T13:00:00.000Z",
+        ends_at: "2026-05-04T14:00:00.000Z",
+        is_focus: true,
+      },
+    };
+    const events = toMeetingEvents([focusSignal]);
+    const { container } = render(
+      <TodaySchedule
+        events={events}
         now={new Date("2026-05-04T12:00:00.000Z")}
       />,
     );
-    expect(screen.getByText(/no meetings today/i)).toBeTruthy();
+    const focusItem = container.querySelector("li");
+    expect(focusItem?.className).toContain("bg-foreground");
   });
 });
 
@@ -378,17 +488,31 @@ describe("WeekStatsCard", () => {
       expect(card.textContent).toContain("PRs reviewed");
     });
     const card = screen.getByRole("article", { name: /this week/i });
-    // Each stat is rendered as label + value pair; assert via dt/dd.
     const dts = card.querySelectorAll("dt");
     const dds = card.querySelectorAll("dd");
     const map: Record<string, string> = {};
     dts.forEach((dt, i) => {
       map[dt.textContent ?? ""] = dds[i]?.textContent ?? "";
     });
-    expect(map["PRs reviewed"]).toBe("1");
-    expect(map["Tickets shipped"]).toBe("1");
-    expect(map["Inbox zeroed days"]).toBe("1");
-    expect(map["Focus hours"]).toBe("0");
+    // dd combines value + trend chip; assert prefix only.
+    expect(map["PRs reviewed"]?.startsWith("1")).toBe(true);
+    expect(map["Tickets shipped"]?.startsWith("1")).toBe(true);
+    expect(map["Inbox zeroed days"]?.startsWith("1")).toBe(true);
+    expect(map["Focus hours"]?.startsWith("0")).toBe(true);
+  });
+
+  it("renders trend deltas with up/down/flat signs", async () => {
+    const loader = vi.fn(async (_since: string) => [] as StoredSignal[]);
+    const { container } = render(<WeekStatsCard now={now} loader={loader} />);
+    await waitFor(() => screen.getByText(/PRs reviewed/));
+    const ups = container.querySelectorAll('[data-trend="up"]');
+    const downs = container.querySelectorAll('[data-trend="down"]');
+    const flats = container.querySelectorAll('[data-trend="flat"]');
+    expect(ups.length).toBeGreaterThan(0);
+    expect(ups[0].textContent).toContain("↑");
+    expect(downs.length).toBeGreaterThan(0);
+    expect(downs[0].textContent).toContain("↓");
+    expect(flats.length).toBeGreaterThan(0);
   });
 
   it("passes a 7-day-ago ISO `since` to the loader", async () => {
