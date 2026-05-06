@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Calendar as CalIcon, ExternalLink, Video, X } from "lucide-react";
+import { Calendar as CalIcon, ChevronRight, Video, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { z } from "zod";
 import {
@@ -45,7 +45,6 @@ function InboxPage() {
   const search = Route.useSearch();
   const navigate = Route.useNavigate();
   const [filter, setFilter] = useState<Filter>("all");
-  const [showSnoozed, setShowSnoozed] = useState(false);
   const [signals, setSignals] = useState<StoredSignal[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const selectedId = search.signal ?? null;
@@ -60,14 +59,9 @@ function InboxPage() {
   );
   const [repliedIds, setRepliedIds] = useState<Set<string>>(() => new Set());
 
-  const reload = useCallback(async (includeSnoozed: boolean) => {
+  const reload = useCallback(async () => {
     try {
-      // Always fetch the full set so filter chips can render live counts.
-      // Filter selection is applied client-side in InboxView.
-      const qs = includeSnoozed
-        ? "filter=all&include_snoozed=true"
-        : "filter=all";
-      const body = (await apiFetch(`/api/signals?${qs}`)) as {
+      const body = (await apiFetch("/api/signals?filter=all")) as {
         signals: StoredSignal[];
       };
       setSignals(body.signals);
@@ -78,13 +72,10 @@ function InboxPage() {
   }, []);
 
   useEffect(() => {
-    reload(showSnoozed);
-  }, [showSnoozed, reload]);
+    reload();
+  }, [reload]);
 
-  const refresh = useCallback(() => {
-    reload(showSnoozed);
-  }, [showSnoozed, reload]);
-  useAutoRefresh(refresh);
+  useAutoRefresh(reload);
 
   const dismiss = useCallback(
     async (id: string) => {
@@ -97,9 +88,9 @@ function InboxPage() {
         return next;
       });
       await apiFetch(`/api/signals/${id}/dismiss`, { method: "POST" });
-      reload(showSnoozed);
+      reload();
     },
-    [showSnoozed, reload, selectedId, setSelectedId],
+    [reload, selectedId, setSelectedId],
   );
 
   const handleReplyStart = useCallback((id: string) => {
@@ -128,8 +119,6 @@ function InboxPage() {
     <InboxView
       filter={filter}
       onFilterChange={setFilter}
-      showSnoozed={showSnoozed}
-      onShowSnoozedChange={setShowSnoozed}
       signals={visibleSignals}
       error={error}
       onDismiss={dismiss}
@@ -173,8 +162,6 @@ export function computeFilterCounts(
 export function InboxView({
   filter,
   onFilterChange,
-  showSnoozed = false,
-  onShowSnoozedChange,
   signals,
   error,
   onDismiss,
@@ -186,8 +173,6 @@ export function InboxView({
 }: {
   filter: Filter;
   onFilterChange: (f: Filter) => void;
-  showSnoozed?: boolean;
-  onShowSnoozedChange?: (v: boolean) => void;
   signals: StoredSignal[] | null;
   error: string | null;
   onDismiss: (id: string) => void;
@@ -212,100 +197,138 @@ export function InboxView({
     () => visible?.find((s) => s.id === selectedId) ?? null,
     [visible, selectedId],
   );
-  return (
-    <section className="flex h-full min-h-0 flex-col p-8">
-      <header>
-        <h1 className="text-xl font-semibold">Inbox</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Unified Signals from your sources.
-        </p>
-      </header>
+  const total = visible?.length ?? 0;
+  const unread = visible
+    ? visible.filter(
+        (s) => typeof s.unread_count === "number" && s.unread_count > 0,
+      ).length
+    : 0;
 
-      <nav
-        aria-label="Inbox filters"
-        className="mt-4 flex flex-wrap items-center gap-2"
-      >
-        {FILTERS.map((f) => (
-          <button
-            type="button"
-            key={f.id}
-            aria-pressed={filter === f.id}
-            onClick={() => onFilterChange(f.id)}
-            className={cn(
-              "inline-flex items-center rounded-full border px-3 py-1 text-sm",
-              filter === f.id
-                ? "border-foreground bg-foreground text-background"
-                : "border-border bg-background text-foreground hover:bg-muted",
-            )}
-          >
-            {f.label}
-            {counts && (
-              <span
-                data-slot="filter-count"
-                className={cn(
-                  "ml-1.5 rounded-full px-1.5 py-px text-[10px] tabular-nums",
-                  filter === f.id
-                    ? "bg-background/20 text-background"
-                    : "bg-muted text-muted-foreground",
-                )}
-              >
-                {counts[f.id]}
-              </span>
-            )}
-          </button>
-        ))}
-        <label className="ml-2 inline-flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground">
-          <input
-            type="checkbox"
-            checked={showSnoozed}
-            onChange={(e) => onShowSnoozedChange?.(e.target.checked)}
-            className="h-3.5 w-3.5 rounded border-border"
-          />
-          Show snoozed
-        </label>
-      </nav>
-
-      {error && (
-        <p className="mt-6 rounded border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+  if (error) {
+    return (
+      <section className="flex h-full min-h-0 flex-col px-8 pt-6">
+        <p className="rounded border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
           {error}
         </p>
-      )}
+      </section>
+    );
+  }
 
-      {visible == null && !error && (
-        <p className="mt-6 text-sm text-muted-foreground">Loading…</p>
-      )}
+  if (visible == null) {
+    return (
+      <section className="flex h-full min-h-0 flex-col px-8 pt-6">
+        <p className="text-sm text-muted-foreground">Loading…</p>
+      </section>
+    );
+  }
 
-      {visible && visible.length === 0 && (
-        <p className="mt-6 text-sm text-muted-foreground">
+  if (visible.length === 0) {
+    return (
+      <section className="flex h-full min-h-0 flex-col px-8 pt-6">
+        <p className="text-sm text-muted-foreground">
           Nothing here. New Signals show up automatically.
         </p>
-      )}
+      </section>
+    );
+  }
 
-      {visible && visible.length > 0 && (
-        <div className="mt-4 grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-[420px_1fr]">
-          <ul className="flex min-h-0 flex-col divide-y divide-border overflow-y-auto rounded-md border border-border bg-card">
-            {visible.map((s) => (
-              <InboxRow
-                key={s.id}
-                signal={s}
-                selected={selectedId === s.id}
-                replied={repliedIds?.has(s.id) ?? false}
-                snoozed={!!s.snoozed_until && s.snoozed_until > nowIso}
-                onSelect={() => onSelect?.(s.id)}
-                onDismiss={() => onDismiss(s.id)}
-                nowIso={nowIso}
-              />
-            ))}
-          </ul>
-          <InboxDetailPane
-            signal={selected}
-            onClose={() => onSelect?.(null)}
-            onDismiss={onDismiss}
-            onReplyStart={onReplyStart}
-            onReplyRollback={onReplyRollback}
-          />
+  return (
+    <section
+      className="grid h-full min-h-0 grid-cols-1 overflow-hidden lg:grid-cols-[420px_1fr]"
+      style={{ background: "var(--canvas)" }}
+    >
+      <div
+        className="flex min-h-0 flex-col overflow-hidden"
+        style={{ borderRight: "1px solid var(--hairline-soft)" }}
+      >
+        <div
+          className="flex flex-col gap-3 px-[18px] pt-4 pb-3"
+          style={{ borderBottom: "1px solid var(--hairline-soft)" }}
+        >
+          <div className="flex items-baseline">
+            <h1
+              className="font-semibold tracking-tight"
+              style={{ fontSize: 21, lineHeight: 1.25, color: "var(--ink)" }}
+            >
+              Inbox
+            </h1>
+            <span
+              className="ml-2.5 font-medium"
+              style={{ fontSize: 13, color: "var(--muted-foreground)" }}
+            >
+              {unread} unread · {total} total
+            </span>
+            <span className="flex-1" />
+            <button
+              type="button"
+              className="rounded-md px-3 hover:bg-(--surface-soft)"
+              style={{ height: 30, fontSize: 12, color: "var(--ink)" }}
+            >
+              Mark all read
+            </button>
+          </div>
+          <nav
+            aria-label="Inbox filters"
+            className="flex flex-wrap items-center gap-1.5"
+          >
+            {FILTERS.map((f) => {
+              const active = filter === f.id;
+              return (
+                <button
+                  type="button"
+                  key={f.id}
+                  aria-pressed={active}
+                  onClick={() => onFilterChange(f.id)}
+                  className="inline-flex items-center gap-1.5 rounded-full px-3 py-[5px] font-medium leading-tight transition-colors"
+                  style={{
+                    fontSize: 13,
+                    background: active ? "var(--ink)" : "var(--surface-soft)",
+                    color: active ? "var(--canvas)" : "var(--ink)",
+                    border: "1px solid transparent",
+                  }}
+                >
+                  {f.label}
+                  {counts && (
+                    <span
+                      data-slot="filter-count"
+                      className="tabular-nums"
+                      style={{ fontSize: 11, opacity: 0.6 }}
+                    >
+                      {counts[f.id]}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </nav>
         </div>
-      )}
+        <ul className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+          {visible.map((s) => (
+            <InboxRow
+              key={s.id}
+              signal={s}
+              selected={selectedId === s.id}
+              replied={repliedIds?.has(s.id) ?? false}
+              snoozed={!!s.snoozed_until && s.snoozed_until > nowIso}
+              onSelect={() => onSelect?.(s.id)}
+              onDismiss={() => onDismiss(s.id)}
+              nowIso={nowIso}
+            />
+          ))}
+        </ul>
+      </div>
+      <div
+        className="flex min-h-0 flex-col overflow-hidden"
+        style={{ background: "var(--canvas)" }}
+      >
+        <InboxDetailPane
+          signal={selected}
+          onClose={() => onSelect?.(null)}
+          onDismiss={onDismiss}
+          onReplyStart={onReplyStart}
+          onReplyRollback={onReplyRollback}
+        />
+      </div>
     </section>
   );
 }
@@ -324,9 +347,12 @@ export function InboxRow({
   replied: boolean;
   snoozed: boolean;
   onSelect: () => void;
+  // Kept on the prop type so the detail pane still receives the same callback;
+  // dismiss is only surfaced in the detail pane now.
   onDismiss: () => void;
   nowIso: string;
 }) {
+  void onDismiss;
   const severity = severityOf(signal);
   const isAutoRule = signal.payload?.badge === "auto-rule";
   const unread =
@@ -336,78 +362,104 @@ export function InboxRow({
   return (
     <li
       data-selected={selected || undefined}
-      className={cn(
-        "relative flex items-center gap-3 px-4 py-3",
-        // Rausch left-border accent on selected row (mockup #2).
-        "before:pointer-events-none before:absolute before:inset-y-0 before:left-0 before:w-[3px] before:bg-primary before:opacity-0",
-        selected && "bg-muted/40 before:opacity-100",
-        (replied || snoozed) && "opacity-60",
-      )}
+      className={cn((replied || snoozed) && "opacity-60")}
+      style={{
+        background: selected ? "var(--surface-soft)" : "transparent",
+        borderLeft: `2px solid ${selected ? "var(--primary)" : "transparent"}`,
+        borderBottom: "1px solid var(--hairline-soft)",
+      }}
     >
-      <SourceGlyph source={providerSourceKind(signal.provider)} size={28} />
       <button
         type="button"
         onClick={onSelect}
-        className="min-w-0 flex-1 text-left"
+        className="grid w-full items-start text-left"
+        style={{
+          gridTemplateColumns: "auto 1fr auto",
+          gap: 12,
+          padding: "14px 18px",
+        }}
       >
-        <div className="flex items-center gap-2">
+        <span
+          className="flex shrink-0 flex-col items-center"
+          style={{ gap: 6, paddingTop: 2 }}
+        >
+          <SourceGlyph source={providerSourceKind(signal.provider)} size={22} />
           {unread && (
             <span
               role="img"
               data-slot="unread"
               aria-label={`${unread} unread`}
-              className="inline-flex h-1.5 w-1.5 shrink-0 rounded-full bg-primary"
-            />
-          )}
-          <div className="truncate text-sm font-medium text-foreground">
-            {signal.title}
-          </div>
-          {severity === "ci_fail" && (
-            <SeverityChip tone="danger">CI FAIL</SeverityChip>
-          )}
-          {severity === "conflict" && (
-            <SeverityChip tone="warning">CONFLICT</SeverityChip>
-          )}
-          {isAutoRule && <SeverityChip tone="muted">RULE</SeverityChip>}
-          {replied && (
-            <SeverityChip tone="success" className="uppercase tracking-wide">
-              Replied
-            </SeverityChip>
-          )}
-          {signal.priority === "high" && (
-            <SeverityChip tone="danger" className="uppercase tracking-wide">
-              High
-            </SeverityChip>
-          )}
-          {signal.priority === "low" && (
-            <SeverityChip tone="muted" className="uppercase tracking-wide">
-              Low
-            </SeverityChip>
-          )}
-          {snoozed && (
-            <SeverityChip
-              tone="warning"
-              title={`Returns at ${formatSnoozeReturn(signal.snoozed_until)}`}
+              className="tabular-nums"
+              style={{ fontSize: 10, fontWeight: 700, color: "var(--primary)" }}
             >
-              Snoozed · returns {formatSnoozeReturn(signal.snoozed_until)}
-            </SeverityChip>
+              {unread}
+            </span>
           )}
-        </div>
-        <div className="mt-0.5 flex items-baseline justify-between gap-2 text-xs text-muted-foreground">
-          <span className="truncate">
-            {signalKindLabel(signal.kind)} · {secondaryLabel(signal)}
+        </span>
+        <span className="min-w-0">
+          <span
+            className="flex items-center"
+            style={{ gap: 6, marginBottom: 2 }}
+          >
+            {severity === "ci_fail" && (
+              <SeverityChip tone="danger">CI FAIL</SeverityChip>
+            )}
+            {severity === "conflict" && (
+              <SeverityChip tone="warning">CONFLICT</SeverityChip>
+            )}
+            {isAutoRule && <SeverityChip tone="muted">RULE</SeverityChip>}
+            <span
+              className="truncate"
+              style={{
+                fontSize: 14,
+                fontWeight: unread ? 600 : 500,
+                color: "var(--ink)",
+              }}
+            >
+              {signal.title}
+            </span>
+            {replied && (
+              <SeverityChip tone="success" className="uppercase tracking-wide">
+                Replied
+              </SeverityChip>
+            )}
+            {signal.priority === "high" && (
+              <SeverityChip tone="danger" className="uppercase tracking-wide">
+                High
+              </SeverityChip>
+            )}
+            {signal.priority === "low" && (
+              <SeverityChip tone="muted" className="uppercase tracking-wide">
+                Low
+              </SeverityChip>
+            )}
+            {snoozed && (
+              <SeverityChip
+                tone="warning"
+                title={`Returns at ${formatSnoozeReturn(signal.snoozed_until)}`}
+              >
+                Snoozed · returns {formatSnoozeReturn(signal.snoozed_until)}
+              </SeverityChip>
+            )}
           </span>
-          <time className="shrink-0 tabular-nums">
-            {relAgo(signal.source_created_at, nowIso)}
-          </time>
-        </div>
-      </button>
-      <button
-        type="button"
-        onClick={onDismiss}
-        className="rounded border border-border px-2 py-1 text-xs text-foreground hover:bg-muted"
-      >
-        Dismiss
+          <span
+            className="block truncate"
+            style={{ fontSize: 12, color: "var(--muted-foreground)" }}
+          >
+            {secondaryLabel(signal) || signalKindLabel(signal.kind)}
+          </span>
+        </span>
+        <time
+          className="shrink-0 tabular-nums"
+          style={{
+            fontSize: 11,
+            paddingTop: 3,
+            color: "var(--muted-foreground)",
+            fontFamily: "ui-monospace, SF Mono, Menlo, monospace",
+          }}
+        >
+          {relAgo(signal.source_created_at, nowIso)}
+        </time>
       </button>
     </li>
   );
@@ -424,24 +476,27 @@ function SeverityChip({
   children: React.ReactNode;
   title?: string;
 }) {
-  const toneClass =
+  const style: React.CSSProperties =
     tone === "danger"
-      ? "border-destructive/40 bg-destructive/10 text-destructive"
+      ? { background: "var(--danger-soft)", color: "var(--destructive)" }
       : tone === "warning"
-        ? "border-amber-300 bg-amber-50 text-amber-700"
+        ? { background: "var(--warn-soft)", color: "var(--warn)" }
         : tone === "success"
-          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-          : "border-border bg-muted text-muted-foreground";
+          ? { background: "var(--good-soft)", color: "var(--good)" }
+          : {
+              background: "var(--surface-strong)",
+              color: "var(--muted-foreground)",
+            };
   return (
     <span
       data-slot="severity-chip"
       data-tone={tone}
       title={title}
       className={cn(
-        "shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-medium",
-        toneClass,
+        "shrink-0 rounded-full px-[7px] py-px font-bold uppercase tracking-wide",
         className,
       )}
+      style={{ fontSize: 10, lineHeight: 1.4, ...style }}
     >
       {children}
     </span>
@@ -500,7 +555,8 @@ export function InboxDetailPane({
     return (
       <aside
         aria-label="Signal detail"
-        className="hidden items-center justify-center rounded-md border border-dashed border-border bg-card p-5 text-sm text-muted-foreground lg:flex"
+        className="hidden h-full items-center justify-center text-sm lg:flex"
+        style={{ color: "var(--muted-foreground)" }}
       >
         Select a signal to see details.
       </aside>
@@ -511,25 +567,45 @@ export function InboxDetailPane({
     <aside
       aria-label="Signal detail"
       data-detail-kind={group}
-      className="rounded-md border border-border bg-card p-5"
+      className="min-h-0 flex-1 overflow-y-auto"
+      style={{ padding: "28px 32px" }}
     >
-      <header className="flex items-start justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-2">
-          <SourceGlyph source={providerSourceKind(signal.provider)} size={28} />
-          <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            {signalKindLabel(signal.kind)}
-          </span>
-        </div>
+      <header
+        className="flex items-center"
+        style={{ gap: 8, marginBottom: 12 }}
+      >
+        <SourceGlyph source={providerSourceKind(signal.provider)} size={20} />
+        <span
+          className="font-medium uppercase tracking-wider"
+          style={{
+            fontSize: 11,
+            color: "var(--muted-foreground)",
+            fontFamily: "ui-monospace, SF Mono, Menlo, monospace",
+          }}
+        >
+          {signalKindLabel(signal.kind)}
+        </span>
+        <span className="flex-1" />
         <button
           type="button"
           aria-label="Close detail"
           onClick={onClose}
-          className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+          className="rounded-full p-1 hover:bg-(--surface-strong)"
+          style={{ color: "var(--muted-foreground)" }}
         >
           <X className="h-4 w-4" />
         </button>
       </header>
-      <h2 className="mt-3 text-base font-semibold text-foreground">
+      <h2
+        className="font-semibold tracking-tight"
+        style={{
+          fontSize: 22,
+          lineHeight: 1.18,
+          letterSpacing: "-0.4px",
+          color: "var(--ink)",
+          margin: "0 0 14px",
+        }}
+      >
         {signal.title}
       </h2>
       {group === "pr" && (
@@ -548,26 +624,47 @@ export function InboxDetailPane({
       )}
       {group === "meeting" && <MeetingDetail signal={signal} />}
       {group === "ticket" && <TaskDetail signal={signal} />}
-      <div className="mt-5 flex flex-wrap gap-2">
+      <div
+        className="sticky bottom-0 z-10 flex flex-wrap items-center gap-2"
+        style={{
+          marginTop: 24,
+          padding: "16px 0",
+          background: "var(--canvas)",
+          borderTop: "1px solid var(--hairline-soft)",
+        }}
+      >
+        <button
+          type="button"
+          onClick={() => onDismiss(signal.id)}
+          className="inline-flex items-center justify-center rounded-md hover:bg-(--surface-soft)"
+          style={{
+            height: 32,
+            padding: "0 12px",
+            fontSize: 13,
+            color: "var(--muted-foreground)",
+          }}
+        >
+          Dismiss
+        </button>
+        <span className="flex-1" />
         {/* MeetingDetail carries its own Join meeting / Open invite buttons. */}
         {signal.url && group !== "meeting" && (
           <a
             href={signal.url}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex items-center gap-1 rounded-sm bg-primary px-3 py-1.5 text-sm text-primary-foreground hover:bg-primary-active"
+            className="inline-flex items-center gap-1 rounded-md hover:bg-(--surface-soft)"
+            style={{
+              height: 32,
+              padding: "0 12px",
+              fontSize: 13,
+              color: "var(--muted-foreground)",
+            }}
           >
-            <ExternalLink className="h-4 w-4" />
-            {providerOpenLabel(signal.provider)}
+            {providerOpenLabel(signal.provider)} →
+            {/* <ExternalLink className="h-3.5 w-3.5" aria-hidden /> */}
           </a>
         )}
-        <button
-          type="button"
-          onClick={() => onDismiss(signal.id)}
-          className="rounded border border-border px-3 py-1.5 text-sm text-foreground hover:bg-muted"
-        >
-          Dismiss
-        </button>
       </div>
     </aside>
   );
@@ -684,38 +781,93 @@ export function PRDetail({
       {aiSummary && (
         <section
           aria-label="AI summary"
-          className="rounded-md border border-border bg-muted/40 p-3"
+          className="flex items-start gap-3"
+          style={{
+            padding: "14px 16px",
+            borderRadius: 12,
+            background: "var(--src-ai-bg)",
+            border: "1px solid var(--hairline-soft)",
+          }}
         >
-          <header className="mb-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-            AI summary
-          </header>
-          <p className="whitespace-pre-line text-sm text-foreground">
-            {aiSummary}
-          </p>
+          <SourceGlyph source="ai" size={20} />
+          <div className="flex-1">
+            <header
+              className="font-bold uppercase tracking-wider"
+              style={{
+                fontSize: 9,
+                color: "var(--src-ai)",
+                marginBottom: 4,
+              }}
+            >
+              AI Summary
+            </header>
+            <p
+              className="whitespace-pre-line"
+              style={{
+                fontSize: 13,
+                lineHeight: 1.55,
+                color: "var(--body, var(--foreground))",
+              }}
+            >
+              {aiSummary}
+            </p>
+          </div>
         </section>
       )}
       {filesChanged.length > 0 && (
         <section aria-label="Files changed">
-          <header className="mb-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-            Files changed
+          <header
+            className="font-bold uppercase tracking-wider"
+            style={{
+              fontSize: 9,
+              color: "var(--muted-foreground)",
+              marginBottom: 8,
+            }}
+          >
+            Files Changed
           </header>
-          <ul className="divide-y divide-border rounded-md border border-border">
+          <ul className="flex flex-col">
             {filesChanged.map((f) => (
               <li
                 key={f.path}
-                className="flex items-center justify-between gap-3 px-3 py-1.5 text-xs"
+                className="flex items-center"
+                style={{
+                  padding: "8px 0",
+                  borderBottom: "1px solid var(--hairline-soft)",
+                }}
               >
-                <span className="truncate font-mono text-foreground">
+                <span
+                  className="flex-1 truncate"
+                  style={{
+                    fontSize: 12,
+                    fontFamily: "ui-monospace, SF Mono, Menlo, monospace",
+                    color: "var(--body, var(--foreground))",
+                  }}
+                >
                   {f.path}
                 </span>
-                <span className="shrink-0 font-mono">
+                <span
+                  className="shrink-0"
+                  style={{
+                    fontSize: 12,
+                    fontFamily: "ui-monospace, SF Mono, Menlo, monospace",
+                  }}
+                >
                   {typeof f.additions === "number" && (
-                    <span className="text-emerald-600">+{f.additions}</span>
+                    <span style={{ color: "var(--good)" }}>+{f.additions}</span>
                   )}
                   {typeof f.additions === "number" &&
-                    typeof f.deletions === "number" && <span> </span>}
+                    typeof f.deletions === "number" && (
+                      <span
+                        style={{ color: "var(--muted-soft)", margin: "0 4px" }}
+                      >
+                        ·
+                      </span>
+                    )}
                   {typeof f.deletions === "number" && (
-                    <span className="text-destructive">-{f.deletions}</span>
+                    <span style={{ color: "var(--destructive)" }}>
+                      -{f.deletions}
+                    </span>
                   )}
                 </span>
               </li>
@@ -723,21 +875,68 @@ export function PRDetail({
           </ul>
         </section>
       )}
+      {repo && typeof number === "number" && (
+        <PrDiffViewer repo={repo} number={number} />
+      )}
       {recentComments.length > 0 && (
         <section aria-label="Recent comments">
-          <header className="mb-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-            Recent comments
+          <header
+            className="font-bold uppercase tracking-wider"
+            style={{
+              fontSize: 9,
+              color: "var(--muted-foreground)",
+              marginBottom: 8,
+            }}
+          >
+            Recent Comments
           </header>
-          <ol className="space-y-2">
+          <ol className="flex flex-col" style={{ gap: 14 }}>
             {recentComments.map((c, i) => (
               <li
                 key={`${c.author}-${c.created_at ?? i}`}
-                className="rounded-md border border-border bg-background p-2 text-xs"
+                className="grid items-start"
+                style={{ gridTemplateColumns: "auto 1fr", gap: 12 }}
               >
-                <div className="font-medium text-foreground">@{c.author}</div>
-                <p className="mt-0.5 whitespace-pre-line text-muted-foreground">
-                  {c.body}
-                </p>
+                <div
+                  className="inline-flex items-center justify-center"
+                  style={{
+                    width: 28,
+                    height: 28,
+                    borderRadius: "50%",
+                    background: "var(--surface-strong)",
+                    color: "var(--ink)",
+                    fontSize: 12,
+                    fontWeight: 600,
+                  }}
+                >
+                  {c.author.slice(0, 1).toUpperCase()}
+                </div>
+                <div
+                  style={{
+                    background: "var(--surface-soft)",
+                    borderRadius: 12,
+                    padding: "10px 14px",
+                  }}
+                >
+                  <div
+                    className="flex items-baseline"
+                    style={{ gap: 8, marginBottom: 4 }}
+                  >
+                    <span style={{ fontSize: 13, fontWeight: 600 }}>
+                      @{c.author}
+                    </span>
+                  </div>
+                  <p
+                    className="whitespace-pre-line"
+                    style={{
+                      fontSize: 13,
+                      lineHeight: 1.55,
+                      color: "var(--body, var(--foreground))",
+                    }}
+                  >
+                    {c.body}
+                  </p>
+                </div>
               </li>
             ))}
           </ol>
@@ -831,6 +1030,260 @@ const defaultRequestConnectUrl: RequestConnectUrl = async (provider) =>
 const defaultOpenUrl: OpenUrl = (url) => {
   window.open(url, "_blank", "noopener,noreferrer");
 };
+
+type PrFile = {
+  filename: string;
+  status: string;
+  additions: number;
+  deletions: number;
+  patch: string | null;
+};
+
+type PrFilesResult =
+  | { ok: true; files: PrFile[] }
+  | { ok: false; error: string; reason?: string; needs_reauth?: boolean };
+
+type PrFilesLoader = (params: {
+  repo: string;
+  number: number;
+}) => Promise<PrFilesResult>;
+
+const defaultPrFilesLoader: PrFilesLoader = async ({ repo, number }) => {
+  const qs = `repo=${encodeURIComponent(repo)}&number=${number}`;
+  return (await apiFetch(`/api/pr/files?${qs}`)) as PrFilesResult;
+};
+
+export function PrDiffViewer({
+  repo,
+  number,
+  load = defaultPrFilesLoader,
+}: {
+  repo: string;
+  number: number;
+  load?: PrFilesLoader;
+}) {
+  const [open, setOpen] = useState(false);
+  const [state, setState] = useState<
+    | { kind: "idle" }
+    | { kind: "loading" }
+    | { kind: "ok"; files: PrFile[] }
+    | { kind: "error"; message: string }
+  >({ kind: "idle" });
+
+  const reveal = async () => {
+    if (open) {
+      setOpen(false);
+      return;
+    }
+    setOpen(true);
+    if (state.kind === "ok") return;
+    setState({ kind: "loading" });
+    try {
+      const out = await load({ repo, number });
+      if (out.ok) setState({ kind: "ok", files: out.files });
+      else setState({ kind: "error", message: out.error });
+    } catch (e) {
+      setState({
+        kind: "error",
+        message: e instanceof Error ? e.message : "failed to load diff",
+      });
+    }
+  };
+
+  return (
+    <section aria-label="PR diff">
+      <button
+        type="button"
+        onClick={reveal}
+        className="inline-flex items-center rounded-md hover:bg-(--surface-soft)"
+        style={{
+          height: 30,
+          padding: "0 12px",
+          fontSize: 12,
+          color: "var(--muted-foreground)",
+          border: "1px solid var(--hairline-soft)",
+        }}
+      >
+        {open ? "Hide diff" : "Show diff"}
+      </button>
+      {open && state.kind === "loading" && (
+        <p
+          className="mt-2 text-xs"
+          style={{ color: "var(--muted-foreground)" }}
+        >
+          Loading diff…
+        </p>
+      )}
+      {open && state.kind === "error" && (
+        <p
+          role="alert"
+          className="mt-2 text-xs"
+          style={{ color: "var(--destructive)" }}
+        >
+          Couldn't load diff: {state.message}
+        </p>
+      )}
+      {open && state.kind === "ok" && state.files.length === 0 && (
+        <p
+          className="mt-2 text-xs"
+          style={{ color: "var(--muted-foreground)" }}
+        >
+          No files changed.
+        </p>
+      )}
+      {open && state.kind === "ok" && state.files.length > 0 && (
+        <div className="mt-3 flex flex-col" style={{ gap: 12 }}>
+          {state.files.map((f) => (
+            <PrFilePatch key={f.filename} file={f} />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function PrFilePatch({
+  file,
+  defaultOpen = false,
+}: {
+  file: PrFile;
+  defaultOpen?: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  const panelId = `pr-file-${file.filename.replace(/[^a-z0-9]/gi, "-")}`;
+  return (
+    <article
+      data-slot="pr-file-patch"
+      data-open={open || undefined}
+      className="overflow-hidden"
+      style={{
+        border: "1px solid var(--hairline-soft)",
+        borderRadius: 12,
+      }}
+    >
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-controls={panelId}
+        className="flex w-full items-center text-left"
+        style={{
+          padding: "8px 12px",
+          background: "var(--surface-soft)",
+          borderBottom: open ? "1px solid var(--hairline-soft)" : "none",
+          gap: 12,
+        }}
+      >
+        <ChevronRight
+          aria-hidden
+          className="shrink-0 transition-transform"
+          style={{
+            width: 14,
+            height: 14,
+            color: "var(--muted-foreground)",
+            transform: open ? "rotate(90deg)" : "rotate(0deg)",
+          }}
+        />
+        <span
+          className="flex-1 truncate"
+          style={{
+            fontSize: 12,
+            fontFamily: "ui-monospace, SF Mono, Menlo, monospace",
+            color: "var(--ink)",
+          }}
+        >
+          {file.filename}
+        </span>
+        <span
+          className="shrink-0"
+          style={{
+            fontSize: 12,
+            fontFamily: "ui-monospace, SF Mono, Menlo, monospace",
+          }}
+        >
+          <span style={{ color: "var(--good)" }}>+{file.additions}</span>
+          <span style={{ color: "var(--muted-soft)", margin: "0 4px" }}>·</span>
+          <span style={{ color: "var(--destructive)" }}>-{file.deletions}</span>
+        </span>
+      </button>
+      {open && (
+        <div id={panelId}>
+          {file.patch == null ? (
+            <p
+              className="m-0"
+              style={{
+                padding: "10px 12px",
+                fontSize: 12,
+                color: "var(--muted-foreground)",
+              }}
+            >
+              Patch not available (binary or oversized file).
+            </p>
+          ) : (
+            <PatchLines patch={file.patch} />
+          )}
+        </div>
+      )}
+    </article>
+  );
+}
+
+function PatchLines({ patch }: { patch: string }) {
+  const lines = patch.split("\n");
+  return (
+    <pre
+      className="m-0 overflow-x-auto"
+      style={{
+        fontFamily: "ui-monospace, SF Mono, Menlo, monospace",
+        fontSize: 12,
+        lineHeight: 1.55,
+      }}
+    >
+      {lines.map((line, i) => {
+        const tone =
+          line.startsWith("+") && !line.startsWith("+++")
+            ? "add"
+            : line.startsWith("-") && !line.startsWith("---")
+              ? "del"
+              : line.startsWith("@@")
+                ? "hunk"
+                : "ctx";
+        const bg =
+          tone === "add"
+            ? "var(--good-soft)"
+            : tone === "del"
+              ? "var(--danger-soft)"
+              : tone === "hunk"
+                ? "var(--src-cal-bg)"
+                : "transparent";
+        const fg =
+          tone === "add"
+            ? "var(--good)"
+            : tone === "del"
+              ? "var(--destructive)"
+              : tone === "hunk"
+                ? "var(--src-cal)"
+                : "var(--body, var(--foreground))";
+        return (
+          <span
+            // biome-ignore lint/suspicious/noArrayIndexKey: patch lines are positional and may repeat verbatim
+            key={`${i}-${line}`}
+            data-tone={tone}
+            style={{
+              display: "block",
+              padding: "0 12px",
+              background: bg,
+              color: fg,
+              whiteSpace: "pre",
+            }}
+          >
+            {line || " "}
+          </span>
+        );
+      })}
+    </pre>
+  );
+}
 
 export function PrReviewActions({
   repo,
@@ -1615,6 +2068,18 @@ function secondaryLabel(s: StoredSignal): string {
     return [identifier, stateName].filter(Boolean).join(" · ");
   }
   const repo = (s.payload?.repo as string | undefined) ?? "";
+  const number = s.payload?.number as number | undefined;
   const author = (s.payload?.author as string | undefined) ?? "";
-  return [repo, author && `by @${author}`].filter(Boolean).join(" · ");
+  const additions = s.payload?.additions as number | undefined;
+  const deletions = s.payload?.deletions as number | undefined;
+  const repoCell = repo
+    ? `${repo}${typeof number === "number" ? ` #${number}` : ""}`
+    : "";
+  const diffCell =
+    typeof additions === "number" && typeof deletions === "number"
+      ? `+${additions} −${deletions}`
+      : "";
+  return [repoCell, author && `${author}`, diffCell]
+    .filter(Boolean)
+    .join(" · ");
 }

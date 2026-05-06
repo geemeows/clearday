@@ -104,6 +104,31 @@
   --plus: #92174d;
   --legal-link: #428bff;
 
+  /* Inbox / signal source hues — kept muted, drawn ourselves to avoid brand recreation. */
+  --src-git: #2b1a4a;
+  --src-git-bg: #efeaf7;
+  --src-slack: #2b6e6c;
+  --src-slack-bg: #e2f1f0;
+  --src-cal: #2b4a8a;
+  --src-cal-bg: #e6edf9;
+  --src-task: #6a4a14;
+  --src-task-bg: #f7efe1;
+  --src-ai: #4a1a4a;
+  --src-ai-bg: #f3e6f3;
+
+  /* Semantic soft tints used by inbox chips/cards */
+  --good: #0a8754;
+  --good-soft: #e7f5ee;
+  --warn: #b76c00;
+  --warn-soft: #fff4e1;
+  --danger-soft: #fdecea;
+  --accent-soft: #ffd1da;
+  --accent-tint: #fff1f4;
+  --surface-soft: #f7f7f7;
+  --surface-strong: #f2f2f2;
+  --ink: #222222;
+  --canvas: #ffffff;
+
   /* Type — Airbnb Cereal VF with Circular + system fallbacks */
   --font-sans: 'Airbnb Cereal', Circular, -apple-system, system-ui, Roboto,
     'Helvetica Neue', sans-serif;
@@ -194,6 +219,24 @@ html[data-theme="dark"] {
   --muted-soft: #6a6a6a;
   --hairline-soft: #1f1f1f;
   --border-strong: #3a3a3a;
+
+  /* Dark variants of source/semantic tints used by the inbox. */
+  --src-git-bg: #211735;
+  --src-slack-bg: #122a28;
+  --src-cal-bg: #142035;
+  --src-task-bg: #2a200f;
+  --src-ai-bg: #2a142a;
+  --good: #34d399;
+  --good-soft: #112e22;
+  --warn: #f59e0b;
+  --warn-soft: #2a1f0a;
+  --danger-soft: #2a1410;
+  --accent-soft: #4d1322;
+  --accent-tint: #2a1219;
+  --surface-soft: #1a1a1a;
+  --surface-strong: #222222;
+  --ink: #f5f5f5;
+  --canvas: #0a0a0a;
 
   /* Sidebar tokens — dark variant. */
   --sidebar: hsl(240 5.9% 10%);

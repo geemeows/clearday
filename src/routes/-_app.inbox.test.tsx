@@ -10,6 +10,7 @@ import {
   computeFilterCounts,
   InboxDetailPane,
   InboxView,
+  PrDiffViewer,
   PrReviewActions,
   relAgo,
   SlackReplyComposer,
@@ -34,7 +35,7 @@ const sample = (
 });
 
 describe("InboxView", () => {
-  it("renders signal rows with source glyph, title, and a Dismiss action", () => {
+  it("renders signal rows with source glyph and title", () => {
     render(
       <InboxView
         filter="all"
@@ -46,7 +47,6 @@ describe("InboxView", () => {
     );
     expect(screen.getByText("Add cron orchestrator")).toBeTruthy();
     expect(screen.getByLabelText("Git source")).toBeTruthy();
-    expect(screen.getByRole("button", { name: /dismiss/i })).toBeTruthy();
   });
 
   it("renders live filter counts derived from the signals", () => {
@@ -183,7 +183,8 @@ describe("InboxView", () => {
     );
     const row = document.querySelector('li[data-selected="true"]');
     expect(row).not.toBeNull();
-    expect(row?.className).toMatch(/before:bg-primary/);
+    const rowEl = row as HTMLElement;
+    expect(rowEl.style.borderLeft).toMatch(/var\(--primary\)/);
   });
 
   it("renders an unread indicator when unread_count > 0", () => {
@@ -230,7 +231,7 @@ describe("InboxView", () => {
     expect(onFilterChange).toHaveBeenCalledWith("prs");
   });
 
-  it("invokes onDismiss with the signal id", async () => {
+  it("invokes onDismiss with the signal id from the detail pane", async () => {
     const onDismiss = vi.fn();
     render(
       <InboxView
@@ -239,9 +240,12 @@ describe("InboxView", () => {
         signals={[sample({ id: "abc" })]}
         error={null}
         onDismiss={onDismiss}
+        selectedId="abc"
+        onSelect={() => {}}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: /dismiss/i }));
+    const pane = screen.getByLabelText(/signal detail/i);
+    fireEvent.click(within(pane).getByRole("button", { name: /dismiss/i }));
     expect(onDismiss).toHaveBeenCalledWith("abc");
   });
 
@@ -357,23 +361,6 @@ describe("InboxView", () => {
       />,
     );
     expect(screen.queryByText(/snoozed · returns/i)).toBeNull();
-  });
-
-  it("forwards Show snoozed checkbox toggles to onShowSnoozedChange", () => {
-    const onShowSnoozedChange = vi.fn();
-    render(
-      <InboxView
-        filter="all"
-        onFilterChange={() => {}}
-        showSnoozed={false}
-        onShowSnoozedChange={onShowSnoozedChange}
-        signals={[sample()]}
-        error={null}
-        onDismiss={() => {}}
-      />,
-    );
-    fireEvent.click(screen.getByLabelText(/show snoozed/i));
-    expect(onShowSnoozedChange).toHaveBeenCalledWith(true);
   });
 
   it("does not show a Replied pill when the id is not in repliedIds", () => {
@@ -1213,5 +1200,140 @@ describe("Optimistic reply UI", () => {
     await waitFor(() => screen.getByRole("alert"));
     expect(onReplyStart).not.toHaveBeenCalled();
     expect(onReplyRollback).not.toHaveBeenCalled();
+  });
+});
+
+describe("PrDiffViewer", () => {
+  const PATCH = "@@ -1,2 +1,3 @@\n hi\n+added\n-removed";
+
+  it("loads files and renders patch lines on demand with tone classification", async () => {
+    const load = vi.fn(async () => ({
+      ok: true as const,
+      files: [
+        {
+          filename: "src/a.ts",
+          status: "modified",
+          additions: 1,
+          deletions: 1,
+          patch: PATCH,
+        },
+      ],
+    }));
+    render(<PrDiffViewer repo="o/r" number={1} load={load} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /show diff/i }));
+    await waitFor(() => screen.getByText("src/a.ts"));
+
+    expect(load).toHaveBeenCalledWith({ repo: "o/r", number: 1 });
+
+    const article = screen
+      .getByText("src/a.ts")
+      .closest('[data-slot="pr-file-patch"]');
+    expect(article).not.toBeNull();
+    expect(article?.getAttribute("data-open")).toBeNull();
+    expect(article?.querySelector("[data-tone]")).toBeNull();
+
+    fireEvent.click(within(article as HTMLElement).getByRole("button"));
+    expect(article?.getAttribute("data-open")).toBe("true");
+
+    const lines = article?.querySelectorAll("[data-tone]") ?? [];
+    const tones = Array.from(lines).map((l) => l.getAttribute("data-tone"));
+    expect(tones).toEqual(["hunk", "ctx", "add", "del"]);
+  });
+
+  it("toggles a single file independently — expanding one does not expand others", async () => {
+    const load = vi.fn(async () => ({
+      ok: true as const,
+      files: [
+        {
+          filename: "a.ts",
+          status: "modified",
+          additions: 1,
+          deletions: 0,
+          patch: PATCH,
+        },
+        {
+          filename: "b.ts",
+          status: "modified",
+          additions: 0,
+          deletions: 1,
+          patch: PATCH,
+        },
+      ],
+    }));
+    render(<PrDiffViewer repo="o/r" number={1} load={load} />);
+    fireEvent.click(screen.getByRole("button", { name: /show diff/i }));
+    await waitFor(() => screen.getByText("a.ts"));
+
+    const articleA = screen
+      .getByText("a.ts")
+      .closest('[data-slot="pr-file-patch"]') as HTMLElement;
+    const articleB = screen
+      .getByText("b.ts")
+      .closest('[data-slot="pr-file-patch"]') as HTMLElement;
+
+    fireEvent.click(within(articleA).getByRole("button"));
+    expect(articleA.getAttribute("data-open")).toBe("true");
+    expect(articleB.getAttribute("data-open")).toBeNull();
+  });
+
+  it("toggles closed without re-fetching", async () => {
+    const load = vi.fn(async () => ({
+      ok: true as const,
+      files: [
+        {
+          filename: "f.ts",
+          status: "modified",
+          additions: 0,
+          deletions: 0,
+          patch: PATCH,
+        },
+      ],
+    }));
+    render(<PrDiffViewer repo="o/r" number={1} load={load} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /show diff/i }));
+    await waitFor(() => screen.getByText("f.ts"));
+
+    fireEvent.click(screen.getByRole("button", { name: /hide diff/i }));
+    expect(screen.queryByText("f.ts")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /show diff/i }));
+    await waitFor(() => screen.getByText("f.ts"));
+    expect(load).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows a fallback when a file's patch is unavailable", async () => {
+    const load = vi.fn(async () => ({
+      ok: true as const,
+      files: [
+        {
+          filename: "logo.png",
+          status: "modified",
+          additions: 0,
+          deletions: 0,
+          patch: null,
+        },
+      ],
+    }));
+    render(<PrDiffViewer repo="o/r" number={1} load={load} />);
+    fireEvent.click(screen.getByRole("button", { name: /show diff/i }));
+    await waitFor(() => screen.getByText("logo.png"));
+    const article = screen
+      .getByText("logo.png")
+      .closest('[data-slot="pr-file-patch"]') as HTMLElement;
+    fireEvent.click(within(article).getByRole("button"));
+    expect(within(article).getByText(/patch not available/i)).toBeTruthy();
+  });
+
+  it("surfaces load failures via an alert", async () => {
+    const load = vi.fn(async () => ({
+      ok: false as const,
+      error: "github HTTP 401",
+    }));
+    render(<PrDiffViewer repo="o/r" number={1} load={load} />);
+    fireEvent.click(screen.getByRole("button", { name: /show diff/i }));
+    await waitFor(() => screen.getByRole("alert"));
+    expect(screen.getByRole("alert").textContent).toMatch(/github HTTP 401/);
   });
 });

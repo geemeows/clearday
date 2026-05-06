@@ -201,6 +201,10 @@ export default {
       return handleSubmitPrReview(request, service);
     }
 
+    if (url.pathname === "/api/pr/files" && request.method === "GET") {
+      return handleGetPrFiles(url, service);
+    }
+
     if (url.pathname === "/api/slack/reply" && request.method === "POST") {
       return handlePostSlackReply(request, service);
     }
@@ -1030,6 +1034,34 @@ async function handleSubmitPrReview(
   if (out.ok && signalId) {
     await markSignalReplied(service, signalId);
   }
+  return json(out, out.ok ? 200 : 400);
+}
+
+async function handleGetPrFiles(
+  url: URL,
+  service: SupabaseService,
+): Promise<Response> {
+  const repo = url.searchParams.get("repo") ?? "";
+  const number = Number(url.searchParams.get("number"));
+  if (!repo || !Number.isInteger(number) || number <= 0) {
+    return json(
+      { ok: false, error: "repo and number required", reason: "invalid_input" },
+      400,
+    );
+  }
+  const { data, error } = await service
+    .from("provider_accounts")
+    .select("access_token")
+    .eq("provider", "github")
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  const token =
+    (data as { access_token: string | null } | null)?.access_token ?? null;
+
+  const out = await PROVIDERS.github.capabilities.fetchPrFiles(
+    { repo, number },
+    { token, fetch: (i, init) => fetch(i, init) },
+  );
   return json(out, out.ok ? 200 : 400);
 }
 
