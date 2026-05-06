@@ -1,6 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
-  BarChart3,
   ExternalLink,
   Inbox,
   RefreshCw,
@@ -21,16 +20,15 @@ import type { BriefingResult } from "#/features/briefing/morning-briefing";
 import type { ProfileView } from "#/features/settings/profile/api";
 import type { MeetingEvent } from "#/features/signals/views/calendar";
 import {
-  computeWeekStats,
   filterMeetingsToToday,
   pickInboxPreview,
   pickInProgressTickets,
   pickMeetingForAlert,
   pickNextUp,
   pickTodaySchedule,
-  type WeekStats,
 } from "#/features/signals/views/today";
 import { NextUpHero } from "#/features/today/NextUpHero";
+import { PulseCard } from "#/features/today/PulseCard";
 import { useAutoRefresh } from "#/hooks/use-auto-refresh";
 import { apiFetch } from "#/lib/api-client";
 import { relAgo } from "#/routes/_app.inbox";
@@ -129,7 +127,7 @@ function TodayPage() {
       }
       inboxPreview={<InboxPreviewCard />}
       inProgress={<InProgressCard />}
-      weekStats={<WeekStatsCard now={now} />}
+      weekStats={<PulseCard now={now} />}
     />
   );
 }
@@ -821,158 +819,6 @@ export function InProgressCard({
         </ul>
       )}
     </article>
-  );
-}
-
-type WeekLoader = (since: string) => Promise<StoredSignal[]>;
-
-const defaultWeekLoader: WeekLoader = async (since) => {
-  const body = (await apiFetch(
-    `/api/signals?filter=all&include_dismissed=true&since=${encodeURIComponent(since)}&limit=200`,
-  )) as { signals: StoredSignal[] };
-  return body.signals;
-};
-
-// Placeholder trend deltas. Real prev-week comparison lands with the
-// follow-up retrospective backend.
-// TODO(post-redesign): wire to real prev-week comparison data — see PRD #29.
-const PLACEHOLDER_TRENDS: Record<keyof WeekStats, number> = {
-  prsReviewed: 2,
-  ticketsShipped: 1,
-  focusHours: -1,
-  inboxZeroedDays: 0,
-};
-
-// TODO(post-redesign): replace the per-week signals fetch with a dedicated
-// retrospective endpoint that returns both current + prev counts — see PRD #29.
-export function useWeekStats(
-  now: Date,
-  loader: WeekLoader = defaultWeekLoader,
-): {
-  stats: WeekStats | null;
-  trends: Record<keyof WeekStats, number>;
-  error: string | null;
-} {
-  const [stats, setStats] = useState<WeekStats | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  const sinceIso = useMemo(() => {
-    const d = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    return d.toISOString();
-  }, [now]);
-
-  useEffect(() => {
-    let cancelled = false;
-    loader(sinceIso)
-      .then((list) => {
-        if (cancelled) return;
-        setStats(computeWeekStats(list, new Date()));
-        setError(null);
-      })
-      .catch((e) => {
-        if (cancelled) return;
-        setError(e instanceof Error ? e.message : "failed to load");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [loader, sinceIso]);
-
-  return { stats, trends: PLACEHOLDER_TRENDS, error };
-}
-
-export function WeekStatsCard({
-  now,
-  loader = defaultWeekLoader,
-}: {
-  now: Date;
-  loader?: WeekLoader;
-}) {
-  const { stats, trends, error } = useWeekStats(now, loader);
-
-  return (
-    <article
-      aria-label="This week"
-      className="rounded-lg border border-border bg-card p-5"
-    >
-      <header className="flex items-center gap-2 text-muted-foreground text-xs uppercase tracking-wider">
-        <BarChart3 className="h-4 w-4" />
-        This week
-      </header>
-      {error && <p className="mt-3 text-destructive text-sm">{error}</p>}
-      {!error && stats == null && (
-        <p className="mt-3 text-muted-foreground text-sm">Loading…</p>
-      )}
-      {!error && stats != null && (
-        <dl className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Stat
-            label="PRs reviewed"
-            value={stats.prsReviewed}
-            delta={trends.prsReviewed}
-          />
-          <Stat
-            label="Tickets shipped"
-            value={stats.ticketsShipped}
-            delta={trends.ticketsShipped}
-          />
-          <Stat
-            label="Focus hours"
-            value={stats.focusHours}
-            delta={trends.focusHours}
-          />
-          <Stat
-            label="Inbox zeroed days"
-            value={stats.inboxZeroedDays}
-            delta={trends.inboxZeroedDays}
-          />
-        </dl>
-      )}
-    </article>
-  );
-}
-
-function Stat({
-  label,
-  value,
-  delta,
-}: {
-  label: string;
-  value: number;
-  delta: number;
-}) {
-  return (
-    <div className="rounded-sm border border-border bg-secondary/40 px-3 py-2">
-      <dt className="text-muted-foreground text-xs">{label}</dt>
-      <dd className="mt-0.5 flex items-baseline gap-2">
-        <span className="font-semibold text-foreground text-lg">{value}</span>
-        <TrendDelta delta={delta} />
-      </dd>
-    </div>
-  );
-}
-
-function TrendDelta({ delta }: { delta: number }) {
-  if (delta === 0) {
-    return (
-      <span data-trend="flat" className="text-muted-foreground text-xs">
-        ±0
-      </span>
-    );
-  }
-  const positive = delta > 0;
-  return (
-    <span
-      data-trend={positive ? "up" : "down"}
-      className={
-        positive
-          ? "font-medium text-emerald-600 text-xs"
-          : "font-medium text-destructive text-xs"
-      }
-    >
-      {positive ? "↑" : "↓"}
-      {positive ? "+" : ""}
-      {delta}
-    </span>
   );
 }
 

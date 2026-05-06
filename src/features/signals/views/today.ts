@@ -46,7 +46,45 @@ export type WeekStats = {
   ticketsShipped: number;
   focusHours: number;
   inboxZeroedDays: number;
+  sourceMix: SourceMixEntry[];
+  reviewLatencyHours: number[];
+  latencyDeltaHours: number;
+  shippedByDay: ShippedByDayEntry[];
 };
+
+export type PulseSourceKey =
+  | "github"
+  | "slack"
+  | "calendar"
+  | "linear"
+  | "ai";
+
+export type SourceMixEntry = {
+  source: PulseSourceKey;
+  count: number;
+};
+
+export type ShippedByDayEntry = {
+  day: string;
+  prs: number;
+  tickets: number;
+};
+
+const PULSE_SOURCE_ORDER: PulseSourceKey[] = [
+  "github",
+  "slack",
+  "calendar",
+  "linear",
+  "ai",
+];
+
+const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+const PR_KINDS: SignalKind[] = [
+  "pr_review_requested",
+  "pr_authored",
+  "pr_assigned",
+];
 
 export function pickNextUp(
   signals: StoredSignal[],
@@ -227,7 +265,146 @@ export function computeWeekStats(
 
   const focusHours = Math.round((focusMs / 3_600_000) * 10) / 10;
   const inboxZeroedDays = countInboxZeroedDays(signals, now);
-  return { prsReviewed, ticketsShipped, focusHours, inboxZeroedDays };
+  const sourceMix = computeSourceMix(signals, now);
+  const reviewLatencyHours = computeReviewLatencyHours(signals, now);
+  const prevLatencyHours = computeReviewLatencyHours(signals, now, 7);
+  const latencyDeltaHours = roundOne(
+    medianNonZero(reviewLatencyHours) - medianNonZero(prevLatencyHours),
+  );
+  const shippedByDay = computeShippedByDay(signals, now);
+  return {
+    prsReviewed,
+    ticketsShipped,
+    focusHours,
+    inboxZeroedDays,
+    sourceMix,
+    reviewLatencyHours,
+    latencyDeltaHours,
+    shippedByDay,
+  };
+}
+
+function classifySource(s: StoredSignal): PulseSourceKey | null {
+  if (s.provider === "github") return "github";
+  if (s.provider === "slack") return "slack";
+  if (s.provider === "google") return s.kind === "meeting" ? "calendar" : null;
+  if (s.provider === "linear" || s.provider === "jira") return "linear";
+  return null;
+}
+
+function computeSourceMix(
+  signals: StoredSignal[],
+  now: Date,
+): SourceMixEntry[] {
+  const weekAgo = now.getTime() - 7 * DAY_MS;
+  const counts = new Map<PulseSourceKey, number>();
+  for (const k of PULSE_SOURCE_ORDER) counts.set(k, 0);
+  for (const s of signals) {
+    const t = s.source_created_at ? Date.parse(s.source_created_at) : Number.NaN;
+    if (Number.isNaN(t)) continue;
+    if (t < weekAgo || t > now.getTime()) continue;
+    const key = classifySource(s);
+    if (!key) continue;
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return PULSE_SOURCE_ORDER.map((source) => ({
+    source,
+    count: counts.get(source) ?? 0,
+  }));
+}
+
+/**
+ * Per-day medians of time-to-action (hours) for `pr_review_requested` rows
+ * acted on in each of the 7 days ending at `now` (or, for the prior period,
+ * the 7 days ending `offsetDays` earlier). Days with no acted PRs return 0.
+ *
+ * "Acted" = dismissed_at present; latency = dismissed_at - source_created_at.
+ * We use this as a deterministic proxy for time-to-first-comment until the
+ * GitHub adapter starts emitting first-comment metadata.
+ */
+function computeReviewLatencyHours(
+  signals: StoredSignal[],
+  now: Date,
+  offsetDays = 0,
+): number[] {
+  const dayStart = (d: Date) =>
+    Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+  const todayStart = dayStart(now) - offsetDays * DAY_MS;
+  const buckets: number[][] = Array.from({ length: 7 }, () => []);
+  for (const s of signals) {
+    if (s.kind !== "pr_review_requested") continue;
+    if (!s.dismissed_at || !s.source_created_at) continue;
+    const dismissed = Date.parse(s.dismissed_at);
+    const created = Date.parse(s.source_created_at);
+    if (Number.isNaN(dismissed) || Number.isNaN(created)) continue;
+    const dismissedDayStart = Math.floor(dismissed / DAY_MS) * DAY_MS;
+    const daysAgo = Math.floor((todayStart - dismissedDayStart) / DAY_MS);
+    const dayIdx = 6 - daysAgo;
+    if (dayIdx < 0 || dayIdx > 6) continue;
+    const hours = Math.max(0, (dismissed - created) / 3_600_000);
+    buckets[dayIdx].push(hours);
+  }
+  return buckets.map((b) => roundOne(median(b)));
+}
+
+function computeShippedByDay(
+  signals: StoredSignal[],
+  now: Date,
+): ShippedByDayEntry[] {
+  const weekdayStarts: number[] = [];
+  const labels: string[] = [];
+  const cursor = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+  );
+  while (weekdayStarts.length < 5) {
+    const dow = cursor.getUTCDay();
+    if (dow >= 1 && dow <= 5) {
+      weekdayStarts.push(cursor.getTime());
+      labels.push(WEEKDAY_LABELS[dow]);
+    }
+    cursor.setUTCDate(cursor.getUTCDate() - 1);
+  }
+  weekdayStarts.reverse();
+  labels.reverse();
+  const out: ShippedByDayEntry[] = labels.map((day) => ({
+    day,
+    prs: 0,
+    tickets: 0,
+  }));
+  for (const s of signals) {
+    if (!s.dismissed_at) continue;
+    const t = Date.parse(s.dismissed_at);
+    if (Number.isNaN(t)) continue;
+    const isPr = (PR_KINDS as readonly string[]).includes(s.kind);
+    const isTicket = (TICKET_KINDS as readonly string[]).includes(s.kind);
+    if (!isPr && !isTicket) continue;
+    for (let i = 0; i < weekdayStarts.length; i++) {
+      const start = weekdayStarts[i];
+      if (t >= start && t < start + DAY_MS) {
+        if (isPr) out[i].prs += 1;
+        else out[i].tickets += 1;
+        break;
+      }
+    }
+  }
+  return out;
+}
+
+function median(values: number[]): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0
+    ? (sorted[mid - 1] + sorted[mid]) / 2
+    : sorted[mid];
+}
+
+function medianNonZero(values: number[]): number {
+  return median(values.filter((v) => v > 0));
+}
+
+function roundOne(n: number): number {
+  return Math.round(n * 10) / 10;
 }
 
 /**
