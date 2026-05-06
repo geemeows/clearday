@@ -876,7 +876,7 @@ export function PRDetail({
         </section>
       )}
       {repo && typeof number === "number" && (
-        <PrDiffViewer repo={repo} number={number} />
+        <PrPullRequestPanel repo={repo} number={number} />
       )}
       {recentComments.length > 0 && (
         <section aria-label="Recent comments">
@@ -1053,14 +1053,185 @@ const defaultPrFilesLoader: PrFilesLoader = async ({ repo, number }) => {
   return (await apiFetch(`/api/pr/files?${qs}`)) as PrFilesResult;
 };
 
+export type PrReviewComment = {
+  id: number;
+  path: string;
+  line: number | null;
+  side: "LEFT" | "RIGHT" | null;
+  diff_hunk: string | null;
+  body: string;
+  user: string | null;
+  user_avatar_url: string | null;
+  created_at: string | null;
+};
+
+export type PrOverviewResult =
+  | {
+      ok: true;
+      body: string | null;
+      author: string | null;
+      author_avatar_url: string | null;
+      review_comments: PrReviewComment[];
+    }
+  | { ok: false; error: string; reason?: string; needs_reauth?: boolean };
+
+export type PrOverviewLoader = (params: {
+  repo: string;
+  number: number;
+}) => Promise<PrOverviewResult>;
+
+const defaultPrOverviewLoader: PrOverviewLoader = async ({ repo, number }) => {
+  const qs = `repo=${encodeURIComponent(repo)}&number=${number}`;
+  return (await apiFetch(`/api/pr/overview?${qs}`)) as PrOverviewResult;
+};
+
+function groupCommentsByPath(
+  comments: PrReviewComment[],
+): Record<string, PrReviewComment[]> {
+  const out: Record<string, PrReviewComment[]> = {};
+  for (const c of comments) {
+    if (!c.path) continue;
+    if (!out[c.path]) out[c.path] = [];
+    out[c.path].push(c);
+  }
+  return out;
+}
+
+export function PrDescription({
+  repo,
+  number,
+  load = defaultPrOverviewLoader,
+  onComments,
+}: {
+  repo: string;
+  number: number;
+  load?: PrOverviewLoader;
+  onComments?: (commentsByPath: Record<string, PrReviewComment[]>) => void;
+}) {
+  const [state, setState] = useState<
+    | { kind: "loading" }
+    | { kind: "ok"; body: string | null }
+    | { kind: "error"; message: string }
+  >({ kind: "loading" });
+
+  useEffect(() => {
+    let cancelled = false;
+    setState({ kind: "loading" });
+    load({ repo, number })
+      .then((out) => {
+        if (cancelled) return;
+        if (out.ok) {
+          setState({ kind: "ok", body: out.body });
+          onComments?.(groupCommentsByPath(out.review_comments));
+        } else {
+          setState({ kind: "error", message: out.error });
+        }
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        setState({
+          kind: "error",
+          message: e instanceof Error ? e.message : "failed to load PR",
+        });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [repo, number, load, onComments]);
+
+  return (
+    <section aria-label="PR description">
+      <header
+        className="font-bold uppercase tracking-wider"
+        style={{
+          fontSize: 9,
+          color: "var(--muted-foreground)",
+          marginBottom: 8,
+        }}
+      >
+        Description
+      </header>
+      {state.kind === "loading" && (
+        <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>
+          Loading description…
+        </p>
+      )}
+      {state.kind === "error" && (
+        <p
+          role="alert"
+          className="text-xs"
+          style={{ color: "var(--destructive)" }}
+        >
+          Couldn't load description: {state.message}
+        </p>
+      )}
+      {state.kind === "ok" && !state.body && (
+        <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>
+          No description provided.
+        </p>
+      )}
+      {state.kind === "ok" && state.body && (
+        <div
+          style={{
+            padding: "12px 16px",
+            borderRadius: 12,
+            background: "var(--surface-soft)",
+            border: "1px solid var(--hairline-soft)",
+            fontSize: 13,
+            lineHeight: 1.55,
+            color: "var(--body, var(--foreground))",
+            whiteSpace: "pre-wrap",
+          }}
+        >
+          {state.body}
+        </div>
+      )}
+    </section>
+  );
+}
+
+export function PrPullRequestPanel({
+  repo,
+  number,
+  loadOverview,
+  loadFiles,
+}: {
+  repo: string;
+  number: number;
+  loadOverview?: PrOverviewLoader;
+  loadFiles?: PrFilesLoader;
+}) {
+  const [commentsByPath, setCommentsByPath] = useState<
+    Record<string, PrReviewComment[]>
+  >({});
+  return (
+    <div className="flex flex-col" style={{ gap: 16 }}>
+      <PrDescription
+        repo={repo}
+        number={number}
+        load={loadOverview}
+        onComments={setCommentsByPath}
+      />
+      <PrDiffViewer
+        repo={repo}
+        number={number}
+        load={loadFiles}
+        commentsByPath={commentsByPath}
+      />
+    </div>
+  );
+}
+
 export function PrDiffViewer({
   repo,
   number,
   load = defaultPrFilesLoader,
+  commentsByPath,
 }: {
   repo: string;
   number: number;
   load?: PrFilesLoader;
+  commentsByPath?: Record<string, PrReviewComment[]>;
 }) {
   const [state, setState] = useState<
     | { kind: "loading" }
@@ -1123,7 +1294,11 @@ export function PrDiffViewer({
       {state.kind === "ok" && state.files.length > 0 && (
         <div className="flex flex-col" style={{ gap: 8 }}>
           {state.files.map((f) => (
-            <PrFilePatch key={f.filename} file={f} />
+            <PrFilePatch
+              key={f.filename}
+              file={f}
+              comments={commentsByPath?.[f.filename] ?? []}
+            />
           ))}
         </div>
       )}
@@ -1134,9 +1309,11 @@ export function PrDiffViewer({
 function PrFilePatch({
   file,
   defaultOpen = false,
+  comments = [],
 }: {
   file: PrFile;
   defaultOpen?: boolean;
+  comments?: PrReviewComment[];
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const panelId = `pr-file-${file.filename.replace(/[^a-z0-9]/gi, "-")}`;
@@ -1183,6 +1360,37 @@ function PrFilePatch({
         >
           {file.filename}
         </span>
+        {comments.length > 0 && (
+          <span
+            data-slot="comment-count"
+            title={`${comments.length} review ${comments.length === 1 ? "comment" : "comments"}`}
+            className="inline-flex shrink-0 items-center gap-1 rounded-full"
+            style={{
+              padding: "1px 8px",
+              fontSize: 11,
+              fontWeight: 600,
+              background: "var(--src-ai-bg)",
+              color: "var(--src-ai)",
+            }}
+          >
+            <svg
+              width="10"
+              height="10"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+              role="presentation"
+            >
+              <title>review comments</title>
+              <path d="M3 4h10v6H6l-3 3z" />
+            </svg>
+            {comments.length}
+          </span>
+        )}
         <span
           className="shrink-0"
           style={{
@@ -1211,9 +1419,96 @@ function PrFilePatch({
           ) : (
             <PatchLines patch={file.patch} />
           )}
+          {comments.length > 0 && <PrFileComments comments={comments} />}
         </div>
       )}
     </article>
+  );
+}
+
+function PrFileComments({ comments }: { comments: PrReviewComment[] }) {
+  return (
+    <section
+      aria-label="Review comments"
+      className="flex flex-col"
+      style={{
+        gap: 10,
+        padding: "12px",
+        borderTop: "1px solid var(--hairline-soft)",
+        background: "var(--surface-soft)",
+      }}
+    >
+      {comments.map((c) => (
+        <article
+          key={c.id}
+          style={{
+            padding: "10px 12px",
+            borderRadius: 10,
+            background: "var(--canvas)",
+            border: "1px solid var(--hairline-soft)",
+          }}
+        >
+          <header
+            className="flex items-center"
+            style={{ gap: 8, marginBottom: 6 }}
+          >
+            {c.user_avatar_url ? (
+              <img
+                src={c.user_avatar_url}
+                alt={c.user ? `@${c.user}` : "reviewer"}
+                width={20}
+                height={20}
+                style={{
+                  borderRadius: "50%",
+                  border: "1px solid var(--hairline-soft)",
+                  objectFit: "cover",
+                }}
+              />
+            ) : (
+              <span
+                aria-hidden
+                className="inline-flex items-center justify-center"
+                style={{
+                  width: 20,
+                  height: 20,
+                  borderRadius: "50%",
+                  background: "var(--surface-strong)",
+                  color: "var(--ink)",
+                  fontSize: 10,
+                  fontWeight: 600,
+                }}
+              >
+                {(c.user?.[0] ?? "?").toUpperCase()}
+              </span>
+            )}
+            <span style={{ fontSize: 12, fontWeight: 600 }}>
+              @{c.user ?? "unknown"}
+            </span>
+            {typeof c.line === "number" && (
+              <span
+                style={{
+                  fontSize: 11,
+                  fontFamily: "ui-monospace, SF Mono, Menlo, monospace",
+                  color: "var(--muted-foreground)",
+                }}
+              >
+                line {c.line}
+              </span>
+            )}
+          </header>
+          <p
+            className="m-0 whitespace-pre-line"
+            style={{
+              fontSize: 13,
+              lineHeight: 1.5,
+              color: "var(--body, var(--foreground))",
+            }}
+          >
+            {c.body}
+          </p>
+        </article>
+      ))}
+    </section>
   );
 }
 
@@ -1865,13 +2160,22 @@ export function SlackReplyComposer({
   );
 }
 
+export type MeetingAttendee = {
+  email: string | null;
+  name: string | null;
+  response: string | null;
+  organizer?: boolean;
+};
+
 export function MeetingDetail({ signal }: { signal: StoredSignal }) {
   const startsAt = signal.payload?.starts_at as string | undefined;
   const endsAt = signal.payload?.ends_at as string | undefined;
   const videoLink = signal.payload?.video_link as string | undefined;
   const organizer = signal.payload?.organizer as string | undefined;
-  const description = signal.payload?.description as string | undefined;
+  const description = (signal.payload?.description as string | null) ?? "";
   const agenda = parseAgenda(description);
+  const attendees =
+    (signal.payload?.attendees as MeetingAttendee[] | undefined) ?? [];
   const linkedItems =
     (signal.payload?.linked_items as
       | Array<{
@@ -1900,9 +2204,27 @@ export function MeetingDetail({ signal }: { signal: StoredSignal }) {
           </>
         )}
       </dl>
+      {attendees.length > 0 && (
+        <section aria-label="Attendees" className="flex items-center gap-3">
+          <header
+            className="font-bold uppercase tracking-wider"
+            style={{ fontSize: 9, color: "var(--muted-foreground)" }}
+          >
+            Attendees
+          </header>
+          <AttendeeStack attendees={attendees} />
+          <span style={{ fontSize: 12, color: "var(--muted-foreground)" }}>
+            {attendees.length}{" "}
+            {attendees.length === 1 ? "attendee" : "attendees"}
+          </span>
+        </section>
+      )}
       {agenda.length > 0 && (
         <section aria-label="Agenda">
-          <header className="mb-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+          <header
+            className="mb-2 font-bold uppercase tracking-wider"
+            style={{ fontSize: 9, color: "var(--muted-foreground)" }}
+          >
             Agenda
           </header>
           <ul className="ml-4 list-disc space-y-1 text-sm text-foreground">
@@ -1961,6 +2283,126 @@ export function MeetingDetail({ signal }: { signal: StoredSignal }) {
       )}
     </div>
   );
+}
+
+export function AttendeeStack({
+  attendees,
+  max = 5,
+}: {
+  attendees: MeetingAttendee[];
+  max?: number;
+}) {
+  const sorted = [...attendees].sort(byResponse);
+  const visible = sorted.slice(0, max);
+  const overflow = sorted.length - visible.length;
+  return (
+    <div className="flex items-center" style={{ paddingLeft: 8 }}>
+      {visible.map((a, i) => (
+        <AttendeeAvatar
+          key={attendeeKey(a, i)}
+          attendee={a}
+          stackedAfterFirst={i > 0}
+        />
+      ))}
+      {overflow > 0 && (
+        <span
+          title={sorted
+            .slice(max)
+            .map((a) => attendeeLabel(a))
+            .join(", ")}
+          className="inline-flex items-center justify-center"
+          style={{
+            width: 24,
+            height: 24,
+            borderRadius: "50%",
+            background: "var(--surface-strong)",
+            color: "var(--ink)",
+            fontSize: 10,
+            fontWeight: 600,
+            border: "2px solid var(--canvas)",
+            marginLeft: -8,
+          }}
+        >
+          +{overflow}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function AttendeeAvatar({
+  attendee,
+  stackedAfterFirst,
+}: {
+  attendee: MeetingAttendee;
+  stackedAfterFirst: boolean;
+}) {
+  const label = attendeeLabel(attendee);
+  const opacity = attendee.response === "declined" ? 0.5 : 1;
+  return (
+    <span
+      title={
+        attendee.response && attendee.response !== "accepted"
+          ? `${label} · ${attendee.response}`
+          : label
+      }
+      data-response={attendee.response ?? undefined}
+      className="inline-flex items-center justify-center"
+      style={{
+        width: 24,
+        height: 24,
+        borderRadius: "50%",
+        background: avatarTint(label),
+        color: "var(--ink)",
+        fontSize: 10,
+        fontWeight: 600,
+        border: "2px solid var(--canvas)",
+        marginLeft: stackedAfterFirst ? -8 : 0,
+        opacity,
+      }}
+    >
+      {initials(label)}
+    </span>
+  );
+}
+
+const ATTENDEE_TINTS = [
+  "var(--src-git-bg)",
+  "var(--src-slack-bg)",
+  "var(--src-cal-bg)",
+  "var(--src-task-bg)",
+  "var(--src-ai-bg)",
+];
+
+function avatarTint(label: string): string {
+  let h = 0;
+  for (let i = 0; i < label.length; i++) h = (h * 31 + label.charCodeAt(i)) | 0;
+  return ATTENDEE_TINTS[Math.abs(h) % ATTENDEE_TINTS.length];
+}
+
+function attendeeKey(a: MeetingAttendee, i: number): string {
+  return a.email ?? a.name ?? `idx-${i}`;
+}
+
+function attendeeLabel(a: MeetingAttendee): string {
+  return a.name?.trim() || a.email?.trim() || "Guest";
+}
+
+function initials(label: string): string {
+  const parts = label.split(/[\s@._-]+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0][0]?.toUpperCase() ?? "?";
+  return ((parts[0][0] ?? "") + (parts[1][0] ?? "")).toUpperCase();
+}
+
+function byResponse(a: MeetingAttendee, b: MeetingAttendee): number {
+  const order: Record<string, number> = {
+    accepted: 0,
+    tentative: 1,
+    needsAction: 2,
+    declined: 3,
+  };
+  return (order[a.response ?? ""] ?? 4) - (order[b.response ?? ""] ?? 4);
 }
 
 function parseAgenda(description: string | undefined): string[] {

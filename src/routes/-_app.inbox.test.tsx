@@ -7,9 +7,12 @@ import {
 } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import {
+  AttendeeStack,
   computeFilterCounts,
   InboxDetailPane,
   InboxView,
+  MeetingDetail,
+  PrDescription,
   PrDiffViewer,
   PrReviewActions,
   relAgo,
@@ -1330,5 +1333,193 @@ describe("PrDiffViewer", () => {
     render(<PrDiffViewer repo="o/r" number={1} load={load} />);
     await waitFor(() => screen.getByRole("alert"));
     expect(screen.getByRole("alert").textContent).toMatch(/github HTTP 401/);
+  });
+
+  it("badges the file header with the count of review comments and renders them when expanded", async () => {
+    const PATCH = "@@ -1 +1 @@\n hi\n+x";
+    const load = vi.fn(async () => ({
+      ok: true as const,
+      files: [
+        {
+          filename: "src/a.ts",
+          status: "modified",
+          additions: 1,
+          deletions: 0,
+          patch: PATCH,
+        },
+      ],
+    }));
+    render(
+      <PrDiffViewer
+        repo="o/r"
+        number={1}
+        load={load}
+        commentsByPath={{
+          "src/a.ts": [
+            {
+              id: 7,
+              path: "src/a.ts",
+              line: 12,
+              side: "RIGHT",
+              diff_hunk: PATCH,
+              body: "nit: rename this",
+              user: "rahul",
+              user_avatar_url: null,
+              created_at: null,
+            },
+          ],
+        }}
+      />,
+    );
+    await waitFor(() => screen.getByText("src/a.ts"));
+    const article = screen
+      .getByText("src/a.ts")
+      .closest('[data-slot="pr-file-patch"]') as HTMLElement;
+    const badge = within(article).getByText("1", {
+      selector: '[data-slot="comment-count"]',
+    });
+    expect(badge).toBeTruthy();
+    expect(within(article).queryByText(/nit: rename this/)).toBeNull();
+    fireEvent.click(within(article).getByRole("button"));
+    expect(within(article).getByText(/nit: rename this/)).toBeTruthy();
+    expect(within(article).getByText(/line 12/)).toBeTruthy();
+    expect(within(article).getByText("@rahul")).toBeTruthy();
+  });
+});
+
+describe("PrDescription", () => {
+  it("auto-fetches and renders the PR body and forwards review comments by path", async () => {
+    const onComments = vi.fn();
+    const load = vi.fn(async () => ({
+      ok: true as const,
+      body: "Reworks the slack webhook to batch-upsert.",
+      author: "alice",
+      author_avatar_url: null,
+      review_comments: [
+        {
+          id: 1,
+          path: "src/a.ts",
+          line: 4,
+          side: "RIGHT" as const,
+          diff_hunk: null,
+          body: "fix this",
+          user: "bob",
+          user_avatar_url: null,
+          created_at: null,
+        },
+      ],
+    }));
+    render(
+      <PrDescription
+        repo="o/r"
+        number={42}
+        load={load}
+        onComments={onComments}
+      />,
+    );
+    await waitFor(() =>
+      screen.getByText(/Reworks the slack webhook to batch-upsert/),
+    );
+    expect(load).toHaveBeenCalledWith({ repo: "o/r", number: 42 });
+    expect(onComments).toHaveBeenCalledWith({
+      "src/a.ts": expect.arrayContaining([expect.objectContaining({ id: 1 })]),
+    });
+  });
+
+  it("renders the empty-description state when the PR body is null", async () => {
+    const load = vi.fn(async () => ({
+      ok: true as const,
+      body: null,
+      author: null,
+      author_avatar_url: null,
+      review_comments: [],
+    }));
+    render(<PrDescription repo="o/r" number={1} load={load} />);
+    await waitFor(() => screen.getByText(/no description provided/i));
+  });
+
+  it("surfaces description-load failures via an alert", async () => {
+    const load = vi.fn(async () => ({
+      ok: false as const,
+      error: "github HTTP 500",
+    }));
+    render(<PrDescription repo="o/r" number={1} load={load} />);
+    await waitFor(() => screen.getByRole("alert"));
+    expect(screen.getByRole("alert").textContent).toMatch(/github HTTP 500/);
+  });
+});
+
+describe("MeetingDetail / AttendeeStack", () => {
+  const meetingSignal = {
+    id: "m1",
+    provider: "google" as const,
+    kind: "meeting" as const,
+    source_id: "evt-1",
+    title: "Standup",
+    url: null,
+    payload: {
+      starts_at: "2026-05-04T15:00:00Z",
+      ends_at: "2026-05-04T15:15:00Z",
+      organizer: "boss@acme.com",
+      description: "- Token refresh edge case\n- Slack adapter retry budget",
+      attendees: [
+        { email: "p@acme.com", name: "Priya", response: "accepted" as const },
+        {
+          email: "r@acme.com",
+          name: "Rahul",
+          response: "needsAction" as const,
+        },
+        {
+          email: "j@acme.com",
+          name: "Joon",
+          response: "declined" as const,
+        },
+      ],
+    },
+    requires_action: false,
+    source_created_at: "2026-05-04T15:00:00Z",
+    dismissed_at: null,
+  } as const;
+
+  it("renders the agenda parsed from the description", () => {
+    render(<MeetingDetail signal={meetingSignal} />);
+    expect(screen.getByText("Token refresh edge case")).toBeTruthy();
+    expect(screen.getByText("Slack adapter retry budget")).toBeTruthy();
+  });
+
+  it("renders one avatar per attendee with a hover title showing the attendee's name", () => {
+    render(
+      <AttendeeStack
+        attendees={[
+          { email: "p@acme.com", name: "Priya", response: "accepted" },
+          { email: "r@acme.com", name: "Rahul", response: "needsAction" },
+        ]}
+      />,
+    );
+    expect(screen.getByTitle("Priya")).toBeTruthy();
+    expect(screen.getByTitle(/Rahul · needsAction/)).toBeTruthy();
+  });
+
+  it("collapses the overflow into a +N pill listing the hidden names", () => {
+    const many = Array.from({ length: 8 }, (_, i) => ({
+      email: `u${i}@acme.com`,
+      name: `User ${i}`,
+      response: "accepted" as const,
+    }));
+    render(<AttendeeStack attendees={many} max={5} />);
+    const overflow = screen.getByText("+3");
+    expect(overflow).toBeTruthy();
+    const title = overflow.getAttribute("title") ?? "";
+    expect(title).toContain("User 5");
+    expect(title).toContain("User 7");
+  });
+
+  it("uses email as a fallback label when name is missing", () => {
+    render(
+      <AttendeeStack
+        attendees={[{ email: "guest@acme.com", name: null, response: null }]}
+      />,
+    );
+    expect(screen.getByTitle("guest@acme.com")).toBeTruthy();
   });
 });

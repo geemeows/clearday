@@ -36,7 +36,9 @@ export type GoogleCalendarEvent = {
   attendees?: Array<{
     self?: boolean;
     email?: string;
+    displayName?: string;
     responseStatus?: string;
+    organizer?: boolean;
   }>;
   organizer?: { email?: string; self?: boolean };
   conferenceData?: {
@@ -126,6 +128,15 @@ export function normalize(event: GoogleCalendarEvent): Signal | null {
       response_status: responseStatus,
       organizer: event.organizer?.email ?? null,
       linked_items: linkedItems,
+      description: event.description ?? null,
+      attendees: (event.attendees ?? [])
+        .filter((a) => !a.self && (a.email || a.displayName))
+        .map((a) => ({
+          email: a.email ?? null,
+          name: a.displayName ?? null,
+          response: a.responseStatus ?? null,
+          organizer: a.organizer === true,
+        })),
       ...(isFocus ? { is_focus: true } : {}),
     },
     requires_action: false,

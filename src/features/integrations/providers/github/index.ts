@@ -8,6 +8,11 @@ import {
   fetchPrFiles,
 } from "#/features/integrations/providers/github/capabilities/fetch-pr-files";
 import {
+  type FetchPrOverviewParams,
+  type FetchPrOverviewResult,
+  fetchPrOverview,
+} from "#/features/integrations/providers/github/capabilities/fetch-pr-overview";
+import {
   type PrReviewEvent,
   type SubmitPrReviewParams,
   type SubmitPrReviewResult,
@@ -26,11 +31,17 @@ export type GithubCapabilities = {
     params: FetchPrFilesParams,
     deps: { fetch: typeof fetch; token: string | null },
   ) => Promise<FetchPrFilesResult>;
+  fetchPrOverview: (
+    params: FetchPrOverviewParams,
+    deps: { fetch: typeof fetch; token: string | null },
+  ) => Promise<FetchPrOverviewResult>;
 };
 
 export type {
   FetchPrFilesParams,
   FetchPrFilesResult,
+  FetchPrOverviewParams,
+  FetchPrOverviewResult,
   PrReviewEvent,
   SubmitPrReviewParams,
   SubmitPrReviewResult,
@@ -50,5 +61,6 @@ export const github: Provider<void, void, GithubCapabilities> = {
   capabilities: {
     submitPrReview: (params, deps) => submitPrReview(params, deps),
     fetchPrFiles: (params, deps) => fetchPrFiles(params, deps),
+    fetchPrOverview: (params, deps) => fetchPrOverview(params, deps),
   },
 };
