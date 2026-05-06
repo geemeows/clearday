@@ -5,7 +5,7 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { IntegrationsPanel } from "#/components/IntegrationsPanel";
 import type { ApiSourceStatus } from "#/lib/source-status";
 
@@ -102,6 +102,154 @@ describe("IntegrationsPanel", () => {
     render(<IntegrationsPanel sourcesLoader={loader} now={NOW} />);
     const buttons = screen.getAllByRole("button", { name: /reauthorize/i });
     expect(buttons.length).toBe(4);
+  });
+
+  it("Reauthorize calls connectUrl and opens the returned URL", async () => {
+    const loader = loaderWith([FRESH_GITHUB]);
+    const connectUrl = vi.fn(async (provider: string) => ({
+      ok: true,
+      url: `https://auth.example.com/start/${provider}`,
+    }));
+    const openUrl = vi.fn();
+    render(
+      <IntegrationsPanel
+        sourcesLoader={loader}
+        connectUrl={connectUrl}
+        openUrl={openUrl}
+        now={NOW}
+      />,
+    );
+    await waitFor(() => {
+      const github = screen.getByRole("listitem", {
+        name: "GitHub integration",
+      });
+      expect(
+        within(github)
+          .getByLabelText(/GitHub status/)
+          .getAttribute("data-status"),
+      ).toBe("ok");
+    });
+    const github = screen.getByRole("listitem", {
+      name: "GitHub integration",
+    });
+    fireEvent.click(
+      within(github).getByRole("button", { name: /reauthorize/i }),
+    );
+    await waitFor(() => {
+      expect(connectUrl).toHaveBeenCalledWith("github");
+      expect(openUrl).toHaveBeenCalledWith(
+        "https://auth.example.com/start/github",
+      );
+    });
+  });
+
+  it("Reauthorize surfaces an error when connectUrl fails", async () => {
+    const loader = loaderWith([FRESH_GITHUB]);
+    const connectUrl = vi.fn(async () => ({
+      ok: false,
+      error: "no backend",
+    }));
+    const openUrl = vi.fn();
+    render(
+      <IntegrationsPanel
+        sourcesLoader={loader}
+        connectUrl={connectUrl}
+        openUrl={openUrl}
+        now={NOW}
+      />,
+    );
+    const github = screen.getByRole("listitem", {
+      name: "GitHub integration",
+    });
+    fireEvent.click(
+      within(github).getByRole("button", { name: /reauthorize/i }),
+    );
+    await waitFor(() => {
+      expect(screen.getByRole("alert").textContent).toContain("no backend");
+    });
+    expect(openUrl).not.toHaveBeenCalled();
+  });
+
+  it("Disconnect button only renders for connected non-mock providers", async () => {
+    const loader = loaderWith([FRESH_GITHUB]);
+    render(<IntegrationsPanel sourcesLoader={loader} now={NOW} />);
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "Disconnect GitHub" }),
+      ).toBeTruthy();
+    });
+    // Slack/Google have no /api/sources entry → neutral → no Disconnect.
+    expect(
+      screen.queryByRole("button", { name: "Disconnect Slack" }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Disconnect Google Calendar" }),
+    ).toBeNull();
+    // Linear is mock → no Disconnect even though it's listed.
+    expect(
+      screen.queryByRole("button", { name: "Disconnect Linear" }),
+    ).toBeNull();
+  });
+
+  it("Disconnect calls the disconnect handler and refreshes status", async () => {
+    let call = 0;
+    const sourcesLoader = vi.fn(async () => {
+      call += 1;
+      return call === 1
+        ? { sources: [FRESH_GITHUB] }
+        : { sources: [] as (typeof FRESH_GITHUB)[] };
+    });
+    const disconnect = vi.fn(async () => ({ ok: true }));
+    render(
+      <IntegrationsPanel
+        sourcesLoader={sourcesLoader}
+        disconnect={disconnect}
+        now={NOW}
+      />,
+    );
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "Disconnect GitHub" }),
+      ).toBeTruthy();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Disconnect GitHub" }));
+    await waitFor(() => {
+      expect(disconnect).toHaveBeenCalledWith("github");
+      expect(sourcesLoader).toHaveBeenCalledTimes(2);
+    });
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("button", { name: "Disconnect GitHub" }),
+      ).toBeNull();
+    });
+  });
+
+  it("Disconnect surfaces error when handler returns ok:false", async () => {
+    const loader = loaderWith([FRESH_GITHUB]);
+    const disconnect = vi.fn(async () => ({
+      ok: false,
+      error: "server boom",
+    }));
+    render(
+      <IntegrationsPanel
+        sourcesLoader={loader}
+        disconnect={disconnect}
+        now={NOW}
+      />,
+    );
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "Disconnect GitHub" }),
+      ).toBeTruthy();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Disconnect GitHub" }));
+    await waitFor(() => {
+      expect(screen.getByRole("alert").textContent).toContain("server boom");
+    });
+    // Row is still connected since disconnect failed.
+    expect(
+      screen.getByRole("button", { name: "Disconnect GitHub" }),
+    ).toBeTruthy();
   });
 
   it("allowlist add appends a chip and prefixes # when missing", () => {

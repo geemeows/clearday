@@ -9,7 +9,7 @@
 // edits update local state only, matching the per-section slice pattern.
 
 import { Plus, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { SourceGlyph, type SourceKind } from "#/components/SourceGlyph";
 import { Button } from "#/components/ui/button";
 import { Input } from "#/components/ui/input";
@@ -29,6 +29,9 @@ type ApiSource = {
 };
 
 type SourcesPayload = { sources: ApiSource[] };
+
+type DisconnectResult = { ok: boolean; error?: string };
+type ConnectUrlResult = { ok: boolean; url?: string; error?: string };
 
 type RowDef = {
   id: string;
@@ -83,12 +86,18 @@ export type IntegrationsPanelProps = {
   sourcesLoader?: () => Promise<SourcesPayload>;
   initialAllowlist?: string[];
   now?: number;
+  disconnect?: (provider: string) => Promise<DisconnectResult>;
+  connectUrl?: (provider: string) => Promise<ConnectUrlResult>;
+  openUrl?: (url: string) => void;
 };
 
 export function IntegrationsPanel({
   sourcesLoader,
   initialAllowlist,
   now,
+  disconnect,
+  connectUrl,
+  openUrl,
 }: IntegrationsPanelProps = {}) {
   const [statuses, setStatuses] = useState<Record<string, RowStatus>>({});
   const [enabled, setEnabled] = useState<Record<string, boolean>>(() =>
@@ -98,6 +107,8 @@ export function IntegrationsPanel({
     () => initialAllowlist ?? DEFAULT_SLACK_CHANNELS,
   );
   const [draft, setDraft] = useState("");
+  const [busyProvider, setBusyProvider] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const load = useMemo(
     () =>
@@ -105,8 +116,34 @@ export function IntegrationsPanel({
       (() => apiFetch("/api/sources") as Promise<SourcesPayload>),
     [sourcesLoader],
   );
+  const doDisconnect = useMemo(
+    () =>
+      disconnect ??
+      ((provider: string) =>
+        apiFetch(`/api/integrations/${provider}`, {
+          method: "DELETE",
+        }) as Promise<DisconnectResult>),
+    [disconnect],
+  );
+  const doConnectUrl = useMemo(
+    () =>
+      connectUrl ??
+      ((provider: string) =>
+        apiFetch(
+          `/api/providers/${provider}/connect-url`,
+        ) as Promise<ConnectUrlResult>),
+    [connectUrl],
+  );
+  const doOpen = useMemo(
+    () =>
+      openUrl ??
+      ((url: string) => {
+        window.open(url, "_blank", "noopener,noreferrer");
+      }),
+    [openUrl],
+  );
 
-  useEffect(() => {
+  const refresh = useCallback(() => {
     let cancelled = false;
     load()
       .then((body) => {
@@ -142,6 +179,39 @@ export function IntegrationsPanel({
     };
   }, [load, now]);
 
+  useEffect(() => refresh(), [refresh]);
+
+  const onReauthorize = async (providerKey: string) => {
+    setBusyProvider(providerKey);
+    setError(null);
+    try {
+      const out = await doConnectUrl(providerKey);
+      if (out.ok && out.url) doOpen(out.url);
+      else setError(out.error ?? "could not start connection");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusyProvider(null);
+    }
+  };
+
+  const onDisconnect = async (providerKey: string) => {
+    setBusyProvider(providerKey);
+    setError(null);
+    try {
+      const out = await doDisconnect(providerKey);
+      if (!out.ok) {
+        setError(out.error ?? "disconnect failed");
+        return;
+      }
+      refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusyProvider(null);
+    }
+  };
+
   const onAddChannel = () => {
     const raw = draft.trim();
     if (!raw) return;
@@ -168,6 +238,12 @@ export function IntegrationsPanel({
         </p>
       </header>
 
+      {error ? (
+        <p role="alert" className="mt-3 text-destructive text-sm">
+          {error}
+        </p>
+      ) : null}
+
       <ul
         aria-label="Integration providers"
         className="mt-6 divide-y divide-border rounded-md border border-border"
@@ -178,6 +254,8 @@ export function IntegrationsPanel({
             lastPolledAt: null,
           };
           const isEnabled = enabled[row.id] ?? true;
+          const isConnected = !row.isMock && meta.status !== "neutral";
+          const isBusy = busyProvider === row.providerKey;
           return (
             <li
               key={row.id}
@@ -219,12 +297,23 @@ export function IntegrationsPanel({
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={() => {
-                  /* OAuth re-flow lives in #40 follow-up — local no-op. */
-                }}
+                disabled={isBusy || row.isMock}
+                onClick={() => onReauthorize(row.providerKey)}
               >
                 Reauthorize
               </Button>
+              {isConnected ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={isBusy}
+                  onClick={() => onDisconnect(row.providerKey)}
+                  aria-label={`Disconnect ${row.label}`}
+                >
+                  Disconnect
+                </Button>
+              ) : null}
               <Switch
                 aria-label={`${row.label} enabled`}
                 checked={isEnabled}
