@@ -54,6 +54,16 @@ export const ACTIONS: Record<AutomationAction["type"], ActionDescriptor> = {
     label: "Post Slack message",
     kind: "external",
   },
+  comment_on_pr: {
+    type: "comment_on_pr",
+    label: "Comment on PR",
+    kind: "external",
+  },
+  request_reviewers: {
+    type: "request_reviewers",
+    label: "Request reviewers",
+    kind: "external",
+  },
 };
 
 export const ACTION_LIST: ActionDescriptor[] = Object.values(ACTIONS);

@@ -107,6 +107,10 @@ function defaultAction(type: AutomationAction["type"]): AutomationAction {
       return { type: "set_focus", duration_minutes: 25 };
     case "post_message":
       return { type: "post_message", target: "self_dm", body: "" };
+    case "comment_on_pr":
+      return { type: "comment_on_pr", body: "" };
+    case "request_reviewers":
+      return { type: "request_reviewers", reviewers: [] };
   }
 }
 
@@ -1116,6 +1120,125 @@ function ActionInputs({
       />
     );
   }
+  if (action.type === "comment_on_pr") {
+    return (
+      <div className="space-y-2">
+        <p className="text-muted-foreground text-xs">
+          Posts a top-level comment on the PR. Targets the triggering Signal's
+          PR by default; pin a repo + number to target a specific PR.
+        </p>
+        <div className="grid grid-cols-2 gap-2">
+          <input
+            type="text"
+            aria-label="GitHub repo"
+            value={action.repo ?? ""}
+            onChange={(e) =>
+              onChange({
+                ...action,
+                repo: e.target.value.length > 0 ? e.target.value : undefined,
+              })
+            }
+            placeholder="owner/repo (optional)"
+            className="rounded border border-border bg-background px-2 py-1 font-mono text-xs"
+          />
+          <input
+            type="number"
+            min={1}
+            aria-label="PR number"
+            value={action.number ?? ""}
+            onChange={(e) => {
+              const n = Number(e.target.value);
+              onChange({
+                ...action,
+                number: Number.isInteger(n) && n > 0 ? n : undefined,
+              });
+            }}
+            placeholder="PR # (optional)"
+            className="rounded border border-border bg-background px-2 py-1 font-mono text-xs"
+          />
+        </div>
+        <textarea
+          aria-label="PR comment body"
+          value={action.body}
+          onChange={(e) => onChange({ ...action, body: e.target.value })}
+          placeholder="{{signal.title}}"
+          rows={3}
+          className="w-full rounded border border-border bg-background px-2 py-1 font-mono text-xs"
+        />
+      </div>
+    );
+  }
+  if (action.type === "request_reviewers") {
+    const reviewersText = action.reviewers.join(", ");
+    const teamsText = (action.team_reviewers ?? []).join(", ");
+    const splitCsv = (s: string): string[] =>
+      s
+        .split(",")
+        .map((p) => p.trim())
+        .filter((p) => p.length > 0);
+    return (
+      <div className="space-y-2">
+        <p className="text-muted-foreground text-xs">
+          Re-pings reviewers on the triggering PR. Comma-separate logins / team
+          slugs.
+        </p>
+        <input
+          type="text"
+          aria-label="Reviewer logins"
+          value={reviewersText}
+          onChange={(e) =>
+            onChange({ ...action, reviewers: splitCsv(e.target.value) })
+          }
+          placeholder="alice, bob"
+          className="w-full rounded border border-border bg-background px-2 py-1 font-mono text-xs"
+        />
+        <input
+          type="text"
+          aria-label="Team reviewer slugs"
+          value={teamsText}
+          onChange={(e) => {
+            const next = splitCsv(e.target.value);
+            onChange({
+              ...action,
+              team_reviewers: next.length > 0 ? next : undefined,
+            });
+          }}
+          placeholder="platform, infra (optional teams)"
+          className="w-full rounded border border-border bg-background px-2 py-1 font-mono text-xs"
+        />
+        <div className="grid grid-cols-2 gap-2">
+          <input
+            type="text"
+            aria-label="GitHub repo"
+            value={action.repo ?? ""}
+            onChange={(e) =>
+              onChange({
+                ...action,
+                repo: e.target.value.length > 0 ? e.target.value : undefined,
+              })
+            }
+            placeholder="owner/repo (optional)"
+            className="rounded border border-border bg-background px-2 py-1 font-mono text-xs"
+          />
+          <input
+            type="number"
+            min={1}
+            aria-label="PR number"
+            value={action.number ?? ""}
+            onChange={(e) => {
+              const n = Number(e.target.value);
+              onChange({
+                ...action,
+                number: Number.isInteger(n) && n > 0 ? n : undefined,
+              });
+            }}
+            placeholder="PR # (optional)"
+            className="rounded border border-border bg-background px-2 py-1 font-mono text-xs"
+          />
+        </div>
+      </div>
+    );
+  }
   if (action.type === "post_message") {
     return (
       <div className="space-y-2">
@@ -1155,6 +1278,10 @@ function ActionInputs({
           rows={3}
           className="w-full rounded border border-border bg-background px-2 py-1 font-mono text-xs"
         />
+        <p className="text-muted-foreground text-[10px]">
+          Templating: {"{{signal.title}}, {{signal.url}}, {{signal.payload.repo}}"}.
+          Missing fields render as empty.
+        </p>
       </div>
     );
   }

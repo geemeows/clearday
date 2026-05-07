@@ -64,6 +64,27 @@ export type AutomationAction =
       target: "channel" | "self_dm" | "thread_reply";
       body: string;
       channel?: string;
+    }
+  // GitHub `comment_on_pr` action. Posts a top-level Issue comment on a PR
+  // via the GitHub Issue Comments endpoint. `repo` and `number` are
+  // resolved by the executor's handler from the triggering Signal's
+  // payload when omitted; the builder also lets the user pin an explicit
+  // pair so a schedule-trigger automation can target a specific PR.
+  | {
+      type: "comment_on_pr";
+      body: string;
+      repo?: string;
+      number?: number;
+    }
+  // GitHub `request_reviewers` action. Layered on the same PR as the
+  // triggering Signal by default; the builder lets the user pin an
+  // explicit `repo`/`number` for cross-PR flows.
+  | {
+      type: "request_reviewers";
+      reviewers: string[];
+      team_reviewers?: string[];
+      repo?: string;
+      number?: number;
     };
 
 export type AutomationTriggerKind =
@@ -306,9 +327,10 @@ function applyAction(
       // upsert seam; the executor's handler dispatches via features/focus.
       break;
     case "post_message":
-      // External Slack capability — does not touch the Signal upsert columns.
-      // Routed by the executor's injected handler once the Slack wiring lands
-      // in #90; the default handler is a no-op.
+    case "comment_on_pr":
+    case "request_reviewers":
+      // External provider capability — does not touch the Signal upsert
+      // columns. Routed by the executor's injected handler.
       break;
     case "set_channels": {
       // Last-write-wins per slot, same vocabulary as priority. An empty list
@@ -377,6 +399,8 @@ const ACTION_TYPES = new Set<AutomationAction["type"]>([
   "transition_ticket",
   "set_focus",
   "post_message",
+  "comment_on_pr",
+  "request_reviewers",
 ]);
 
 const PREDICATE_TYPES = new Set<AutomationPredicate["type"]>([
@@ -518,6 +542,54 @@ export function validateAutomations(automations: Automation[]): string[] {
               `automation ${a.id}: post_message with target "channel" requires a channel`,
             );
           }
+        }
+      }
+      if (act.type === "comment_on_pr") {
+        if (typeof act.body !== "string" || act.body.length === 0) {
+          errors.push(
+            `automation ${a.id}: comment_on_pr.body must be a non-empty string`,
+          );
+        }
+        if (act.repo !== undefined && typeof act.repo !== "string") {
+          errors.push(
+            `automation ${a.id}: comment_on_pr.repo must be a string`,
+          );
+        }
+        if (
+          act.number !== undefined &&
+          (!Number.isInteger(act.number) || act.number <= 0)
+        ) {
+          errors.push(
+            `automation ${a.id}: comment_on_pr.number must be a positive integer`,
+          );
+        }
+      }
+      if (act.type === "request_reviewers") {
+        if (!Array.isArray(act.reviewers)) {
+          errors.push(
+            `automation ${a.id}: request_reviewers.reviewers must be an array`,
+          );
+        } else if (
+          act.reviewers.length === 0 &&
+          (!Array.isArray(act.team_reviewers) ||
+            act.team_reviewers.length === 0)
+        ) {
+          errors.push(
+            `automation ${a.id}: request_reviewers requires at least one reviewer or team_reviewer`,
+          );
+        }
+        if (act.repo !== undefined && typeof act.repo !== "string") {
+          errors.push(
+            `automation ${a.id}: request_reviewers.repo must be a string`,
+          );
+        }
+        if (
+          act.number !== undefined &&
+          (!Number.isInteger(act.number) || act.number <= 0)
+        ) {
+          errors.push(
+            `automation ${a.id}: request_reviewers.number must be a positive integer`,
+          );
         }
       }
       if (act.type === "set_channels") {

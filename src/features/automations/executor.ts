@@ -23,6 +23,7 @@ import type {
   AutomationAction,
   PlannedAutomation,
 } from "#/features/automations/engine";
+import type { Signal } from "#/shared/signal";
 
 export type AutomationRunStatus =
   | "pending"
@@ -70,6 +71,12 @@ export type ExecuteCtx = {
   signalId: string | null;
   triggerEventId: string;
   /**
+   * Triggering Signal, when one exists (signal_ingested / signal_state_change).
+   * Null for focus / schedule events. External-action handlers consult it for
+   * templating substitution and for default repo/number derivation.
+   */
+  signal: Signal | null;
+  /**
    * Whether the v1 internal actions should be considered already-applied at
    * the Signal upsert seam. Kept as a flag so a future trigger that fires
    * outside the upsert (e.g. `signal_state_change`) can opt the executor
@@ -107,6 +114,12 @@ export type ExecuteInput = {
   plan: PlannedAutomation;
   triggerEventId: string;
   signalId: string | null;
+  /**
+   * Triggering Signal when the event carries one (signal_ingested /
+   * signal_state_change). Threaded into ExecuteCtx for handlers that need
+   * the Signal payload (templating, default repo/number derivation).
+   */
+  signal?: Signal | null;
 };
 
 export type ExecuteResult = {
@@ -129,6 +142,7 @@ export async function executeAutomation(
   const ctx: ExecuteCtx = {
     signalId: input.signalId,
     triggerEventId: input.triggerEventId,
+    signal: input.signal ?? null,
     internalActionsAppliedByUpsert: internalApplied,
   };
 

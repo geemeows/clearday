@@ -66,7 +66,7 @@ export async function runAutomationsForInsertedSignals(
     const results: ExecuteResult[] = [];
     for (const plan of planned) {
       const result = await executeAutomation(
-        { plan, triggerEventId: eventId, signalId: stored.id },
+        { plan, triggerEventId: eventId, signalId: stored.id, signal: stored },
         store,
         options,
       );
@@ -107,7 +107,7 @@ export async function runAutomationsForUpdatedSignals(
     const results: ExecuteResult[] = [];
     for (const plan of planned) {
       const result = await executeAutomation(
-        { plan, triggerEventId: eventId, signalId: after.id },
+        { plan, triggerEventId: eventId, signalId: after.id, signal: after },
         store,
         options,
       );
