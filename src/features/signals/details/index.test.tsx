@@ -37,16 +37,29 @@ describe("SignalDetail dispatcher", () => {
     expect(screen.getByText("boss@acme.com")).toBeTruthy();
   });
 
+  it("renders SlackDetail for slack signals", () => {
+    const signal: StoredSignal = {
+      ...baseSignal,
+      id: "s",
+      provider: "slack",
+      kind: "dm",
+      payload: {
+        channel: "C1",
+        channel_name: "engineering",
+        author_name: "Alice",
+      },
+    };
+    render(<SignalDetail signal={signal} />);
+    expect(screen.getByText("#engineering")).toBeTruthy();
+  });
+
   it("returns null (no crash) for groups not yet routed", () => {
-    const slackSignal: StoredSignal = { ...baseSignal, id: "s", kind: "dm" };
-    const { container } = render(<SignalDetail signal={slackSignal} />);
-    expect(container.firstChild).toBeNull();
     const prSignal: StoredSignal = {
       ...baseSignal,
       id: "p",
       kind: "pr_review_requested",
     };
-    const { container: c2 } = render(<SignalDetail signal={prSignal} />);
-    expect(c2.firstChild).toBeNull();
+    const { container } = render(<SignalDetail signal={prSignal} />);
+    expect(container.firstChild).toBeNull();
   });
 });
