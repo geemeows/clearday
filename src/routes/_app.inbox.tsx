@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Calendar as CalIcon, ChevronRight, Video, X } from "lucide-react";
+import { ChevronRight, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeRaw from "rehype-raw";
@@ -22,9 +22,15 @@ import {
   type StoredSignal,
 } from "#/features/signals/components/InboxView";
 import { SourceGlyph } from "#/features/signals/components/SourceGlyph";
+import { SignalDetail } from "#/features/signals/details";
+import {
+  AttendeeStack,
+  type MeetingAttendee,
+} from "#/features/signals/details/meeting/Attendees";
+import { MeetingDetail } from "#/features/signals/details/meeting";
+import { TaskDetail } from "#/features/signals/details/task";
 import {
   type Filter,
-  formatMeetingTime,
   kindGroup,
   relAgo,
 } from "#/features/signals/display";
@@ -34,8 +40,8 @@ import { apiFetch } from "#/lib/api-client";
 import { cn } from "#/lib/cn";
 import { supabase } from "#/lib/supabase";
 
-export { InboxRow };
-export type { StoredSignal };
+export { InboxRow, AttendeeStack, MeetingDetail, TaskDetail };
+export type { StoredSignal, MeetingAttendee };
 
 // Wraps the feature-module InboxView with a default renderDetail that points
 // at the route-local InboxDetailPane. Keeps existing test call sites working
@@ -280,8 +286,7 @@ export function InboxDetailPane({
           onReplyRollback={onReplyRollback}
         />
       )}
-      {group === "meeting" && <MeetingDetail signal={signal} />}
-      {group === "ticket" && <TaskDetail signal={signal} />}
+      <SignalDetail signal={signal} />
       <div
         className="flex flex-wrap items-center gap-2"
         style={{
@@ -325,44 +330,6 @@ export function InboxDetailPane({
         )}
       </div>
     </aside>
-  );
-}
-
-export function TaskDetail({ signal }: { signal: StoredSignal }) {
-  const identifier = signal.payload?.identifier as string | undefined;
-  const stateName = signal.payload?.state_name as string | undefined;
-  const priority = signal.payload?.priority_label as string | undefined;
-  const teamKey = signal.payload?.team_key as string | undefined;
-  return (
-    <dl
-      data-slot="task-detail"
-      className="mt-3 grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1.5 text-sm"
-    >
-      {identifier && (
-        <>
-          <dt className="text-muted-foreground">Ticket</dt>
-          <dd className="font-mono text-foreground">{identifier}</dd>
-        </>
-      )}
-      {teamKey && (
-        <>
-          <dt className="text-muted-foreground">Team</dt>
-          <dd className="text-foreground">{teamKey}</dd>
-        </>
-      )}
-      {stateName && (
-        <>
-          <dt className="text-muted-foreground">Status</dt>
-          <dd className="text-foreground">{stateName}</dd>
-        </>
-      )}
-      {priority && (
-        <>
-          <dt className="text-muted-foreground">Priority</dt>
-          <dd className="text-foreground">{priority}</dd>
-        </>
-      )}
-    </dl>
   );
 }
 
@@ -3082,215 +3049,4 @@ export function SlackReplyComposer({
   );
 }
 
-export type MeetingAttendee = {
-  email: string | null;
-  name: string | null;
-  response: string | null;
-  organizer?: boolean;
-};
-
-export function MeetingDetail({ signal }: { signal: StoredSignal }) {
-  const startsAt = signal.payload?.starts_at as string | undefined;
-  const endsAt = signal.payload?.ends_at as string | undefined;
-  const videoLink = signal.payload?.video_link as string | undefined;
-  const organizer = signal.payload?.organizer as string | undefined;
-  const description = (signal.payload?.description as string | null) ?? "";
-  const agenda = parseAgenda(description);
-  const attendees =
-    (signal.payload?.attendees as MeetingAttendee[] | undefined) ?? [];
-  const linkedItems =
-    (signal.payload?.linked_items as
-      | Array<{
-          kind: string;
-          url: string;
-          repo?: string;
-          number?: number;
-          key?: string;
-        }>
-      | undefined) ?? [];
-  return (
-    <div data-slot="meeting-detail" className="mt-3 space-y-3 text-sm">
-      <dl className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1.5">
-        {startsAt && (
-          <>
-            <dt className="text-muted-foreground">When</dt>
-            <dd className="text-foreground">
-              {formatMeetingTime(startsAt, endsAt)}
-            </dd>
-          </>
-        )}
-        {organizer && (
-          <>
-            <dt className="text-muted-foreground">Organizer</dt>
-            <dd className="text-foreground">{organizer}</dd>
-          </>
-        )}
-      </dl>
-      {attendees.length > 0 && (
-        <section aria-label="Attendees" className="flex items-center gap-3">
-          <header
-            className="font-bold uppercase tracking-wider"
-            style={{ fontSize: 9, color: "var(--muted-foreground)" }}
-          >
-            Attendees
-          </header>
-          <AttendeeStack attendees={attendees} />
-          <span style={{ fontSize: 12, color: "var(--muted-foreground)" }}>
-            {attendees.length}{" "}
-            {attendees.length === 1 ? "attendee" : "attendees"}
-          </span>
-        </section>
-      )}
-      {agenda.length > 0 && (
-        <section aria-label="Agenda">
-          <header
-            className="mb-2 font-bold uppercase tracking-wider"
-            style={{ fontSize: 9, color: "var(--muted-foreground)" }}
-          >
-            Agenda
-          </header>
-          <ul className="ml-4 list-disc space-y-1 text-sm text-foreground">
-            {agenda.map((line) => (
-              <li key={line}>{line}</li>
-            ))}
-          </ul>
-        </section>
-      )}
-      <div className="flex flex-wrap gap-2">
-        {videoLink && (
-          <a
-            href={videoLink}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1 rounded-sm bg-primary px-3 py-1.5 text-sm text-primary-foreground hover:bg-primary-active"
-          >
-            <Video className="h-4 w-4" />
-            Join meeting
-          </a>
-        )}
-        {signal.url && (
-          <a
-            href={signal.url}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1 rounded border border-border px-3 py-1.5 text-sm text-foreground hover:bg-muted"
-          >
-            <CalIcon className="h-4 w-4" />
-            Open invite
-          </a>
-        )}
-      </div>
-      {linkedItems.length > 0 && (
-        <div>
-          <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-            Linked items
-          </p>
-          <ul className="mt-1 space-y-1">
-            {linkedItems.map((item) => (
-              <li key={item.url}>
-                <a
-                  href={item.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-sm text-foreground underline hover:text-foreground/80"
-                >
-                  {item.kind === "pr" && item.repo
-                    ? `${item.repo}#${item.number}`
-                    : (item.key ?? item.url)}
-                </a>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-    </div>
-  );
-}
-
-export function AttendeeStack({
-  attendees,
-  max = 5,
-}: {
-  attendees: MeetingAttendee[];
-  max?: number;
-}) {
-  const sorted = [...attendees].sort(byResponse);
-  const visible = sorted.slice(0, max);
-  const overflow = sorted.length - visible.length;
-  return (
-    <div className="flex items-center" style={{ paddingLeft: 8 }}>
-      {visible.map((a, i) => {
-        const label = attendeeLabel(a);
-        const declined = a.response === "declined";
-        return (
-          <UserAvatar
-            key={attendeeKey(a, i)}
-            name={label}
-            size="md"
-            title={
-              a.response && a.response !== "accepted"
-                ? `${label} · ${a.response}`
-                : label
-            }
-            data-response={a.response ?? undefined}
-            style={{
-              border: "2px solid var(--canvas)",
-              marginLeft: i > 0 ? -8 : 0,
-              opacity: declined ? 0.5 : 1,
-            }}
-          />
-        );
-      })}
-      {overflow > 0 && (
-        <span
-          title={sorted
-            .slice(max)
-            .map((a) => attendeeLabel(a))
-            .join(", ")}
-          className="inline-flex items-center justify-center"
-          style={{
-            width: 24,
-            height: 24,
-            borderRadius: "50%",
-            background: "var(--surface-strong)",
-            color: "var(--ink)",
-            fontSize: 10,
-            fontWeight: 600,
-            border: "2px solid var(--canvas)",
-            marginLeft: -8,
-          }}
-        >
-          +{overflow}
-        </span>
-      )}
-    </div>
-  );
-}
-
-function attendeeKey(a: MeetingAttendee, i: number): string {
-  return a.email ?? a.name ?? `idx-${i}`;
-}
-
-function attendeeLabel(a: MeetingAttendee): string {
-  return a.name?.trim() || a.email?.trim() || "Guest";
-}
-
-function byResponse(a: MeetingAttendee, b: MeetingAttendee): number {
-  const order: Record<string, number> = {
-    accepted: 0,
-    tentative: 1,
-    needsAction: 2,
-    declined: 3,
-  };
-  return (order[a.response ?? ""] ?? 4) - (order[b.response ?? ""] ?? 4);
-}
-
-function parseAgenda(description: string | undefined): string[] {
-  if (!description) return [];
-  return description
-    .split("\n")
-    .map((l) => l.trim().replace(/^[-*•]\s*/, ""))
-    .filter((l) => l.length > 0)
-    .slice(0, 6);
-}
 
