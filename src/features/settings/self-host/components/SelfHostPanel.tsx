@@ -6,7 +6,7 @@
 
 import { Check, Copy } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { Button } from "#/components/ui/button";
+import { Button } from "#/components/coss/button";
 import type { SelfHostInfo } from "#/features/settings/self-host/api";
 import { apiFetch } from "#/lib/api-client";
 
@@ -79,23 +79,23 @@ export function SelfHostPanel({
   };
 
   return (
-    <section>
+    <section className="space-y-8">
       <header>
-        <h2 className="font-semibold text-xl">Self-host</h2>
-        <p className="mt-2 text-muted-foreground text-sm">
-          Deployment metadata for this Devy instance.
+        <h2 className="font-semibold text-2xl tracking-tight">Self-host</h2>
+        <p className="mt-1 font-mono text-[11px] text-muted-foreground">
+          Your deployment. All data and tokens live in your own Supabase.
         </p>
       </header>
 
       {error && (
-        <p role="alert" className="mt-4 text-destructive text-sm">
+        <p role="alert" className="text-destructive text-sm">
           {error}
         </p>
       )}
 
       {info && (
         <>
-          <div className="mt-6 overflow-hidden rounded-md border border-border">
+          <div className="overflow-hidden rounded-lg border border-border bg-card">
             <table className="w-full text-sm">
               <tbody>
                 {rows.map((row, idx) => (
@@ -144,8 +144,8 @@ export function SelfHostPanel({
             </table>
           </div>
 
-          <section className="mt-8">
-            <h3 className="font-semibold text-base">Data</h3>
+          <section>
+            <h3 className="font-semibold text-base tracking-tight">Data</h3>
             <p className="mt-1 text-muted-foreground text-sm">
               Export your signals or trigger a fresh rollup.
             </p>
@@ -169,8 +169,8 @@ export function SelfHostPanel({
             </div>
           </section>
 
-          <section className="mt-8">
-            <h3 className="font-semibold text-base text-destructive">
+          <section className="rounded-lg border border-destructive/30 bg-destructive/5 p-4">
+            <h3 className="font-semibold text-base text-destructive tracking-tight">
               Danger zone
             </h3>
             <p className="mt-1 text-muted-foreground text-sm">

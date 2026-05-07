@@ -22,6 +22,9 @@ function jsonResponse(status: number, body: unknown): Response {
 const PR_BODY = {
   body: "Reworks the slack webhook to batch-upsert.",
   user: { login: "alice", avatar_url: "https://avatars/u/1" },
+  state: "open",
+  merged: false,
+  merged_at: null,
 };
 
 const COMMENTS = [
@@ -37,10 +40,21 @@ const COMMENTS = [
   },
 ];
 
+const ISSUE_COMMENTS = [
+  {
+    id: 100,
+    body: "Looks great overall — left a few notes inline.",
+    user: { login: "carol", avatar_url: "https://avatars/u/3" },
+    created_at: "2026-05-02T09:00:00Z",
+  },
+];
+
 describe("fetchPrOverview", () => {
-  it("fetches /pulls/N and /pulls/N/comments and surfaces body, author, comments", async () => {
+  it("fetches /pulls/N, /pulls/N/comments, and /issues/N/comments and surfaces body, author, both comment streams", async () => {
     const { fn, calls } = recordingFetch((url) => {
       if (url.endsWith("/pulls/42")) return jsonResponse(200, PR_BODY);
+      if (url.includes("/issues/42/comments"))
+        return jsonResponse(200, ISSUE_COMMENTS);
       return jsonResponse(200, COMMENTS);
     });
     const out = await fetchPrOverview(
@@ -60,16 +74,54 @@ describe("fetchPrOverview", () => {
       body: "nit: rename",
       user: "rahul",
     });
+    expect(out.state).toBe("open");
+    expect(out.merged).toBe(false);
+    expect(out.merged_at).toBeNull();
+    expect(out.issue_comments).toHaveLength(1);
+    expect(out.issue_comments[0]).toMatchObject({
+      id: 100,
+      body: "Looks great overall — left a few notes inline.",
+      user: "carol",
+      user_avatar_url: "https://avatars/u/3",
+      created_at: "2026-05-02T09:00:00Z",
+    });
     const urls = calls.map((c) => c.url);
     expect(urls).toContain("https://api.github.com/repos/owner/repo/pulls/42");
     expect(urls).toContain(
       "https://api.github.com/repos/owner/repo/pulls/42/comments?per_page=100",
     );
+    expect(urls).toContain(
+      "https://api.github.com/repos/owner/repo/issues/42/comments?per_page=100",
+    );
+  });
+
+  it("surfaces merged state from /pulls/N so the SPA can flip the chip without a re-poll", async () => {
+    const merged = {
+      ...PR_BODY,
+      state: "closed",
+      merged: true,
+      merged_at: "2026-05-02T11:00:00Z",
+    };
+    const { fn } = recordingFetch((url) => {
+      if (url.endsWith("/pulls/7")) return jsonResponse(200, merged);
+      if (url.includes("/issues/7/comments")) return jsonResponse(200, []);
+      return jsonResponse(200, []);
+    });
+    const out = await fetchPrOverview(
+      { repo: "o/r", number: 7 },
+      { token: "t", fetch: fn },
+    );
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    expect(out.state).toBe("closed");
+    expect(out.merged).toBe(true);
+    expect(out.merged_at).toBe("2026-05-02T11:00:00Z");
   });
 
   it("falls back to original_line when line is null on outdated comments", async () => {
     const { fn } = recordingFetch((url) => {
       if (url.endsWith("/pulls/1")) return jsonResponse(200, PR_BODY);
+      if (url.includes("/issues/1/comments")) return jsonResponse(200, []);
       return jsonResponse(200, [
         {
           id: 9,

@@ -99,4 +99,17 @@ describe("AppShell sidebar", () => {
       await screen.findByRole("button", { name: /^settings$/i }),
     ).toBeTruthy();
   });
+
+  it("opens the FocusModal when the focus trigger is clicked", async () => {
+    await renderShell();
+    const trigger = await screen.findByRole("button", {
+      name: /start focus session/i,
+    });
+    fireEvent.click(trigger);
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText(/start focus session/i)).toBeTruthy();
+    expect(
+      within(dialog).getByRole("group", { name: /duration/i }),
+    ).toBeTruthy();
+  });
 });

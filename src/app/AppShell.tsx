@@ -18,6 +18,7 @@ import {
   type NavSource,
   OPEN_CMDK_EVENT,
 } from "#/app/NavigationSidebar";
+import { FocusModal } from "#/features/focus/components/FocusModal";
 import type { ProviderAccountStatus } from "#/features/integrations/provider-account-status";
 import {
   PROFILE_UPDATED_EVENT,
@@ -30,7 +31,12 @@ import {
   type ThemeView,
 } from "#/features/settings/theme/api";
 import type { SourceKind } from "#/features/signals/components/SourceGlyph";
+import {
+  pickActiveFocus,
+  toMeetingEvents,
+} from "#/features/signals/views/calendar";
 import { apiFetch } from "#/lib/api-client";
+import type { Signal, SignalKind, StoredSignal } from "#/shared/signal";
 
 const PAGES: NavPage[] = [
   { to: "/today", label: "Today", icon: Sun },
@@ -74,7 +80,7 @@ export function AppShell() {
   const router = useRouter();
   const path = useRouterState({ select: (s) => s.location.pathname });
   const sourceMeta = useSourceStatuses();
-  const inboxBadge = useInboxBadge();
+  const { inboxBadge, tasksBadge } = useNavBadges();
   const profile = useProfile();
   const theme = useEffectiveTheme();
 
@@ -92,23 +98,43 @@ export function AppShell() {
     [sourceMeta],
   );
 
-  // focus.active is stubbed to false until the focus session slice (#39)
-  // wires the live countdown.
-  const focus: FocusState = { active: false };
+  const focus = useActiveFocus();
+  const [focusModalOpen, setFocusModalOpen] = useState(false);
 
   const props: NavigationSidebarProps = {
     pages: PAGES,
     page: path,
     onPage: (to) => router.navigate({ to }),
     inboxBadge,
+    tasksBadge,
     sources,
     focus,
-    onStartFocus: () => {
-      // Inline FocusButton owns its own dialog for now.
-    },
+    onStartFocus: () => setFocusModalOpen(true),
     onOpenSettings: () => router.navigate({ to: "/settings" }),
     onOpenCmdk: () => window.dispatchEvent(new CustomEvent(OPEN_CMDK_EVENT)),
     profile,
+  };
+
+  const startFocusSession = async ({
+    minutes,
+    message,
+  }: {
+    minutes: number;
+    message: string;
+  }) => {
+    try {
+      await apiFetch("/api/focus", {
+        method: "POST",
+        body: {
+          duration_minutes: minutes,
+          message: message.trim() || undefined,
+        },
+      });
+    } catch {
+      // Best-effort; the FocusActiveBlock will reflect calendar state on the
+      // next refresh once the busy event lands. Errors here are surfaced via
+      // the existing toast/log layer in apiFetch.
+    }
   };
 
   const commands: PaletteCommand[] = useMemo(() => {
@@ -151,8 +177,62 @@ export function AppShell() {
         <Outlet />
       </main>
       <CommandPalette commands={commands} />
+      <FocusModal
+        open={focusModalOpen}
+        onOpenChange={setFocusModalOpen}
+        onStart={startFocusSession}
+      />
     </div>
   );
+}
+
+// Polls /api/signals?filter=meetings each minute to detect a currently-active
+// focus block (calendar event with payload.is_focus or a focus-shaped title).
+// Returns the FocusState shape consumed by NavigationSidebar.
+function useActiveFocus(): FocusState {
+  const [state, setState] = useState<FocusState>({ active: false });
+  useEffect(() => {
+    let cancelled = false;
+    const refresh = async () => {
+      try {
+        const body = (await apiFetch("/api/signals?filter=meetings")) as {
+          signals: StoredSignal[];
+        };
+        if (cancelled) return;
+        const events = toMeetingEvents(body.signals);
+        const block = pickActiveFocus(events, new Date());
+        if (!block) {
+          setState({ active: false });
+          return;
+        }
+        const now = Date.now();
+        const total = Math.max(
+          1,
+          Math.round(
+            (block.endsAt.getTime() - block.startsAt.getTime()) / 1000,
+          ),
+        );
+        const remaining = Math.max(
+          0,
+          Math.round((block.endsAt.getTime() - now) / 1000),
+        );
+        setState({
+          active: true,
+          remainingSeconds: remaining,
+          totalSeconds: total,
+        });
+      } catch {
+        if (!cancelled) setState({ active: false });
+      }
+    };
+    refresh();
+    const t = setInterval(refresh, 60_000);
+    return () => {
+      cancelled = true;
+      clearInterval(t);
+    };
+  }, []);
+  return state;
 }
 
 type ThemeSaveResult =
@@ -251,15 +331,25 @@ function useProfile(): NavProfile {
   };
 }
 
-function useInboxBadge(): number {
-  const [count, setCount] = useState(0);
+// Pull both nav badges from the same signals payload so the sidebar fires a
+// single request: inbox = unread + requires_action; tasks = open work
+// (in-progress tickets + authored PRs).
+const TASK_KINDS: ReadonlySet<SignalKind> = new Set([
+  "ticket_in_progress",
+  "pr_authored",
+]);
+
+function useNavBadges(): { inboxBadge: number; tasksBadge: number } {
+  const [badges, setBadges] = useState({ inboxBadge: 0, tasksBadge: 0 });
   useEffect(() => {
     let cancelled = false;
     apiFetch("/api/signals?filter=all")
       .then((body) => {
         if (cancelled) return;
-        const signals = (body as { signals?: unknown[] }).signals ?? [];
-        setCount(signals.length);
+        const signals = (body as { signals?: Signal[] }).signals ?? [];
+        const inboxBadge = signals.filter((s) => s.requires_action).length;
+        const tasksBadge = signals.filter((s) => TASK_KINDS.has(s.kind)).length;
+        setBadges({ inboxBadge, tasksBadge });
       })
       .catch(() => {
         // Leave at 0 on auth/network failure.
@@ -268,7 +358,7 @@ function useInboxBadge(): number {
       cancelled = true;
     };
   }, []);
-  return count;
+  return badges;
 }
 
 function useSourceStatuses(): Record<string, SourceMeta> {

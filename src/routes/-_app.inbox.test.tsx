@@ -12,10 +12,14 @@ import {
   InboxDetailPane,
   InboxView,
   MeetingDetail,
+  PrComments,
   PrDescription,
   PrDiffViewer,
   PrReviewActions,
+  PrReviewSubmitPanel,
+  parsePatch,
   relAgo,
+  reviewDraftKey,
   SlackReplyComposer,
   SlackThreadContext,
 } from "#/routes/_app.inbox";
@@ -408,9 +412,13 @@ describe("InboxDetailPane", () => {
     );
     const pane = screen.getByLabelText("Signal detail");
     expect(within(pane).getByText("Add cron orchestrator")).toBeTruthy();
-    expect(within(pane).getByText("owner/repo#42")).toBeTruthy();
+    expect(within(pane).getByText("owner/repo #42")).toBeTruthy();
     expect(within(pane).getByText("@alice")).toBeTruthy();
-    expect(within(pane).getByText(/awaiting your action/i)).toBeTruthy();
+    expect(
+      within(pane).getByText("Open · review requested", {
+        selector: '[data-slot="pr-status-chip"]',
+      }),
+    ).toBeTruthy();
     const open = within(pane).getByRole("link", { name: /open in github/i });
     expect(open.getAttribute("href")).toBe(
       "https://github.com/owner/repo/pull/42",
@@ -630,7 +638,7 @@ describe("PR detail extras", () => {
       />,
     );
     expect(screen.getByText("+42")).toBeTruthy();
-    expect(screen.getByText("-7")).toBeTruthy();
+    expect(screen.getByText("−7")).toBeTruthy();
     expect(screen.getByLabelText("AI summary")).toBeTruthy();
     expect(screen.getByLabelText("Files changed")).toBeTruthy();
     expect(screen.getByText("src/cron.ts")).toBeTruthy();
@@ -1408,6 +1416,10 @@ describe("PrDescription", () => {
           created_at: null,
         },
       ],
+      issue_comments: [],
+      state: "open" as const,
+      merged: false,
+      merged_at: null,
     }));
     render(
       <PrDescription
@@ -1433,9 +1445,37 @@ describe("PrDescription", () => {
       author: null,
       author_avatar_url: null,
       review_comments: [],
+      issue_comments: [],
+      state: "open" as const,
+      merged: false,
+      merged_at: null,
     }));
     render(<PrDescription repo="o/r" number={1} load={load} />);
     await waitFor(() => screen.getByText(/no description provided/i));
+  });
+
+  it("forwards the live PR state via onPrState so the chip can flip to Merged without a re-poll", async () => {
+    const onPrState = vi.fn();
+    const load = vi.fn(async () => ({
+      ok: true as const,
+      body: "shipped",
+      author: "alice",
+      author_avatar_url: null,
+      review_comments: [],
+      issue_comments: [],
+      state: "closed" as const,
+      merged: true,
+      merged_at: "2026-05-02T11:00:00Z",
+    }));
+    render(
+      <PrDescription repo="o/r" number={2} load={load} onPrState={onPrState} />,
+    );
+    await waitFor(() => expect(onPrState).toHaveBeenCalledTimes(1));
+    expect(onPrState).toHaveBeenCalledWith({
+      state: "closed",
+      merged: true,
+      merged_at: "2026-05-02T11:00:00Z",
+    });
   });
 
   it("surfaces description-load failures via an alert", async () => {
@@ -1446,6 +1486,428 @@ describe("PrDescription", () => {
     render(<PrDescription repo="o/r" number={1} load={load} />);
     await waitFor(() => screen.getByRole("alert"));
     expect(screen.getByRole("alert").textContent).toMatch(/github HTTP 500/);
+  });
+});
+
+describe("parsePatch", () => {
+  it("annotates each row with the right-side / left-side file line numbers", () => {
+    const rows = parsePatch(
+      "@@ -10,3 +10,4 @@\n line a\n+added\n-removed\n line c",
+    );
+    // Hunk header
+    expect(rows[0].tone).toBe("hunk");
+    // " line a" — context, both sides advance from 10
+    expect(rows[1]).toMatchObject({ tone: "ctx", oldLine: 10, newLine: 10 });
+    // "+added" — right side only
+    expect(rows[2]).toMatchObject({ tone: "add", newLine: 11 });
+    expect(rows[2].oldLine).toBeUndefined();
+    // "-removed" — left side only, oldLine 11 (10 + 1 ctx)
+    expect(rows[3]).toMatchObject({ tone: "del", oldLine: 11 });
+    expect(rows[3].newLine).toBeUndefined();
+    // " line c" — context resumes
+    expect(rows[4]).toMatchObject({ tone: "ctx", oldLine: 12, newLine: 12 });
+  });
+});
+
+describe("PrDiffViewer inline comments", () => {
+  const PATCH = "@@ -1 +1,2 @@\n hi\n+x";
+
+  function loadOne(patch: string) {
+    return vi.fn(async () => ({
+      ok: true as const,
+      files: [
+        {
+          filename: "src/a.ts",
+          status: "modified",
+          additions: 1,
+          deletions: 0,
+          patch,
+        },
+      ],
+    }));
+  }
+
+  it("renders existing review comments inline directly under the matching diff line", async () => {
+    const load = loadOne(PATCH);
+    render(
+      <PrDiffViewer
+        repo="o/r"
+        number={1}
+        load={load}
+        commentsByPath={{
+          "src/a.ts": [
+            {
+              id: 7,
+              path: "src/a.ts",
+              line: 2,
+              side: "RIGHT",
+              diff_hunk: PATCH,
+              body: "**rename** this",
+              user: "rahul",
+              user_avatar_url: null,
+              created_at: null,
+            },
+          ],
+        }}
+      />,
+    );
+    await waitFor(() => screen.getByText("src/a.ts"));
+    const article = screen
+      .getByText("src/a.ts")
+      .closest('[data-slot="pr-file-patch"]') as HTMLElement;
+    fireEvent.click(within(article).getAllByRole("button")[0]);
+    const row = within(article)
+      .getByText("+x")
+      .closest('[data-line-key="RIGHT|2"]') as HTMLElement;
+    expect(row).not.toBeNull();
+    const thread = row.querySelector(
+      '[data-slot="inline-thread"]',
+    ) as HTMLElement;
+    expect(thread).not.toBeNull();
+    expect(within(thread).getByText("@rahul")).toBeTruthy();
+    expect(within(thread).getByText("rename").tagName).toBe("STRONG");
+  });
+
+  it("opens an inline composer when the + button on a line is clicked, then commits the draft", async () => {
+    const onAdd = vi.fn();
+    const load = loadOne(PATCH);
+    render(
+      <PrDiffViewer
+        repo="o/r"
+        number={1}
+        load={load}
+        drafts={{}}
+        onAddDraft={onAdd}
+      />,
+    );
+    await waitFor(() => screen.getByText("src/a.ts"));
+    const article = screen
+      .getByText("src/a.ts")
+      .closest('[data-slot="pr-file-patch"]') as HTMLElement;
+    // expand
+    fireEvent.click(within(article).getAllByRole("button")[0]);
+    const addBtn = within(article).getByRole("button", {
+      name: /comment on new line 2/i,
+    });
+    fireEvent.click(addBtn);
+    const composer = within(article).getByRole("textbox", {
+      name: /inline review comment/i,
+    });
+    fireEvent.change(composer, { target: { value: "rename this" } });
+    fireEvent.click(
+      within(article).getByRole("button", { name: /add to review/i }),
+    );
+    expect(onAdd).toHaveBeenCalledWith({
+      path: "src/a.ts",
+      side: "RIGHT",
+      line: 2,
+      body: "rename this",
+    });
+  });
+
+  it("shift-click on a second line extends the composer into a multi-line range", async () => {
+    const onAdd = vi.fn();
+    const PATCH_MULTI = "@@ -1,1 +1,3 @@\n hi\n+a\n+b\n+c";
+    const load = loadOne(PATCH_MULTI);
+    render(
+      <PrDiffViewer
+        repo="o/r"
+        number={1}
+        load={load}
+        drafts={{}}
+        onAddDraft={onAdd}
+      />,
+    );
+    await waitFor(() => screen.getByText("src/a.ts"));
+    const article = screen
+      .getByText("src/a.ts")
+      .closest('[data-slot="pr-file-patch"]') as HTMLElement;
+    fireEvent.click(within(article).getAllByRole("button")[0]); // expand file
+    fireEvent.click(
+      within(article).getByRole("button", { name: /comment on new line 2/i }),
+    );
+    // Shift-click on line 4 should extend composer to range 2-4.
+    fireEvent.click(
+      within(article).getByRole("button", { name: /comment on new line 4/i }),
+      { shiftKey: true },
+    );
+    expect(within(article).getByText(/new lines 2–4/i)).toBeTruthy();
+    fireEvent.change(
+      within(article).getByRole("textbox", {
+        name: /inline review comment/i,
+      }),
+      { target: { value: "extract this block" } },
+    );
+    fireEvent.click(
+      within(article).getByRole("button", { name: /add to review/i }),
+    );
+    expect(onAdd).toHaveBeenCalledWith({
+      path: "src/a.ts",
+      side: "RIGHT",
+      line: 4,
+      startLine: 2,
+      body: "extract this block",
+    });
+  });
+
+  it("click-and-drag from one line down through other lines selects the range and opens the composer", async () => {
+    const onAdd = vi.fn();
+    const PATCH_MULTI = "@@ -1,1 +1,3 @@\n hi\n+a\n+b\n+c";
+    const load = loadOne(PATCH_MULTI);
+    render(
+      <PrDiffViewer
+        repo="o/r"
+        number={1}
+        load={load}
+        drafts={{}}
+        onAddDraft={onAdd}
+      />,
+    );
+    await waitFor(() => screen.getByText("src/a.ts"));
+    const article = screen
+      .getByText("src/a.ts")
+      .closest('[data-slot="pr-file-patch"]') as HTMLElement;
+    fireEvent.click(within(article).getAllByRole("button")[0]); // expand file
+    const startBtn = within(article).getByRole("button", {
+      name: /comment on new line 2/i,
+    });
+    const endRow = article.querySelector(
+      '[data-line-key="RIGHT|4"]',
+    ) as HTMLElement;
+    fireEvent.pointerDown(startBtn);
+    fireEvent.pointerEnter(endRow);
+    fireEvent.pointerUp(document);
+    expect(within(article).getByText(/new lines 2–4/i)).toBeTruthy();
+    fireEvent.change(
+      within(article).getByRole("textbox", {
+        name: /inline review comment/i,
+      }),
+      { target: { value: "extract block" } },
+    );
+    fireEvent.click(
+      within(article).getByRole("button", { name: /add to review/i }),
+    );
+    expect(onAdd).toHaveBeenCalledWith({
+      path: "src/a.ts",
+      side: "RIGHT",
+      line: 4,
+      startLine: 2,
+      body: "extract block",
+    });
+  });
+
+  it("falls back to an Outdated section for comments whose line isn't in the patch", async () => {
+    const load = loadOne(PATCH);
+    render(
+      <PrDiffViewer
+        repo="o/r"
+        number={1}
+        load={load}
+        commentsByPath={{
+          "src/a.ts": [
+            {
+              id: 9,
+              path: "src/a.ts",
+              line: 99,
+              side: "RIGHT",
+              diff_hunk: null,
+              body: "old comment",
+              user: "carol",
+              user_avatar_url: null,
+              created_at: null,
+            },
+          ],
+        }}
+      />,
+    );
+    await waitFor(() => screen.getByText("src/a.ts"));
+    const article = screen
+      .getByText("src/a.ts")
+      .closest('[data-slot="pr-file-patch"]') as HTMLElement;
+    fireEvent.click(within(article).getAllByRole("button")[0]);
+    const orphan = article.querySelector(
+      '[data-slot="orphan-comments"]',
+    ) as HTMLElement;
+    expect(orphan).not.toBeNull();
+    expect(within(orphan).getByText(/old comment/)).toBeTruthy();
+  });
+});
+
+describe("PrReviewSubmitPanel", () => {
+  it("submits queued drafts as one review and clears them on success", async () => {
+    const submit = vi.fn(async () => ({ ok: true as const }));
+    const onCleared = vi.fn();
+    const drafts = {
+      [reviewDraftKey({ path: "a.ts", line: 12, side: "RIGHT" })]: {
+        path: "a.ts",
+        line: 12,
+        side: "RIGHT" as const,
+        body: "rename",
+      },
+      [reviewDraftKey({ path: "b.ts", line: 4, side: "RIGHT" })]: {
+        path: "b.ts",
+        line: 4,
+        side: "RIGHT" as const,
+        body: "extract",
+      },
+    };
+    render(
+      <PrReviewSubmitPanel
+        repo="o/r"
+        number={1}
+        drafts={drafts}
+        onCleared={onCleared}
+        submit={submit}
+      />,
+    );
+    fireEvent.click(screen.getByLabelText(/request changes/i));
+    fireEvent.change(screen.getByLabelText(/review summary/i), {
+      target: { value: "general feedback" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /submit review/i }));
+    await waitFor(() => expect(submit).toHaveBeenCalledTimes(1));
+    expect(submit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        repo: "o/r",
+        number: 1,
+        event: "REQUEST_CHANGES",
+        body: "general feedback",
+        comments: expect.arrayContaining([
+          expect.objectContaining({ path: "a.ts", line: 12, body: "rename" }),
+          expect.objectContaining({ path: "b.ts", line: 4, body: "extract" }),
+        ]),
+      }),
+    );
+    expect(onCleared).toHaveBeenCalled();
+  });
+
+  it("forwards multi-line drafts as start_line / start_side on the wire", async () => {
+    const submit = vi.fn(async () => ({ ok: true as const }));
+    const drafts = {
+      [reviewDraftKey({
+        path: "a.ts",
+        line: 12,
+        side: "RIGHT",
+        startLine: 8,
+      })]: {
+        path: "a.ts",
+        line: 12,
+        startLine: 8,
+        side: "RIGHT" as const,
+        body: "extract",
+      },
+    };
+    render(
+      <PrReviewSubmitPanel
+        repo="o/r"
+        number={1}
+        drafts={drafts}
+        onCleared={() => {}}
+        submit={submit}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /submit review/i }));
+    await waitFor(() => expect(submit).toHaveBeenCalledTimes(1));
+    expect(submit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        comments: [
+          expect.objectContaining({
+            path: "a.ts",
+            line: 12,
+            side: "RIGHT",
+            start_line: 8,
+            start_side: "RIGHT",
+            body: "extract",
+          }),
+        ],
+      }),
+    );
+  });
+
+  it("surfaces submit errors as alerts and keeps drafts intact", async () => {
+    const submit = vi.fn(async () => ({
+      ok: false as const,
+      error: "github HTTP 422",
+    }));
+    const onCleared = vi.fn();
+    const drafts = {
+      [reviewDraftKey({ path: "a.ts", line: 1, side: "RIGHT" })]: {
+        path: "a.ts",
+        line: 1,
+        side: "RIGHT" as const,
+        body: "x",
+      },
+    };
+    render(
+      <PrReviewSubmitPanel
+        repo="o/r"
+        number={1}
+        drafts={drafts}
+        onCleared={onCleared}
+        submit={submit}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /submit review/i }));
+    await waitFor(() => screen.getByRole("alert"));
+    expect(screen.getByRole("alert").textContent).toMatch(/422/);
+    expect(onCleared).not.toHaveBeenCalled();
+  });
+});
+
+describe("PrComments", () => {
+  it("shows a skeleton while loading", () => {
+    render(
+      <PrComments loading={true} reviewComments={[]} issueComments={[]} />,
+    );
+    expect(screen.getByLabelText(/loading comments/i)).toBeTruthy();
+  });
+
+  it("renders an empty state when there are no comments", () => {
+    render(
+      <PrComments loading={false} reviewComments={[]} issueComments={[]} />,
+    );
+    expect(screen.getByText(/no comments yet/i)).toBeTruthy();
+  });
+
+  it("merges issue + review comments into one chronological timeline and renders bodies as markdown", () => {
+    render(
+      <PrComments
+        loading={false}
+        reviewComments={[
+          {
+            id: 7,
+            path: "src/a.ts",
+            line: 12,
+            side: "RIGHT",
+            diff_hunk: null,
+            body: "**nit**: rename this",
+            user: "rahul",
+            user_avatar_url: null,
+            created_at: "2026-05-02T10:00:00Z",
+          },
+        ]}
+        issueComments={[
+          {
+            id: 100,
+            body: "looks good to me",
+            user: "carol",
+            user_avatar_url: null,
+            created_at: "2026-05-01T09:00:00Z",
+          },
+        ]}
+      />,
+    );
+    const articles = screen.getAllByRole("article");
+    expect(articles).toHaveLength(2);
+    expect(articles[0].textContent).toMatch(/looks good to me/);
+    expect(articles[1].textContent).toMatch(/nit/);
+    expect(within(articles[1]).getByText(/src\/a\.ts:12/)).toBeTruthy();
+    expect(
+      within(articles[1]).getByText("Review", {
+        selector: '[data-slot="comment-kind"]',
+      }),
+    ).toBeTruthy();
+    expect(within(articles[1]).getByText("nit").tagName).toBe("STRONG");
   });
 });
 

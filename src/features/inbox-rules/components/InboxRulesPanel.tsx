@@ -191,29 +191,32 @@ export function InboxRulesPanel({
   );
 
   return (
-    <section
-      aria-label="Inbox rules"
-      className="mt-8 rounded border border-zinc-200 bg-white p-5"
-    >
-      <h2 className="text-base font-semibold text-zinc-900">Inbox rules</h2>
-      <p className="mt-1 text-sm text-zinc-500">
-        Auto-categorize, snooze, or dismiss Signals on write.
-      </p>
+    <section aria-label="Inbox rules" className="space-y-6">
+      <header>
+        <h2 className="font-semibold text-2xl tracking-tight">Inbox rules</h2>
+        <p className="mt-1 font-mono text-[11px] text-muted-foreground">
+          Pure rule evaluator over Signals — runs after upsert, before alert
+          dispatch.
+        </p>
+      </header>
 
       {error && (
-        <p className="mt-3 rounded border border-red-200 bg-red-50 p-2 text-sm text-red-700">
+        <p
+          role="alert"
+          className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-destructive text-sm"
+        >
           {error}
         </p>
       )}
 
       {rules == null && !error && (
-        <p className="mt-3 text-sm text-zinc-500">Loading…</p>
+        <p className="text-muted-foreground text-sm">Loading…</p>
       )}
 
       {rules && (
-        <div className="mt-4 space-y-3">
+        <div className="space-y-3 rounded-lg border border-border bg-card p-4">
           {rules.length === 0 && (
-            <p className="text-sm text-zinc-500">
+            <p className="text-muted-foreground text-sm">
               No rules yet. Add one below to start shaping your inbox.
             </p>
           )}

@@ -17,6 +17,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { BriefingResult } from "#/features/briefing/morning-briefing";
 import { UpcomingEventsCard } from "#/features/signals/components/UpcomingEventsCard";
 import { toMeetingEvents } from "#/features/signals/views/calendar";
+import { PulseCard } from "#/features/today/PulseCard";
 import {
   BriefingCard,
   formatGreeting,
@@ -25,7 +26,6 @@ import {
   renderBold,
   TodaySchedule,
   TodayView,
-  WeekStatsCard,
 } from "#/routes/_app.today";
 import type { StoredSignal } from "#/shared/signal";
 
@@ -104,7 +104,6 @@ describe("TodayView greeting + alerts", () => {
     render(
       <TodayView
         meetings={[]}
-        upcoming={[]}
         error={null}
         alertSignal={null}
         onDismissAlert={() => {}}
@@ -123,7 +122,6 @@ describe("TodayView greeting + alerts", () => {
     render(
       <TodayView
         meetings={[meetingSignal()]}
-        upcoming={[]}
         error={null}
         alertSignal={meetingSignal()}
         onDismissAlert={onDismissAlert}
@@ -139,7 +137,6 @@ describe("TodayView greeting + alerts", () => {
     render(
       <TodayView
         meetings={[]}
-        upcoming={[]}
         error={null}
         alertSignal={null}
         onDismissAlert={() => {}}
@@ -448,14 +445,13 @@ describe("InProgressCard", () => {
   });
 });
 
-describe("WeekStatsCard", () => {
+describe("PulseCard", () => {
   const now = new Date("2026-05-04T12:00:00.000Z");
 
-  it("renders the four counts from the loaded signals", async () => {
+  it("renders donut, line, and bars driven by computeWeekStats output", async () => {
     const loader = vi.fn(
       async (_since: string) =>
         [
-          // PR reviewed (acted, in window)
           {
             id: "p1",
             provider: "github",
@@ -465,84 +461,51 @@ describe("WeekStatsCard", () => {
             url: null,
             payload: {},
             requires_action: false,
-            source_created_at: "2026-05-02T09:00:00.000Z",
-            dismissed_at: null,
+            source_created_at: "2026-05-02T08:00:00.000Z",
+            dismissed_at: "2026-05-03T08:00:00.000Z",
           },
-          // Ticket shipped (dismissed in window)
           {
-            id: "t1",
-            provider: "linear",
-            kind: "ticket_in_progress",
-            source_id: "t1",
-            title: "Ticket t1",
-            url: null,
-            payload: {},
-            requires_action: false,
-            source_created_at: "2026-04-20T09:00:00.000Z",
-            dismissed_at: "2026-05-02T09:00:00.000Z",
-          },
-          // Inbox-zeroed day: actionable mention received + dismissed on
-          // 2026-05-03 with no carry-over.
-          {
-            id: "z1",
+            id: "s1",
             provider: "slack",
             kind: "mention",
-            source_id: "z1",
+            source_id: "s1",
             title: "@you",
             url: null,
             payload: {},
             requires_action: true,
-            source_created_at: "2026-05-03T08:00:00.000Z",
-            dismissed_at: "2026-05-03T20:00:00.000Z",
+            source_created_at: "2026-05-02T09:00:00.000Z",
+            dismissed_at: null,
           },
         ] as StoredSignal[],
     );
-    render(<WeekStatsCard now={now} loader={loader} />);
-    await waitFor(() => {
-      const card = screen.getByRole("article", { name: /this week/i });
-      expect(card.textContent).toContain("PRs reviewed");
-    });
-    const card = screen.getByRole("article", { name: /this week/i });
-    const dts = card.querySelectorAll("dt");
-    const dds = card.querySelectorAll("dd");
-    const map: Record<string, string> = {};
-    dts.forEach((dt, i) => {
-      map[dt.textContent ?? ""] = dds[i]?.textContent ?? "";
-    });
-    // dd combines value + trend chip; assert prefix only.
-    expect(map["PRs reviewed"]?.startsWith("1")).toBe(true);
-    expect(map["Tickets shipped"]?.startsWith("1")).toBe(true);
-    expect(map["Inbox zeroed days"]?.startsWith("1")).toBe(true);
-    expect(map["Focus hours"]?.startsWith("0")).toBe(true);
-  });
-
-  it("renders trend deltas with up/down/flat signs", async () => {
-    const loader = vi.fn(async (_since: string) => [] as StoredSignal[]);
-    const { container } = render(<WeekStatsCard now={now} loader={loader} />);
-    await waitFor(() => screen.getByText(/PRs reviewed/));
-    const ups = container.querySelectorAll('[data-trend="up"]');
-    const downs = container.querySelectorAll('[data-trend="down"]');
-    const flats = container.querySelectorAll('[data-trend="flat"]');
-    expect(ups.length).toBeGreaterThan(0);
-    expect(ups[0].textContent).toContain("↑");
-    expect(downs.length).toBeGreaterThan(0);
-    expect(downs[0].textContent).toContain("↓");
-    expect(flats.length).toBeGreaterThan(0);
+    const { container } = render(<PulseCard now={now} loader={loader} />);
+    await waitFor(() => screen.getByRole("article", { name: /pulse/i }));
+    await waitFor(() =>
+      expect(
+        container.querySelectorAll("circle[data-source]").length,
+      ).toBeGreaterThan(0),
+    );
+    expect(container.querySelectorAll("[data-pulse-point]")).toHaveLength(7);
+    expect(container.querySelectorAll("[data-pulse-bar-group]")).toHaveLength(
+      5,
+    );
+    expect(screen.getByText(/last 7 days/i)).toBeTruthy();
+    expect(screen.getByText(/Review latency/i)).toBeTruthy();
+    expect(screen.getByText(/Shipped this week/i)).toBeTruthy();
   });
 
   it("passes a 7-day-ago ISO `since` to the loader", async () => {
     const loader = vi.fn(async (_since: string) => [] as StoredSignal[]);
-    render(<WeekStatsCard now={now} loader={loader} />);
+    render(<PulseCard now={now} loader={loader} />);
     await waitFor(() => expect(loader).toHaveBeenCalled());
-    const since = loader.mock.calls[0][0];
-    expect(since).toBe("2026-04-27T12:00:00.000Z");
+    expect(loader.mock.calls[0][0]).toBe("2026-04-27T12:00:00.000Z");
   });
 
   it("surfaces a load error", async () => {
     const loader = vi.fn(async (_since: string) => {
       throw new Error("boom");
     });
-    render(<WeekStatsCard now={now} loader={loader} />);
+    render(<PulseCard now={now} loader={loader} />);
     await waitFor(() => screen.getByText(/boom/i));
   });
 });

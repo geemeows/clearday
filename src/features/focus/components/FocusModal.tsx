@@ -8,7 +8,7 @@
 // caller.
 
 import { useEffect, useState } from "react";
-import { Button } from "#/components/ui/button";
+import { Button } from "#/components/coss/button";
 import {
   Dialog,
   DialogContent,
@@ -16,9 +16,9 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "#/components/ui/dialog";
-import { Input } from "#/components/ui/input";
-import { Label } from "#/components/ui/label";
+} from "#/components/coss/dialog";
+import { Input } from "#/components/coss/input";
+import { Label } from "#/components/coss/label";
 import { cn } from "#/lib/cn";
 
 const DURATIONS: ReadonlyArray<number> = [25, 45, 60, 90, 120];

@@ -1,17 +1,28 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Calendar as CalIcon, ChevronRight, Video, X } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import rehypeRaw from "rehype-raw";
+import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
+import remarkGfm from "remark-gfm";
 import { z } from "zod";
+import { Tabs, TabsList, TabsPanel, TabsTab } from "#/components/coss/tabs";
+import { Skeleton } from "#/components/ui/skeleton";
 import {
   providerOpenLabel,
   providerSourceKind,
   signalKindLabel,
 } from "#/features/integrations/display";
+import {
+  InboxPreviewRow,
+  InboxPreviewRowSkeleton,
+} from "#/features/signals/components/InboxPreviewRow";
 import { SourceGlyph } from "#/features/signals/components/SourceGlyph";
 import { filterMeetingsToToday } from "#/features/signals/views/today";
 import { useAutoRefresh } from "#/hooks/use-auto-refresh";
 import { apiFetch } from "#/lib/api-client";
 import { cn } from "#/lib/cn";
+import { supabase } from "#/lib/supabase";
 import type { Signal, SignalKind } from "#/shared/signal";
 
 const inboxSearchSchema = z.object({
@@ -39,6 +50,17 @@ const FILTERS: Array<{ id: Filter; label: string }> = [
   { id: "tickets", label: "Tickets" },
   { id: "mentions", label: "Mentions" },
   { id: "meetings", label: "Meetings" },
+];
+
+const SKELETON_ROWS = [
+  { id: "sk-a", width: "78%" },
+  { id: "sk-b", width: "55%" },
+  { id: "sk-c", width: "82%" },
+  { id: "sk-d", width: "44%" },
+  { id: "sk-e", width: "70%" },
+  { id: "sk-f", width: "60%" },
+  { id: "sk-g", width: "76%" },
+  { id: "sk-h", width: "50%" },
 ];
 
 function InboxPage() {
@@ -216,17 +238,108 @@ export function InboxView({
 
   if (visible == null) {
     return (
-      <section className="flex h-full min-h-0 flex-col px-8 pt-6">
-        <p className="text-sm text-muted-foreground">Loading…</p>
+      <section
+        aria-busy="true"
+        aria-label="Loading inbox"
+        className="grid h-full min-h-0 grid-cols-1 overflow-hidden lg:grid-cols-[420px_1fr]"
+        style={{ background: "var(--canvas)" }}
+      >
+        <div
+          className="flex min-h-0 flex-col overflow-hidden"
+          style={{ borderRight: "1px solid var(--hairline-soft)" }}
+        >
+          <div
+            className="flex flex-col gap-3 px-[18px] pt-4 pb-3"
+            style={{ borderBottom: "1px solid var(--hairline-soft)" }}
+          >
+            <div className="flex items-baseline">
+              <h1
+                className="font-semibold tracking-tight"
+                style={{ fontSize: 21, lineHeight: 1.25, color: "var(--ink)" }}
+              >
+                Inbox
+              </h1>
+              <span
+                className="ml-2.5 font-medium"
+                style={{ fontSize: 13, color: "var(--muted-foreground)" }}
+              >
+                — unread · — total
+              </span>
+              <span className="flex-1" />
+              <button
+                type="button"
+                disabled
+                className="rounded-md px-3"
+                style={{
+                  height: 30,
+                  fontSize: 12,
+                  color: "var(--ink)",
+                  opacity: 0.5,
+                }}
+              >
+                Mark all read
+              </button>
+            </div>
+            <nav
+              aria-label="Inbox filters"
+              className="flex flex-wrap items-center gap-1.5"
+            >
+              {FILTERS.map((f) => {
+                const active = filter === f.id;
+                return (
+                  <button
+                    type="button"
+                    key={f.id}
+                    aria-pressed={active}
+                    onClick={() => onFilterChange(f.id)}
+                    className="inline-flex items-center gap-1.5 rounded-full px-3 py-[5px] font-medium leading-tight transition-colors"
+                    style={{
+                      fontSize: 13,
+                      background: active ? "var(--ink)" : "var(--surface-soft)",
+                      color: active ? "var(--canvas)" : "var(--ink)",
+                      border: "1px solid transparent",
+                    }}
+                  >
+                    {f.label}
+                  </button>
+                );
+              })}
+            </nav>
+          </div>
+          <ul className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            {SKELETON_ROWS.map(({ id, width }) => (
+              <li
+                key={id}
+                style={{
+                  borderLeft: "2px solid transparent",
+                  borderBottom: "1px solid var(--hairline-soft)",
+                  padding: "2px 6px",
+                }}
+              >
+                <InboxPreviewRowSkeleton titleWidth={width} />
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div style={{ background: "var(--canvas)" }} />
       </section>
     );
   }
 
   if (visible.length === 0) {
     return (
-      <section className="flex h-full min-h-0 flex-col px-8 pt-6">
-        <p className="text-sm text-muted-foreground">
-          Nothing here. New Signals show up automatically.
+      <section
+        className="flex h-full min-h-0 flex-col items-center justify-center gap-2 px-8 text-center"
+        style={{ background: "var(--canvas)" }}
+      >
+        <p
+          className="font-semibold tracking-tight"
+          style={{ fontSize: 16, color: "var(--ink)" }}
+        >
+          Nothing here.
+        </p>
+        <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
+          New signals show up automatically.
         </p>
       </section>
     );
@@ -355,10 +468,40 @@ export function InboxRow({
   void onDismiss;
   const severity = severityOf(signal);
   const isAutoRule = signal.payload?.badge === "auto-rule";
-  const unread =
-    typeof signal.unread_count === "number" && signal.unread_count > 0
-      ? signal.unread_count
-      : null;
+  const chips = (
+    <>
+      {severity === "ci_fail" && (
+        <SeverityChip tone="danger">CI FAIL</SeverityChip>
+      )}
+      {severity === "conflict" && (
+        <SeverityChip tone="warning">CONFLICT</SeverityChip>
+      )}
+      {isAutoRule && <SeverityChip tone="muted">RULE</SeverityChip>}
+      {replied && (
+        <SeverityChip tone="success" className="uppercase tracking-wide">
+          Replied
+        </SeverityChip>
+      )}
+      {signal.priority === "high" && (
+        <SeverityChip tone="danger" className="uppercase tracking-wide">
+          High
+        </SeverityChip>
+      )}
+      {signal.priority === "low" && (
+        <SeverityChip tone="muted" className="uppercase tracking-wide">
+          Low
+        </SeverityChip>
+      )}
+      {snoozed && (
+        <SeverityChip
+          tone="warning"
+          title={`Returns at ${formatSnoozeReturn(signal.snoozed_until)}`}
+        >
+          Snoozed · returns {formatSnoozeReturn(signal.snoozed_until)}
+        </SeverityChip>
+      )}
+    </>
+  );
   return (
     <li
       data-selected={selected || undefined}
@@ -372,94 +515,15 @@ export function InboxRow({
       <button
         type="button"
         onClick={onSelect}
-        className="grid w-full items-start text-left"
-        style={{
-          gridTemplateColumns: "auto 1fr auto",
-          gap: 12,
-          padding: "14px 18px",
-        }}
+        className="block w-full"
+        style={{ padding: "2px 6px" }}
       >
-        <span
-          className="flex shrink-0 flex-col items-center"
-          style={{ gap: 6, paddingTop: 2 }}
-        >
-          <SourceGlyph source={providerSourceKind(signal.provider)} size={22} />
-          {unread && (
-            <span
-              role="img"
-              data-slot="unread"
-              aria-label={`${unread} unread`}
-              className="tabular-nums"
-              style={{ fontSize: 10, fontWeight: 700, color: "var(--primary)" }}
-            >
-              {unread}
-            </span>
-          )}
-        </span>
-        <span className="min-w-0">
-          <span
-            className="flex items-center"
-            style={{ gap: 6, marginBottom: 2 }}
-          >
-            {severity === "ci_fail" && (
-              <SeverityChip tone="danger">CI FAIL</SeverityChip>
-            )}
-            {severity === "conflict" && (
-              <SeverityChip tone="warning">CONFLICT</SeverityChip>
-            )}
-            {isAutoRule && <SeverityChip tone="muted">RULE</SeverityChip>}
-            <span
-              className="truncate"
-              style={{
-                fontSize: 14,
-                fontWeight: unread ? 600 : 500,
-                color: "var(--ink)",
-              }}
-            >
-              {signal.title}
-            </span>
-            {replied && (
-              <SeverityChip tone="success" className="uppercase tracking-wide">
-                Replied
-              </SeverityChip>
-            )}
-            {signal.priority === "high" && (
-              <SeverityChip tone="danger" className="uppercase tracking-wide">
-                High
-              </SeverityChip>
-            )}
-            {signal.priority === "low" && (
-              <SeverityChip tone="muted" className="uppercase tracking-wide">
-                Low
-              </SeverityChip>
-            )}
-            {snoozed && (
-              <SeverityChip
-                tone="warning"
-                title={`Returns at ${formatSnoozeReturn(signal.snoozed_until)}`}
-              >
-                Snoozed · returns {formatSnoozeReturn(signal.snoozed_until)}
-              </SeverityChip>
-            )}
-          </span>
-          <span
-            className="block truncate"
-            style={{ fontSize: 12, color: "var(--muted-foreground)" }}
-          >
-            {secondaryLabel(signal) || signalKindLabel(signal.kind)}
-          </span>
-        </span>
-        <time
-          className="shrink-0 tabular-nums"
-          style={{
-            fontSize: 11,
-            paddingTop: 3,
-            color: "var(--muted-foreground)",
-            fontFamily: "ui-monospace, SF Mono, Menlo, monospace",
-          }}
-        >
-          {relAgo(signal.source_created_at, nowIso)}
-        </time>
+        <InboxPreviewRow
+          signal={signal}
+          nowIso={nowIso}
+          chips={chips}
+          unreadDisplay="count"
+        />
       </button>
     </li>
   );
@@ -551,6 +615,16 @@ export function InboxDetailPane({
   onReplyStart?: (id: string) => void;
   onReplyRollback?: (id: string) => void;
 }) {
+  const [liveState, setLiveState] = useState<PrLiveState | null>(null);
+  const signalId = signal?.id;
+  // Reset whenever a different signal is selected so the chip doesn't
+  // briefly show the previous PR's merged state. Biome can't see that
+  // signalId is the trigger (the body doesn't read it), but we need the
+  // effect to refire on selection change.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: signalId is the reset trigger
+  useEffect(() => {
+    setLiveState(null);
+  }, [signalId]);
   if (!signal) {
     return (
       <aside
@@ -563,6 +637,8 @@ export function InboxDetailPane({
     );
   }
   const group = kindGroup(signal.kind);
+  const prRepo = signal.payload?.repo as string | undefined;
+  const prNumber = signal.payload?.number as number | undefined;
   return (
     <aside
       aria-label="Signal detail"
@@ -575,17 +651,34 @@ export function InboxDetailPane({
         style={{ gap: 8, marginBottom: 12 }}
       >
         <SourceGlyph source={providerSourceKind(signal.provider)} size={20} />
-        <span
-          className="font-medium uppercase tracking-wider"
-          style={{
-            fontSize: 11,
-            color: "var(--muted-foreground)",
-            fontFamily: "ui-monospace, SF Mono, Menlo, monospace",
-          }}
-        >
-          {signalKindLabel(signal.kind)}
-        </span>
+        {group === "pr" && prRepo ? (
+          <span
+            className="font-medium"
+            style={{
+              fontSize: 12,
+              color: "var(--muted-foreground)",
+              fontFamily: "ui-monospace, SF Mono, Menlo, monospace",
+            }}
+          >
+            {prRepo}
+            {typeof prNumber === "number" ? ` #${prNumber}` : ""}
+          </span>
+        ) : (
+          <span
+            className="font-medium uppercase tracking-wider"
+            style={{
+              fontSize: 11,
+              color: "var(--muted-foreground)",
+              fontFamily: "ui-monospace, SF Mono, Menlo, monospace",
+            }}
+          >
+            {signalKindLabel(signal.kind)}
+          </span>
+        )}
         <span className="flex-1" />
+        {group === "pr" && (
+          <PrStatusChip signal={signal} liveState={liveState} />
+        )}
         <button
           type="button"
           aria-label="Close detail"
@@ -603,16 +696,18 @@ export function InboxDetailPane({
           lineHeight: 1.18,
           letterSpacing: "-0.4px",
           color: "var(--ink)",
-          margin: "0 0 14px",
+          margin: group === "pr" ? "0 0 14px" : "0 0 14px",
         }}
       >
         {signal.title}
       </h2>
+      {group === "pr" && <PrMetaRow signal={signal} />}
       {group === "pr" && (
         <PRDetail
           signal={signal}
           onReplyStart={onReplyStart}
           onReplyRollback={onReplyRollback}
+          onPrState={setLiveState}
         />
       )}
       {group === "slack" && (
@@ -625,7 +720,7 @@ export function InboxDetailPane({
       {group === "meeting" && <MeetingDetail signal={signal} />}
       {group === "ticket" && <TaskDetail signal={signal} />}
       <div
-        className="sticky bottom-0 z-10 flex flex-wrap items-center gap-2"
+        className="flex flex-wrap items-center gap-2"
         style={{
           marginTop: 24,
           padding: "16px 0",
@@ -708,22 +803,138 @@ export function TaskDetail({ signal }: { signal: StoredSignal }) {
   );
 }
 
-export function PRDetail({
+function PrStatusChip({
   signal,
-  onReplyStart,
-  onReplyRollback,
+  liveState,
 }: {
   signal: StoredSignal;
-  onReplyStart?: (id: string) => void;
-  onReplyRollback?: (id: string) => void;
+  liveState: PrLiveState | null;
 }) {
-  const repo = signal.payload?.repo as string | undefined;
-  const number = signal.payload?.number as number | undefined;
+  // Live overview is the source of truth when available — the poll only
+  // covers open PRs, so signal.payload doesn't track merge/close.
+  const merged = liveState ? liveState.merged : Boolean(signal.payload?.merged);
+  const closed = liveState
+    ? liveState.state === "closed" && !liveState.merged
+    : Boolean(signal.payload?.closed) && !merged;
+  const draft = Boolean(signal.payload?.draft);
+  const tone: "good" | "muted" | "ai" | "danger" = merged
+    ? "ai"
+    : closed
+      ? "danger"
+      : draft
+        ? "muted"
+        : "good";
+  const label = merged
+    ? "Merged"
+    : closed
+      ? "Closed"
+      : draft
+        ? "Draft"
+        : signal.kind === "pr_review_requested"
+          ? "Open · review requested"
+          : signal.kind === "pr_authored"
+            ? "Open · authored by you"
+            : "Open";
+  const palette: Record<typeof tone, { bg: string; fg: string }> = {
+    good: { bg: "var(--good-soft)", fg: "var(--good)" },
+    danger: { bg: "var(--danger-soft)", fg: "var(--destructive)" },
+    ai: { bg: "var(--src-ai-bg)", fg: "var(--src-ai)" },
+    muted: { bg: "var(--surface-strong)", fg: "var(--muted-foreground)" },
+  };
+  return (
+    <span
+      data-slot="pr-status-chip"
+      className="inline-flex items-center rounded-full"
+      style={{
+        padding: "2px 10px",
+        fontSize: 11,
+        background: palette[tone].bg,
+        color: palette[tone].fg,
+      }}
+    >
+      {label}
+    </span>
+  );
+}
+
+function PrMetaRow({ signal }: { signal: StoredSignal }) {
   const author = signal.payload?.author as string | undefined;
   const authorAvatar = signal.payload?.author_avatar_url as string | undefined;
   const additions = signal.payload?.additions as number | undefined;
   const deletions = signal.payload?.deletions as number | undefined;
-  const draft = Boolean(signal.payload?.draft);
+  const filesChanged =
+    (signal.payload?.files_changed as Array<{ path: string }> | undefined) ??
+    [];
+  const filesCount =
+    (signal.payload?.files_count as number | undefined) ?? filesChanged.length;
+  const opened = signal.source_created_at
+    ? relAgo(signal.source_created_at, new Date().toISOString())
+    : "";
+  return (
+    <div
+      data-slot="pr-meta"
+      className="flex flex-wrap items-center"
+      style={{ gap: 16, marginBottom: 20 }}
+    >
+      {author && (
+        <span className="flex items-center" style={{ gap: 8 }}>
+          <AuthorAvatar handle={author} src={authorAvatar} />
+          <span style={{ fontSize: 13, fontWeight: 500 }}>@{author}</span>
+        </span>
+      )}
+      {opened && (
+        <span
+          style={{
+            fontSize: 12,
+            color: "var(--muted-foreground)",
+            fontFamily: "ui-monospace, SF Mono, Menlo, monospace",
+          }}
+        >
+          opened {opened}
+        </span>
+      )}
+      {(typeof additions === "number" || typeof deletions === "number") && (
+        <span
+          style={{
+            fontSize: 12,
+            fontFamily: "ui-monospace, SF Mono, Menlo, monospace",
+          }}
+        >
+          {typeof additions === "number" && (
+            <span style={{ color: "var(--good)" }}>+{additions}</span>
+          )}
+          {typeof additions === "number" && typeof deletions === "number" && (
+            <span style={{ color: "var(--muted-soft)", margin: "0 4px" }}>
+              ·
+            </span>
+          )}
+          {typeof deletions === "number" && (
+            <span style={{ color: "var(--destructive)" }}>−{deletions}</span>
+          )}
+          {filesCount > 0 && (
+            <span style={{ color: "var(--muted-foreground)" }}>
+              {` across ${filesCount} ${filesCount === 1 ? "file" : "files"}`}
+            </span>
+          )}
+        </span>
+      )}
+    </div>
+  );
+}
+
+export function PRDetail({
+  signal,
+  onReplyStart,
+  onReplyRollback,
+  onPrState,
+}: {
+  signal: StoredSignal;
+  onReplyStart?: (id: string) => void;
+  onReplyRollback?: (id: string) => void;
+  onPrState?: (state: PrLiveState) => void;
+}) {
+  const repo = signal.payload?.repo as string | undefined;
+  const number = signal.payload?.number as number | undefined;
   const aiSummary = signal.payload?.ai_summary as string | undefined;
   const filesChanged =
     (signal.payload?.files_changed as
@@ -734,50 +945,7 @@ export function PRDetail({
       | Array<{ author: string; body: string; created_at?: string }>
       | undefined) ?? [];
   return (
-    <div data-slot="pr-detail" className="mt-3 space-y-4">
-      <dl className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1.5 text-sm">
-        {repo && (
-          <>
-            <dt className="text-muted-foreground">Repo</dt>
-            <dd className="text-foreground">
-              {repo}
-              {typeof number === "number" ? `#${number}` : ""}
-            </dd>
-          </>
-        )}
-        {author && (
-          <>
-            <dt className="text-muted-foreground">Author</dt>
-            <dd className="flex items-center gap-2 text-foreground">
-              <AuthorAvatar handle={author} src={authorAvatar} />
-              <span>@{author}</span>
-            </dd>
-          </>
-        )}
-        {(typeof additions === "number" || typeof deletions === "number") && (
-          <>
-            <dt className="text-muted-foreground">Diff</dt>
-            <dd className="font-mono text-xs">
-              {typeof additions === "number" && (
-                <span className="text-emerald-600">+{additions}</span>
-              )}
-              {typeof additions === "number" &&
-                typeof deletions === "number" && <span> </span>}
-              {typeof deletions === "number" && (
-                <span className="text-destructive">-{deletions}</span>
-              )}
-            </dd>
-          </>
-        )}
-        <dt className="text-muted-foreground">Status</dt>
-        <dd className="text-foreground">
-          {draft
-            ? "Draft"
-            : signal.requires_action
-              ? "Awaiting your action"
-              : "Tracking"}
-        </dd>
-      </dl>
+    <div data-slot="pr-detail" className="space-y-4">
       {aiSummary && (
         <section
           aria-label="AI summary"
@@ -876,7 +1044,7 @@ export function PRDetail({
         </section>
       )}
       {repo && typeof number === "number" && (
-        <PrPullRequestPanel repo={repo} number={number} />
+        <PrPullRequestPanel repo={repo} number={number} onPrState={onPrState} />
       )}
       {recentComments.length > 0 && (
         <section aria-label="Recent comments">
@@ -942,7 +1110,7 @@ export function PRDetail({
           </ol>
         </section>
       )}
-      {repo && typeof number === "number" && !draft && (
+      {repo && typeof number === "number" && !signal.payload?.draft && (
         <PrReviewActions
           repo={repo}
           number={number}
@@ -977,12 +1145,22 @@ function AuthorAvatar({ handle, src }: { handle: string; src?: string }) {
 
 type PrReviewEvent = "APPROVE" | "REQUEST_CHANGES" | "COMMENT";
 
+export type PrReviewSubmitDraft = {
+  path: string;
+  line: number;
+  side: ReviewDraftSide;
+  body: string;
+  start_line?: number;
+  start_side?: ReviewDraftSide;
+};
+
 type PrReviewSubmit = (params: {
   repo: string;
   number: number;
   event: PrReviewEvent;
   body?: string;
   signal_id?: string;
+  comments?: PrReviewSubmitDraft[];
 }) => Promise<{ ok: boolean; error?: string; needs_reauth?: boolean }>;
 
 const defaultPrReviewSubmit: PrReviewSubmit = async (params) =>
@@ -1065,14 +1243,29 @@ export type PrReviewComment = {
   created_at: string | null;
 };
 
+export type PrIssueComment = {
+  id: number;
+  body: string;
+  user: string | null;
+  user_avatar_url: string | null;
+  created_at: string | null;
+};
+
+export type PrLiveState = {
+  state: "open" | "closed";
+  merged: boolean;
+  merged_at: string | null;
+};
+
 export type PrOverviewResult =
-  | {
+  | ({
       ok: true;
       body: string | null;
       author: string | null;
       author_avatar_url: string | null;
       review_comments: PrReviewComment[];
-    }
+      issue_comments: PrIssueComment[];
+    } & PrLiveState)
   | { ok: false; error: string; reason?: string; needs_reauth?: boolean };
 
 export type PrOverviewLoader = (params: {
@@ -1084,6 +1277,118 @@ const defaultPrOverviewLoader: PrOverviewLoader = async ({ repo, number }) => {
   const qs = `repo=${encodeURIComponent(repo)}&number=${number}`;
   return (await apiFetch(`/api/pr/overview?${qs}`)) as PrOverviewResult;
 };
+
+// rehype-sanitize schema based on the GitHub default but with a few extras
+// commonly found in PR bodies: image dimensions, video poster, and `align` on
+// images / paragraphs (GitHub authors lean on these often).
+const markdownSanitizeSchema = {
+  ...defaultSchema,
+  attributes: {
+    ...defaultSchema.attributes,
+    img: [
+      ...((defaultSchema.attributes?.img as Array<unknown>) ?? []),
+      "align",
+      "width",
+      "height",
+      "loading",
+      "style",
+    ],
+    a: [
+      ...((defaultSchema.attributes?.a as Array<unknown>) ?? []),
+      "rel",
+      "target",
+    ],
+    "*": [
+      ...((defaultSchema.attributes?.["*"] as Array<unknown>) ?? []),
+      "align",
+    ],
+  },
+  tagNames: [
+    ...(defaultSchema.tagNames ?? []),
+    "details",
+    "summary",
+    "video",
+    "source",
+  ],
+};
+
+// Hosts whose images Chrome blocks under ORB or that require a github auth
+// token to fetch (user-attachments). These need to go through our worker
+// proxy at /api/github/asset, which fetches server-side with the user's
+// token and re-emits the bytes from our origin.
+const GITHUB_ASSET_PROXY_HOSTS = new Set([
+  "github.com",
+  "user-images.githubusercontent.com",
+  "raw.githubusercontent.com",
+  "private-user-images.githubusercontent.com",
+  "objects.githubusercontent.com",
+]);
+
+function proxyGithubAssetUrl(
+  src: string | undefined,
+  authToken: string | null,
+): string | undefined {
+  if (!src) return src;
+  let parsed: URL;
+  try {
+    parsed = new URL(src);
+  } catch {
+    return src;
+  }
+  if (parsed.protocol !== "https:") return src;
+  if (!GITHUB_ASSET_PROXY_HOSTS.has(parsed.hostname)) return src;
+  const qs = `url=${encodeURIComponent(parsed.toString())}${
+    authToken ? `&auth=${encodeURIComponent(authToken)}` : ""
+  }`;
+  return `/api/github/asset?${qs}`;
+}
+
+function useSupabaseAccessToken(): string | null {
+  const [token, setToken] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    supabase.auth.getSession().then(({ data }) => {
+      if (cancelled) return;
+      setToken(data.session?.access_token ?? null);
+    });
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
+      setToken(session?.access_token ?? null);
+    });
+    return () => {
+      cancelled = true;
+      sub.subscription.unsubscribe();
+    };
+  }, []);
+  return token;
+}
+
+function Markdown({ children }: { children: string }) {
+  const authToken = useSupabaseAccessToken();
+  return (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      rehypePlugins={[rehypeRaw, [rehypeSanitize, markdownSanitizeSchema]]}
+      components={{
+        a: ({ node: _n, ...props }) => (
+          <a {...props} target="_blank" rel="noopener noreferrer" />
+        ),
+        img: ({ node: _n, src, ...props }) => (
+          <img
+            {...props}
+            src={proxyGithubAssetUrl(
+              typeof src === "string" ? src : undefined,
+              authToken,
+            )}
+            loading="lazy"
+            alt={props.alt ?? ""}
+          />
+        ),
+      }}
+    >
+      {children}
+    </ReactMarkdown>
+  );
+}
 
 function groupCommentsByPath(
   comments: PrReviewComment[],
@@ -1097,16 +1402,87 @@ function groupCommentsByPath(
   return out;
 }
 
+export type DiffRow = {
+  raw: string;
+  tone: "hunk" | "ctx" | "add" | "del";
+  oldLine?: number;
+  newLine?: number;
+};
+
+// Parse a unified patch into rows annotated with each side's file line
+// number. Inline review comments target one of those line numbers.
+export function parsePatch(patch: string): DiffRow[] {
+  const lines = patch.split("\n");
+  const rows: DiffRow[] = [];
+  let oldLine = 0;
+  let newLine = 0;
+  for (const raw of lines) {
+    if (raw.startsWith("@@")) {
+      const m = raw.match(/^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
+      if (m) {
+        oldLine = Number(m[1]);
+        newLine = Number(m[2]);
+      }
+      rows.push({ raw, tone: "hunk" });
+      continue;
+    }
+    if (raw.startsWith("+") && !raw.startsWith("+++")) {
+      rows.push({ raw, tone: "add", newLine });
+      newLine += 1;
+      continue;
+    }
+    if (raw.startsWith("-") && !raw.startsWith("---")) {
+      rows.push({ raw, tone: "del", oldLine });
+      oldLine += 1;
+      continue;
+    }
+    if (raw.startsWith("---") || raw.startsWith("+++")) {
+      rows.push({ raw, tone: "ctx" });
+      continue;
+    }
+    rows.push({ raw, tone: "ctx", oldLine, newLine });
+    oldLine += 1;
+    newLine += 1;
+  }
+  return rows;
+}
+
+export type ReviewDraftSide = "LEFT" | "RIGHT";
+
+export type ReviewDraft = {
+  path: string;
+  line: number;
+  side: ReviewDraftSide;
+  /** Inclusive start of a multi-line range. Omit for single-line drafts. */
+  startLine?: number;
+  body: string;
+};
+
+export function reviewDraftKey(d: {
+  path: string;
+  line: number;
+  side: ReviewDraftSide;
+  startLine?: number;
+}): string {
+  return `${d.path}|${d.side}|${d.startLine ?? d.line}-${d.line}`;
+}
+
 export function PrDescription({
   repo,
   number,
   load = defaultPrOverviewLoader,
   onComments,
+  onReviewComments,
+  onIssueComments,
+  onPrState,
 }: {
   repo: string;
   number: number;
   load?: PrOverviewLoader;
   onComments?: (commentsByPath: Record<string, PrReviewComment[]>) => void;
+  onReviewComments?: (comments: PrReviewComment[]) => void;
+  onIssueComments?: (comments: PrIssueComment[]) => void;
+  onPrState?: (state: PrLiveState) => void;
 }) {
   const [state, setState] = useState<
     | { kind: "loading" }
@@ -1123,6 +1499,13 @@ export function PrDescription({
         if (out.ok) {
           setState({ kind: "ok", body: out.body });
           onComments?.(groupCommentsByPath(out.review_comments));
+          onReviewComments?.(out.review_comments);
+          onIssueComments?.(out.issue_comments);
+          onPrState?.({
+            state: out.state,
+            merged: out.merged,
+            merged_at: out.merged_at,
+          });
         } else {
           setState({ kind: "error", message: out.error });
         }
@@ -1137,25 +1520,19 @@ export function PrDescription({
     return () => {
       cancelled = true;
     };
-  }, [repo, number, load, onComments]);
+  }, [
+    repo,
+    number,
+    load,
+    onComments,
+    onReviewComments,
+    onIssueComments,
+    onPrState,
+  ]);
 
   return (
     <section aria-label="PR description">
-      <header
-        className="font-bold uppercase tracking-wider"
-        style={{
-          fontSize: 9,
-          color: "var(--muted-foreground)",
-          marginBottom: 8,
-        }}
-      >
-        Description
-      </header>
-      {state.kind === "loading" && (
-        <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>
-          Loading description…
-        </p>
-      )}
+      {state.kind === "loading" && <PrDescriptionSkeleton />}
       {state.kind === "error" && (
         <p
           role="alert"
@@ -1172,21 +1549,32 @@ export function PrDescription({
       )}
       {state.kind === "ok" && state.body && (
         <div
+          className="markdown-body"
           style={{
-            padding: "12px 16px",
-            borderRadius: 12,
-            background: "var(--surface-soft)",
-            border: "1px solid var(--hairline-soft)",
             fontSize: 13,
             lineHeight: 1.55,
             color: "var(--body, var(--foreground))",
-            whiteSpace: "pre-wrap",
           }}
         >
-          {state.body}
+          <Markdown>{state.body}</Markdown>
         </div>
       )}
     </section>
+  );
+}
+
+function PrDescriptionSkeleton() {
+  return (
+    <output
+      aria-busy="true"
+      aria-label="Loading description"
+      className="flex flex-col gap-2"
+    >
+      <Skeleton className="h-3.5 w-11/12" />
+      <Skeleton className="h-3.5 w-9/12" />
+      <Skeleton className="h-3.5 w-10/12" />
+      <Skeleton className="h-3.5 w-7/12" />
+    </output>
   );
 }
 
@@ -1195,30 +1583,103 @@ export function PrPullRequestPanel({
   number,
   loadOverview,
   loadFiles,
+  onPrState,
 }: {
   repo: string;
   number: number;
   loadOverview?: PrOverviewLoader;
   loadFiles?: PrFilesLoader;
+  onPrState?: (state: PrLiveState) => void;
 }) {
   const [commentsByPath, setCommentsByPath] = useState<
     Record<string, PrReviewComment[]>
   >({});
+  const [reviewComments, setReviewComments] = useState<PrReviewComment[]>([]);
+  const [issueComments, setIssueComments] = useState<PrIssueComment[]>([]);
+  const [overviewLoading, setOverviewLoading] = useState(true);
+  const [drafts, setDrafts] = useState<Record<string, ReviewDraft>>({});
+  const handleReviewComments = useCallback((comments: PrReviewComment[]) => {
+    setReviewComments(comments);
+    setOverviewLoading(false);
+  }, []);
+  const upsertDraft = useCallback((draft: ReviewDraft) => {
+    setDrafts((prev) => ({ ...prev, [reviewDraftKey(draft)]: draft }));
+  }, []);
+  const removeDraft = useCallback((key: string) => {
+    setDrafts((prev) => {
+      if (!(key in prev)) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  }, []);
+  const clearDrafts = useCallback(() => setDrafts({}), []);
+  const draftCount = Object.keys(drafts).length;
   return (
-    <div className="flex flex-col" style={{ gap: 16 }}>
-      <PrDescription
-        repo={repo}
-        number={number}
-        load={loadOverview}
-        onComments={setCommentsByPath}
-      />
-      <PrDiffViewer
-        repo={repo}
-        number={number}
-        load={loadFiles}
-        commentsByPath={commentsByPath}
-      />
-    </div>
+    <Tabs defaultValue="description">
+      <TabsList variant="underline" className="w-full">
+        <TabsTab value="description">Description</TabsTab>
+        <TabsTab value="comments">
+          Comments
+          {reviewComments.length + issueComments.length > 0 && (
+            <span
+              data-slot="comment-count"
+              className="ml-1 inline-flex items-center justify-center rounded-full px-1.5"
+              style={{
+                fontSize: 10,
+                minWidth: 18,
+                height: 18,
+                background: "var(--surface-strong)",
+                color: "var(--ink)",
+                fontWeight: 600,
+              }}
+            >
+              {reviewComments.length + issueComments.length}
+            </span>
+          )}
+        </TabsTab>
+        <TabsTab value="diff">Diff</TabsTab>
+      </TabsList>
+      <TabsPanel value="description" className="pt-3" keepMounted>
+        <PrDescription
+          repo={repo}
+          number={number}
+          load={loadOverview}
+          onComments={setCommentsByPath}
+          onReviewComments={handleReviewComments}
+          onIssueComments={setIssueComments}
+          onPrState={onPrState}
+        />
+      </TabsPanel>
+      <TabsPanel value="comments" className="pt-3">
+        <PrComments
+          loading={overviewLoading}
+          reviewComments={reviewComments}
+          issueComments={issueComments}
+        />
+      </TabsPanel>
+      <TabsPanel value="diff" className="pt-3">
+        <div className="flex flex-col" style={{ gap: 12 }}>
+          {draftCount > 0 && (
+            <PrReviewSubmitPanel
+              repo={repo}
+              number={number}
+              drafts={drafts}
+              onCleared={clearDrafts}
+            />
+          )}
+          <PrDiffViewer
+            repo={repo}
+            number={number}
+            load={loadFiles}
+            commentsByPath={commentsByPath}
+            drafts={drafts}
+            onAddDraft={upsertDraft}
+            onRemoveDraft={removeDraft}
+          />
+        </div>
+      </TabsPanel>
+    </Tabs>
   );
 }
 
@@ -1227,11 +1688,17 @@ export function PrDiffViewer({
   number,
   load = defaultPrFilesLoader,
   commentsByPath,
+  drafts,
+  onAddDraft,
+  onRemoveDraft,
 }: {
   repo: string;
   number: number;
   load?: PrFilesLoader;
   commentsByPath?: Record<string, PrReviewComment[]>;
+  drafts?: Record<string, ReviewDraft>;
+  onAddDraft?: (draft: ReviewDraft) => void;
+  onRemoveDraft?: (key: string) => void;
 }) {
   const [state, setState] = useState<
     | { kind: "loading" }
@@ -1262,21 +1729,7 @@ export function PrDiffViewer({
 
   return (
     <section aria-label="PR diff">
-      <header
-        className="font-bold uppercase tracking-wider"
-        style={{
-          fontSize: 9,
-          color: "var(--muted-foreground)",
-          marginBottom: 8,
-        }}
-      >
-        Diff
-      </header>
-      {state.kind === "loading" && (
-        <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>
-          Loading diff…
-        </p>
-      )}
+      {state.kind === "loading" && <PrDiffSkeleton />}
       {state.kind === "error" && (
         <p
           role="alert"
@@ -1298,6 +1751,9 @@ export function PrDiffViewer({
               key={f.filename}
               file={f}
               comments={commentsByPath?.[f.filename] ?? []}
+              drafts={drafts}
+              onAddDraft={onAddDraft}
+              onRemoveDraft={onRemoveDraft}
             />
           ))}
         </div>
@@ -1306,14 +1762,237 @@ export function PrDiffViewer({
   );
 }
 
+function PrDiffSkeleton() {
+  return (
+    <output
+      aria-busy="true"
+      aria-label="Loading diff"
+      className="flex flex-col"
+      style={{ gap: 8 }}
+    >
+      {[
+        { id: "diff-sk-a", w: "62%" },
+        { id: "diff-sk-b", w: "48%" },
+        { id: "diff-sk-c", w: "74%" },
+      ].map((row) => (
+        <div
+          key={row.id}
+          className="flex items-center"
+          style={{
+            border: "1px solid var(--hairline-soft)",
+            borderRadius: 12,
+            padding: "8px 12px",
+            gap: 12,
+          }}
+        >
+          <Skeleton className="h-4 w-4 rounded" />
+          <Skeleton className="h-3.5" style={{ width: row.w }} />
+          <div className="flex-1" />
+          <Skeleton className="h-3.5 w-10" />
+        </div>
+      ))}
+    </output>
+  );
+}
+
+type PrCommentEntry =
+  | { kind: "issue"; data: PrIssueComment }
+  | { kind: "review"; data: PrReviewComment };
+
+export function PrComments({
+  loading,
+  reviewComments,
+  issueComments,
+}: {
+  loading: boolean;
+  reviewComments: PrReviewComment[];
+  issueComments: PrIssueComment[];
+}) {
+  if (loading) return <PrCommentsSkeleton />;
+  const entries: PrCommentEntry[] = [
+    ...issueComments.map((c) => ({ kind: "issue" as const, data: c })),
+    ...reviewComments.map((c) => ({ kind: "review" as const, data: c })),
+  ].sort((a, b) => {
+    const aT = a.data.created_at ?? "";
+    const bT = b.data.created_at ?? "";
+    return aT.localeCompare(bT);
+  });
+  if (entries.length === 0) {
+    return (
+      <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>
+        No comments yet.
+      </p>
+    );
+  }
+  return (
+    <section
+      aria-label="PR comments"
+      className="flex flex-col"
+      style={{ gap: 12 }}
+    >
+      {entries.map((entry) => (
+        <PrCommentCard key={`${entry.kind}-${entry.data.id}`} entry={entry} />
+      ))}
+    </section>
+  );
+}
+
+function PrCommentCard({ entry }: { entry: PrCommentEntry }) {
+  const c = entry.data;
+  return (
+    <article
+      style={{
+        padding: "10px 12px",
+        borderRadius: 12,
+        border: "1px solid var(--hairline-soft)",
+      }}
+    >
+      <header className="flex items-center" style={{ gap: 8, marginBottom: 6 }}>
+        {c.user_avatar_url ? (
+          <img
+            src={c.user_avatar_url}
+            alt={c.user ? `@${c.user}` : "commenter"}
+            width={20}
+            height={20}
+            style={{
+              borderRadius: "50%",
+              border: "1px solid var(--hairline-soft)",
+              objectFit: "cover",
+            }}
+          />
+        ) : (
+          <span
+            aria-hidden
+            className="inline-flex items-center justify-center"
+            style={{
+              width: 20,
+              height: 20,
+              borderRadius: "50%",
+              background: "var(--surface-strong)",
+              color: "var(--ink)",
+              fontSize: 10,
+              fontWeight: 600,
+            }}
+          >
+            {(c.user?.[0] ?? "?").toUpperCase()}
+          </span>
+        )}
+        <span style={{ fontSize: 12, fontWeight: 600 }}>
+          @{c.user ?? "unknown"}
+        </span>
+        {entry.kind === "review" && (
+          <span
+            data-slot="comment-kind"
+            style={{
+              fontSize: 10,
+              fontWeight: 600,
+              textTransform: "uppercase",
+              letterSpacing: 0.4,
+              padding: "2px 6px",
+              borderRadius: 999,
+              background: "var(--surface-strong)",
+              color: "var(--muted-foreground)",
+            }}
+          >
+            Review
+          </span>
+        )}
+        {entry.kind === "review" && (entry.data as PrReviewComment).path && (
+          <span
+            style={{
+              fontSize: 11,
+              fontFamily: "ui-monospace, SF Mono, Menlo, monospace",
+              color: "var(--muted-foreground)",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {(entry.data as PrReviewComment).path}
+            {typeof (entry.data as PrReviewComment).line === "number"
+              ? `:${(entry.data as PrReviewComment).line}`
+              : ""}
+          </span>
+        )}
+        {c.created_at && (
+          <span
+            className="ml-auto"
+            style={{ fontSize: 11, color: "var(--muted-foreground)" }}
+          >
+            {new Date(c.created_at).toLocaleDateString(undefined, {
+              month: "short",
+              day: "numeric",
+            })}
+          </span>
+        )}
+      </header>
+      <div
+        className="markdown-body"
+        style={{
+          fontSize: 13,
+          lineHeight: 1.5,
+          color: "var(--body, var(--foreground))",
+        }}
+      >
+        <Markdown>{c.body}</Markdown>
+      </div>
+    </article>
+  );
+}
+
+function PrCommentsSkeleton() {
+  return (
+    <output
+      aria-busy="true"
+      aria-label="Loading comments"
+      className="flex flex-col"
+      style={{ gap: 12 }}
+    >
+      {[
+        { id: "cm-sk-a", lines: 2 },
+        { id: "cm-sk-b", lines: 3 },
+      ].map((row) => (
+        <div
+          key={row.id}
+          className="flex flex-col gap-2"
+          style={{
+            padding: "10px 12px",
+            borderRadius: 12,
+            border: "1px solid var(--hairline-soft)",
+          }}
+        >
+          <div className="flex items-center gap-2">
+            <Skeleton className="h-5 w-5 rounded-full" />
+            <Skeleton className="h-3 w-24" />
+          </div>
+          {Array.from({ length: row.lines }).map((_, i) => (
+            <Skeleton
+              // biome-ignore lint/suspicious/noArrayIndexKey: skeleton lines are positional
+              key={i}
+              className="h-3.5"
+              style={{ width: `${60 + ((i * 13) % 30)}%` }}
+            />
+          ))}
+        </div>
+      ))}
+    </output>
+  );
+}
+
 function PrFilePatch({
   file,
   defaultOpen = false,
   comments = [],
+  drafts,
+  onAddDraft,
+  onRemoveDraft,
 }: {
   file: PrFile;
   defaultOpen?: boolean;
   comments?: PrReviewComment[];
+  drafts?: Record<string, ReviewDraft>;
+  onAddDraft?: (draft: ReviewDraft) => void;
+  onRemoveDraft?: (key: string) => void;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const panelId = `pr-file-${file.filename.replace(/[^a-z0-9]/gi, "-")}`;
@@ -1417,47 +2096,453 @@ function PrFilePatch({
               Patch not available (binary or oversized file).
             </p>
           ) : (
-            <PatchLines patch={file.patch} />
+            <PatchLines
+              path={file.filename}
+              patch={file.patch}
+              comments={comments}
+              drafts={drafts}
+              onAddDraft={onAddDraft}
+              onRemoveDraft={onRemoveDraft}
+            />
           )}
-          {comments.length > 0 && <PrFileComments comments={comments} />}
         </div>
       )}
     </article>
   );
 }
 
-function PrFileComments({ comments }: { comments: PrReviewComment[] }) {
+function PatchLines({
+  path,
+  patch,
+  comments = [],
+  drafts,
+  onAddDraft,
+  onRemoveDraft,
+}: {
+  path: string;
+  patch: string;
+  comments?: PrReviewComment[];
+  drafts?: Record<string, ReviewDraft>;
+  onAddDraft?: (draft: ReviewDraft) => void;
+  onRemoveDraft?: (key: string) => void;
+}) {
+  const rows = useMemo(() => parsePatch(patch), [patch]);
+  const commentsByLine = useMemo(() => {
+    const out: Record<string, PrReviewComment[]> = {};
+    for (const c of comments) {
+      if (typeof c.line !== "number") continue;
+      const side: ReviewDraftSide = c.side === "LEFT" ? "LEFT" : "RIGHT";
+      const key = `${side}|${c.line}`;
+      if (!out[key]) out[key] = [];
+      out[key].push(c);
+    }
+    return out;
+  }, [comments]);
+  // Comments whose target line isn't part of the rendered patch (outdated /
+  // truncated diffs). We surface these below the diff so reviewers don't
+  // miss them.
+  const orphanComments = useMemo(() => {
+    const visibleKeys = new Set<string>();
+    for (const row of rows) {
+      if (typeof row.newLine === "number" && row.tone !== "del") {
+        visibleKeys.add(`RIGHT|${row.newLine}`);
+      }
+      if (typeof row.oldLine === "number" && row.tone !== "add") {
+        visibleKeys.add(`LEFT|${row.oldLine}`);
+      }
+    }
+    return comments.filter((c) => {
+      if (typeof c.line !== "number") return false;
+      const side: ReviewDraftSide = c.side === "LEFT" ? "LEFT" : "RIGHT";
+      return !visibleKeys.has(`${side}|${c.line}`);
+    });
+  }, [comments, rows]);
+  const [composerAt, setComposerAt] = useState<{
+    side: ReviewDraftSide;
+    line: number;
+    startLine?: number;
+  } | null>(null);
+  // Drag-to-select state. While the user holds the pointer down on a "+"
+  // button and moves over other rows, we extend the range. On pointerup we
+  // open the composer for the final span. A single click without movement
+  // falls through to the click handler below for single-line behavior.
+  const [drag, setDrag] = useState<{
+    side: ReviewDraftSide;
+    startLine: number;
+    endLine: number;
+  } | null>(null);
+  const suppressNextClickRef = useRef(false);
+  useEffect(() => {
+    if (!drag) return;
+    const onUp = () => {
+      setDrag((cur) => {
+        if (!cur) return null;
+        const lo = Math.min(cur.startLine, cur.endLine);
+        const hi = Math.max(cur.startLine, cur.endLine);
+        if (lo !== hi) {
+          setComposerAt({
+            side: cur.side,
+            line: hi,
+            startLine: lo,
+          });
+          suppressNextClickRef.current = true;
+        }
+        return null;
+      });
+    };
+    document.addEventListener("pointerup", onUp);
+    return () => document.removeEventListener("pointerup", onUp);
+  }, [drag]);
+  const startDraft = useCallback(
+    (side: ReviewDraftSide, line: number, withShift: boolean) => {
+      setComposerAt((prev) => {
+        // Shift-click extends an existing composer on the same side into a
+        // multi-line range. Without an open composer, shift-click behaves
+        // like a regular click.
+        if (withShift && prev && prev.side === side) {
+          const anchor = prev.startLine ?? prev.line;
+          const lo = Math.min(anchor, line);
+          const hi = Math.max(anchor, line);
+          return {
+            side,
+            line: hi,
+            startLine: lo === hi ? undefined : lo,
+          };
+        }
+        return { side, line };
+      });
+    },
+    [],
+  );
   return (
-    <section
-      aria-label="Review comments"
-      className="flex flex-col"
+    <div
+      className="overflow-x-auto"
       style={{
-        gap: 10,
-        padding: "12px",
-        borderTop: "1px solid var(--hairline-soft)",
+        fontFamily: "ui-monospace, SF Mono, Menlo, monospace",
+        fontSize: 12,
+        lineHeight: 1.55,
+      }}
+    >
+      {rows.map((row, i) => {
+        const bg =
+          row.tone === "add"
+            ? "var(--good-soft)"
+            : row.tone === "del"
+              ? "var(--danger-soft)"
+              : row.tone === "hunk"
+                ? "var(--src-cal-bg)"
+                : "transparent";
+        const fg =
+          row.tone === "add"
+            ? "var(--good)"
+            : row.tone === "del"
+              ? "var(--destructive)"
+              : row.tone === "hunk"
+                ? "var(--src-cal)"
+                : "var(--body, var(--foreground))";
+        const side: ReviewDraftSide | null =
+          row.tone === "del"
+            ? "LEFT"
+            : row.tone === "add" || row.tone === "ctx"
+              ? "RIGHT"
+              : null;
+        const targetLine =
+          side === "LEFT" ? row.oldLine : side === "RIGHT" ? row.newLine : null;
+        const lineKey =
+          side && typeof targetLine === "number"
+            ? `${side}|${targetLine}`
+            : null;
+        const rowComments =
+          lineKey && commentsByLine[lineKey] ? commentsByLine[lineKey] : [];
+        const draft =
+          side && typeof targetLine === "number" && drafts
+            ? Object.values(drafts).find(
+                (d) =>
+                  d.path === path && d.side === side && d.line === targetLine,
+              )
+            : undefined;
+        const composerOpen =
+          composerAt &&
+          side === composerAt.side &&
+          targetLine === composerAt.line;
+        const canComment = side !== null && typeof targetLine === "number";
+        const inDragRange =
+          drag &&
+          side === drag.side &&
+          typeof targetLine === "number" &&
+          targetLine >= Math.min(drag.startLine, drag.endLine) &&
+          targetLine <= Math.max(drag.startLine, drag.endLine);
+        return (
+          <div
+            // biome-ignore lint/suspicious/noArrayIndexKey: patch rows are positional and may repeat verbatim
+            key={`r-${i}`}
+            data-line-key={lineKey ?? undefined}
+            onPointerEnter={() => {
+              if (!drag) return;
+              if (!side || drag.side !== side) return;
+              if (typeof targetLine !== "number") return;
+              setDrag((cur) =>
+                cur && cur.endLine === targetLine
+                  ? cur
+                  : cur
+                    ? { ...cur, endLine: targetLine }
+                    : cur,
+              );
+            }}
+          >
+            <div
+              className="group flex items-stretch"
+              data-tone={row.tone}
+              data-drag-selected={inDragRange ? "true" : undefined}
+              style={{
+                background: inDragRange
+                  ? `color-mix(in oklab, var(--primary) 14%, ${bg})`
+                  : bg,
+                color: fg,
+                boxShadow: inDragRange
+                  ? "inset 3px 0 0 0 var(--primary)"
+                  : undefined,
+              }}
+            >
+              <span
+                aria-hidden
+                className="select-none text-right"
+                style={{
+                  flex: "0 0 38px",
+                  padding: "0 6px",
+                  color: "var(--muted-foreground)",
+                  borderRight: "1px solid var(--hairline-soft)",
+                }}
+              >
+                {typeof row.oldLine === "number" && row.tone !== "add"
+                  ? row.oldLine
+                  : ""}
+              </span>
+              <span
+                aria-hidden
+                className="select-none text-right"
+                style={{
+                  flex: "0 0 38px",
+                  padding: "0 6px",
+                  color: "var(--muted-foreground)",
+                  borderRight: "1px solid var(--hairline-soft)",
+                }}
+              >
+                {typeof row.newLine === "number" && row.tone !== "del"
+                  ? row.newLine
+                  : ""}
+              </span>
+              {canComment && onAddDraft ? (
+                <button
+                  type="button"
+                  onPointerDown={() => {
+                    if (!side || typeof targetLine !== "number") return;
+                    setDrag({
+                      side,
+                      startLine: targetLine,
+                      endLine: targetLine,
+                    });
+                  }}
+                  onClick={(e) => {
+                    if (suppressNextClickRef.current) {
+                      suppressNextClickRef.current = false;
+                      return;
+                    }
+                    if (!side || typeof targetLine !== "number") return;
+                    startDraft(side, targetLine, e.shiftKey);
+                  }}
+                  aria-label={`Comment on ${side === "LEFT" ? "old" : "new"} line ${targetLine}`}
+                  title="Click to comment, shift-click or click-and-drag to span a range"
+                  data-slot="add-comment"
+                  className={cn(
+                    "inline-flex shrink-0 items-center justify-center group-hover:opacity-100",
+                    inDragRange ? "opacity-100" : "opacity-0",
+                  )}
+                  style={{
+                    width: 18,
+                    height: 16,
+                    margin: "auto 2px",
+                    fontSize: 12,
+                    lineHeight: 1,
+                    color: "var(--canvas)",
+                    background: "var(--primary)",
+                    borderRadius: 4,
+                    border: 0,
+                    cursor: "pointer",
+                  }}
+                >
+                  +
+                </button>
+              ) : (
+                <span style={{ width: 22 }} aria-hidden />
+              )}
+              <span
+                className="flex-1"
+                style={{ padding: "0 8px", whiteSpace: "pre" }}
+              >
+                {row.raw || " "}
+              </span>
+            </div>
+            {(rowComments.length > 0 || draft || composerOpen) &&
+              side &&
+              typeof targetLine === "number" && (
+                <InlineThread
+                  path={path}
+                  side={side}
+                  line={targetLine}
+                  startLine={
+                    composerOpen ? composerAt?.startLine : draft?.startLine
+                  }
+                  comments={rowComments}
+                  draft={draft}
+                  showComposer={!!composerOpen && !draft}
+                  onCancelComposer={() => setComposerAt(null)}
+                  onAddDraft={(d) => {
+                    onAddDraft?.(d);
+                    setComposerAt(null);
+                  }}
+                  onEditDraft={() =>
+                    setComposerAt({
+                      side,
+                      line: targetLine,
+                      startLine: draft?.startLine,
+                    })
+                  }
+                  onRemoveDraft={(k) => onRemoveDraft?.(k)}
+                />
+              )}
+          </div>
+        );
+      })}
+      {orphanComments.length > 0 && (
+        <section
+          aria-label="Outdated review comments"
+          data-slot="orphan-comments"
+          className="flex flex-col"
+          style={{
+            gap: 8,
+            padding: 12,
+            borderTop: "1px solid var(--hairline-soft)",
+            background: "var(--surface-soft)",
+          }}
+        >
+          <span
+            style={{
+              fontSize: 10,
+              fontWeight: 600,
+              textTransform: "uppercase",
+              letterSpacing: 0.4,
+              color: "var(--muted-foreground)",
+            }}
+          >
+            Outdated
+          </span>
+          {orphanComments.map((c) => (
+            <article
+              key={c.id}
+              style={{
+                padding: "8px 10px",
+                borderRadius: 8,
+                background: "var(--canvas)",
+                border: "1px solid var(--hairline-soft)",
+              }}
+            >
+              <header
+                className="flex items-center"
+                style={{ gap: 8, marginBottom: 4 }}
+              >
+                <span style={{ fontSize: 12, fontWeight: 600 }}>
+                  @{c.user ?? "unknown"}
+                </span>
+                {typeof c.line === "number" && (
+                  <span
+                    style={{
+                      fontSize: 11,
+                      fontFamily: "ui-monospace, SF Mono, Menlo, monospace",
+                      color: "var(--muted-foreground)",
+                    }}
+                  >
+                    line {c.line}
+                  </span>
+                )}
+              </header>
+              <div
+                className="markdown-body"
+                style={{ fontSize: 13, lineHeight: 1.5 }}
+              >
+                <Markdown>{c.body}</Markdown>
+              </div>
+            </article>
+          ))}
+        </section>
+      )}
+    </div>
+  );
+}
+
+function InlineThread({
+  path,
+  side,
+  line,
+  startLine,
+  comments,
+  draft,
+  showComposer,
+  onCancelComposer,
+  onAddDraft,
+  onEditDraft,
+  onRemoveDraft,
+}: {
+  path: string;
+  side: ReviewDraftSide;
+  line: number;
+  startLine?: number;
+  comments: PrReviewComment[];
+  draft?: ReviewDraft;
+  showComposer: boolean;
+  onCancelComposer: () => void;
+  onAddDraft: (d: ReviewDraft) => void;
+  onEditDraft: () => void;
+  onRemoveDraft: (key: string) => void;
+}) {
+  const sideLabel = side === "LEFT" ? "old" : "new";
+  const rangeLabel =
+    typeof startLine === "number" && startLine !== line
+      ? `${sideLabel} lines ${startLine}–${line}`
+      : `${sideLabel} line ${line}`;
+  return (
+    <div
+      data-slot="inline-thread"
+      style={{
         background: "var(--surface-soft)",
+        borderTop: "1px solid var(--hairline-soft)",
+        borderBottom: "1px solid var(--hairline-soft)",
+        padding: "10px 12px",
+        display: "flex",
+        flexDirection: "column",
+        gap: 8,
       }}
     >
       {comments.map((c) => (
         <article
           key={c.id}
           style={{
-            padding: "10px 12px",
-            borderRadius: 10,
+            padding: "8px 10px",
+            borderRadius: 8,
             background: "var(--canvas)",
             border: "1px solid var(--hairline-soft)",
           }}
         >
           <header
             className="flex items-center"
-            style={{ gap: 8, marginBottom: 6 }}
+            style={{ gap: 8, marginBottom: 4 }}
           >
             {c.user_avatar_url ? (
               <img
                 src={c.user_avatar_url}
                 alt={c.user ? `@${c.user}` : "reviewer"}
-                width={20}
-                height={20}
+                width={18}
+                height={18}
                 style={{
                   borderRadius: "50%",
                   border: "1px solid var(--hairline-soft)",
@@ -1469,8 +2554,8 @@ function PrFileComments({ comments }: { comments: PrReviewComment[] }) {
                 aria-hidden
                 className="inline-flex items-center justify-center"
                 style={{
-                  width: 20,
-                  height: 20,
+                  width: 18,
+                  height: 18,
                   borderRadius: "50%",
                   background: "var(--surface-strong)",
                   color: "var(--ink)",
@@ -1484,17 +2569,85 @@ function PrFileComments({ comments }: { comments: PrReviewComment[] }) {
             <span style={{ fontSize: 12, fontWeight: 600 }}>
               @{c.user ?? "unknown"}
             </span>
-            {typeof c.line === "number" && (
-              <span
-                style={{
-                  fontSize: 11,
-                  fontFamily: "ui-monospace, SF Mono, Menlo, monospace",
-                  color: "var(--muted-foreground)",
-                }}
-              >
-                line {c.line}
-              </span>
-            )}
+            <span
+              style={{
+                fontSize: 11,
+                fontFamily: "ui-monospace, SF Mono, Menlo, monospace",
+                color: "var(--muted-foreground)",
+              }}
+            >
+              line {c.line}
+            </span>
+          </header>
+          <div
+            className="markdown-body"
+            style={{ fontSize: 13, lineHeight: 1.5 }}
+          >
+            <Markdown>{c.body}</Markdown>
+          </div>
+        </article>
+      ))}
+      {draft && !showComposer && (
+        <article
+          data-slot="draft-comment"
+          style={{
+            padding: "8px 10px",
+            borderRadius: 8,
+            background: "var(--canvas)",
+            border: "1px dashed var(--primary)",
+          }}
+        >
+          <header
+            className="flex items-center"
+            style={{ gap: 8, marginBottom: 4 }}
+          >
+            <span
+              style={{
+                fontSize: 10,
+                fontWeight: 600,
+                textTransform: "uppercase",
+                letterSpacing: 0.4,
+                color: "var(--primary)",
+              }}
+            >
+              Pending — {rangeLabel}
+            </span>
+            <button
+              type="button"
+              onClick={onEditDraft}
+              className="ml-auto"
+              style={{
+                fontSize: 11,
+                color: "var(--muted-foreground)",
+                background: "transparent",
+                border: 0,
+                cursor: "pointer",
+              }}
+            >
+              Edit
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                onRemoveDraft(
+                  reviewDraftKey({
+                    path,
+                    line,
+                    side,
+                    startLine: draft.startLine,
+                  }),
+                )
+              }
+              style={{
+                fontSize: 11,
+                color: "var(--destructive)",
+                background: "transparent",
+                border: 0,
+                cursor: "pointer",
+              }}
+            >
+              Discard
+            </button>
           </header>
           <p
             className="m-0 whitespace-pre-line"
@@ -1504,68 +2657,316 @@ function PrFileComments({ comments }: { comments: PrReviewComment[] }) {
               color: "var(--body, var(--foreground))",
             }}
           >
-            {c.body}
+            {draft.body}
           </p>
         </article>
-      ))}
-    </section>
+      )}
+      {showComposer && (
+        <InlineComposer
+          path={path}
+          side={side}
+          line={line}
+          startLine={startLine}
+          rangeLabel={rangeLabel}
+          initialBody={draft?.body ?? ""}
+          onCancel={onCancelComposer}
+          onSubmit={onAddDraft}
+        />
+      )}
+    </div>
   );
 }
 
-function PatchLines({ patch }: { patch: string }) {
-  const lines = patch.split("\n");
+function InlineComposer({
+  path,
+  side,
+  line,
+  startLine,
+  rangeLabel,
+  initialBody,
+  onCancel,
+  onSubmit,
+}: {
+  path: string;
+  side: ReviewDraftSide;
+  line: number;
+  startLine?: number;
+  rangeLabel: string;
+  initialBody: string;
+  onCancel: () => void;
+  onSubmit: (d: ReviewDraft) => void;
+}) {
+  const [body, setBody] = useState(initialBody);
+  const trimmed = body.trim();
   return (
-    <pre
-      className="m-0 overflow-x-auto"
+    <div
+      data-slot="inline-composer"
       style={{
-        fontFamily: "ui-monospace, SF Mono, Menlo, monospace",
-        fontSize: 12,
-        lineHeight: 1.55,
+        padding: "8px 10px",
+        borderRadius: 8,
+        background: "var(--canvas)",
+        border: "1px solid var(--primary)",
       }}
     >
-      {lines.map((line, i) => {
-        const tone =
-          line.startsWith("+") && !line.startsWith("+++")
-            ? "add"
-            : line.startsWith("-") && !line.startsWith("---")
-              ? "del"
-              : line.startsWith("@@")
-                ? "hunk"
-                : "ctx";
-        const bg =
-          tone === "add"
-            ? "var(--good-soft)"
-            : tone === "del"
-              ? "var(--danger-soft)"
-              : tone === "hunk"
-                ? "var(--src-cal-bg)"
-                : "transparent";
-        const fg =
-          tone === "add"
-            ? "var(--good)"
-            : tone === "del"
-              ? "var(--destructive)"
-              : tone === "hunk"
-                ? "var(--src-cal)"
-                : "var(--body, var(--foreground))";
-        return (
-          <span
-            // biome-ignore lint/suspicious/noArrayIndexKey: patch lines are positional and may repeat verbatim
-            key={`${i}-${line}`}
-            data-tone={tone}
-            style={{
-              display: "block",
-              padding: "0 12px",
-              background: bg,
-              color: fg,
-              whiteSpace: "pre",
-            }}
+      <div
+        className="flex items-center"
+        style={{ gap: 8, marginBottom: 6, fontSize: 11 }}
+      >
+        <span style={{ fontWeight: 600, color: "var(--primary)" }}>
+          New comment
+        </span>
+        <span style={{ color: "var(--muted-foreground)" }}>{rangeLabel}</span>
+      </div>
+      <textarea
+        value={body}
+        onChange={(e) => setBody(e.target.value)}
+        placeholder="Leave a comment on this line"
+        aria-label="Inline review comment"
+        rows={3}
+        style={{
+          width: "100%",
+          padding: 8,
+          fontSize: 13,
+          fontFamily: "inherit",
+          borderRadius: 6,
+          border: "1px solid var(--hairline-soft)",
+          resize: "vertical",
+          background: "var(--canvas)",
+          color: "var(--foreground)",
+        }}
+      />
+      <div
+        className="flex items-center"
+        style={{ gap: 6, marginTop: 6, justifyContent: "flex-end" }}
+      >
+        <button
+          type="button"
+          onClick={onCancel}
+          style={{
+            fontSize: 12,
+            padding: "4px 10px",
+            border: "1px solid var(--hairline-soft)",
+            borderRadius: 6,
+            background: "transparent",
+            color: "var(--foreground)",
+            cursor: "pointer",
+          }}
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          disabled={trimmed.length === 0}
+          onClick={() =>
+            onSubmit({
+              path,
+              side,
+              line,
+              startLine: startLine !== line ? startLine : undefined,
+              body: trimmed,
+            })
+          }
+          style={{
+            fontSize: 12,
+            padding: "4px 10px",
+            borderRadius: 6,
+            border: 0,
+            background:
+              trimmed.length === 0 ? "var(--surface-strong)" : "var(--primary)",
+            color:
+              trimmed.length === 0
+                ? "var(--muted-foreground)"
+                : "var(--canvas)",
+            cursor: trimmed.length === 0 ? "not-allowed" : "pointer",
+          }}
+        >
+          Add to review
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export function PrReviewSubmitPanel({
+  repo,
+  number,
+  drafts,
+  onCleared,
+  submit = defaultPrReviewSubmit,
+}: {
+  repo: string;
+  number: number;
+  drafts: Record<string, ReviewDraft>;
+  onCleared: () => void;
+  submit?: PrReviewSubmit;
+}) {
+  const draftList = Object.values(drafts);
+  const [body, setBody] = useState("");
+  const [event, setEvent] = useState<PrReviewEvent>("COMMENT");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  if (draftList.length === 0) return null;
+  const onSubmit = async () => {
+    setSubmitting(true);
+    setError(null);
+    try {
+      const out = await submit({
+        repo,
+        number,
+        event,
+        body: body.trim() || undefined,
+        comments: draftList.map((d) => {
+          const out: PrReviewSubmitDraft = {
+            path: d.path,
+            line: d.line,
+            side: d.side,
+            body: d.body,
+          };
+          if (typeof d.startLine === "number" && d.startLine < d.line) {
+            out.start_line = d.startLine;
+            out.start_side = d.side;
+          }
+          return out;
+        }),
+      } as Parameters<PrReviewSubmit>[0]);
+      if (!out.ok) {
+        setError(out.error ?? "submission failed");
+        return;
+      }
+      onCleared();
+      setBody("");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "submission failed");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+  return (
+    <section
+      aria-label="Pending review"
+      data-slot="review-submit-panel"
+      style={{
+        padding: "12px 14px",
+        borderRadius: 12,
+        border: "1px solid var(--primary)",
+        background: "var(--surface-soft)",
+        display: "flex",
+        flexDirection: "column",
+        gap: 10,
+      }}
+    >
+      <header className="flex items-center" style={{ gap: 10 }}>
+        <span style={{ fontSize: 13, fontWeight: 600 }}>
+          Pending review · {draftList.length}
+          {draftList.length === 1 ? " comment" : " comments"}
+        </span>
+        <button
+          type="button"
+          onClick={onCleared}
+          className="ml-auto"
+          style={{
+            fontSize: 11,
+            color: "var(--muted-foreground)",
+            background: "transparent",
+            border: 0,
+            cursor: "pointer",
+          }}
+        >
+          Discard all
+        </button>
+      </header>
+      <ul
+        className="m-0 flex flex-col"
+        style={{ gap: 4, fontSize: 12, padding: 0, listStyle: "none" }}
+      >
+        {draftList.map((d) => (
+          <li
+            key={reviewDraftKey(d)}
+            className="flex items-center"
+            style={{ gap: 8, color: "var(--muted-foreground)" }}
           >
-            {line || " "}
-          </span>
-        );
-      })}
-    </pre>
+            <span
+              style={{
+                fontFamily: "ui-monospace, SF Mono, Menlo, monospace",
+                color: "var(--ink)",
+              }}
+            >
+              {d.path}:{d.line}
+            </span>
+            <span className="truncate">{d.body}</span>
+          </li>
+        ))}
+      </ul>
+      <textarea
+        value={body}
+        onChange={(e) => setBody(e.target.value)}
+        placeholder="Optional review summary"
+        aria-label="Review summary"
+        rows={2}
+        style={{
+          width: "100%",
+          padding: 8,
+          fontSize: 13,
+          fontFamily: "inherit",
+          borderRadius: 6,
+          border: "1px solid var(--hairline-soft)",
+          resize: "vertical",
+          background: "var(--canvas)",
+          color: "var(--foreground)",
+        }}
+      />
+      <div className="flex items-center" style={{ gap: 8, flexWrap: "wrap" }}>
+        {(["COMMENT", "APPROVE", "REQUEST_CHANGES"] as PrReviewEvent[]).map(
+          (ev) => (
+            <label
+              key={ev}
+              className="inline-flex items-center"
+              style={{ gap: 6, fontSize: 12, cursor: "pointer" }}
+            >
+              <input
+                type="radio"
+                name="review-event"
+                value={ev}
+                checked={event === ev}
+                onChange={() => setEvent(ev)}
+              />
+              {ev === "APPROVE"
+                ? "Approve"
+                : ev === "REQUEST_CHANGES"
+                  ? "Request changes"
+                  : "Comment"}
+            </label>
+          ),
+        )}
+        <button
+          type="button"
+          onClick={onSubmit}
+          disabled={submitting}
+          className="ml-auto"
+          style={{
+            fontSize: 12,
+            padding: "6px 12px",
+            borderRadius: 6,
+            border: 0,
+            background: submitting ? "var(--surface-strong)" : "var(--primary)",
+            color: submitting ? "var(--muted-foreground)" : "var(--canvas)",
+            cursor: submitting ? "wait" : "pointer",
+            fontWeight: 600,
+          }}
+        >
+          {submitting ? "Submitting…" : "Submit review"}
+        </button>
+      </div>
+      {error && (
+        <p
+          role="alert"
+          className="m-0"
+          style={{ fontSize: 12, color: "var(--destructive)" }}
+        >
+          {error}
+        </p>
+      )}
+    </section>
   );
 }
 
@@ -2459,7 +3860,7 @@ export function kindGroup(kind: SignalKind): SignalGroup {
   return "pr";
 }
 
-function secondaryLabel(s: StoredSignal): string {
+export function secondaryLabel(s: Signal): string {
   if (s.provider === "slack") {
     const channelType = s.payload?.channel_type as string | undefined;
     const channel = s.payload?.channel as string | undefined;

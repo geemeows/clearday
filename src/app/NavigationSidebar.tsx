@@ -2,12 +2,11 @@
 // props — no fetches, no router lookups inside. The parent (AppShell) wires
 // hooks and route navigation; this module just renders.
 
-import { Settings as SettingsIcon } from "lucide-react";
+import { Settings as SettingsIcon, Target } from "lucide-react";
 import type { ReactNode } from "react";
-import { Avatar, AvatarFallback, AvatarImage } from "#/components/ui/avatar";
-import { Button } from "#/components/ui/button";
+import { Avatar, AvatarFallback, AvatarImage } from "#/components/coss/avatar";
+import { Button } from "#/components/coss/button";
 import { FocusActiveBlock } from "#/features/focus/components/FocusActiveBlock";
-import { FocusButton } from "#/features/focus/components/FocusButton";
 import type { ProviderAccountStatus } from "#/features/integrations/provider-account-status";
 import { ThemeToggle } from "#/features/settings/theme/components/ThemeToggle";
 import {
@@ -47,6 +46,7 @@ export type NavigationSidebarProps = {
   page: string;
   onPage: (to: string) => void;
   inboxBadge: number;
+  tasksBadge: number;
   sources: NavSource[];
   focus: FocusState;
   onStartFocus: () => void;
@@ -60,6 +60,7 @@ export function NavigationSidebar({
   page,
   onPage,
   inboxBadge,
+  tasksBadge,
   sources,
   focus,
   onStartFocus,
@@ -93,7 +94,18 @@ export function NavigationSidebar({
         <ul className="mt-1 space-y-0.5">
           {pages.map((p) => {
             const active = page === p.to || page.startsWith(`${p.to}/`);
-            const showBadge = p.to === "/inbox" && inboxBadge > 0;
+            const badge =
+              p.to === "/inbox"
+                ? inboxBadge
+                : p.to === "/tasks"
+                  ? tasksBadge
+                  : 0;
+            const badgeId =
+              p.to === "/inbox"
+                ? "inbox-badge"
+                : p.to === "/tasks"
+                  ? "tasks-badge"
+                  : undefined;
             return (
               <li key={p.to}>
                 <Button
@@ -105,12 +117,12 @@ export function NavigationSidebar({
                 >
                   <p.icon className="h-4 w-4" />
                   <span className="flex-1 text-left">{p.label}</span>
-                  {showBadge ? (
+                  {badge > 0 ? (
                     <span
-                      data-testid="inbox-badge"
+                      data-testid={badgeId}
                       className="rounded-full bg-primary px-1.5 py-0.5 font-mono text-[10px] text-primary-foreground"
                     >
-                      {inboxBadge}
+                      {badge}
                     </span>
                   ) : null}
                 </Button>
@@ -177,9 +189,6 @@ function FocusSlot({
   focus: FocusState;
   onStartFocus: () => void;
 }) {
-  // onStartFocus exists for callers that own the FocusModal flow; the
-  // built-in FocusButton fallback runs its own inline prompt for now.
-  void onStartFocus;
   if (focus.active) {
     return (
       <FocusActiveBlock
@@ -190,7 +199,15 @@ function FocusSlot({
   }
   return (
     <div data-focus-active="false">
-      <FocusButton />
+      <button
+        type="button"
+        onClick={onStartFocus}
+        aria-label="Start focus session"
+        className="flex w-full items-center justify-center gap-2 rounded-md bg-primary px-3 py-2.5 font-medium text-primary-foreground text-sm shadow-sm transition-colors hover:bg-primary-active"
+      >
+        <Target className="h-4 w-4" />
+        Start focus session
+      </button>
     </div>
   );
 }

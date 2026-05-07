@@ -39,6 +39,15 @@ const FIELDS: ProfileFields = {
 };
 
 describe("ProfilePanel", () => {
+  beforeEach(() => {
+    // ThemeToggle mounted in the panel reads /api/theme on mount.
+    mockApi.mockResolvedValue({
+      theme: "light",
+      density: "comfortable",
+      accent: "rausch",
+    });
+  });
+
   it("renders avatar fallback, name, email, and GitHub handle from useProfile", async () => {
     render(<ProfilePanel loader={async () => FIELDS} />);
     expect(await screen.findByText("Devy User")).toBeTruthy();
@@ -52,6 +61,15 @@ describe("ProfilePanel", () => {
     const button = await screen.findByRole("button", { name: /sign out/i });
     fireEvent.click(button);
     expect(onSignOut).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders the theme toggle alongside the profile fields", async () => {
+    render(<ProfilePanel loader={async () => FIELDS} />);
+    expect(
+      await screen.findByRole("button", {
+        name: /switch to (light|dark) mode/i,
+      }),
+    ).toBeTruthy();
   });
 
   describe("loadProfileFields", () => {

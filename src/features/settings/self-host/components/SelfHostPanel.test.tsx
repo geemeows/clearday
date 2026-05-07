@@ -68,7 +68,7 @@ describe("SelfHostPanel", () => {
     const button = await screen.findByRole("button", {
       name: /disconnect all providers/i,
     });
-    expect(button.getAttribute("data-variant")).toBe("destructive");
+    expect(button.className).toMatch(/bg-destructive/);
     fireEvent.click(button);
     expect(onDisconnectAll).toHaveBeenCalledTimes(1);
   });

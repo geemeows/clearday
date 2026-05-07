@@ -55,9 +55,9 @@ describe("AIPanel", () => {
       "Strip PR diffs",
       "Disable AI on personal account",
     ]) {
-      expect(screen.getByLabelText(label)).toBeTruthy();
+      expect(screen.getByRole("switch", { name: label })).toBeTruthy();
     }
-    const toggle = screen.getByLabelText("Strip file paths");
+    const toggle = screen.getByRole("switch", { name: "Strip file paths" });
     expect(toggle.getAttribute("aria-checked")).toBe("false");
     fireEvent.click(toggle);
     expect(toggle.getAttribute("aria-checked")).toBe("true");

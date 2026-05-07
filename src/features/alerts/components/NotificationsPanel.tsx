@@ -6,9 +6,9 @@
 
 import { Plus, X } from "lucide-react";
 import { useState } from "react";
-import { Button } from "#/components/ui/button";
-import { Input } from "#/components/ui/input";
-import { Switch } from "#/components/ui/switch";
+import { Button } from "#/components/coss/button";
+import { Input } from "#/components/coss/input";
+import { Switch } from "#/components/coss/switch";
 import {
   type MatrixChannel,
   type MatrixKind,
@@ -157,20 +157,19 @@ export function NotificationsPanel() {
   };
 
   return (
-    <section>
+    <section className="space-y-8">
       <header>
-        <h2 className="font-semibold text-xl">Notifications</h2>
-        <p className="mt-2 text-muted-foreground text-sm">
-          Where Devy pings you, what each channel handles, and when to stay
-          quiet.
+        <h2 className="font-semibold text-2xl tracking-tight">Notifications</h2>
+        <p className="mt-1 font-mono text-[11px] text-muted-foreground">
+          Choose channels, route per event kind, and define quiet hours.
         </p>
       </header>
 
-      <section className="mt-6">
-        <h3 className="font-semibold text-base">Channels</h3>
+      <section>
+        <h3 className="font-semibold text-base tracking-tight">Channels</h3>
         <ul
           aria-label="Notification channels"
-          className="mt-3 divide-y divide-border rounded-md border border-border"
+          className="mt-3 divide-y divide-border overflow-hidden rounded-lg border border-border bg-card"
         >
           {CHANNELS.map((c) => (
             <li key={c.id} className="flex items-center gap-4 px-4 py-3">
@@ -200,12 +199,14 @@ export function NotificationsPanel() {
         </ul>
       </section>
 
-      <section className="mt-8">
-        <h3 className="font-semibold text-base">Per-event routing</h3>
+      <section>
+        <h3 className="font-semibold text-base tracking-tight">
+          Per-event routing
+        </h3>
         <p className="mt-1 text-muted-foreground text-sm">
           Pick which channels fire for each kind of signal.
         </p>
-        <div className="mt-3 rounded-md border border-border p-4">
+        <div className="mt-3 rounded-lg border border-border bg-card p-4">
           <NotificationMatrix
             kinds={MATRIX_KINDS}
             channels={MATRIX_CHANNELS}
@@ -215,9 +216,11 @@ export function NotificationsPanel() {
         </div>
       </section>
 
-      <section className="mt-8">
+      <section>
         <div className="flex items-center justify-between">
-          <h3 className="font-semibold text-base">Quiet hours</h3>
+          <h3 className="font-semibold text-base tracking-tight">
+            Quiet hours
+          </h3>
           <Switch
             aria-label="Quiet hours enabled"
             checked={quietHoursOn}

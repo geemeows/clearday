@@ -11,9 +11,9 @@
 
 import { Plus, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Button } from "#/components/ui/button";
-import { Input } from "#/components/ui/input";
-import { Switch } from "#/components/ui/switch";
+import { Button } from "#/components/coss/button";
+import { Input } from "#/components/coss/input";
+import { Switch } from "#/components/coss/switch";
 import type { ProviderAccountStatus } from "#/features/integrations/provider-account-status";
 import {
   SourceGlyph,
@@ -222,24 +222,23 @@ export function IntegrationsPanel({
   };
 
   return (
-    <section>
+    <section className="space-y-6">
       <header>
-        <h2 className="font-semibold text-xl">Integrations</h2>
-        <p className="mt-2 text-muted-foreground text-sm">
-          Connect the sources Devy reads from. Reauthorize re-runs the OAuth
-          flow; the toggle pauses ingestion locally.
+        <h2 className="font-semibold text-2xl tracking-tight">Integrations</h2>
+        <p className="mt-1 font-mono text-[11px] text-muted-foreground">
+          Per-user backend — refresh tokens stored in your own Supabase.
         </p>
       </header>
 
       {error ? (
-        <p role="alert" className="mt-3 text-destructive text-sm">
+        <p role="alert" className="text-destructive text-sm">
           {error}
         </p>
       ) : null}
 
       <ul
         aria-label="Integration providers"
-        className="mt-6 divide-y divide-border rounded-md border border-border"
+        className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-card"
       >
         {ROWS.map((row) => {
           const meta: RowStatus = statuses[row.id] ?? {
@@ -319,15 +318,24 @@ export function IntegrationsPanel({
         })}
       </ul>
 
-      <section className="mt-8">
-        <h3 className="font-semibold text-base">Slack channel allowlist</h3>
+      <section>
+        <h3 className="font-semibold text-base tracking-tight">
+          Slack channel allowlist
+        </h3>
         <p className="mt-1 text-muted-foreground text-sm">
-          <code>@here</code> / <code>@channel</code> only become Signals in
-          channels listed here. DMs and explicit @-mentions always come through.
+          <code className="rounded bg-muted px-1 py-px font-mono text-xs">
+            @here
+          </code>{" "}
+          /{" "}
+          <code className="rounded bg-muted px-1 py-px font-mono text-xs">
+            @channel
+          </code>{" "}
+          only become Signals in channels listed here. DMs and explicit
+          @-mentions always come through.
         </p>
         <ul
           aria-label="Slack channel allowlist"
-          className="mt-3 flex flex-wrap gap-2"
+          className="mt-3 flex flex-wrap gap-2 rounded-lg border border-border bg-card p-4"
         >
           {channels.map((name) => (
             <li key={name}>

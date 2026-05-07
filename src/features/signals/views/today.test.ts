@@ -468,12 +468,145 @@ describe("computeWeekStats", () => {
   });
 
   it("returns zeros for an empty list", () => {
-    expect(computeWeekStats([], now)).toEqual({
-      prsReviewed: 0,
-      ticketsShipped: 0,
-      focusHours: 0,
-      inboxZeroedDays: 0,
+    const out = computeWeekStats([], now);
+    expect(out.prsReviewed).toBe(0);
+    expect(out.ticketsShipped).toBe(0);
+    expect(out.focusHours).toBe(0);
+    expect(out.inboxZeroedDays).toBe(0);
+    expect(out.sourceMix.map((e) => e.count)).toEqual([0, 0, 0, 0, 0]);
+    expect(out.reviewLatencyHours).toEqual([0, 0, 0, 0, 0, 0, 0]);
+    expect(out.latencyDeltaHours).toBe(0);
+    expect(out.shippedByDay).toHaveLength(5);
+    expect(out.shippedByDay.every((d) => d.prs === 0 && d.tickets === 0)).toBe(
+      true,
+    );
+  });
+
+  it("groups in-window signals by source for sourceMix", () => {
+    const slack = (id: string, createdAt: string): StoredSignal => ({
+      id,
+      provider: "slack",
+      kind: "mention",
+      source_id: id,
+      title: id,
+      url: null,
+      payload: {},
+      requires_action: true,
+      source_created_at: createdAt,
+      dismissed_at: null,
+      ...STORED_DEFAULTS,
     });
+    const cal = (id: string, startsAt: string): StoredSignal => ({
+      id,
+      provider: "google",
+      kind: "meeting",
+      source_id: id,
+      title: id,
+      url: null,
+      payload: { starts_at: startsAt },
+      requires_action: false,
+      source_created_at: startsAt,
+      dismissed_at: null,
+      ...STORED_DEFAULTS,
+    });
+    const out = computeWeekStats(
+      [
+        pr("p1", inWindow, true),
+        pr("p2", inWindow, true),
+        slack("s1", inWindow),
+        cal("c1", inWindow),
+        ticket("t1", "ticket_in_progress", inWindow, null),
+        // out of window — not counted
+        pr("p3", outOfWindow, true),
+      ],
+      now,
+    );
+    const byKey = Object.fromEntries(
+      out.sourceMix.map((e) => [e.source, e.count]),
+    );
+    expect(byKey).toEqual({
+      github: 2,
+      slack: 1,
+      calendar: 1,
+      linear: 1,
+      ai: 0,
+    });
+  });
+
+  it("computes 7 daily medians of review latency in hours", () => {
+    const review = (
+      id: string,
+      created: string,
+      dismissed: string,
+    ): StoredSignal => ({
+      id,
+      provider: "github",
+      kind: "pr_review_requested",
+      source_id: id,
+      title: id,
+      url: null,
+      payload: {},
+      requires_action: false,
+      source_created_at: created,
+      dismissed_at: dismissed,
+      ...STORED_DEFAULTS,
+    });
+    // now = 2026-05-04T12:00 UTC. Newest day index = 6 (2026-05-04).
+    // Two PRs dismissed on 2026-05-03 with latencies 4h and 6h → median 5h.
+    // One PR dismissed on 2026-05-04 with latency 2h.
+    const out = computeWeekStats(
+      [
+        review("a", "2026-05-03T10:00:00.000Z", "2026-05-03T14:00:00.000Z"),
+        review("b", "2026-05-03T08:00:00.000Z", "2026-05-03T14:00:00.000Z"),
+        review("c", "2026-05-04T08:00:00.000Z", "2026-05-04T10:00:00.000Z"),
+      ],
+      now,
+    );
+    expect(out.reviewLatencyHours).toHaveLength(7);
+    expect(out.reviewLatencyHours[5]).toBe(5);
+    expect(out.reviewLatencyHours[6]).toBe(2);
+    // empty days → 0
+    expect(out.reviewLatencyHours[0]).toBe(0);
+  });
+
+  it("counts shipped PRs and tickets per weekday for the last 5 weekdays", () => {
+    // now = Mon 2026-05-04. Last 5 weekdays = Tue..Fri prev week + Mon today.
+    const out = computeWeekStats(
+      [
+        // Ticket dismissed 2026-05-04 (Mon) → tickets:1 on last entry
+        ticket(
+          "t1",
+          "ticket_in_progress",
+          "2026-04-20T09:00:00.000Z",
+          "2026-05-04T09:00:00.000Z",
+        ),
+        // Authored PR dismissed 2026-05-01 (Fri) → prs:1
+        {
+          id: "p1",
+          provider: "github",
+          kind: "pr_authored",
+          source_id: "p1",
+          title: "p1",
+          url: null,
+          payload: {},
+          requires_action: false,
+          source_created_at: "2026-04-30T09:00:00.000Z",
+          dismissed_at: "2026-05-01T09:00:00.000Z",
+          ...STORED_DEFAULTS,
+        },
+      ],
+      now,
+    );
+    expect(out.shippedByDay).toHaveLength(5);
+    expect(out.shippedByDay.map((e) => e.day)).toEqual([
+      "Tue",
+      "Wed",
+      "Thu",
+      "Fri",
+      "Mon",
+    ]);
+    expect(out.shippedByDay[3]).toEqual({ day: "Fri", prs: 1, tickets: 0 });
+    expect(out.shippedByDay[4]).toEqual({ day: "Mon", prs: 0, tickets: 1 });
   });
 });
 

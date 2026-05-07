@@ -3,7 +3,7 @@
 // Meetings / Slack) over shadcn `Dialog` + `Command` (cmdk). Footer carries an
 // "Ask AI" affordance with the typed query and the provider chip.
 
-import { CornerDownLeft, Sparkles } from "lucide-react";
+import { Sparkles } from "lucide-react";
 import {
   type ComponentType,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -20,13 +20,13 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
-} from "#/components/ui/command";
+} from "#/components/coss/command";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogTitle,
-} from "#/components/ui/dialog";
+} from "#/components/coss/dialog";
 import type { AskAiResult } from "#/features/ask-ai/api";
 import { signalKindLabel } from "#/features/integrations/display";
 import {
@@ -302,6 +302,11 @@ function PaletteDialog({
             onValueChange={setQuery}
             placeholder="Search PRs, tickets, meetings, Slack…"
             aria-label="Search Signals"
+            trailing={
+              <kbd className="rounded border bg-muted px-1.5 py-0.5 font-mono text-[10px] tracking-wider text-muted-foreground">
+                ESC
+              </kbd>
+            }
           />
           <CommandList className="max-h-[360px]">
             <CommandEmpty>No matches yet. Try a different query.</CommandEmpty>
@@ -321,10 +326,12 @@ function PaletteDialog({
                       <div className="min-w-0 flex-1 truncate font-medium text-foreground">
                         {c.label}
                       </div>
-                      <CornerDownLeft
+                      <span
                         aria-hidden
-                        className="size-3 text-muted-foreground opacity-0 group-data-[selected=true]:opacity-100 data-[selected=true]:opacity-100"
-                      />
+                        className="font-mono text-[10px] text-muted-foreground"
+                      >
+                        ↵
+                      </span>
                     </CommandItem>
                   ))}
                 </CommandGroup>
@@ -342,7 +349,7 @@ function PaletteDialog({
                       onSelect={() => openResult(r)}
                       className="gap-3"
                     >
-                      <SourceGlyph source={g.glyph} size={28} />
+                      <SourceGlyph source={g.glyph} size={20} />
                       <div className="min-w-0 flex-1">
                         <div className="truncate font-medium text-foreground">
                           {r.title}
@@ -351,10 +358,12 @@ function PaletteDialog({
                           {secondaryLabel(r)}
                         </div>
                       </div>
-                      <CornerDownLeft
+                      <span
                         aria-hidden
-                        className="size-3 text-muted-foreground opacity-0 group-data-[selected=true]:opacity-100 data-[selected=true]:opacity-100"
-                      />
+                        className="font-mono text-[10px] text-muted-foreground"
+                      >
+                        ↵
+                      </span>
                     </CommandItem>
                   ))}
                 </CommandGroup>
@@ -387,37 +396,42 @@ function AskAiFooter({
   disabled: boolean;
   onAsk: () => void;
 }) {
+  const trimmed = query.trim();
   return (
     <section
       aria-label="Ask AI"
-      className="flex items-center gap-2 border-t bg-muted/40 px-3 py-2 text-xs text-muted-foreground"
+      className="flex items-center gap-3 border-t px-4 py-3"
+      style={{ background: "var(--src-ai-bg)" }}
     >
-      <Sparkles aria-hidden className="size-3.5 text-foreground" />
-      <span className="text-foreground">Ask AI</span>
-      <span className="truncate">
-        {query.trim() ? query : "Type a question and press ⌘↵"}
-      </span>
-      <span className="ml-auto flex items-center gap-2">
-        <kbd className="rounded border bg-background px-1.5 py-0.5 font-mono text-[10px] tracking-wider text-foreground">
-          ⌘↵
-        </kbd>
-        <span
-          data-slot="ai-provider"
-          className={cn(
-            "rounded-full border bg-background px-2 py-0.5 font-mono text-[10px] tracking-wider text-foreground",
+      <SourceGlyph source="ai" size={20} />
+      <button
+        type="button"
+        onClick={onAsk}
+        disabled={disabled}
+        className="min-w-0 flex-1 text-left disabled:opacity-50"
+      >
+        <div className="truncate text-sm font-semibold text-foreground">
+          Ask AI
+          {trimmed && (
+            <>
+              {' "'}
+              <span style={{ color: "var(--src-ai)" }}>{trimmed}</span>
+              {'"'}
+            </>
           )}
-        >
-          {PROVIDER_LABEL}
-        </span>
-        <button
-          type="button"
-          onClick={onAsk}
-          disabled={disabled}
-          className="rounded-md border bg-background px-2 py-0.5 text-[11px] text-foreground hover:bg-accent disabled:opacity-50"
-        >
-          Ask
-        </button>
-      </span>
+        </div>
+        <div className="truncate text-[11px] text-muted-foreground">
+          Searches across all your signals ·{" "}
+          <span data-slot="ai-provider">{PROVIDER_LABEL}</span>
+        </div>
+      </button>
+      <kbd
+        className={cn(
+          "rounded border bg-background px-1.5 py-0.5 font-mono text-[10px] tracking-wider text-muted-foreground",
+        )}
+      >
+        ⌘↵
+      </kbd>
     </section>
   );
 }
