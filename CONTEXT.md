@@ -235,6 +235,20 @@ which is fine: they appear in the schedule widget but are filtered out of
 the alert path by source tag (so you don't get a "Focus starts in 10 min"
 ping for a block you just created).
 
+### Automation
+
+A user-defined `trigger → predicates → actions` pipeline. An Automation fires
+on a typed event (v1: `signal_ingested`; planned: `signal_state_change`,
+`focus_started`, `focus_ended`, `schedule`), AND-matches its predicates against
+the event payload, and dispatches a flat list of actions. v1 ships a single
+trigger (`signal_ingested`) and the **internal action** vocabulary
+(`dismiss`, `snooze`, `tag`, `set_priority`, `set_channels`) that supersedes
+the old "Inbox rule" effects 1:1. Future actions wrap **Capabilities** on
+existing providers (Slack `post_message`, GitHub `comment_on_pr`, Focus
+`set_focus`, …). Stored in `automations`; runs are recorded one-row-per-fire
+in `automation_runs` keyed on `(automation_id, trigger_event_id)` for
+idempotency. See ADR-0004 and PRD #87.
+
 ### Auth proxy
 
 A single project-operated Cloudflare Worker (e.g. `auth.clearday.dev`) that is
