@@ -13,7 +13,13 @@ import type { AutomationAction } from "#/features/automations/engine";
 export type ActionDescriptor = {
   type: AutomationAction["type"];
   label: string;
-  kind: "internal";
+  /**
+   * `internal` actions land as columns on the Signal row at upsert time.
+   * `deferred` actions are registered but have no live capability yet —
+   * the executor stamps them `skipped_no_capability` until the relevant
+   * provider capability lands.
+   */
+  kind: "internal" | "deferred";
 };
 
 export const ACTIONS: Record<AutomationAction["type"], ActionDescriptor> = {
@@ -29,6 +35,11 @@ export const ACTIONS: Record<AutomationAction["type"], ActionDescriptor> = {
     type: "set_channels",
     label: "Set channels",
     kind: "internal",
+  },
+  transition_ticket: {
+    type: "transition_ticket",
+    label: "Transition ticket",
+    kind: "deferred",
   },
 };
 

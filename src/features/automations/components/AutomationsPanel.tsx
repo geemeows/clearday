@@ -92,6 +92,8 @@ function defaultAction(type: AutomationAction["type"]): AutomationAction {
       return { type: "set_priority", value: "high" };
     case "set_channels":
       return { type: "set_channels", channels: ["slack_dm"] };
+    case "transition_ticket":
+      return { type: "transition_ticket", to_status: "Done" };
   }
 }
 
@@ -260,13 +262,26 @@ export function AutomationsPanel({
     [automations, persist],
   );
 
-  const onDelete = useCallback(
-    (id: string) => {
-      if (!automations) return;
-      persist(automations.filter((a) => a.id !== id));
-    },
-    [automations, persist],
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const pendingDelete = useMemo(
+    () => automations?.find((a) => a.id === pendingDeleteId) ?? null,
+    [automations, pendingDeleteId],
   );
+
+  const requestDelete = useCallback((id: string) => {
+    setPendingDeleteId(id);
+  }, []);
+
+  const cancelDelete = useCallback(() => {
+    setPendingDeleteId(null);
+  }, []);
+
+  const confirmDelete = useCallback(() => {
+    if (!automations || !pendingDeleteId) return;
+    const next = automations.filter((a) => a.id !== pendingDeleteId);
+    setPendingDeleteId(null);
+    persist(next);
+  }, [automations, pendingDeleteId, persist]);
 
   const filtered = useMemo(() => {
     if (!automations) return [];
@@ -364,7 +379,7 @@ export function AutomationsPanel({
                 busy={busy}
                 onToggle={(enabled) => onToggle(a.id, enabled)}
                 onEdit={() => openEdit(a)}
-                onDelete={() => onDelete(a.id)}
+                onDelete={() => requestDelete(a.id)}
               />
             ))}
           </div>
@@ -377,6 +392,40 @@ export function AutomationsPanel({
           signals={previewSignals}
         />
       )}
+
+      <Dialog
+        open={pendingDelete !== null}
+        onOpenChange={(open) => {
+          if (!open) cancelDelete();
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete automation</DialogTitle>
+          </DialogHeader>
+          <p className="text-muted-foreground text-sm">
+            Delete <span className="font-medium">{pendingDelete?.name}</span>?
+            This also purges its run history. This cannot be undone.
+          </p>
+          <DialogFooter>
+            <button
+              type="button"
+              onClick={cancelDelete}
+              className="rounded border border-border bg-background px-3 py-1.5 text-sm"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              aria-label="Confirm delete automation"
+              onClick={confirmDelete}
+              className="rounded border border-destructive/40 bg-destructive px-3 py-1.5 text-destructive-foreground text-sm hover:opacity-90"
+            >
+              Delete
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={builderOpen} onOpenChange={setBuilderOpen}>
         <DialogContent className="sm:max-w-2xl">
@@ -806,6 +855,27 @@ function ActionInputs({
         placeholder="tag"
         className="w-full rounded border border-border bg-background px-2 py-1 text-xs"
       />
+    );
+  }
+  if (action.type === "transition_ticket") {
+    return (
+      <div className="space-y-2">
+        <p
+          role="alert"
+          className="rounded border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-amber-700 text-xs dark:text-amber-400"
+        >
+          Linear / Jira not yet integrated — this action will record a
+          “skipped_no_capability” run until a ticket-tracker provider lands.
+        </p>
+        <input
+          type="text"
+          aria-label="Transition to status"
+          value={action.to_status}
+          onChange={(e) => onChange({ ...action, to_status: e.target.value })}
+          placeholder="Done"
+          className="w-full rounded border border-border bg-background px-2 py-1 text-xs"
+        />
+      </div>
     );
   }
   if (action.type === "set_priority") {

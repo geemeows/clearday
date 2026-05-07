@@ -18,6 +18,7 @@
 // All Supabase access is injected via a thin store interface so the module
 // stays unit-testable without supabase-js.
 
+import { ACTIONS } from "#/features/automations/actions";
 import type {
   AutomationAction,
   PlannedAutomation,
@@ -28,7 +29,8 @@ export type AutomationRunStatus =
   | "succeeded"
   | "failed"
   | "skipped_dry_run"
-  | "skipped_idempotent";
+  | "skipped_idempotent"
+  | "skipped_no_capability";
 
 export type AutomationRunInsert = {
   automation_id: string;
@@ -129,6 +131,34 @@ export async function executeAutomation(
     triggerEventId: input.triggerEventId,
     internalActionsAppliedByUpsert: internalApplied,
   };
+
+  // Plans whose every action is `deferred` (e.g. `transition_ticket` ahead of
+  // a Linear/Jira capability) short-circuit to `skipped_no_capability`. The
+  // run row still lands so the user sees the deferred dispatch in the runs
+  // view; once a capability registers, this branch falls away.
+  if (
+    input.plan.actions.length > 0 &&
+    input.plan.actions.every((a) => ACTIONS[a.type]?.kind === "deferred")
+  ) {
+    const inserted = await store.insertIfNew({
+      automation_id: input.plan.automation_id,
+      trigger_event_id: input.triggerEventId,
+      signal_id: input.signalId,
+      status: "skipped_no_capability",
+      actions_planned: input.plan.actions,
+      actions_executed: [],
+      error: null,
+      started_at: startedAt,
+      finished_at: now().toISOString(),
+    });
+    if (!inserted) return idempotent(input.plan.automation_id);
+    return {
+      automation_id: input.plan.automation_id,
+      status: "skipped_no_capability",
+      executed: [],
+      error: null,
+    };
+  }
 
   if (options.dryRun) {
     const inserted = await store.insertIfNew({

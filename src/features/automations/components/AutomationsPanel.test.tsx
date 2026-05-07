@@ -104,6 +104,70 @@ describe("AutomationsPanel search", () => {
   });
 });
 
+describe("AutomationsPanel delete-with-history-purge", () => {
+  it("opens a confirmation dialog instead of deleting on first click", async () => {
+    const saver = vi.fn(async () => ({ ok: true }));
+    renderPanel({ saver });
+    const deleteButton = await screen.findByLabelText("Delete Snooze deps");
+    fireEvent.click(deleteButton);
+    expect(await screen.findByText("Delete automation")).toBeTruthy();
+    expect(
+      screen.getByText(/also purges its run history/i),
+    ).toBeTruthy();
+    expect(saver).not.toHaveBeenCalled();
+    expect(screen.getAllByText("Snooze deps").length).toBeGreaterThan(0);
+  });
+
+  it("Cancel closes the dialog and keeps the automation", async () => {
+    const saver = vi.fn(async () => ({ ok: true }));
+    renderPanel({ saver });
+    fireEvent.click(await screen.findByLabelText("Delete Snooze deps"));
+    await screen.findByText("Delete automation");
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() => {
+      expect(screen.queryByText("Delete automation")).toBeNull();
+    });
+    expect(saver).not.toHaveBeenCalled();
+    expect(screen.getByText("Snooze deps")).toBeTruthy();
+  });
+
+  it("Confirm persists the list without the deleted row", async () => {
+    const saver = vi.fn<(next: Automation[]) => Promise<{ ok: true }>>(
+      async () => ({ ok: true }),
+    );
+    renderPanel({ saver });
+    fireEvent.click(await screen.findByLabelText("Delete Snooze deps"));
+    fireEvent.click(
+      await screen.findByLabelText("Confirm delete automation"),
+    );
+    await waitFor(() => {
+      expect(saver).toHaveBeenCalledTimes(1);
+    });
+    const persisted = saver.mock.calls[0]?.[0] ?? [];
+    expect(persisted.map((a) => a.id)).toEqual(["a-2", "a-3"]);
+  });
+});
+
+describe("AutomationsPanel transition_ticket warning", () => {
+  it("renders the deferred-capability warning when the action is selected in the builder", async () => {
+    const transitionList: Automation[] = [
+      automation({
+        id: "a-1",
+        name: "PR merged → ticket Done",
+        actions: [{ type: "transition_ticket", to_status: "Done" }],
+      }),
+    ];
+    renderPanel({
+      loader: vi.fn(async () => ({ automations: transitionList })),
+    });
+    fireEvent.click(await screen.findByText("Edit"));
+    expect(
+      await screen.findByText(/Linear \/ Jira not yet integrated/i),
+    ).toBeTruthy();
+    expect(screen.getByLabelText("Transition to status")).toBeTruthy();
+  });
+});
+
 describe("AutomationsPanel ?demo=1 empty-state toggle", () => {
   it("does not render the toggle when demo is false (default)", async () => {
     renderPanel();

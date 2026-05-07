@@ -34,7 +34,11 @@ export type AutomationAction =
   | { type: "snooze"; minutes: number }
   | { type: "tag"; tag: string }
   | { type: "set_priority"; value: SignalPriority }
-  | { type: "set_channels"; channels: AlertChannel[] };
+  | { type: "set_channels"; channels: AlertChannel[] }
+  // Stub action wired ahead of the Linear/Jira capability landing. The
+  // planner accepts and persists it, but the executor short-circuits to
+  // `skipped_no_capability` until a ticket-tracker capability is registered.
+  | { type: "transition_ticket"; to_status: string };
 
 export type AutomationTriggerKind = "signal_ingested";
 
@@ -182,6 +186,10 @@ function applyAction(
       // lower one.
       if (a.value === "low" || a.value === "high") result.priority = a.value;
       break;
+    case "transition_ticket":
+      // External capability — does not touch the Signal upsert columns.
+      // Executor handles routing (or stub status) downstream.
+      break;
     case "set_channels": {
       // Last-write-wins per slot, same vocabulary as priority. An empty list
       // is meaningful — it means "this automation says fire no channels" —
@@ -234,6 +242,7 @@ const ACTION_TYPES = new Set<AutomationAction["type"]>([
   "tag",
   "set_priority",
   "set_channels",
+  "transition_ticket",
 ]);
 
 const PREDICATE_TYPES = new Set<AutomationPredicate["type"]>([
@@ -306,6 +315,13 @@ export function validateAutomations(automations: Automation[]): string[] {
         if (act.value !== "low" && act.value !== "high") {
           errors.push(
             `automation ${a.id}: set_priority.value must be "low" or "high"`,
+          );
+        }
+      }
+      if (act.type === "transition_ticket") {
+        if (typeof act.to_status !== "string") {
+          errors.push(
+            `automation ${a.id}: transition_ticket.to_status must be a string`,
           );
         }
       }

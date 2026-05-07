@@ -123,6 +123,32 @@ describe("executeAutomation", () => {
     expect(store.rows[0].actions_planned.map((a) => a.type)).toEqual(["tag"]);
   });
 
+  it("records skipped_no_capability for a plan whose only action is transition_ticket", async () => {
+    const store = memoryRunsStore();
+    const handler = vi.fn();
+    const result = await executeAutomation(
+      {
+        plan: {
+          automation_id: "a-1",
+          actions: [{ type: "transition_ticket", to_status: "Done" }],
+        },
+        triggerEventId: "sig-1:t",
+        signalId: "sig-1",
+      },
+      store,
+      { handler, internalActionsAppliedByUpsert: false },
+    );
+    expect(result.status).toBe("skipped_no_capability");
+    expect(result.executed).toEqual([]);
+    expect(handler).not.toHaveBeenCalled();
+    expect(store.rows).toHaveLength(1);
+    expect(store.rows[0].status).toBe("skipped_no_capability");
+    expect(store.rows[0].actions_planned).toEqual([
+      { type: "transition_ticket", to_status: "Done" },
+    ]);
+    expect(store.rows[0].actions_executed).toEqual([]);
+  });
+
   it("internal-action handler is a no-op when upsert already applied them", async () => {
     const store = memoryRunsStore();
     const handler = vi.fn(async () => ({
