@@ -2,6 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   type Automation,
   applyAutomationsToSignal,
+  cronExpressionValid,
+  cronMatchesMinute,
+  humanizeCron,
+  minuteIsoFromDate,
   planAutomations,
   previewAutomations,
   validateAutomations,
@@ -702,7 +706,7 @@ describe("validateAutomations", () => {
         name: "n",
         enabled: true,
         priority: 1,
-        trigger_kind: "schedule" as unknown as "signal_ingested",
+        trigger_kind: "webhook" as unknown as "signal_ingested",
         predicates: [{ type: "kind", kind: "mention" }],
         actions: [{ type: "tag", tag: "t" }],
       },
@@ -815,5 +819,230 @@ describe("validateAutomations", () => {
       },
     ]);
     expect(errs.some((e) => e.includes("snooze.minutes"))).toBe(true);
+  });
+});
+
+describe("cronMatchesMinute", () => {
+  it("matches a fully-specified minute", () => {
+    // 2026-05-04T09:00:00Z is a Monday.
+    expect(cronMatchesMinute("0 9 * * 1-5", "2026-05-04T09:00:00.000Z")).toBe(
+      true,
+    );
+  });
+
+  it("does not match on a non-matching minute", () => {
+    expect(cronMatchesMinute("0 9 * * 1-5", "2026-05-04T09:01:00.000Z")).toBe(
+      false,
+    );
+  });
+
+  it("does not match on Saturday for a weekday-only cron", () => {
+    // 2026-05-09T09:00:00Z is a Saturday.
+    expect(cronMatchesMinute("0 9 * * 1-5", "2026-05-09T09:00:00.000Z")).toBe(
+      false,
+    );
+  });
+
+  it("supports `*` wildcard fields", () => {
+    expect(cronMatchesMinute("* * * * *", "2026-05-04T09:01:00.000Z")).toBe(
+      true,
+    );
+  });
+
+  it("supports step expressions", () => {
+    expect(cronMatchesMinute("*/15 * * * *", "2026-05-04T09:00:00.000Z")).toBe(
+      true,
+    );
+    expect(cronMatchesMinute("*/15 * * * *", "2026-05-04T09:15:00.000Z")).toBe(
+      true,
+    );
+    expect(cronMatchesMinute("*/15 * * * *", "2026-05-04T09:14:00.000Z")).toBe(
+      false,
+    );
+  });
+
+  it("supports comma lists", () => {
+    expect(
+      cronMatchesMinute("0 9,17 * * 1-5", "2026-05-04T17:00:00.000Z"),
+    ).toBe(true);
+    expect(
+      cronMatchesMinute("0 9,17 * * 1-5", "2026-05-04T13:00:00.000Z"),
+    ).toBe(false);
+  });
+
+  it("treats day-of-week 0 and 7 as Sunday", () => {
+    // 2026-05-10 is a Sunday.
+    expect(cronMatchesMinute("0 9 * * 0", "2026-05-10T09:00:00.000Z")).toBe(
+      true,
+    );
+    expect(cronMatchesMinute("0 9 * * 7", "2026-05-10T09:00:00.000Z")).toBe(
+      true,
+    );
+  });
+
+  it("invalid cron never matches", () => {
+    expect(cronMatchesMinute("not-a-cron", "2026-05-04T09:00:00.000Z")).toBe(
+      false,
+    );
+    expect(cronMatchesMinute("99 * * * *", "2026-05-04T09:00:00.000Z")).toBe(
+      false,
+    );
+  });
+});
+
+describe("cronExpressionValid", () => {
+  it("accepts standard 5-field cron", () => {
+    expect(cronExpressionValid("0 9 * * 1-5")).toBe(true);
+    expect(cronExpressionValid("*/5 * * * *")).toBe(true);
+    expect(cronExpressionValid("0 0,12 1 * *")).toBe(true);
+  });
+
+  it("rejects malformed cron", () => {
+    expect(cronExpressionValid("")).toBe(false);
+    expect(cronExpressionValid("0 9 * *")).toBe(false);
+    expect(cronExpressionValid("99 * * * *")).toBe(false);
+    expect(cronExpressionValid("0 9 * * 8")).toBe(false);
+    expect(cronExpressionValid("a b c d e")).toBe(false);
+  });
+});
+
+describe("humanizeCron", () => {
+  it("renders weekday morning shape", () => {
+    expect(humanizeCron("0 9 * * 1-5")).toBe("Weekdays · 09:00");
+  });
+
+  it("renders single weekday", () => {
+    expect(humanizeCron("30 17 * * 5")).toBe("Friday · 17:30");
+  });
+
+  it("falls back to the raw expression for unrecognised shapes", () => {
+    expect(humanizeCron("*/15 * * * *")).toBe("*/15 * * * *");
+    expect(humanizeCron("not-a-cron")).toBe("not-a-cron");
+  });
+});
+
+describe("minuteIsoFromDate", () => {
+  it("truncates to whole minutes", () => {
+    expect(minuteIsoFromDate(new Date("2026-05-04T09:00:42.123Z"))).toBe(
+      "2026-05-04T09:00:00.000Z",
+    );
+  });
+});
+
+describe("planAutomations — schedule trigger", () => {
+  function makeScheduleAutomation(
+    overrides: Partial<Automation> = {},
+  ): Automation {
+    return {
+      id: "sched-1",
+      name: "9am roundup",
+      enabled: true,
+      priority: 100,
+      trigger_kind: "schedule",
+      trigger_config: { cron: "0 9 * * 1-5" },
+      predicates: [],
+      actions: [{ type: "tag", tag: "schedule" }],
+      ...overrides,
+    };
+  }
+
+  it("fires for an automation whose cron matches the minute", () => {
+    const out = planAutomations(
+      { kind: "schedule", minute_iso: "2026-05-04T09:00:00.000Z" },
+      [makeScheduleAutomation()],
+    );
+    expect(out.map((p) => p.automation_id)).toEqual(["sched-1"]);
+  });
+
+  it("does not fire when the cron does not match the minute", () => {
+    const out = planAutomations(
+      { kind: "schedule", minute_iso: "2026-05-04T09:01:00.000Z" },
+      [makeScheduleAutomation()],
+    );
+    expect(out).toEqual([]);
+  });
+
+  it("does not fire on a non-schedule event", () => {
+    const out = planAutomations(
+      { kind: "signal_ingested", signal: makeSignal() },
+      [makeScheduleAutomation()],
+    );
+    expect(out).toEqual([]);
+  });
+
+  it("a signal_ingested automation does not fire on schedule events", () => {
+    const out = planAutomations(
+      { kind: "schedule", minute_iso: "2026-05-04T09:00:00.000Z" },
+      [makeAutomation()],
+    );
+    expect(out).toEqual([]);
+  });
+
+  it("a disabled schedule automation does not fire even when the cron matches", () => {
+    const out = planAutomations(
+      { kind: "schedule", minute_iso: "2026-05-04T09:00:00.000Z" },
+      [makeScheduleAutomation({ enabled: false })],
+    );
+    expect(out).toEqual([]);
+  });
+
+  it("a schedule automation without a cron expression does not fire", () => {
+    const out = planAutomations(
+      { kind: "schedule", minute_iso: "2026-05-04T09:00:00.000Z" },
+      [makeScheduleAutomation({ trigger_config: undefined })],
+    );
+    expect(out).toEqual([]);
+  });
+});
+
+describe("validateAutomations — schedule trigger", () => {
+  it("accepts a schedule automation with a valid cron", () => {
+    expect(
+      validateAutomations([
+        {
+          id: "s",
+          name: "n",
+          enabled: true,
+          priority: 1,
+          trigger_kind: "schedule",
+          trigger_config: { cron: "0 9 * * 1-5" },
+          predicates: [],
+          actions: [{ type: "tag", tag: "t" }],
+        },
+      ]),
+    ).toEqual([]);
+  });
+
+  it("rejects a schedule automation without a cron", () => {
+    const errs = validateAutomations([
+      {
+        id: "s",
+        name: "n",
+        enabled: true,
+        priority: 1,
+        trigger_kind: "schedule",
+        predicates: [],
+        actions: [{ type: "tag", tag: "t" }],
+      },
+    ]);
+    expect(
+      errs.some((e) => e.includes("schedule trigger requires trigger_config.cron")),
+    ).toBe(true);
+  });
+
+  it("rejects a schedule automation with an invalid cron", () => {
+    const errs = validateAutomations([
+      {
+        id: "s",
+        name: "n",
+        enabled: true,
+        priority: 1,
+        trigger_kind: "schedule",
+        trigger_config: { cron: "99 * * * *" },
+        predicates: [],
+        actions: [{ type: "tag", tag: "t" }],
+      },
+    ]);
+    expect(errs.some((e) => e.includes("invalid cron expression"))).toBe(true);
   });
 });

@@ -19,8 +19,10 @@
 import {
   type Automation,
   type FocusBoundaryEvent,
-  type SignalStateChangeEvent,
+  minuteIsoFromDate,
   planAutomations,
+  type ScheduleEvent,
+  type SignalStateChangeEvent,
 } from "#/features/automations/engine";
 import {
   type AutomationRunsStore,
@@ -158,6 +160,45 @@ export async function runFocusBoundaryAutomation(
     results.push(result);
   }
   return { sessionId, boundary, results };
+}
+
+export type ScheduleTickResult = {
+  minuteIso: string;
+  results: ExecuteResult[];
+};
+
+/**
+ * Schedule trigger entry point. Called once per minute by the Worker cron.
+ * Builds a single `schedule` event for the given minute and dispatches every
+ * matching automation through the executor with a stable
+ * `${automation_id}:${minute_iso}` trigger event id, so a re-tick of the same
+ * minute short-circuits to skipped_idempotent.
+ *
+ * `now` accepts a Date or ISO minute string; the orchestrator truncates to
+ * whole minutes regardless so the cron evaluation and the trigger event id
+ * stay consistent across re-ticks within the same minute.
+ */
+export async function runScheduleAutomations(
+  now: Date | string,
+  automations: Automation[],
+  store: AutomationRunsStore,
+  options: ExecuteOptions = {},
+): Promise<ScheduleTickResult> {
+  const minuteIso =
+    typeof now === "string" ? minuteIsoFromDate(new Date(now)) : minuteIsoFromDate(now);
+  const event: ScheduleEvent = { kind: "schedule", minute_iso: minuteIso };
+  const planned = planAutomations(event, automations);
+  const results: ExecuteResult[] = [];
+  for (const plan of planned) {
+    const eventId = triggerEventId(event, undefined, undefined, plan.automation_id);
+    const result = await executeAutomation(
+      { plan, triggerEventId: eventId, signalId: null },
+      store,
+      options,
+    );
+    results.push(result);
+  }
+  return { minuteIso, results };
 }
 
 /**

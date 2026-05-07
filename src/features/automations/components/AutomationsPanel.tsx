@@ -13,6 +13,8 @@ import {
   type Automation,
   type AutomationAction,
   type AutomationPredicate,
+  cronExpressionValid,
+  humanizeCron,
   previewAutomations,
 } from "#/features/automations/engine";
 import { TRIGGER_LIST } from "#/features/automations/triggers";
@@ -597,11 +599,16 @@ function AutomationBuilder({
         <select
           aria-label="Trigger kind"
           value={automation.trigger_kind}
-          onChange={(e) =>
+          onChange={(e) => {
+            const next = e.target.value as Automation["trigger_kind"];
             set({
-              trigger_kind: e.target.value as Automation["trigger_kind"],
-            })
-          }
+              trigger_kind: next,
+              trigger_config:
+                next === "schedule"
+                  ? { cron: automation.trigger_config?.cron ?? "0 9 * * 1-5" }
+                  : undefined,
+            });
+          }}
           className="rounded border border-border bg-background px-2 py-1"
         >
           {TRIGGER_LIST.map((t) => (
@@ -611,6 +618,13 @@ function AutomationBuilder({
           ))}
         </select>
       </label>
+
+      {automation.trigger_kind === "schedule" && (
+        <ScheduleConfigEditor
+          cron={automation.trigger_config?.cron ?? ""}
+          onChange={(cron) => set({ trigger_config: { cron } })}
+        />
+      )}
 
       <fieldset className="space-y-2 rounded border border-border p-3">
         <legend className="px-1 text-xs text-muted-foreground">When</legend>
@@ -672,6 +686,45 @@ function AutomationBuilder({
         </button>
       </fieldset>
     </div>
+  );
+}
+
+function ScheduleConfigEditor({
+  cron,
+  onChange,
+}: {
+  cron: string;
+  onChange: (cron: string) => void;
+}) {
+  const trimmed = cron.trim();
+  const valid = trimmed.length > 0 && cronExpressionValid(trimmed);
+  return (
+    <fieldset className="space-y-2 rounded border border-border p-3">
+      <legend className="px-1 text-xs text-muted-foreground">Schedule</legend>
+      <label className="flex flex-col gap-1">
+        <span className="text-xs text-muted-foreground">
+          Cron expression (UTC, minute granularity)
+        </span>
+        <input
+          type="text"
+          aria-label="Cron expression"
+          value={cron}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="0 9 * * 1-5"
+          className="rounded border border-border bg-background px-2 py-1 font-mono text-xs"
+        />
+      </label>
+      <p
+        aria-live="polite"
+        className={`text-xs ${valid ? "text-muted-foreground" : "text-destructive"}`}
+      >
+        {valid
+          ? humanizeCron(trimmed)
+          : trimmed.length === 0
+            ? "Enter a 5-field cron expression"
+            : "Invalid cron expression"}
+      </p>
+    </fieldset>
   );
 }
 

@@ -59,7 +59,18 @@ export type AutomationTriggerKind =
   | "signal_ingested"
   | "signal_state_change"
   | "focus_started"
-  | "focus_ended";
+  | "focus_ended"
+  | "schedule";
+
+/**
+ * Per-trigger configuration. v1 only the `schedule` trigger uses this slot
+ * (cron expression). Other trigger kinds ignore it. Stored as JSON in the
+ * `automations.trigger_config` column.
+ */
+export type AutomationTriggerConfig = {
+  /** Standard 5-field cron expression evaluated against UTC minutes. */
+  cron?: string;
+};
 
 export type Automation = {
   id: string;
@@ -67,6 +78,7 @@ export type Automation = {
   enabled: boolean;
   priority: number;
   trigger_kind: AutomationTriggerKind;
+  trigger_config?: AutomationTriggerConfig;
   predicates: AutomationPredicate[];
   actions: AutomationAction[];
 };
@@ -92,10 +104,22 @@ export type FocusBoundaryEvent = {
   duration_minutes: number;
 };
 
+export type ScheduleEvent = {
+  kind: "schedule";
+  /**
+   * The minute boundary the cron worker is evaluating, truncated to whole
+   * minutes and serialized as `YYYY-MM-DDTHH:MM:00.000Z`. Used both for cron
+   * matching and as the suffix of the trigger event id, so a re-tick of the
+   * same minute yields the same id and short-circuits to skipped_idempotent.
+   */
+  minute_iso: string;
+};
+
 export type AutomationEvent =
   | SignalIngestedEvent
   | SignalStateChangeEvent
-  | FocusBoundaryEvent;
+  | FocusBoundaryEvent
+  | ScheduleEvent;
 
 export type PlannedAutomation = {
   automation_id: string;
@@ -116,13 +140,19 @@ export function planAutomations(
   const ordered = [...automations].sort((a, b) => a.priority - b.priority);
   const isFocusEvent =
     event.kind === "focus_started" || event.kind === "focus_ended";
+  const isScheduleEvent = event.kind === "schedule";
   for (const a of ordered) {
     if (!a.enabled) continue;
     if (a.trigger_kind !== event.kind) continue;
-    // Focus boundary events have no Signal-shaped fields to filter on, so an
-    // empty predicate list is a valid "fire on every boundary" automation.
-    // Signal triggers still require at least one predicate.
-    if (!isFocusEvent && a.predicates.length === 0) continue;
+    // Focus / schedule events have no Signal-shaped fields to filter on, so
+    // an empty predicate list is a valid "fire on every tick / boundary"
+    // automation. Signal triggers still require at least one predicate.
+    if (!isFocusEvent && !isScheduleEvent && a.predicates.length === 0)
+      continue;
+    if (isScheduleEvent) {
+      const cron = a.trigger_config?.cron;
+      if (!cron || !cronMatchesMinute(cron, event.minute_iso)) continue;
+    }
     if (!a.predicates.every((p) => matchesPredicate(p, event))) continue;
     planned.push({ automation_id: a.id, actions: a.actions });
   }
@@ -138,7 +168,10 @@ function matchesPredicate(
   // automation has predicates configured (see `every` in planAutomations);
   // returning false here means a misconfigured Focus automation simply
   // never fires rather than throwing.
-  if (event.kind !== "signal_ingested" && event.kind !== "signal_state_change") {
+  if (
+    event.kind !== "signal_ingested" &&
+    event.kind !== "signal_state_change"
+  ) {
     return false;
   }
   // For `signal_ingested` we match against the inserted Signal; for
@@ -310,11 +343,13 @@ const TRIGGER_KINDS: readonly AutomationTriggerKind[] = [
   "signal_state_change",
   "focus_started",
   "focus_ended",
+  "schedule",
 ];
 
-const FOCUS_TRIGGER_KINDS: readonly AutomationTriggerKind[] = [
+const PREDICATELESS_TRIGGER_KINDS: readonly AutomationTriggerKind[] = [
   "focus_started",
   "focus_ended",
+  "schedule",
 ];
 
 const ACTION_TYPES = new Set<AutomationAction["type"]>([
@@ -357,13 +392,24 @@ export function validateAutomations(automations: Automation[]): string[] {
       );
     }
 
-    const isFocus = FOCUS_TRIGGER_KINDS.includes(
+    const allowsEmptyPredicates = PREDICATELESS_TRIGGER_KINDS.includes(
       a.trigger_kind as AutomationTriggerKind,
     );
     if (!Array.isArray(a.predicates))
       errors.push(`automation ${a.id}: predicates must be an array`);
-    else if (!isFocus && a.predicates.length === 0)
+    else if (!allowsEmptyPredicates && a.predicates.length === 0)
       errors.push(`automation ${a.id}: at least one predicate required`);
+
+    if (a.trigger_kind === "schedule") {
+      const cron = a.trigger_config?.cron;
+      if (typeof cron !== "string" || cron.length === 0) {
+        errors.push(
+          `automation ${a.id}: schedule trigger requires trigger_config.cron`,
+        );
+      } else if (!cronExpressionValid(cron)) {
+        errors.push(`automation ${a.id}: invalid cron expression "${cron}"`);
+      }
+    }
     if (!Array.isArray(a.actions) || a.actions.length === 0)
       errors.push(`automation ${a.id}: at least one action required`);
 
@@ -444,4 +490,208 @@ export function validateAutomations(automations: Automation[]): string[] {
     }
   }
   return errors;
+}
+
+// ---------------------------------------------------------------------------
+// Cron — minute-granularity matcher used by the schedule trigger.
+//
+// Standard 5-field cron (minute, hour, day-of-month, month, day-of-week)
+// evaluated against UTC. Supports `*`, exact value, comma list `a,b,c`, range
+// `a-b`, and step `*/N`. No special tokens (`@daily`, `?`, `L`, …) — the
+// builder UI surfaces this vocabulary so callers don't expect more.
+//
+// Day-of-week 0 and 7 both mean Sunday (POSIX cron convention). When both
+// day-of-month and day-of-week are restricted, an OR-match fires (also POSIX
+// cron); when one is `*` only the other gates the match.
+// ---------------------------------------------------------------------------
+
+type CronField = number[];
+
+type ParsedCron = {
+  minute: CronField;
+  hour: CronField;
+  dom: CronField;
+  month: CronField;
+  dow: CronField;
+  domStar: boolean;
+  dowStar: boolean;
+};
+
+const CRON_RANGES: Array<[number, number]> = [
+  [0, 59], // minute
+  [0, 23], // hour
+  [1, 31], // day-of-month
+  [1, 12], // month
+  [0, 7], // day-of-week (0/7 = Sunday)
+];
+
+function parseCron(expr: string): ParsedCron | null {
+  const parts = expr.trim().split(/\s+/);
+  if (parts.length !== 5) return null;
+  const fields: CronField[] = [];
+  for (let i = 0; i < 5; i++) {
+    const [lo, hi] = CRON_RANGES[i];
+    const set = parseCronField(parts[i], lo, hi);
+    if (!set) return null;
+    fields.push(set);
+  }
+  return {
+    minute: fields[0],
+    hour: fields[1],
+    dom: fields[2],
+    month: fields[3],
+    // Normalize 7 → 0 (Sunday).
+    dow: fields[4].map((d) => (d === 7 ? 0 : d)),
+    domStar: parts[2] === "*",
+    dowStar: parts[4] === "*",
+  };
+}
+
+function parseCronField(
+  raw: string,
+  lo: number,
+  hi: number,
+): CronField | null {
+  const out = new Set<number>();
+  for (const piece of raw.split(",")) {
+    const result = expandCronPiece(piece, lo, hi);
+    if (!result) return null;
+    for (const v of result) out.add(v);
+  }
+  return [...out].sort((a, b) => a - b);
+}
+
+function expandCronPiece(
+  piece: string,
+  lo: number,
+  hi: number,
+): number[] | null {
+  let step = 1;
+  let body = piece;
+  const slash = piece.indexOf("/");
+  if (slash >= 0) {
+    const stepStr = piece.slice(slash + 1);
+    body = piece.slice(0, slash);
+    const parsedStep = Number(stepStr);
+    if (!Number.isInteger(parsedStep) || parsedStep <= 0) return null;
+    step = parsedStep;
+  }
+  let start = lo;
+  let end = hi;
+  if (body !== "*") {
+    if (body.includes("-")) {
+      const [a, b] = body.split("-");
+      const av = Number(a);
+      const bv = Number(b);
+      if (!Number.isInteger(av) || !Number.isInteger(bv)) return null;
+      if (av < lo || bv > hi || av > bv) return null;
+      start = av;
+      end = bv;
+    } else {
+      const v = Number(body);
+      if (!Number.isInteger(v) || v < lo || v > hi) return null;
+      // No step on a bare value: it's a single value, not a sequence.
+      return slash >= 0 ? rangeWithStep(v, hi, step) : [v];
+    }
+  }
+  return rangeWithStep(start, end, step);
+}
+
+function rangeWithStep(start: number, end: number, step: number): number[] {
+  const out: number[] = [];
+  for (let i = start; i <= end; i += step) out.push(i);
+  return out;
+}
+
+export function cronExpressionValid(expr: string): boolean {
+  return parseCron(expr) !== null;
+}
+
+/**
+ * True when `cron` matches the UTC minute encoded by `minuteIso`. Caller is
+ * responsible for passing a minute-truncated ISO string (the orchestrator
+ * builds it from `Date` rounded down to the minute).
+ */
+export function cronMatchesMinute(cron: string, minuteIso: string): boolean {
+  const parsed = parseCron(cron);
+  if (!parsed) return false;
+  const date = new Date(minuteIso);
+  if (Number.isNaN(date.getTime())) return false;
+  const minute = date.getUTCMinutes();
+  const hour = date.getUTCHours();
+  const dom = date.getUTCDate();
+  const month = date.getUTCMonth() + 1;
+  const dow = date.getUTCDay();
+  if (!parsed.minute.includes(minute)) return false;
+  if (!parsed.hour.includes(hour)) return false;
+  if (!parsed.month.includes(month)) return false;
+  // POSIX cron: when both DOM and DOW are restricted, OR them. When either is
+  // `*`, only the restricted one gates the match.
+  const domMatch = parsed.dom.includes(dom);
+  const dowMatch = parsed.dow.includes(dow);
+  if (parsed.domStar && parsed.dowStar) return true;
+  if (parsed.domStar) return dowMatch;
+  if (parsed.dowStar) return domMatch;
+  return domMatch || dowMatch;
+}
+
+/**
+ * Best-effort English summary for a cron expression. Falls back to echoing the
+ * raw expression for shapes the simple humanizer doesn't recognise — the
+ * builder still shows the cron string itself, this is just the friendly
+ * caption next to it.
+ */
+export function humanizeCron(expr: string): string {
+  if (!cronExpressionValid(expr)) return expr;
+  const parts = expr.trim().split(/\s+/);
+  const [minute, hour, dom, month, dow] = parts;
+  if (dom !== "*" || month !== "*") return expr;
+  const dayLabel = humanizeDow(dow);
+  if (dayLabel === null) return expr;
+  if (/^\d+$/.test(minute) && /^\d+$/.test(hour)) {
+    const hh = hour.padStart(2, "0");
+    const mm = minute.padStart(2, "0");
+    return `${dayLabel} · ${hh}:${mm}`;
+  }
+  return expr;
+}
+
+function humanizeDow(field: string): string | null {
+  if (field === "*") return "Every day";
+  if (field === "1-5") return "Weekdays";
+  if (field === "0,6" || field === "6,0") return "Weekends";
+  if (/^[0-7]$/.test(field)) {
+    const names = [
+      "Sunday",
+      "Monday",
+      "Tuesday",
+      "Wednesday",
+      "Thursday",
+      "Friday",
+      "Saturday",
+      "Sunday",
+    ];
+    return names[Number(field)];
+  }
+  return null;
+}
+
+/**
+ * Truncates a Date to whole minutes and returns the canonical
+ * `YYYY-MM-DDTHH:MM:00.000Z` string used as the schedule event id suffix and
+ * cron evaluation input.
+ */
+export function minuteIsoFromDate(date: Date): string {
+  const d = new Date(
+    Date.UTC(
+      date.getUTCFullYear(),
+      date.getUTCMonth(),
+      date.getUTCDate(),
+      date.getUTCHours(),
+      date.getUTCMinutes(),
+      0,
+      0,
+    ),
+  );
+  return d.toISOString();
 }

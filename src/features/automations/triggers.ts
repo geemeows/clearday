@@ -37,16 +37,22 @@ export const TRIGGERS: Record<AutomationTriggerKind, TriggerDescriptor> = {
     kind: "focus_ended",
     label: "Focus ended",
   },
+  schedule: {
+    kind: "schedule",
+    label: "Schedule",
+  },
 };
 
 export const TRIGGER_LIST: TriggerDescriptor[] = Object.values(TRIGGERS);
 
 export function triggerEventId(
   event: AutomationEvent,
-  /** Signal id for signal_* events; ignored for focus events. */
+  /** Signal id for signal_* events; ignored for focus / schedule events. */
   signalId?: string,
   /** `created_at` for `signal_ingested`; `updated_at` for `signal_state_change`. */
   signalTimestamp?: string,
+  /** Automation id; required for `schedule`, ignored otherwise. */
+  automationId?: string,
 ): string {
   switch (event.kind) {
     case "signal_ingested":
@@ -57,5 +63,7 @@ export function triggerEventId(
       return `${event.session_id}:start`;
     case "focus_ended":
       return `${event.session_id}:end`;
+    case "schedule":
+      return `${automationId ?? ""}:${event.minute_iso}`;
   }
 }

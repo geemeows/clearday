@@ -8,6 +8,7 @@ import {
   runAutomationsForInsertedSignals,
   runAutomationsForUpdatedSignals,
   runFocusBoundaryAutomation,
+  runScheduleAutomations,
   runSignalIngestedAutomations,
   type SignalLookup,
 } from "#/features/automations/orchestrator";
@@ -376,5 +377,90 @@ describe("runFocusBoundaryAutomation", () => {
     );
     expect(out.results).toEqual([]);
     expect(store.rows).toHaveLength(0);
+  });
+});
+
+const scheduledAutomation: Automation = {
+  id: "sched-1",
+  name: "Weekday 9am roundup",
+  enabled: true,
+  priority: 1,
+  trigger_kind: "schedule",
+  trigger_config: { cron: "0 9 * * 1-5" },
+  predicates: [],
+  actions: [{ type: "tag", tag: "scheduled" }],
+};
+
+describe("runScheduleAutomations", () => {
+  it("happy path: cron-matching minute writes one succeeded run keyed on automation_id:minute_iso", async () => {
+    const store = memoryRunsStore();
+    const out = await runScheduleAutomations(
+      new Date("2026-05-04T09:00:00.000Z"),
+      [scheduledAutomation],
+      store,
+    );
+    expect(out.minuteIso).toBe("2026-05-04T09:00:00.000Z");
+    expect(out.results).toHaveLength(1);
+    expect(out.results[0].status).toBe("succeeded");
+    expect(store.rows).toHaveLength(1);
+    expect(store.rows[0].trigger_event_id).toBe(
+      "sched-1:2026-05-04T09:00:00.000Z",
+    );
+    expect(store.rows[0].signal_id).toBeNull();
+  });
+
+  it("non-matching minute writes nothing", async () => {
+    const store = memoryRunsStore();
+    const out = await runScheduleAutomations(
+      new Date("2026-05-04T09:01:00.000Z"),
+      [scheduledAutomation],
+      store,
+    );
+    expect(out.results).toEqual([]);
+    expect(store.rows).toHaveLength(0);
+  });
+
+  it("re-tick of the same minute short-circuits to skipped_idempotent", async () => {
+    const store = memoryRunsStore();
+    await runScheduleAutomations(
+      new Date("2026-05-04T09:00:00.000Z"),
+      [scheduledAutomation],
+      store,
+    );
+    const out = await runScheduleAutomations(
+      // a few seconds later, same minute
+      new Date("2026-05-04T09:00:42.123Z"),
+      [scheduledAutomation],
+      store,
+    );
+    expect(out.results[0].status).toBe("skipped_idempotent");
+    expect(store.rows).toHaveLength(1);
+  });
+
+  it("dispatches set_focus through the injected handler", async () => {
+    const store = memoryRunsStore();
+    const calls: Array<{ duration_minutes: number }> = [];
+    const out = await runScheduleAutomations(
+      new Date("2026-05-04T09:00:00.000Z"),
+      [
+        {
+          ...scheduledAutomation,
+          actions: [{ type: "set_focus", duration_minutes: 25 }],
+        },
+      ],
+      store,
+      {
+        internalActionsAppliedByUpsert: false,
+        handler: async (action) => {
+          if (action.type === "set_focus") {
+            calls.push({ duration_minutes: action.duration_minutes });
+            return { type: action.type, ok: true };
+          }
+          return { type: action.type, ok: true };
+        },
+      },
+    );
+    expect(out.results[0].status).toBe("succeeded");
+    expect(calls).toEqual([{ duration_minutes: 25 }]);
   });
 });

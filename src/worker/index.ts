@@ -1907,6 +1907,7 @@ async function loadAutomationsFromService(
     enabled: boolean;
     priority: number;
     trigger_kind: Automation["trigger_kind"];
+    trigger_config: Automation["trigger_config"] | null;
     predicates: Automation["predicates"] | null;
     actions: Automation["actions"] | null;
   }>;
@@ -1916,6 +1917,7 @@ async function loadAutomationsFromService(
     enabled: r.enabled,
     priority: r.priority,
     trigger_kind: r.trigger_kind,
+    trigger_config: r.trigger_config ?? undefined,
     predicates: r.predicates ?? [],
     actions: r.actions ?? [],
   }));
@@ -1938,7 +1940,7 @@ function automationsStore(service: SupabaseService): AutomationsStore {
         enabled: a.enabled,
         priority: a.priority,
         trigger_kind: a.trigger_kind,
-        trigger_config: {},
+        trigger_config: a.trigger_config ?? {},
         predicates: a.predicates,
         actions: a.actions,
       }));
