@@ -1,3 +1,4 @@
+import { Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Dialog,
@@ -107,6 +108,8 @@ export function AutomationsPanel({
   loader,
   saver,
   signalsLoader = defaultSignalsLoader,
+  q: qProp,
+  onQChange,
 }: {
   loader?: () => Promise<{ automations: Automation[] }>;
   saver?: (automations: Automation[]) => Promise<{
@@ -115,7 +118,18 @@ export function AutomationsPanel({
     error?: string;
   }>;
   signalsLoader?: SignalsLoader;
+  q?: string;
+  onQChange?: (q: string) => void;
 } = {}) {
+  const [qLocal, setQLocal] = useState("");
+  const q = qProp ?? qLocal;
+  const setQ = useCallback(
+    (next: string) => {
+      if (onQChange) onQChange(next);
+      else setQLocal(next);
+    },
+    [onQChange],
+  );
   const [automations, setAutomations] = useState<Automation[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -246,6 +260,13 @@ export function AutomationsPanel({
     [automations, persist],
   );
 
+  const filtered = useMemo(() => {
+    if (!automations) return [];
+    const needle = q.trim().toLowerCase();
+    if (!needle) return automations;
+    return automations.filter((a) => a.name.toLowerCase().includes(needle));
+  }, [automations, q]);
+
   return (
     <section aria-label="Automations" className="space-y-6">
       <header className="flex items-end justify-between">
@@ -279,23 +300,46 @@ export function AutomationsPanel({
       )}
 
       {automations && (
-        <div className="space-y-2 rounded-lg border border-border bg-card p-3">
-          {automations.length === 0 && (
-            <p className="text-muted-foreground text-sm">
-              No automations yet. Create one to start shaping incoming Signals.
-            </p>
-          )}
-          {automations.map((a) => (
-            <AutomationRow
-              key={a.id}
-              automation={a}
-              busy={busy}
-              onToggle={(enabled) => onToggle(a.id, enabled)}
-              onEdit={() => openEdit(a)}
-              onDelete={() => onDelete(a.id)}
+        <>
+          <div className="relative">
+            <Search
+              aria-hidden="true"
+              className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
             />
-          ))}
-        </div>
+            <input
+              type="search"
+              role="searchbox"
+              aria-label="Search automations"
+              placeholder="Search automations…"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              className="h-9 w-full rounded-md border border-border bg-background py-1 pr-3 pl-8 text-sm placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+            />
+          </div>
+          <div className="space-y-2 rounded-lg border border-border bg-card p-3">
+            {automations.length === 0 && (
+              <p className="text-muted-foreground text-sm">
+                No automations yet. Create one to start shaping incoming
+                Signals.
+              </p>
+            )}
+            {automations.length > 0 && filtered.length === 0 && (
+              <p className="text-muted-foreground text-sm">
+                No matches for “{q}”
+              </p>
+            )}
+            {filtered.map((a) => (
+              <AutomationRow
+                key={a.id}
+                automation={a}
+                busy={busy}
+                onToggle={(enabled) => onToggle(a.id, enabled)}
+                onEdit={() => openEdit(a)}
+                onDelete={() => onDelete(a.id)}
+              />
+            ))}
+          </div>
+        </>
       )}
 
       {automations && previewSignals && (
