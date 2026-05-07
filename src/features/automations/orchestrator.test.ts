@@ -6,6 +6,7 @@ import type {
 } from "#/features/automations/executor";
 import {
   runAutomationsForInsertedSignals,
+  runAutomationsForUpdatedSignals,
   runSignalIngestedAutomations,
   type SignalLookup,
 } from "#/features/automations/orchestrator";
@@ -121,6 +122,112 @@ describe("runAutomationsForInsertedSignals", () => {
     const out = await runAutomationsForInsertedSignals(
       [makeStored({ payload: { author: "alice" } })],
       [dependabotAutomation],
+      store,
+    );
+    expect(out[0].results).toEqual([]);
+    expect(store.rows).toHaveLength(0);
+  });
+});
+
+const prMergedAutomation: Automation = {
+  id: "pr-merged",
+  name: "Tag merged PRs",
+  enabled: true,
+  priority: 1,
+  trigger_kind: "signal_state_change",
+  predicates: [
+    { type: "state_from_to", field: "merged", from: "false", to: "true" },
+  ],
+  actions: [{ type: "tag", tag: "merged" }],
+};
+
+describe("runAutomationsForUpdatedSignals", () => {
+  it("happy path: PR merged update lands one succeeded run row", async () => {
+    const store = memoryRunsStore();
+    const before: Signal = {
+      provider: "github",
+      kind: "pr_authored",
+      source_id: "pr-1",
+      title: "feat: x",
+      url: null,
+      payload: { merged: false },
+      requires_action: true,
+      source_created_at: "2026-05-04T10:00:00.000Z",
+    };
+    const after = makeStored({
+      kind: "pr_authored",
+      payload: { merged: true },
+      created_at: "2026-05-04T10:00:00.000Z",
+      updated_at: "2026-05-04T11:00:00.000Z",
+    });
+    const out = await runAutomationsForUpdatedSignals(
+      [{ before, after }],
+      [prMergedAutomation],
+      store,
+    );
+    expect(out).toHaveLength(1);
+    expect(out[0].results).toHaveLength(1);
+    expect(out[0].results[0].status).toBe("succeeded");
+    expect(store.rows).toHaveLength(1);
+    expect(store.rows[0].trigger_event_id).toBe(
+      "sig-1:2026-05-04T11:00:00.000Z",
+    );
+  });
+
+  it("re-poll of the same updated signal short-circuits to skipped_idempotent", async () => {
+    const store = memoryRunsStore();
+    const before: Signal = {
+      provider: "github",
+      kind: "pr_authored",
+      source_id: "pr-1",
+      title: "feat: x",
+      url: null,
+      payload: { merged: false },
+      requires_action: true,
+      source_created_at: "2026-05-04T10:00:00.000Z",
+    };
+    const after = makeStored({
+      kind: "pr_authored",
+      payload: { merged: true },
+      created_at: "2026-05-04T10:00:00.000Z",
+      updated_at: "2026-05-04T11:00:00.000Z",
+    });
+    await runAutomationsForUpdatedSignals(
+      [{ before, after }],
+      [prMergedAutomation],
+      store,
+    );
+    const out = await runAutomationsForUpdatedSignals(
+      [{ before, after }],
+      [prMergedAutomation],
+      store,
+    );
+    expect(out[0].results[0].status).toBe("skipped_idempotent");
+    expect(store.rows).toHaveLength(1);
+  });
+
+  it("no transition match → no automation_runs row written", async () => {
+    const store = memoryRunsStore();
+    const before: Signal = {
+      provider: "github",
+      kind: "pr_authored",
+      source_id: "pr-1",
+      title: "feat: x",
+      url: null,
+      payload: { merged: false },
+      requires_action: true,
+      source_created_at: "2026-05-04T10:00:00.000Z",
+    };
+    // unread_count bump but `merged` field unchanged → predicate mismatches
+    const after = makeStored({
+      kind: "pr_authored",
+      payload: { merged: false },
+      created_at: "2026-05-04T10:00:00.000Z",
+      updated_at: "2026-05-04T11:00:00.000Z",
+    });
+    const out = await runAutomationsForUpdatedSignals(
+      [{ before, after }],
+      [prMergedAutomation],
       store,
     );
     expect(out[0].results).toEqual([]);

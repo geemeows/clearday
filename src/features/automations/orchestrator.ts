@@ -18,6 +18,7 @@
 
 import {
   type Automation,
+  type SignalStateChangeEvent,
   planAutomations,
 } from "#/features/automations/engine";
 import {
@@ -69,6 +70,47 @@ export async function runAutomationsForInsertedSignals(
       results.push(result);
     }
     reports.push({ signalId: stored.id, results });
+  }
+  return reports;
+}
+
+/**
+ * UPDATE-path counterpart of `runAutomationsForInsertedSignals`. Each pair
+ * carries the pre-update Signal alongside the post-update StoredSignal so
+ * `state_from_to` predicates can compare the two. The trigger event id is
+ * `${after.id}:${after.updated_at}` — re-polling an already-updated row
+ * yields the same id and the executor short-circuits to
+ * `skipped_idempotent`.
+ */
+export async function runAutomationsForUpdatedSignals(
+  pairs: Array<{ before: Signal; after: StoredSignal }>,
+  automations: Automation[],
+  store: AutomationRunsStore,
+  options: ExecuteOptions = {},
+): Promise<RunAutomationsResult[]> {
+  const reports: RunAutomationsResult[] = [];
+  for (const { before, after } of pairs) {
+    const event: SignalStateChangeEvent = {
+      kind: "signal_state_change",
+      before,
+      after,
+    };
+    const planned = planAutomations(event, automations);
+    if (planned.length === 0) {
+      reports.push({ signalId: after.id, results: [] });
+      continue;
+    }
+    const eventId = triggerEventId(event, after.id, after.updated_at);
+    const results: ExecuteResult[] = [];
+    for (const plan of planned) {
+      const result = await executeAutomation(
+        { plan, triggerEventId: eventId, signalId: after.id },
+        store,
+        options,
+      );
+      results.push(result);
+    }
+    reports.push({ signalId: after.id, results });
   }
   return reports;
 }

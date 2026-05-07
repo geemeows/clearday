@@ -27,7 +27,18 @@ export type AutomationPredicate =
   | { type: "provider"; provider: string }
   | { type: "kind"; kind: string }
   | { type: "source_match"; field: string; equals: string }
-  | { type: "title_regex"; pattern: string };
+  | { type: "title_regex"; pattern: string }
+  // Only meaningful for `signal_state_change` events. Matches when the
+  // `payload[field]` value transitioned from `from` to `to` (either bound is
+  // optional but at least one must be supplied — see validateAutomations).
+  // Non-string payload values are coerced via String() so a boolean
+  // `merged: true` matches `to: "true"`.
+  | {
+      type: "state_from_to";
+      field: string;
+      from?: string;
+      to?: string;
+    };
 
 export type AutomationAction =
   | { type: "dismiss" }
@@ -40,7 +51,7 @@ export type AutomationAction =
   // `skipped_no_capability` until a ticket-tracker capability is registered.
   | { type: "transition_ticket"; to_status: string };
 
-export type AutomationTriggerKind = "signal_ingested";
+export type AutomationTriggerKind = "signal_ingested" | "signal_state_change";
 
 export type Automation = {
   id: string;
@@ -57,7 +68,15 @@ export type SignalIngestedEvent = {
   signal: Signal;
 };
 
-export type AutomationEvent = SignalIngestedEvent;
+export type SignalStateChangeEvent = {
+  kind: "signal_state_change";
+  /** The Signal row as it stood before the upsert UPDATE landed. */
+  before: Signal;
+  /** The Signal row as it stands after the UPDATE. */
+  after: Signal;
+};
+
+export type AutomationEvent = SignalIngestedEvent | SignalStateChangeEvent;
 
 export type PlannedAutomation = {
   automation_id: string;
@@ -90,27 +109,43 @@ function matchesPredicate(
   p: AutomationPredicate,
   event: AutomationEvent,
 ): boolean {
-  // Predicates currently target the Signal payload because every v1 trigger
-  // kind (`signal_ingested`) carries one. Future trigger kinds will widen
-  // this with their own payload shapes.
-  const s = event.signal;
+  // For `signal_ingested` we match against the inserted Signal; for
+  // `signal_state_change` predicates target the post-update Signal (the
+  // dedicated `state_from_to` predicate consults the before/after pair).
+  const after = event.kind === "signal_ingested" ? event.signal : event.after;
+  const before = event.kind === "signal_state_change" ? event.before : null;
   switch (p.type) {
     case "provider":
-      return s.provider === p.provider;
+      return after.provider === p.provider;
     case "kind":
-      return s.kind === p.kind;
+      return after.kind === p.kind;
     case "source_match": {
-      const v = (s.payload as Record<string, unknown> | null | undefined)?.[
+      const v = (after.payload as Record<string, unknown> | null | undefined)?.[
         p.field
       ];
       return typeof v === "string" && v === p.equals;
     }
     case "title_regex": {
       try {
-        return new RegExp(p.pattern).test(s.title);
+        return new RegExp(p.pattern).test(after.title);
       } catch {
         return false;
       }
+    }
+    case "state_from_to": {
+      if (!before) return false;
+      if (p.from === undefined && p.to === undefined) return false;
+      const beforeRaw = (
+        before.payload as Record<string, unknown> | null | undefined
+      )?.[p.field];
+      const afterRaw = (
+        after.payload as Record<string, unknown> | null | undefined
+      )?.[p.field];
+      const beforeStr = beforeRaw === undefined ? "" : String(beforeRaw);
+      const afterStr = afterRaw === undefined ? "" : String(afterRaw);
+      const fromOk = p.from === undefined || beforeStr === p.from;
+      const toOk = p.to === undefined || afterStr === p.to;
+      return fromOk && toOk;
     }
   }
 }
@@ -234,7 +269,10 @@ export function previewAutomations(
 // validateAutomations — used by the API to reject malformed PUT bodies.
 // ---------------------------------------------------------------------------
 
-const TRIGGER_KINDS: readonly AutomationTriggerKind[] = ["signal_ingested"];
+const TRIGGER_KINDS: readonly AutomationTriggerKind[] = [
+  "signal_ingested",
+  "signal_state_change",
+];
 
 const ACTION_TYPES = new Set<AutomationAction["type"]>([
   "dismiss",
@@ -250,6 +288,7 @@ const PREDICATE_TYPES = new Set<AutomationPredicate["type"]>([
   "kind",
   "source_match",
   "title_regex",
+  "state_from_to",
 ]);
 
 export function validateAutomations(automations: Automation[]): string[] {
@@ -290,6 +329,16 @@ export function validateAutomations(automations: Automation[]): string[] {
           new RegExp(p.pattern);
         } catch {
           errors.push(`automation ${a.id}: invalid regex "${p.pattern}"`);
+        }
+      }
+      if (p.type === "state_from_to") {
+        if (typeof p.field !== "string" || p.field.length === 0) {
+          errors.push(`automation ${a.id}: state_from_to.field is required`);
+        }
+        if (p.from === undefined && p.to === undefined) {
+          errors.push(
+            `automation ${a.id}: state_from_to requires at least one of from/to`,
+          );
         }
       }
     }

@@ -37,6 +37,7 @@ const PREDICATE_TYPES: Array<{
   { id: "kind", label: "Kind is" },
   { id: "source_match", label: "Payload field equals" },
   { id: "title_regex", label: "Title matches regex" },
+  { id: "state_from_to", label: "State change from / to" },
 ];
 
 const ALERT_CHANNEL_OPTIONS: Array<{ id: AlertChannel; label: string }> = [
@@ -77,6 +78,8 @@ function defaultPredicate(
       return { type: "source_match", field: "author", equals: "" };
     case "title_regex":
       return { type: "title_regex", pattern: "" };
+    case "state_from_to":
+      return { type: "state_from_to", field: "state", from: "", to: "" };
   }
 }
 
@@ -760,6 +763,36 @@ function PredicateInputs({
           value={predicate.equals}
           onChange={(e) => onChange({ ...predicate, equals: e.target.value })}
           placeholder="equals"
+          className="rounded border border-border bg-background px-2 py-1 text-xs"
+        />
+      </div>
+    );
+  }
+  if (predicate.type === "state_from_to") {
+    return (
+      <div className="grid grid-cols-3 gap-2">
+        <input
+          type="text"
+          aria-label="State field"
+          value={predicate.field}
+          onChange={(e) => onChange({ ...predicate, field: e.target.value })}
+          placeholder="field (e.g. merged)"
+          className="rounded border border-border bg-background px-2 py-1 text-xs"
+        />
+        <input
+          type="text"
+          aria-label="State from"
+          value={predicate.from ?? ""}
+          onChange={(e) => onChange({ ...predicate, from: e.target.value })}
+          placeholder="from"
+          className="rounded border border-border bg-background px-2 py-1 text-xs"
+        />
+        <input
+          type="text"
+          aria-label="State to"
+          value={predicate.to ?? ""}
+          onChange={(e) => onChange({ ...predicate, to: e.target.value })}
+          placeholder="to"
           className="rounded border border-border bg-background px-2 py-1 text-xs"
         />
       </div>

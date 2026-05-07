@@ -360,6 +360,145 @@ describe("applyAutomationsToSignal — ordering and gating", () => {
   });
 });
 
+describe("planAutomations — signal_state_change", () => {
+  function makeStateChangeAutomation(
+    overrides: Partial<Automation> = {},
+  ): Automation {
+    return {
+      id: "merged-1",
+      name: "PR merged",
+      enabled: true,
+      priority: 100,
+      trigger_kind: "signal_state_change",
+      predicates: [
+        { type: "state_from_to", field: "merged", from: "false", to: "true" },
+      ],
+      actions: [{ type: "tag", tag: "merged" }],
+      ...overrides,
+    };
+  }
+
+  it("fires when the payload field transitions from `from` to `to`", () => {
+    const before = makeSignal({ payload: { merged: false } });
+    const after = makeSignal({ payload: { merged: true } });
+    const out = planAutomations(
+      { kind: "signal_state_change", before, after },
+      [makeStateChangeAutomation()],
+    );
+    expect(out.map((p) => p.automation_id)).toEqual(["merged-1"]);
+  });
+
+  it("does not fire when the field never changes", () => {
+    const before = makeSignal({ payload: { merged: true } });
+    const after = makeSignal({ payload: { merged: true } });
+    const out = planAutomations(
+      { kind: "signal_state_change", before, after },
+      [makeStateChangeAutomation()],
+    );
+    expect(out).toEqual([]);
+  });
+
+  it("`to` alone matches any prior value", () => {
+    const a = makeStateChangeAutomation({
+      predicates: [{ type: "state_from_to", field: "state", to: "approved" }],
+    });
+    const out = planAutomations(
+      {
+        kind: "signal_state_change",
+        before: makeSignal({ payload: { state: "open" } }),
+        after: makeSignal({ payload: { state: "approved" } }),
+      },
+      [a],
+    );
+    expect(out).toHaveLength(1);
+  });
+
+  it("`from` alone matches any next value", () => {
+    const a = makeStateChangeAutomation({
+      predicates: [{ type: "state_from_to", field: "state", from: "open" }],
+    });
+    const out = planAutomations(
+      {
+        kind: "signal_state_change",
+        before: makeSignal({ payload: { state: "open" } }),
+        after: makeSignal({ payload: { state: "closed" } }),
+      },
+      [a],
+    );
+    expect(out).toHaveLength(1);
+  });
+
+  it("predicate with neither from nor to never matches", () => {
+    const a = makeStateChangeAutomation({
+      predicates: [
+        { type: "state_from_to", field: "merged" } as never,
+      ],
+    });
+    const out = planAutomations(
+      {
+        kind: "signal_state_change",
+        before: makeSignal({ payload: { merged: false } }),
+        after: makeSignal({ payload: { merged: true } }),
+      },
+      [a],
+    );
+    expect(out).toEqual([]);
+  });
+
+  it("AND-combines state_from_to with regular predicates", () => {
+    const a = makeStateChangeAutomation({
+      predicates: [
+        { type: "provider", provider: "github" },
+        { type: "state_from_to", field: "merged", to: "true" },
+      ],
+    });
+    const before = makeSignal({ payload: { merged: false } });
+    const afterMatch = makeSignal({ payload: { merged: true } });
+    const afterOtherProvider = makeSignal({
+      provider: "slack",
+      payload: { merged: true },
+    });
+    expect(
+      planAutomations(
+        { kind: "signal_state_change", before, after: afterMatch },
+        [a],
+      ),
+    ).toHaveLength(1);
+    expect(
+      planAutomations(
+        {
+          kind: "signal_state_change",
+          before,
+          after: afterOtherProvider,
+        },
+        [a],
+      ),
+    ).toEqual([]);
+  });
+
+  it("a signal_state_change automation does not fire on signal_ingested events", () => {
+    const a = makeStateChangeAutomation();
+    const out = planAutomations(
+      { kind: "signal_ingested", signal: makeSignal() },
+      [a],
+    );
+    expect(out).toEqual([]);
+  });
+
+  it("a signal_ingested automation does not fire on state_change events", () => {
+    const a = makeAutomation();
+    const out = planAutomations(
+      {
+        kind: "signal_state_change",
+        before: makeSignal(),
+        after: makeSignal(),
+      },
+      [a],
+    );
+    expect(out).toEqual([]);
+  });
+});
+
 describe("previewAutomations", () => {
   it("keeps only signals that any automation fired on, preserving order", () => {
     const automation = makeAutomation({
@@ -487,6 +626,39 @@ describe("validateAutomations", () => {
       },
     ]);
     expect(errs.some((e) => e.includes("unknown action type"))).toBe(true);
+  });
+
+  it("flags state_from_to without from or to", () => {
+    const errs = validateAutomations([
+      {
+        id: "x",
+        name: "n",
+        enabled: true,
+        priority: 1,
+        trigger_kind: "signal_state_change",
+        predicates: [{ type: "state_from_to", field: "merged" }],
+        actions: [{ type: "tag", tag: "t" }],
+      },
+    ]);
+    expect(
+      errs.some((e) => e.includes("state_from_to requires at least one")),
+    ).toBe(true);
+  });
+
+  it("accepts signal_state_change as a valid trigger kind", () => {
+    expect(
+      validateAutomations([
+        {
+          id: "x",
+          name: "n",
+          enabled: true,
+          priority: 1,
+          trigger_kind: "signal_state_change",
+          predicates: [{ type: "state_from_to", field: "merged", to: "true" }],
+          actions: [{ type: "tag", tag: "t" }],
+        },
+      ]),
+    ).toEqual([]);
   });
 
   it("flags negative snooze.minutes", () => {
