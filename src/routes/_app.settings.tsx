@@ -1,5 +1,5 @@
 import { createFileRoute, Link, Outlet } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Checkbox } from "#/components/coss/checkbox";
 import { SettingsPanel } from "#/components/ui/SettingsPanel";
 import type { IntegrationView } from "#/features/integrations/api/integrations-api";
@@ -273,9 +273,8 @@ export function WebPushDevicesPanel({
   vapidLoader?: () => Promise<{ publicKey: string | null }>;
   renamer?: (id: string, label: string) => Promise<DeviceView>;
 } = {}) {
-  const [devices, setDevices] = useState<DeviceView[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionBusy, setActionBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [vapidConfigured, setVapidConfigured] = useState<boolean | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -326,21 +325,22 @@ export function WebPushDevicesPanel({
     [vapidLoader],
   );
 
-  useEffect(() => {
-    let cancelled = false;
-    load()
-      .then((body) => {
-        if (cancelled) return;
-        setDevices(body.devices);
-      })
-      .catch((e) => {
-        if (cancelled) return;
-        setError(e instanceof Error ? e.message : "failed to load devices");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [load]);
+  // register / remove / rename are bespoke action handlers (each hits its
+  // own endpoint and returns a single device). useAsyncPanel drives the
+  // initial device-list load; persist({ devices }) is used to fold the
+  // action results back into local state without re-fetching.
+  const {
+    data,
+    error: loadError,
+    busy,
+    persist,
+  } = useAsyncPanel<{ devices: DeviceView[] }>({
+    load,
+    save: async () => {},
+  });
+  const devices = data?.devices ?? null;
+  const error =
+    actionError ?? (loadError ? loadError.message : null);
 
   useEffect(() => {
     let cancelled = false;
@@ -359,82 +359,76 @@ export function WebPushDevicesPanel({
   }, [loadVapid]);
 
   const onRegister = useCallback(async () => {
-    setBusy(true);
+    setActionBusy(true);
     setStatus(null);
     try {
       const device = await reg();
-      setDevices((current) => {
-        const next = current ? [...current] : [];
-        const existing = next.findIndex((d) => d.id === device.id);
-        if (existing >= 0) next[existing] = device;
-        else next.unshift(device);
-        return next;
-      });
+      const current = data?.devices ?? [];
+      const next = [...current];
+      const existing = next.findIndex((d) => d.id === device.id);
+      if (existing >= 0) next[existing] = device;
+      else next.unshift(device);
+      persist({ devices: next });
       setStatus("This device is registered for push.");
-      setError(null);
+      setActionError(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "registration failed");
+      setActionError(e instanceof Error ? e.message : "registration failed");
     } finally {
-      setBusy(false);
+      setActionBusy(false);
     }
-  }, [reg]);
+  }, [data?.devices, persist, reg]);
 
   const onRemove = useCallback(
     async (id: string) => {
-      setBusy(true);
+      setActionBusy(true);
       try {
         await remove(id);
-        setDevices((current) => current?.filter((d) => d.id !== id) ?? null);
+        const current = data?.devices ?? [];
+        persist({ devices: current.filter((d) => d.id !== id) });
       } catch (e) {
-        setError(e instanceof Error ? e.message : "remove failed");
+        setActionError(e instanceof Error ? e.message : "remove failed");
       } finally {
-        setBusy(false);
+        setActionBusy(false);
       }
     },
-    [remove],
+    [data?.devices, persist, remove],
   );
 
   const onRenameSubmit = useCallback(
     async (id: string) => {
       const label = draftLabel.trim();
       if (label.length === 0) {
-        setError("device_label must not be empty");
+        setActionError("device_label must not be empty");
         return;
       }
-      setBusy(true);
+      setActionBusy(true);
       try {
         const updated = await rename(id, label);
-        setDevices(
-          (current) => current?.map((d) => (d.id === id ? updated : d)) ?? null,
-        );
-        setError(null);
+        const current = data?.devices ?? [];
+        persist({
+          devices: current.map((d) => (d.id === id ? updated : d)),
+        });
+        setActionError(null);
         setEditingId(null);
         setDraftLabel("");
       } catch (e) {
-        setError(e instanceof Error ? e.message : "rename failed");
+        setActionError(e instanceof Error ? e.message : "rename failed");
       } finally {
-        setBusy(false);
+        setActionBusy(false);
       }
     },
-    [draftLabel, rename],
+    [data?.devices, draftLabel, persist, rename],
   );
 
+  const isBusy = busy || actionBusy;
+
   return (
-    <section
-      aria-label="Push devices"
-      className="mt-8 rounded border border-zinc-200 bg-white p-5"
+    <SettingsPanel
+      title="Push devices"
+      desc="Devices registered for Web Push delivery."
+      error={error}
+      busy={busy && !data}
     >
-      <h2 className="text-base font-semibold text-zinc-900">Push devices</h2>
-      <p className="mt-1 text-sm text-zinc-500">
-        Devices registered for Web Push delivery.
-      </p>
-
-      {error && (
-        <p className="mt-3 rounded border border-red-200 bg-red-50 p-2 text-sm text-red-700">
-          {error}
-        </p>
-      )}
-
       {vapidConfigured === false && (
         <p className="mt-3 rounded border border-amber-200 bg-amber-50 p-2 text-sm text-amber-800">
           VAPID not configured — set the <code>VAPID_PUBLIC_KEY</code>,{" "}
@@ -447,22 +441,22 @@ export function WebPushDevicesPanel({
         <button
           type="button"
           onClick={onRegister}
-          disabled={busy || vapidConfigured === false}
-          className="rounded border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50 disabled:opacity-50"
+          disabled={isBusy || vapidConfigured === false}
+          className="rounded border border-border px-3 py-1.5 text-sm hover:bg-muted/50 disabled:opacity-50"
         >
           Register this device
         </button>
         {status && (
-          <output className="ml-3 text-sm text-zinc-600">{status}</output>
+          <output className="ml-3 text-muted-foreground text-sm">
+            {status}
+          </output>
         )}
       </div>
 
-      {devices == null && !error && (
-        <p className="mt-3 text-sm text-zinc-500">Loading…</p>
-      )}
-
       {devices && devices.length === 0 && (
-        <p className="mt-4 text-sm text-zinc-500">No devices registered yet.</p>
+        <p className="mt-4 text-muted-foreground text-sm">
+          No devices registered yet.
+        </p>
       )}
 
       {devices && devices.length > 0 && (
@@ -486,12 +480,12 @@ export function WebPushDevicesPanel({
                     value={draftLabel}
                     onChange={(e) => setDraftLabel(e.target.value)}
                     maxLength={64}
-                    className="flex-1 rounded border border-zinc-200 px-2 py-1 text-sm"
+                    className="flex-1 rounded border border-border px-2 py-1 text-sm"
                   />
                   <button
                     type="submit"
-                    disabled={busy}
-                    className="text-xs text-zinc-700 underline hover:text-zinc-900 disabled:opacity-50"
+                    disabled={isBusy}
+                    className="text-foreground text-xs underline hover:text-foreground disabled:opacity-50"
                   >
                     Save
                   </button>
@@ -501,8 +495,8 @@ export function WebPushDevicesPanel({
                       setEditingId(null);
                       setDraftLabel("");
                     }}
-                    disabled={busy}
-                    className="text-xs text-zinc-500 underline hover:text-zinc-700 disabled:opacity-50"
+                    disabled={isBusy}
+                    className="text-muted-foreground text-xs underline hover:text-foreground disabled:opacity-50"
                   >
                     Cancel
                   </button>
@@ -513,7 +507,7 @@ export function WebPushDevicesPanel({
                     <strong className="font-medium">
                       {d.device_label ?? "Unknown device"}
                     </strong>
-                    <span className="ml-2 text-zinc-500">
+                    <span className="ml-2 text-muted-foreground">
                       {d.last_delivered_at
                         ? `Last delivered ${formatRelative(d.last_delivered_at)}`
                         : "Never delivered"}
@@ -526,16 +520,16 @@ export function WebPushDevicesPanel({
                         setEditingId(d.id);
                         setDraftLabel(d.device_label ?? "");
                       }}
-                      disabled={busy}
-                      className="text-xs text-zinc-500 underline hover:text-zinc-700 disabled:opacity-50"
+                      disabled={isBusy}
+                      className="text-muted-foreground text-xs underline hover:text-foreground disabled:opacity-50"
                     >
                       Rename
                     </button>
                     <button
                       type="button"
                       onClick={() => onRemove(d.id)}
-                      disabled={busy}
-                      className="text-xs text-zinc-500 underline hover:text-zinc-700 disabled:opacity-50"
+                      disabled={isBusy}
+                      className="text-muted-foreground text-xs underline hover:text-foreground disabled:opacity-50"
                     >
                       Remove
                     </button>
@@ -546,7 +540,7 @@ export function WebPushDevicesPanel({
           ))}
         </ul>
       )}
-    </section>
+    </SettingsPanel>
   );
 }
 
@@ -596,47 +590,41 @@ export function InstallPwaPanel() {
     }
   }, [prompt]);
 
+  // No async load lifecycle — the panel reacts to browser-native install
+  // events, so useAsyncPanel is intentionally not used here. Only the chrome
+  // migrates to <SettingsPanel>.
   if (installed) {
     return (
-      <section
-        aria-label="Install Clearday"
-        className="mt-8 rounded border border-zinc-200 bg-white p-5"
-      >
-        <h2 className="text-base font-semibold text-zinc-900">
-          Install Clearday
-        </h2>
-        <p className="mt-1 text-sm text-zinc-500">Clearday is installed.</p>
-      </section>
+      <SettingsPanel
+        title="Install Clearday"
+        desc="Clearday is installed."
+      />
     );
   }
 
   if (!prompt && !status) return null;
 
   return (
-    <section
-      aria-label="Install Clearday"
-      className="mt-8 rounded border border-zinc-200 bg-white p-5"
+    <SettingsPanel
+      title="Install Clearday"
+      desc="Add Clearday to your dock or home screen for an app-like experience."
     >
-      <h2 className="text-base font-semibold text-zinc-900">
-        Install Clearday
-      </h2>
-      <p className="mt-1 text-sm text-zinc-500">
-        Add Clearday to your dock or home screen for an app-like experience.
-      </p>
       <div className="mt-4 flex items-center gap-3">
         {prompt && (
           <button
             type="button"
             onClick={onInstall}
             disabled={busy}
-            className="rounded border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50 disabled:opacity-50"
+            className="rounded border border-border px-3 py-1.5 text-sm hover:bg-muted/50 disabled:opacity-50"
           >
             Install Clearday
           </button>
         )}
-        {status && <output className="text-sm text-zinc-600">{status}</output>}
+        {status && (
+          <output className="text-muted-foreground text-sm">{status}</output>
+        )}
       </div>
-    </section>
+    </SettingsPanel>
   );
 }
 
@@ -755,9 +743,8 @@ export function AiProviderPanel({
   saver?: (body: AiPutBody) => Promise<AiSettingsView>;
   tester?: () => Promise<{ ok?: boolean; model?: string; error?: string }>;
 } = {}) {
-  const [view, setView] = useState<AiSettingsView | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionBusy, setActionBusy] = useState(false);
   const [testStatus, setTestStatus] = useState<string | null>(null);
   const [draftKey, setDraftKey] = useState("");
   const [draftModel, setDraftModel] = useState("");
@@ -790,48 +777,57 @@ export function AiProviderPanel({
     [tester],
   );
 
+  // selectProvider / saveDraft / runTest are bespoke action handlers (each
+  // composes a different AiPutBody body or hits a different endpoint), so
+  // useAsyncPanel drives only the load lifecycle. Successful actions feed
+  // their server response back through persist({...next}) so the local view
+  // mirrors the server without an extra GET.
+  const {
+    data: view,
+    error: loadError,
+    busy,
+    persist,
+  } = useAsyncPanel<AiSettingsView>({
+    load,
+    save: async () => {},
+  });
+  const error =
+    actionError ?? (loadError ? loadError.message : null);
+
+  // Sync drafts from the persisted snapshot when a fresh one lands.
+  const lastViewRef = useRef<AiSettingsView | null>(null);
   useEffect(() => {
-    let cancelled = false;
-    load()
-      .then((v) => {
-        if (cancelled) return;
-        setView(v);
-        setDraftModel(v.default_model ?? "");
-        setDraftBaseUrl(v.base_url ?? "");
-      })
-      .catch((e) => {
-        if (cancelled) return;
-        setError(e instanceof Error ? e.message : "failed to load");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [load]);
+    if (view && view !== lastViewRef.current) {
+      setDraftModel(view.default_model ?? "");
+      setDraftBaseUrl(view.base_url ?? "");
+      lastViewRef.current = view;
+    }
+  }, [view]);
 
   const selectProvider = useCallback(
     async (provider: AiProvider) => {
-      setBusy(true);
+      setActionBusy(true);
       try {
         const next = await save({
           provider,
           default_model: draftModel || DEFAULT_MODELS[provider],
           base_url: draftBaseUrl || undefined,
         });
-        setView(next);
+        persist({ ...next });
         setDraftModel(next.default_model ?? DEFAULT_MODELS[provider]);
-        setError(null);
+        setActionError(null);
       } catch (e) {
-        setError(e instanceof Error ? e.message : "save failed");
+        setActionError(e instanceof Error ? e.message : "save failed");
       } finally {
-        setBusy(false);
+        setActionBusy(false);
       }
     },
-    [draftBaseUrl, draftModel, save],
+    [draftBaseUrl, draftModel, persist, save],
   );
 
   const saveDraft = useCallback(async () => {
     if (!view?.provider) return;
-    setBusy(true);
+    setActionBusy(true);
     try {
       const next = await save({
         provider: view.provider,
@@ -839,18 +835,18 @@ export function AiProviderPanel({
         base_url: draftBaseUrl || undefined,
         api_key: draftKey || undefined,
       });
-      setView(next);
+      persist({ ...next });
       setDraftKey("");
-      setError(null);
+      setActionError(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "save failed");
+      setActionError(e instanceof Error ? e.message : "save failed");
     } finally {
-      setBusy(false);
+      setActionBusy(false);
     }
-  }, [draftBaseUrl, draftKey, draftModel, save, view?.provider]);
+  }, [draftBaseUrl, draftKey, draftModel, persist, save, view?.provider]);
 
   const runTest = useCallback(async () => {
-    setBusy(true);
+    setActionBusy(true);
     setTestStatus(null);
     try {
       const result = await test();
@@ -858,41 +854,29 @@ export function AiProviderPanel({
       else setTestStatus(`Failed: ${result.error ?? "unknown error"}`);
       // Reload so last_validated_at refreshes.
       const fresh = await load();
-      setView(fresh);
+      persist({ ...fresh });
     } catch (e) {
       setTestStatus(
         `Failed: ${e instanceof Error ? e.message : "unknown error"}`,
       );
     } finally {
-      setBusy(false);
+      setActionBusy(false);
     }
-  }, [load, test]);
+  }, [load, persist, test]);
 
   const activeProvider = view?.provider ?? null;
   const needsKey = activeProvider
     ? (AI_PROVIDERS.find((p) => p.id === activeProvider)?.needsKey ?? true)
     : true;
+  const isBusy = busy || actionBusy;
 
   return (
-    <section
-      aria-label="AI provider"
-      className="mt-8 rounded border border-zinc-200 bg-white p-5"
+    <SettingsPanel
+      title="AI provider"
+      desc="Bring your own LLM API key. Clearday never operates a shared model."
+      error={error}
+      busy={busy && !view}
     >
-      <h2 className="text-base font-semibold text-zinc-900">AI provider</h2>
-      <p className="mt-1 text-sm text-zinc-500">
-        Bring your own LLM API key. Clearday never operates a shared model.
-      </p>
-
-      {error && (
-        <p className="mt-3 rounded border border-red-200 bg-red-50 p-2 text-sm text-red-700">
-          {error}
-        </p>
-      )}
-
-      {view == null && !error && (
-        <p className="mt-3 text-sm text-zinc-500">Loading…</p>
-      )}
-
       {view && (
         <div className="mt-4 space-y-5">
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
@@ -904,7 +888,7 @@ export function AiProviderPanel({
                   type="button"
                   aria-pressed={active}
                   onClick={() => selectProvider(p.id)}
-                  disabled={busy}
+                  disabled={isBusy}
                   className={`rounded border px-3 py-2 text-left text-sm ${
                     active
                       ? "border-zinc-900 bg-zinc-900 text-white"
@@ -933,28 +917,30 @@ export function AiProviderPanel({
               placeholder={
                 activeProvider ? DEFAULT_MODELS[activeProvider] : "model id"
               }
-              className="mt-1 w-full rounded border border-zinc-200 px-2 py-1.5 text-sm"
-              disabled={busy || !activeProvider}
+              className="mt-1 w-full rounded border border-border px-2 py-1.5 text-sm"
+              disabled={isBusy || !activeProvider}
             />
           </label>
 
           {activeProvider === "ollama" && (
             <label className="block text-sm">
-              <span className="block font-medium text-zinc-900">Base URL</span>
+              <span className="block font-medium text-foreground">
+                Base URL
+              </span>
               <input
                 type="text"
                 value={draftBaseUrl}
                 onChange={(e) => setDraftBaseUrl(e.target.value)}
                 placeholder="http://localhost:11434"
-                className="mt-1 w-full rounded border border-zinc-200 px-2 py-1.5 text-sm"
-                disabled={busy}
+                className="mt-1 w-full rounded border border-border px-2 py-1.5 text-sm"
+                disabled={isBusy}
               />
             </label>
           )}
 
           {needsKey && (
             <label className="block text-sm">
-              <span className="block font-medium text-zinc-900">API key</span>
+              <span className="block font-medium text-foreground">API key</span>
               <input
                 type="password"
                 value={draftKey}
@@ -962,11 +948,11 @@ export function AiProviderPanel({
                 placeholder={
                   view.has_api_key ? "•••••• (already set)" : "Paste your key"
                 }
-                className="mt-1 w-full rounded border border-zinc-200 px-2 py-1.5 text-sm font-mono"
-                disabled={busy}
+                className="mt-1 w-full rounded border border-border px-2 py-1.5 font-mono text-sm"
+                disabled={isBusy}
                 autoComplete="off"
               />
-              <span className="mt-1 block text-xs text-zinc-500">
+              <span className="mt-1 block text-muted-foreground text-xs">
                 Stored encrypted. Never returned to the browser in plaintext.
               </span>
             </label>
@@ -976,8 +962,8 @@ export function AiProviderPanel({
             <button
               type="button"
               onClick={saveDraft}
-              disabled={busy || !activeProvider}
-              className="rounded border border-zinc-900 bg-zinc-900 px-3 py-1.5 text-sm text-white hover:bg-zinc-800 disabled:opacity-50"
+              disabled={isBusy || !activeProvider}
+              className="rounded border border-foreground bg-foreground px-3 py-1.5 text-background text-sm hover:opacity-90 disabled:opacity-50"
             >
               Save
             </button>
@@ -985,16 +971,16 @@ export function AiProviderPanel({
               type="button"
               onClick={runTest}
               disabled={
-                busy ||
+                isBusy ||
                 !activeProvider ||
                 (needsKey && !view.has_api_key && !draftKey)
               }
-              className="rounded border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50 disabled:opacity-50"
+              className="rounded border border-border px-3 py-1.5 text-sm hover:bg-muted/50 disabled:opacity-50"
             >
               Test connection
             </button>
             {view.last_validated_at && (
-              <span className="text-xs text-zinc-500">
+              <span className="text-muted-foreground text-xs">
                 Last validated{" "}
                 {new Date(view.last_validated_at).toLocaleString()}
               </span>
@@ -1002,13 +988,13 @@ export function AiProviderPanel({
           </div>
 
           {testStatus && (
-            <output className="block text-sm text-zinc-600">
+            <output className="block text-muted-foreground text-sm">
               {testStatus}
             </output>
           )}
         </div>
       )}
-    </section>
+    </SettingsPanel>
   );
 }
 
@@ -1019,9 +1005,7 @@ export function AiSafeguardsPanel({
   loader?: () => Promise<AiSettingsView>;
   saver?: (body: AiPutBody) => Promise<AiSettingsView>;
 } = {}) {
-  const [view, setView] = useState<AiSettingsView | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [draftBudget, setDraftBudget] = useState("");
   const [draftFallback, setDraftFallback] = useState("");
   const [draftPatterns, setDraftPatterns] = useState("");
@@ -1042,83 +1026,75 @@ export function AiSafeguardsPanel({
     [saver],
   );
 
-  useEffect(() => {
-    let cancelled = false;
-    load()
-      .then((v) => {
-        if (cancelled) return;
-        setView(v);
-        setDraftBudget(String(v.monthly_budget_usd ?? 25));
-        setDraftFallback(v.fallback_model ?? "");
-        setDraftPatterns((v.redact_patterns ?? []).join("\n"));
-      })
-      .catch((e) => {
-        if (cancelled) return;
-        setError(e instanceof Error ? e.message : "failed to load");
+  // The patches on this panel (privacy toggle, ai_disabled toggle, budget +
+  // fallback, redact_patterns) project 1:1 onto the AiSettingsView, so
+  // useAsyncPanel.persist drives the save lifecycle. The save callback
+  // bridges the merged view onto an AiPutBody for the API.
+  const {
+    data: view,
+    error: panelError,
+    busy,
+    persist,
+  } = useAsyncPanel<AiSettingsView>({
+    load,
+    save: async (next) => {
+      if (!next.provider) return;
+      await save({
+        provider: next.provider,
+        monthly_budget_usd: next.monthly_budget_usd,
+        fallback_model: next.fallback_model,
+        privacy_mode: next.privacy_mode,
+        redact_patterns: next.redact_patterns,
+        ai_disabled: next.ai_disabled,
       });
-    return () => {
-      cancelled = true;
-    };
-  }, [load]);
-
-  const persist = useCallback(
-    async (patch: Partial<AiPutBody>) => {
-      if (!view?.provider) return;
-      setBusy(true);
-      try {
-        const next = await save({ provider: view.provider, ...patch });
-        setView(next);
-        setError(null);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "save failed");
-      } finally {
-        setBusy(false);
-      }
     },
-    [save, view?.provider],
-  );
+  });
+  const error = errorMsg ?? (panelError ? panelError.message : null);
 
-  const saveBudget = useCallback(async () => {
+  // Sync drafts from the persisted snapshot when a fresh one lands.
+  const lastViewRef = useRef<AiSettingsView | null>(null);
+  useEffect(() => {
+    if (view && view !== lastViewRef.current) {
+      setDraftBudget(String(view.monthly_budget_usd ?? 25));
+      setDraftFallback(view.fallback_model ?? "");
+      setDraftPatterns((view.redact_patterns ?? []).join("\n"));
+      lastViewRef.current = view;
+    }
+  }, [view]);
+
+  const saveBudget = useCallback(() => {
     const n = Number(draftBudget);
     if (!Number.isFinite(n) || n < 0) {
-      setError("Budget must be a non-negative number.");
+      setErrorMsg("Budget must be a non-negative number.");
       return;
     }
-    await persist({
+    setErrorMsg(null);
+    persist({
       monthly_budget_usd: n,
       fallback_model: draftFallback || null,
     });
   }, [draftBudget, draftFallback, persist]);
 
-  const savePatterns = useCallback(async () => {
+  const savePatterns = useCallback(() => {
     const patterns = draftPatterns
       .split("\n")
       .map((s) => s.trim())
       .filter((s) => s.length > 0);
-    await persist({ redact_patterns: patterns });
+    setErrorMsg(null);
+    persist({ redact_patterns: patterns });
   }, [draftPatterns, persist]);
 
-  const togglePrivacy = useCallback(async () => {
+  const togglePrivacy = useCallback(() => {
     if (!view) return;
-    await persist({ privacy_mode: !view.privacy_mode });
+    setErrorMsg(null);
+    persist({ privacy_mode: !view.privacy_mode });
   }, [persist, view]);
 
-  const toggleDisabled = useCallback(async () => {
+  const toggleDisabled = useCallback(() => {
     if (!view) return;
-    await persist({ ai_disabled: !view.ai_disabled });
+    setErrorMsg(null);
+    persist({ ai_disabled: !view.ai_disabled });
   }, [persist, view]);
-
-  if (view == null && !error) {
-    return (
-      <section
-        aria-label="AI safeguards"
-        className="mt-8 rounded border border-zinc-200 bg-white p-5"
-      >
-        <h2 className="text-base font-semibold text-zinc-900">AI safeguards</h2>
-        <p className="mt-3 text-sm text-zinc-500">Loading…</p>
-      </section>
-    );
-  }
 
   const budget = view?.monthly_budget_usd ?? 25;
   const spent = view?.month_spent_usd ?? 0;
@@ -1126,151 +1102,146 @@ export function AiSafeguardsPanel({
   const overFallback = ratio >= 0.8;
   const overBudget = ratio >= 1;
   const pctClass = overBudget
-    ? "bg-red-500"
+    ? "bg-destructive"
     : overFallback
       ? "bg-amber-500"
       : "bg-emerald-500";
 
   return (
-    <section
-      aria-label="AI safeguards"
-      className="mt-8 rounded border border-zinc-200 bg-white p-5"
+    <SettingsPanel
+      title="AI safeguards"
+      desc="Caps cost and keeps sensitive content out of the model provider."
+      error={error}
+      busy={busy && !view}
     >
-      <h2 className="text-base font-semibold text-zinc-900">AI safeguards</h2>
-      <p className="mt-1 text-sm text-zinc-500">
-        Caps cost and keeps sensitive content out of the model provider.
-      </p>
-
-      {error && (
-        <p className="mt-3 rounded border border-red-200 bg-red-50 p-2 text-sm text-red-700">
-          {error}
-        </p>
-      )}
-
-      <div className="mt-4 space-y-6">
-        <div>
-          <div className="flex items-baseline justify-between">
-            <span className="text-sm font-medium text-zinc-900">
-              Monthly spend
-            </span>
-            <span className="text-sm text-zinc-700">
-              ${spent.toFixed(2)} of ${budget.toFixed(2)}
-            </span>
+      {view && (
+        <div className="mt-4 space-y-6">
+          <div>
+            <div className="flex items-baseline justify-between">
+              <span className="font-medium text-foreground text-sm">
+                Monthly spend
+              </span>
+              <span className="text-foreground text-sm">
+                ${spent.toFixed(2)} of ${budget.toFixed(2)}
+              </span>
+            </div>
+            <div className="mt-2 h-2 w-full overflow-hidden rounded bg-muted">
+              <div
+                className={`h-full ${pctClass}`}
+                style={{ width: `${Math.min(100, Math.round(ratio * 100))}%` }}
+              />
+            </div>
+            {overBudget && (
+              <p className="mt-2 text-destructive text-sm">
+                AI disabled — monthly budget reached.
+              </p>
+            )}
+            {overFallback && !overBudget && (
+              <p className="mt-2 text-amber-700 text-sm">
+                Running on fallback model (≥80% of budget spent).
+              </p>
+            )}
           </div>
-          <div className="mt-2 h-2 w-full overflow-hidden rounded bg-zinc-100">
-            <div
-              className={`h-full ${pctClass}`}
-              style={{ width: `${Math.min(100, Math.round(ratio * 100))}%` }}
+
+          <label className="block text-sm">
+            <span className="block font-medium text-foreground">
+              Monthly budget (USD)
+            </span>
+            <input
+              type="number"
+              min="0"
+              step="0.5"
+              value={draftBudget}
+              onChange={(e) => setDraftBudget(e.target.value)}
+              className="mt-1 w-40 rounded border border-border px-2 py-1.5 text-sm"
+              disabled={busy}
             />
-          </div>
-          {overBudget && (
-            <p className="mt-2 text-sm text-red-700">
-              AI disabled — monthly budget reached.
-            </p>
-          )}
-          {overFallback && !overBudget && (
-            <p className="mt-2 text-sm text-amber-700">
-              Running on fallback model (≥80% of budget spent).
-            </p>
-          )}
-        </div>
+          </label>
 
-        <label className="block text-sm">
-          <span className="block font-medium text-zinc-900">
-            Monthly budget (USD)
-          </span>
-          <input
-            type="number"
-            min="0"
-            step="0.5"
-            value={draftBudget}
-            onChange={(e) => setDraftBudget(e.target.value)}
-            className="mt-1 w-40 rounded border border-zinc-200 px-2 py-1.5 text-sm"
-            disabled={busy}
-          />
-        </label>
-
-        <label className="block text-sm">
-          <span className="block font-medium text-zinc-900">
-            Fallback model
-          </span>
-          <input
-            type="text"
-            value={draftFallback}
-            onChange={(e) => setDraftFallback(e.target.value)}
-            placeholder="e.g. gpt-4o-mini"
-            className="mt-1 w-full rounded border border-zinc-200 px-2 py-1.5 text-sm"
-            disabled={busy}
-          />
-          <span className="mt-1 block text-xs text-zinc-500">
-            Used in place of your default model once 80% of the budget has been
-            spent.
-          </span>
-        </label>
-
-        <button
-          type="button"
-          onClick={saveBudget}
-          disabled={busy || !view?.provider}
-          className="rounded border border-zinc-900 bg-zinc-900 px-3 py-1.5 text-sm text-white hover:bg-zinc-800 disabled:opacity-50"
-        >
-          Save budget
-        </button>
-
-        <label className="flex items-center gap-3 border-t border-zinc-100 pt-4 text-sm">
-          <input
-            type="checkbox"
-            checked={!!view?.privacy_mode}
-            onChange={togglePrivacy}
-            disabled={busy}
-          />
-          <span>
-            <strong className="font-medium">Redact sensitive content</strong>
-            <span className="ml-2 text-zinc-500">
-              Strips code blocks, secrets, paths, and PR diffs from prompts
-              before they leave the Worker.
+          <label className="block text-sm">
+            <span className="block font-medium text-foreground">
+              Fallback model
             </span>
-          </span>
-        </label>
+            <input
+              type="text"
+              value={draftFallback}
+              onChange={(e) => setDraftFallback(e.target.value)}
+              placeholder="e.g. gpt-4o-mini"
+              className="mt-1 w-full rounded border border-border px-2 py-1.5 text-sm"
+              disabled={busy}
+            />
+            <span className="mt-1 block text-muted-foreground text-xs">
+              Used in place of your default model once 80% of the budget has
+              been spent.
+            </span>
+          </label>
 
-        <label className="block text-sm">
-          <span className="block font-medium text-zinc-900">
-            Custom redaction patterns
-          </span>
-          <textarea
-            value={draftPatterns}
-            onChange={(e) => setDraftPatterns(e.target.value)}
-            placeholder="One regex per line"
-            rows={3}
-            className="mt-1 w-full rounded border border-zinc-200 px-2 py-1.5 font-mono text-xs"
-            disabled={busy}
-          />
           <button
             type="button"
-            onClick={savePatterns}
-            disabled={busy || !view?.provider}
-            className="mt-2 rounded border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50 disabled:opacity-50"
+            onClick={saveBudget}
+            disabled={busy || !view.provider}
+            className="rounded border border-foreground bg-foreground px-3 py-1.5 text-background text-sm hover:opacity-90 disabled:opacity-50"
           >
-            Save patterns
+            Save budget
           </button>
-        </label>
 
-        <label className="flex items-center gap-3 border-t border-zinc-100 pt-4 text-sm">
-          <input
-            type="checkbox"
-            checked={!!view?.ai_disabled}
-            onChange={toggleDisabled}
-            disabled={busy}
-          />
-          <span>
-            <strong className="font-medium">Disable AI on this account</strong>
-            <span className="ml-2 text-zinc-500">
-              Skips every AI call regardless of budget or provider config.
+          <div className="flex items-center gap-3 border-border border-t pt-4 text-sm">
+            <Checkbox
+              aria-label="Redact sensitive content"
+              checked={!!view.privacy_mode}
+              onCheckedChange={togglePrivacy}
+              loading={busy}
+            />
+            <span>
+              <strong className="font-medium">Redact sensitive content</strong>
+              <span className="ml-2 text-muted-foreground">
+                Strips code blocks, secrets, paths, and PR diffs from prompts
+                before they leave the Worker.
+              </span>
             </span>
-          </span>
-        </label>
-      </div>
-    </section>
+          </div>
+
+          <label className="block text-sm">
+            <span className="block font-medium text-foreground">
+              Custom redaction patterns
+            </span>
+            <textarea
+              value={draftPatterns}
+              onChange={(e) => setDraftPatterns(e.target.value)}
+              placeholder="One regex per line"
+              rows={3}
+              className="mt-1 w-full rounded border border-border px-2 py-1.5 font-mono text-xs"
+              disabled={busy}
+            />
+            <button
+              type="button"
+              onClick={savePatterns}
+              disabled={busy || !view.provider}
+              className="mt-2 rounded border border-border px-3 py-1.5 text-sm hover:bg-muted/50 disabled:opacity-50"
+            >
+              Save patterns
+            </button>
+          </label>
+
+          <div className="flex items-center gap-3 border-border border-t pt-4 text-sm">
+            <Checkbox
+              aria-label="Disable AI on this account"
+              checked={!!view.ai_disabled}
+              onCheckedChange={toggleDisabled}
+              loading={busy}
+            />
+            <span>
+              <strong className="font-medium">
+                Disable AI on this account
+              </strong>
+              <span className="ml-2 text-muted-foreground">
+                Skips every AI call regardless of budget or provider config.
+              </span>
+            </span>
+          </div>
+        </div>
+      )}
+    </SettingsPanel>
   );
 }
 
