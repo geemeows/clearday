@@ -8,15 +8,14 @@
 // stay stable across CI zones (TZ=UTC in CI).
 
 import type { LinkedItem, StoredSignal } from "#/shared/signal";
+import type {
+  Conflict,
+  DayBucket,
+  MeetingEvent,
+  MonthCell,
+} from "./types";
 
-export type MeetingEvent = {
-  signal: StoredSignal;
-  startsAt: Date;
-  endsAt: Date;
-  videoLink: string | null;
-  linkedItems: LinkedItem[];
-  isFocus: boolean;
-};
+export type { Conflict, DayBucket, MeetingEvent, MonthCell };
 
 export function toMeetingEvent(signal: StoredSignal): MeetingEvent | null {
   if (signal.kind !== "meeting") return null;
@@ -83,8 +82,6 @@ export function eventsForDay(
   );
 }
 
-export type DayBucket = { day: Date; events: MeetingEvent[] };
-
 export function eventsByWeekDay(
   events: MeetingEvent[],
   weekStart: Date,
@@ -105,8 +102,6 @@ export function eventsByWeekDay(
  * stable regardless of where the month starts; the `inMonth` flag marks
  * cells that fall outside the anchor's month so the UI can dim them.
  */
-export type MonthCell = DayBucket & { inMonth: boolean };
-
 export function eventsByMonthGrid(
   events: MeetingEvent[],
   anchor: Date,
@@ -126,8 +121,6 @@ export function eventsByMonthGrid(
   }
   return cells;
 }
-
-export type Conflict = { a: MeetingEvent; b: MeetingEvent };
 
 /**
  * Returns each pair of events whose intervals overlap (open interval —

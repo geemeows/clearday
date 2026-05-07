@@ -11,7 +11,7 @@ import {
   toMeetingEvent,
   toMeetingEvents,
   weekStartFor,
-} from "#/features/signals/views/calendar";
+} from "#/features/calendar/events";
 import type { StoredSignal } from "#/shared/signal";
 
 const meeting = (args: {

@@ -13,7 +13,7 @@ import type { ProfileView } from "#/features/settings/profile/api";
 import { InboxPreviewRow } from "#/features/signals/components/InboxPreviewRow";
 import { SourceGlyph } from "#/features/signals/components/SourceGlyph";
 import { daysInProgress, prRefOf } from "#/features/signals/display";
-import type { MeetingEvent } from "#/features/signals/views/calendar";
+import type { MeetingEvent } from "#/features/calendar/events";
 import {
   filterMeetingsToToday,
   pickInboxPreview,

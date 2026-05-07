@@ -8,7 +8,7 @@ import {
   eventsForDay,
   type MeetingEvent,
   toMeetingEvents,
-} from "#/features/signals/views/calendar";
+} from "#/features/calendar/events";
 import type { LinkedItem, SignalKind, StoredSignal } from "#/shared/signal";
 
 const TICKET_KINDS: SignalKind[] = [
