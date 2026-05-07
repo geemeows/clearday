@@ -3,6 +3,8 @@ import {
   type AutomationRunInsert,
   type AutomationRunsStore,
   executeAutomation,
+  inMemoryRateLimiter,
+  type RateLimiter,
 } from "#/features/automations/executor";
 
 function memoryRunsStore(): AutomationRunsStore & {
@@ -147,6 +149,96 @@ describe("executeAutomation", () => {
       { type: "transition_ticket", to_status: "Done" },
     ]);
     expect(store.rows[0].actions_executed).toEqual([]);
+  });
+
+  it("rate-limit overflow writes a failed run with the limiter's error and skips the handler", async () => {
+    const store = memoryRunsStore();
+    const handler = vi.fn(async () => ({ type: "tag" as const, ok: true }));
+    const limiter = inMemoryRateLimiter({ perMinute: 1 });
+    const now = () => new Date("2026-05-04T10:00:00.000Z");
+    const first = await executeAutomation(
+      {
+        plan: {
+          automation_id: "a-1",
+          actions: [{ type: "tag", tag: "x" }],
+        },
+        triggerEventId: "sig-1:t1",
+        signalId: "sig-1",
+      },
+      store,
+      { handler, internalActionsAppliedByUpsert: false, rateLimiter: limiter, now },
+    );
+    expect(first.status).toBe("succeeded");
+    const second = await executeAutomation(
+      {
+        plan: {
+          automation_id: "a-1",
+          actions: [{ type: "tag", tag: "y" }],
+        },
+        triggerEventId: "sig-2:t2",
+        signalId: "sig-2",
+      },
+      store,
+      { handler, internalActionsAppliedByUpsert: false, rateLimiter: limiter, now },
+    );
+    expect(second.status).toBe("failed");
+    expect(second.error).toMatch(/rate_limit_exceeded/);
+    expect(second.executed).toEqual([]);
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(store.rows).toHaveLength(2);
+    expect(store.rows[1].status).toBe("failed");
+    expect(store.rows[1].error).toMatch(/rate_limit_exceeded/);
+    expect(store.rows[1].actions_executed).toEqual([]);
+    expect(store.rows[1].actions_planned).toEqual([{ type: "tag", tag: "y" }]);
+  });
+
+  it("rate limiter is not consulted for dry-run dispatches", async () => {
+    const store = memoryRunsStore();
+    const tryConsume = vi.fn(() => ({ ok: false as const, error: "x" }));
+    const limiter: RateLimiter = { tryConsume };
+    const result = await executeAutomation(
+      {
+        plan: {
+          automation_id: "a-1",
+          actions: [{ type: "tag", tag: "x" }],
+        },
+        triggerEventId: "sig-1:t",
+        signalId: "sig-1",
+      },
+      store,
+      { dryRun: true, rateLimiter: limiter },
+    );
+    expect(result.status).toBe("skipped_dry_run");
+    expect(tryConsume).not.toHaveBeenCalled();
+  });
+
+  it("rate-limit bucket resets across minute boundaries", async () => {
+    const store = memoryRunsStore();
+    const handler = vi.fn(async () => ({ type: "tag" as const, ok: true }));
+    const limiter = inMemoryRateLimiter({ perMinute: 1 });
+    let clock = new Date("2026-05-04T10:00:00.000Z");
+    const now = () => clock;
+    const first = await executeAutomation(
+      {
+        plan: { automation_id: "a-1", actions: [{ type: "tag", tag: "x" }] },
+        triggerEventId: "sig-1:t1",
+        signalId: "sig-1",
+      },
+      store,
+      { handler, internalActionsAppliedByUpsert: false, rateLimiter: limiter, now },
+    );
+    expect(first.status).toBe("succeeded");
+    clock = new Date("2026-05-04T10:01:30.000Z");
+    const second = await executeAutomation(
+      {
+        plan: { automation_id: "a-1", actions: [{ type: "tag", tag: "y" }] },
+        triggerEventId: "sig-2:t2",
+        signalId: "sig-2",
+      },
+      store,
+      { handler, internalActionsAppliedByUpsert: false, rateLimiter: limiter, now },
+    );
+    expect(second.status).toBe("succeeded");
   });
 
   it("internal-action handler is a no-op when upsert already applied them", async () => {

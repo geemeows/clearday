@@ -98,6 +98,55 @@ export const DEFAULT_INTERNAL_HANDLER: ActionHandler = async (action, ctx) => {
   return { type: action.type, ok: true };
 };
 
+export type RateLimitDecision = { ok: true } | { ok: false; error: string };
+
+/**
+ * Per-user action-rate ceiling. The executor consults the limiter once per
+ * dispatch (after the deferred / dry-run short-circuits) with the action
+ * count of the plan; an `ok: false` decision short-circuits to a `failed` run
+ * with the limiter's structured error so the overflow lands in the runs view
+ * rather than silently dropping. Distinct from the unique-index idempotency
+ * guard — that's per `(automation_id, trigger_event_id)`, this is per-window
+ * across all automations sharing the limiter.
+ */
+export type RateLimiter = {
+  tryConsume: (actionCount: number, now: Date) => RateLimitDecision;
+};
+
+export const DEFAULT_RATE_LIMIT_PER_MINUTE = 60;
+
+/**
+ * Fixed 1-minute bucket counter. Buckets reset on minute boundaries
+ * (`Math.floor(now/60_000)`); a request whose action count would push the
+ * bucket past `perMinute` is denied and the count for the bucket is left
+ * untouched (so the next call within the same minute can still consume up
+ * to the remainder).
+ */
+export function inMemoryRateLimiter(opts: {
+  perMinute?: number;
+} = {}): RateLimiter {
+  const perMinute = opts.perMinute ?? DEFAULT_RATE_LIMIT_PER_MINUTE;
+  let bucketKey = -1;
+  let count = 0;
+  return {
+    tryConsume: (actionCount, now) => {
+      const k = Math.floor(now.getTime() / 60_000);
+      if (k !== bucketKey) {
+        bucketKey = k;
+        count = 0;
+      }
+      if (count + actionCount > perMinute) {
+        return {
+          ok: false,
+          error: `rate_limit_exceeded: ${perMinute} actions/minute`,
+        };
+      }
+      count += actionCount;
+      return { ok: true };
+    },
+  };
+}
+
 export type ExecuteOptions = {
   dryRun?: boolean;
   /**
@@ -108,6 +157,7 @@ export type ExecuteOptions = {
   internalActionsAppliedByUpsert?: boolean;
   handler?: ActionHandler;
   now?: () => Date;
+  rateLimiter?: RateLimiter;
 };
 
 export type ExecuteInput = {
@@ -195,6 +245,34 @@ export async function executeAutomation(
       executed: [],
       error: null,
     };
+  }
+
+  if (options.rateLimiter && input.plan.actions.length > 0) {
+    const decision = options.rateLimiter.tryConsume(
+      input.plan.actions.length,
+      now(),
+    );
+    if (!decision.ok) {
+      const finishedAt = now().toISOString();
+      const inserted = await store.insertIfNew({
+        automation_id: input.plan.automation_id,
+        trigger_event_id: input.triggerEventId,
+        signal_id: input.signalId,
+        status: "failed",
+        actions_planned: input.plan.actions,
+        actions_executed: [],
+        error: decision.error,
+        started_at: startedAt,
+        finished_at: finishedAt,
+      });
+      if (!inserted) return idempotent(input.plan.automation_id);
+      return {
+        automation_id: input.plan.automation_id,
+        status: "failed",
+        executed: [],
+        error: decision.error,
+      };
+    }
   }
 
   const executed: ExecutedAction[] = [];
