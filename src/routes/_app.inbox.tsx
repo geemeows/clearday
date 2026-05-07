@@ -1,7 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Calendar as CalIcon, ChevronRight, Video, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { z } from "zod";
+import { Tabs, TabsList, TabsPanel, TabsTab } from "#/components/coss/tabs";
+import { Skeleton } from "#/components/ui/skeleton";
 import {
   providerOpenLabel,
   providerSourceKind,
@@ -1198,21 +1202,7 @@ export function PrDescription({
 
   return (
     <section aria-label="PR description">
-      <header
-        className="font-bold uppercase tracking-wider"
-        style={{
-          fontSize: 9,
-          color: "var(--muted-foreground)",
-          marginBottom: 8,
-        }}
-      >
-        Description
-      </header>
-      {state.kind === "loading" && (
-        <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>
-          Loading description…
-        </p>
-      )}
+      {state.kind === "loading" && <PrDescriptionSkeleton />}
       {state.kind === "error" && (
         <p
           role="alert"
@@ -1229,6 +1219,7 @@ export function PrDescription({
       )}
       {state.kind === "ok" && state.body && (
         <div
+          className="markdown-body"
           style={{
             padding: "12px 16px",
             borderRadius: 12,
@@ -1237,13 +1228,35 @@ export function PrDescription({
             fontSize: 13,
             lineHeight: 1.55,
             color: "var(--body, var(--foreground))",
-            whiteSpace: "pre-wrap",
           }}
         >
-          {state.body}
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+            {state.body}
+          </ReactMarkdown>
         </div>
       )}
     </section>
+  );
+}
+
+function PrDescriptionSkeleton() {
+  return (
+    <output
+      aria-busy="true"
+      aria-label="Loading description"
+      className="flex flex-col gap-2"
+      style={{
+        padding: "12px 16px",
+        borderRadius: 12,
+        background: "var(--surface-soft)",
+        border: "1px solid var(--hairline-soft)",
+      }}
+    >
+      <Skeleton className="h-3.5 w-11/12" />
+      <Skeleton className="h-3.5 w-9/12" />
+      <Skeleton className="h-3.5 w-10/12" />
+      <Skeleton className="h-3.5 w-7/12" />
+    </output>
   );
 }
 
@@ -1262,20 +1275,28 @@ export function PrPullRequestPanel({
     Record<string, PrReviewComment[]>
   >({});
   return (
-    <div className="flex flex-col" style={{ gap: 16 }}>
-      <PrDescription
-        repo={repo}
-        number={number}
-        load={loadOverview}
-        onComments={setCommentsByPath}
-      />
-      <PrDiffViewer
-        repo={repo}
-        number={number}
-        load={loadFiles}
-        commentsByPath={commentsByPath}
-      />
-    </div>
+    <Tabs defaultValue="description">
+      <TabsList variant="underline" className="w-full">
+        <TabsTab value="description">Description</TabsTab>
+        <TabsTab value="diff">Diff</TabsTab>
+      </TabsList>
+      <TabsPanel value="description" className="pt-3">
+        <PrDescription
+          repo={repo}
+          number={number}
+          load={loadOverview}
+          onComments={setCommentsByPath}
+        />
+      </TabsPanel>
+      <TabsPanel value="diff" className="pt-3">
+        <PrDiffViewer
+          repo={repo}
+          number={number}
+          load={loadFiles}
+          commentsByPath={commentsByPath}
+        />
+      </TabsPanel>
+    </Tabs>
   );
 }
 
@@ -1319,21 +1340,7 @@ export function PrDiffViewer({
 
   return (
     <section aria-label="PR diff">
-      <header
-        className="font-bold uppercase tracking-wider"
-        style={{
-          fontSize: 9,
-          color: "var(--muted-foreground)",
-          marginBottom: 8,
-        }}
-      >
-        Diff
-      </header>
-      {state.kind === "loading" && (
-        <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>
-          Loading diff…
-        </p>
-      )}
+      {state.kind === "loading" && <PrDiffSkeleton />}
       {state.kind === "error" && (
         <p
           role="alert"
@@ -1360,6 +1367,40 @@ export function PrDiffViewer({
         </div>
       )}
     </section>
+  );
+}
+
+function PrDiffSkeleton() {
+  return (
+    <output
+      aria-busy="true"
+      aria-label="Loading diff"
+      className="flex flex-col"
+      style={{ gap: 8 }}
+    >
+      {[
+        { id: "diff-sk-a", w: "62%" },
+        { id: "diff-sk-b", w: "48%" },
+        { id: "diff-sk-c", w: "74%" },
+      ].map((row) => (
+        <div
+          key={row.id}
+          className="flex items-center"
+          style={{
+            border: "1px solid var(--hairline-soft)",
+            borderRadius: 12,
+            padding: "8px 12px",
+            background: "var(--surface-soft)",
+            gap: 12,
+          }}
+        >
+          <Skeleton className="h-4 w-4 rounded" />
+          <Skeleton className="h-3.5" style={{ width: row.w }} />
+          <div className="flex-1" />
+          <Skeleton className="h-3.5 w-10" />
+        </div>
+      ))}
+    </output>
   );
 }
 
