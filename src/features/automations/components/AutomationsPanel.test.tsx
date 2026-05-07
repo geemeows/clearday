@@ -103,3 +103,45 @@ describe("AutomationsPanel search", () => {
     expect(screen.queryByText(/No matches for/)).toBeNull();
   });
 });
+
+describe("AutomationsPanel ?demo=1 empty-state toggle", () => {
+  it("does not render the toggle when demo is false (default)", async () => {
+    renderPanel();
+    expect(await screen.findByText("Snooze deps")).toBeTruthy();
+    expect(screen.queryByLabelText("Toggle empty state preview")).toBeNull();
+  });
+
+  it("renders the toggle when demo is true", async () => {
+    renderPanel({ demo: true });
+    expect(await screen.findByLabelText("Toggle empty state preview")).toBeTruthy();
+    // Populated list still rendered initially.
+    expect(screen.getByText("Snooze deps")).toBeTruthy();
+  });
+
+  it("flipping the toggle swaps the populated list for the empty state without touching data", async () => {
+    const loader = vi.fn(async () => ({ automations: list }));
+    const saver = vi.fn(async () => ({ ok: true }));
+    renderPanel({ demo: true, loader, saver });
+    const toggle = await screen.findByLabelText("Toggle empty state preview");
+    expect(screen.getByText("Snooze deps")).toBeTruthy();
+
+    fireEvent.click(toggle);
+
+    await waitFor(() => {
+      expect(screen.queryByText("Snooze deps")).toBeNull();
+    });
+    expect(screen.getByText(/No automations yet/)).toBeTruthy();
+    // The search input is also hidden in the empty preview.
+    expect(screen.queryByLabelText("Search automations")).toBeNull();
+    // No DB writes.
+    expect(saver).not.toHaveBeenCalled();
+    // Loader fired exactly once on mount.
+    expect(loader).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(toggle);
+    await waitFor(() => {
+      expect(screen.getByText("Snooze deps")).toBeTruthy();
+    });
+    expect(saver).not.toHaveBeenCalled();
+  });
+});

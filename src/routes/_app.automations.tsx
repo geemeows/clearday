@@ -5,6 +5,7 @@ import { AutomationsPanel } from "#/features/automations/components/AutomationsP
 
 const automationsSearchSchema = z.object({
   q: z.string().optional(),
+  demo: z.string().optional(),
 });
 
 export const Route = createFileRoute("/_app/automations")({
@@ -16,6 +17,7 @@ function AutomationsRoute() {
   const search = Route.useSearch();
   const navigate = Route.useNavigate();
   const q = search.q ?? "";
+  const demo = search.demo === "1";
   const onQChange = useCallback(
     (next: string) => {
       navigate({
@@ -27,7 +29,7 @@ function AutomationsRoute() {
   );
   return (
     <div className="mx-auto max-w-[1100px] space-y-6 p-8">
-      <AutomationsPanel q={q} onQChange={onQChange} />
+      <AutomationsPanel q={q} onQChange={onQChange} demo={demo} />
     </div>
   );
 }

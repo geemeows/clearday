@@ -110,6 +110,7 @@ export function AutomationsPanel({
   signalsLoader = defaultSignalsLoader,
   q: qProp,
   onQChange,
+  demo = false,
 }: {
   loader?: () => Promise<{ automations: Automation[] }>;
   saver?: (automations: Automation[]) => Promise<{
@@ -120,6 +121,12 @@ export function AutomationsPanel({
   signalsLoader?: SignalsLoader;
   q?: string;
   onQChange?: (q: string) => void;
+  /**
+   * Design-fixture switch wired to `?demo=1`. When true, renders an "Empty
+   * state preview" toggle in the header that swaps the populated list for the
+   * first-run empty state without touching data. Invisible to real users.
+   */
+  demo?: boolean;
 } = {}) {
   const [qLocal, setQLocal] = useState("");
   const q = qProp ?? qLocal;
@@ -130,6 +137,7 @@ export function AutomationsPanel({
     },
     [onQChange],
   );
+  const [showEmptyPreview, setShowEmptyPreview] = useState(false);
   const [automations, setAutomations] = useState<Automation[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -276,14 +284,27 @@ export function AutomationsPanel({
             Trigger → predicates → actions, evaluated when a Signal lands.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={openNew}
-          disabled={busy || automations === null}
-          className="rounded-md border border-border bg-primary px-3 py-1.5 text-primary-foreground text-sm hover:opacity-90 disabled:opacity-50"
-        >
-          New automation
-        </button>
+        <div className="flex items-center gap-2">
+          {demo && (
+            <button
+              type="button"
+              aria-label="Toggle empty state preview"
+              aria-pressed={showEmptyPreview}
+              onClick={() => setShowEmptyPreview((v) => !v)}
+              className="rounded-md border border-border bg-background px-3 py-1.5 text-sm hover:bg-muted"
+            >
+              {showEmptyPreview ? "Show populated" : "Show empty state"}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={openNew}
+            disabled={busy || automations === null}
+            className="rounded-md border border-border bg-primary px-3 py-1.5 text-primary-foreground text-sm hover:opacity-90 disabled:opacity-50"
+          >
+            New automation
+          </button>
+        </div>
       </header>
 
       {error && (
@@ -299,7 +320,15 @@ export function AutomationsPanel({
         <p className="text-muted-foreground text-sm">Loading…</p>
       )}
 
-      {automations && (
+      {automations && demo && showEmptyPreview && (
+        <div className="space-y-2 rounded-lg border border-border bg-card p-3">
+          <p className="text-muted-foreground text-sm">
+            No automations yet. Create one to start shaping incoming Signals.
+          </p>
+        </div>
+      )}
+
+      {automations && !(demo && showEmptyPreview) && (
         <>
           <div className="relative">
             <Search
