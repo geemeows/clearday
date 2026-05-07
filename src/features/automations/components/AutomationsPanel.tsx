@@ -8,7 +8,7 @@ import {
   DialogTitle,
 } from "#/components/coss/dialog";
 import type { AlertChannel } from "#/features/alerts/dispatcher";
-import { ACTION_LIST } from "#/features/automations/actions";
+import { ACTION_LIST, ACTIONS } from "#/features/automations/actions";
 import {
   type Automation,
   type AutomationAction,
@@ -17,7 +17,11 @@ import {
   humanizeCron,
   previewAutomations,
 } from "#/features/automations/engine";
-import { TRIGGER_LIST } from "#/features/automations/triggers";
+import {
+  AUTOMATION_TEMPLATES,
+  type AutomationTemplate,
+} from "#/features/automations/templates";
+import { TRIGGER_LIST, TRIGGERS } from "#/features/automations/triggers";
 import { apiFetch } from "#/lib/api-client";
 import type { StoredSignal } from "#/shared/signal";
 
@@ -157,6 +161,7 @@ export function AutomationsPanel({
   );
   const [builderOpen, setBuilderOpen] = useState(false);
   const [editing, setEditing] = useState<Automation | null>(null);
+  const [templatesOpen, setTemplatesOpen] = useState(false);
 
   const load = useMemo(
     () =>
@@ -238,6 +243,20 @@ export function AutomationsPanel({
   const openNew = useCallback(() => {
     setEditing(emptyAutomation());
     setBuilderOpen(true);
+  }, []);
+
+  const openTemplates = useCallback(() => {
+    setTemplatesOpen(true);
+  }, []);
+
+  const closeTemplates = useCallback(() => {
+    setTemplatesOpen(false);
+  }, []);
+
+  const useTemplate = useCallback((tpl: AutomationTemplate) => {
+    setEditing({ ...tpl.automation, id: newId() });
+    setBuilderOpen(true);
+    setTemplatesOpen(false);
   }, []);
 
   const openEdit = useCallback((a: Automation) => {
@@ -345,10 +364,12 @@ export function AutomationsPanel({
       )}
 
       {automations && demo && showEmptyPreview && (
-        <div className="space-y-2 rounded-lg border border-border bg-card p-3">
-          <p className="text-muted-foreground text-sm">
-            No automations yet. Create one to start shaping incoming Signals.
-          </p>
+        <div className="space-y-3 rounded-lg border border-border bg-card p-3">
+          <EmptyState
+            busy={busy}
+            onNew={openNew}
+            onBrowseTemplates={openTemplates}
+          />
         </div>
       )}
 
@@ -369,12 +390,13 @@ export function AutomationsPanel({
               className="h-9 w-full rounded-md border border-border bg-background py-1 pr-3 pl-8 text-sm placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
             />
           </div>
-          <div className="space-y-2 rounded-lg border border-border bg-card p-3">
+          <div className="space-y-3 rounded-lg border border-border bg-card p-3">
             {automations.length === 0 && (
-              <p className="text-muted-foreground text-sm">
-                No automations yet. Create one to start shaping incoming
-                Signals.
-              </p>
+              <EmptyState
+                busy={busy}
+                onNew={openNew}
+                onBrowseTemplates={openTemplates}
+              />
             )}
             {automations.length > 0 && filtered.length === 0 && (
               <p className="text-muted-foreground text-sm">
@@ -467,7 +489,115 @@ export function AutomationsPanel({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={templatesOpen} onOpenChange={setTemplatesOpen}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Browse templates</DialogTitle>
+          </DialogHeader>
+          <p className="text-muted-foreground text-xs">
+            Pick a template to seed a new automation. You can edit it before
+            saving — cancelling leaves no row behind.
+          </p>
+          <ul aria-label="Automation templates" className="space-y-2">
+            {AUTOMATION_TEMPLATES.map((tpl) => (
+              <TemplateCard
+                key={tpl.id}
+                template={tpl}
+                onUse={() => useTemplate(tpl)}
+              />
+            ))}
+          </ul>
+          <DialogFooter>
+            <button
+              type="button"
+              onClick={closeTemplates}
+              className="rounded border border-border bg-background px-3 py-1.5 text-sm"
+            >
+              Close
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </section>
+  );
+}
+
+function EmptyState({
+  busy,
+  onNew,
+  onBrowseTemplates,
+}: {
+  busy: boolean;
+  onNew: () => void;
+  onBrowseTemplates: () => void;
+}) {
+  return (
+    <div className="space-y-3">
+      <p className="text-muted-foreground text-sm">
+        No automations yet. Create one to start shaping incoming Signals.
+      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={onNew}
+          disabled={busy}
+          className="rounded-md border border-border bg-primary px-3 py-1.5 text-primary-foreground text-sm hover:opacity-90 disabled:opacity-50"
+        >
+          + New automation
+        </button>
+        <button
+          type="button"
+          onClick={onBrowseTemplates}
+          disabled={busy}
+          className="rounded-md border border-border bg-background px-3 py-1.5 text-sm hover:bg-muted disabled:opacity-50"
+        >
+          Browse templates
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function TemplateCard({
+  template,
+  onUse,
+}: {
+  template: AutomationTemplate;
+  onUse: () => void;
+}) {
+  const triggerLabel =
+    TRIGGERS[template.automation.trigger_kind]?.label ??
+    template.automation.trigger_kind;
+  return (
+    <li className="flex items-start gap-3 rounded border border-border bg-background p-3">
+      <div className="min-w-0 flex-1 space-y-1.5">
+        <p className="font-medium text-sm">{template.automation.name}</p>
+        <p className="text-muted-foreground text-xs">{template.description}</p>
+        <div className="flex flex-wrap gap-1.5 pt-0.5">
+          <span className="rounded-sm border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+            {triggerLabel}
+          </span>
+          {template.automation.actions.map((act, i) => (
+            <span
+              // biome-ignore lint/suspicious/noArrayIndexKey: action chips are presentational; index is stable for this template's static action list
+              key={i}
+              className="rounded-sm border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground"
+            >
+              {ACTIONS[act.type]?.label ?? act.type}
+            </span>
+          ))}
+        </div>
+      </div>
+      <button
+        type="button"
+        aria-label={`Use template ${template.automation.name}`}
+        onClick={onUse}
+        className="rounded border border-border bg-primary px-2 py-1 text-primary-foreground text-xs hover:opacity-90"
+      >
+        Use template
+      </button>
+    </li>
   );
 }
 

@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { AutomationsPanel } from "#/features/automations/components/AutomationsPanel";
 import type { Automation } from "#/features/automations/engine";
+import { AUTOMATION_TEMPLATES } from "#/features/automations/templates";
 
 function automation(overrides: Partial<Automation> = {}): Automation {
   return {
@@ -165,6 +166,82 @@ describe("AutomationsPanel transition_ticket warning", () => {
       await screen.findByText(/Linear \/ Jira not yet integrated/i),
     ).toBeTruthy();
     expect(screen.getByLabelText("Transition to status")).toBeTruthy();
+  });
+});
+
+describe("AutomationsPanel empty-state Browse templates", () => {
+  it("renders both '+ New automation' and 'Browse templates' on the empty state", async () => {
+    renderPanel({
+      loader: vi.fn(async () => ({ automations: [] })),
+    });
+    expect(await screen.findByText(/No automations yet/)).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: /\+ New automation/ }),
+    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Browse templates" })).toBeTruthy();
+  });
+
+  it("opens the templates modal listing the fixture templates", async () => {
+    renderPanel({
+      loader: vi.fn(async () => ({ automations: [] })),
+    });
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Browse templates" }),
+    );
+    expect(await screen.findByLabelText("Automation templates")).toBeTruthy();
+    for (const tpl of AUTOMATION_TEMPLATES) {
+      expect(screen.getByText(tpl.automation.name)).toBeTruthy();
+    }
+  });
+
+  it("clicking 'Use template' opens the builder pre-filled with that template", async () => {
+    const saver = vi.fn(async () => ({ ok: true }));
+    renderPanel({
+      loader: vi.fn(async () => ({ automations: [] })),
+      saver,
+    });
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Browse templates" }),
+    );
+    const tpl = AUTOMATION_TEMPLATES[0];
+    if (!tpl) throw new Error("expected at least one template");
+    fireEvent.click(
+      await screen.findByLabelText(`Use template ${tpl.automation.name}`),
+    );
+    // Builder dialog opens with the template's name pre-filled.
+    const nameInput = (await screen.findByLabelText(
+      "Automation name",
+    )) as HTMLInputElement;
+    expect(nameInput.value).toBe(tpl.automation.name);
+    // Trigger select reflects the template's trigger_kind.
+    const trigger = screen.getByLabelText(
+      "Trigger kind",
+    ) as unknown as HTMLSelectElement;
+    expect(trigger.value).toBe(tpl.automation.trigger_kind);
+    // No save until the user confirms — cancelling leaves no row in `automations`.
+    expect(saver).not.toHaveBeenCalled();
+  });
+
+  it("cancelling the builder after picking a template does not persist a row", async () => {
+    const saver = vi.fn(async () => ({ ok: true }));
+    renderPanel({
+      loader: vi.fn(async () => ({ automations: [] })),
+      saver,
+    });
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Browse templates" }),
+    );
+    const tpl = AUTOMATION_TEMPLATES[0];
+    if (!tpl) throw new Error("expected at least one template");
+    fireEvent.click(
+      await screen.findByLabelText(`Use template ${tpl.automation.name}`),
+    );
+    await screen.findByLabelText("Automation name");
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() => {
+      expect(screen.queryByLabelText("Automation name")).toBeNull();
+    });
+    expect(saver).not.toHaveBeenCalled();
   });
 });
 
