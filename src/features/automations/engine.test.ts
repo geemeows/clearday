@@ -77,6 +77,18 @@ describe("planAutomations", () => {
     );
     expect(out).toEqual([]);
   });
+
+  it("surfaces dry_run on the planned entry only when the source automation has it set", () => {
+    const dry = makeAutomation({ id: "dry", dry_run: true });
+    const live = makeAutomation({ id: "live" });
+    const out = planAutomations(
+      { kind: "signal_ingested", signal: makeSignal() },
+      [dry, live],
+    );
+    const byId = Object.fromEntries(out.map((p) => [p.automation_id, p]));
+    expect(byId.dry.dry_run).toBe(true);
+    expect(byId.live.dry_run).toBeUndefined();
+  });
 });
 
 describe("applyAutomationsToSignal — predicates", () => {

@@ -277,6 +277,39 @@ describe("AutomationsPanel count strip", () => {
   });
 });
 
+describe("AutomationsPanel dry-run toggle", () => {
+  it("reflects the persisted dry_run flag in the builder checkbox", async () => {
+    const dryList: Automation[] = [
+      { ...automation({ id: "a-1", name: "Dry one" }), dry_run: true },
+    ];
+    renderPanel({ loader: vi.fn(async () => ({ automations: dryList })) });
+    fireEvent.click(await screen.findByText("Edit"));
+    const checkbox = (await screen.findByLabelText(
+      "Dry-run mode",
+    )) as HTMLInputElement;
+    expect(checkbox.checked).toBe(true);
+  });
+
+  it("toggling on and saving persists dry_run: true on the automation", async () => {
+    const saver = vi.fn<(next: Automation[]) => Promise<{ ok: true }>>(
+      async () => ({ ok: true }),
+    );
+    const single: Automation[] = [automation({ id: "a-1", name: "Snooze deps" })];
+    renderPanel({ loader: vi.fn(async () => ({ automations: single })), saver });
+    fireEvent.click(await screen.findByText("Edit"));
+    const checkbox = (await screen.findByLabelText(
+      "Dry-run mode",
+    )) as HTMLInputElement;
+    expect(checkbox.checked).toBe(false);
+    fireEvent.click(checkbox);
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(saver).toHaveBeenCalledTimes(1));
+    const saved = saver.mock.calls[0]?.[0] ?? [];
+    const target = saved.find((a) => a.id === "a-1");
+    expect(target?.dry_run).toBe(true);
+  });
+});
+
 describe("AutomationsPanel ?demo=1 empty-state toggle", () => {
   it("does not render the toggle when demo is false (default)", async () => {
     renderPanel();

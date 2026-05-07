@@ -745,6 +745,23 @@ function AutomationBuilder({
         />
       </label>
 
+      <label className="flex items-start gap-2">
+        <input
+          type="checkbox"
+          aria-label="Dry-run mode"
+          checked={automation.dry_run === true}
+          onChange={(e) => set({ dry_run: e.target.checked })}
+          className="mt-0.5"
+        />
+        <span className="flex flex-col">
+          <span className="text-sm">Dry-run mode</span>
+          <span className="text-xs text-muted-foreground">
+            Plan actions but suppress side effects; runs land as
+            skipped_dry_run.
+          </span>
+        </span>
+      </label>
+
       <label className="flex flex-col gap-1">
         <span className="text-xs text-muted-foreground">Trigger</span>
         <select

@@ -186,6 +186,12 @@ export type AutomationEvent =
 export type PlannedAutomation = {
   automation_id: string;
   actions: AutomationAction[];
+  /**
+   * Surface of `Automation.dry_run` so the orchestrator can pass `dryRun: true`
+   * to the executor on a per-plan basis without re-looking-up the source row.
+   * Absent / false when the source automation has no dry_run flag set.
+   */
+  dry_run?: boolean;
 };
 
 /**
@@ -216,7 +222,11 @@ export function planAutomations(
       if (!cron || !cronMatchesMinute(cron, event.minute_iso)) continue;
     }
     if (!a.predicates.every((p) => matchesPredicate(p, event))) continue;
-    planned.push({ automation_id: a.id, actions: a.actions });
+    planned.push({
+      automation_id: a.id,
+      actions: a.actions,
+      ...(a.dry_run === true ? { dry_run: true } : {}),
+    });
   }
   return planned;
 }

@@ -20,6 +20,7 @@ import {
   type Automation,
   type FocusBoundaryEvent,
   minuteIsoFromDate,
+  type PlannedAutomation,
   planAutomations,
   type ScheduleEvent,
   type SignalStateChangeEvent,
@@ -30,6 +31,18 @@ import {
   type ExecuteResult,
   executeAutomation,
 } from "#/features/automations/executor";
+
+// Per-plan dry_run from the source automation OR (caller-supplied) options.dryRun
+// — either route should suppress side effects. The caller path covers the
+// dry-run preview API (#95) where the user wants to test a non-dry-run automation
+// once without flipping the persisted flag.
+function withPlanDryRun(
+  options: ExecuteOptions,
+  plan: PlannedAutomation,
+): ExecuteOptions {
+  if (!plan.dry_run) return options;
+  return { ...options, dryRun: true };
+}
 import { triggerEventId } from "#/features/automations/triggers";
 import type { Signal, StoredSignal } from "#/shared/signal";
 
@@ -68,7 +81,7 @@ export async function runAutomationsForInsertedSignals(
       const result = await executeAutomation(
         { plan, triggerEventId: eventId, signalId: stored.id, signal: stored },
         store,
-        options,
+        withPlanDryRun(options, plan),
       );
       results.push(result);
     }
@@ -109,7 +122,7 @@ export async function runAutomationsForUpdatedSignals(
       const result = await executeAutomation(
         { plan, triggerEventId: eventId, signalId: after.id, signal: after },
         store,
-        options,
+        withPlanDryRun(options, plan),
       );
       results.push(result);
     }
@@ -155,7 +168,7 @@ export async function runFocusBoundaryAutomation(
     const result = await executeAutomation(
       { plan, triggerEventId: eventId, signalId: null },
       store,
-      options,
+      withPlanDryRun(options, plan),
     );
     results.push(result);
   }
@@ -194,7 +207,7 @@ export async function runScheduleAutomations(
     const result = await executeAutomation(
       { plan, triggerEventId: eventId, signalId: null },
       store,
-      options,
+      withPlanDryRun(options, plan),
     );
     results.push(result);
   }

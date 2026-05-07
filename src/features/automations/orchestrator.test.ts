@@ -119,6 +119,24 @@ describe("runAutomationsForInsertedSignals", () => {
     expect(store.rows[0].error).toBe("kaboom");
   });
 
+  it("a dry_run automation lands as skipped_dry_run with planned-but-not-executed actions", async () => {
+    const store = memoryRunsStore();
+    const handler = async () => ({ type: "tag" as const, ok: true });
+    const out = await runAutomationsForInsertedSignals(
+      [makeStored()],
+      [{ ...dependabotAutomation, dry_run: true }],
+      store,
+      { internalActionsAppliedByUpsert: false, handler },
+    );
+    expect(out[0].results[0].status).toBe("skipped_dry_run");
+    expect(store.rows).toHaveLength(1);
+    expect(store.rows[0].status).toBe("skipped_dry_run");
+    expect(store.rows[0].actions_planned.map((a) => a.type)).toEqual([
+      "snooze",
+    ]);
+    expect(store.rows[0].actions_executed).toEqual([]);
+  });
+
   it("returns an empty result list when no automation matches the signal", async () => {
     const store = memoryRunsStore();
     const out = await runAutomationsForInsertedSignals(
