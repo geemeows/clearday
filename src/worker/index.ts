@@ -33,12 +33,15 @@ import {
   type AutomationRunRow,
   type AutomationRunsReader,
   type AutomationsStore,
+  dryRunAutomation,
   getAutomations,
   listAutomationRuns,
   putAutomations,
 } from "#/features/automations/api";
 import type { Automation } from "#/features/automations/engine";
 import type {
+  AutomationRunInsert,
+  AutomationRunsStore,
   AutomationRunStatus,
   ExecutedAction,
 } from "#/features/automations/executor";
@@ -315,6 +318,32 @@ export default {
         const out = await putAutomations(body, store);
         if (!out.ok) return json({ ok: false, error: out.error }, 400);
         return json({ ok: true, automations: out.automations });
+      }
+    }
+
+    {
+      const dryRunMatch = url.pathname.match(
+        /^\/api\/automations\/([^/]+)\/dry-run$/,
+      );
+      if (dryRunMatch && request.method === "POST") {
+        const automationId = decodeURIComponent(dryRunMatch[1] ?? "");
+        const out = await dryRunAutomation(
+          automationId,
+          automationsStore(service),
+          automationRunsStore(service),
+        );
+        if (!out.ok) {
+          const status = out.error === "automation not found" ? 404 : 400;
+          return json({ ok: false, error: out.error }, status);
+        }
+        return json({
+          ok: true,
+          automation_id: out.automation_id,
+          status: out.status,
+          actions_planned: out.actions_planned,
+          trigger_event_id: out.trigger_event_id,
+          started_at: out.started_at,
+        });
       }
     }
 
@@ -1981,6 +2010,30 @@ function automationsStore(service: SupabaseService): AutomationsStore {
         .insert(rows);
       if (insError) throw new Error(insError.message);
       return loadAutomationsFromService(service);
+    },
+  };
+}
+
+function automationRunsStore(service: SupabaseService): AutomationRunsStore {
+  return {
+    insertIfNew: async (row: AutomationRunInsert) => {
+      const { error } = await service.from("automation_runs").insert({
+        automation_id: row.automation_id,
+        trigger_event_id: row.trigger_event_id,
+        signal_id: row.signal_id,
+        status: row.status,
+        actions_planned: row.actions_planned,
+        actions_executed: row.actions_executed,
+        error: row.error,
+        started_at: row.started_at,
+        finished_at: row.finished_at,
+      });
+      if (!error) return true;
+      // Postgres unique-violation → duplicate dispatch; the executor
+      // short-circuits to skipped_idempotent on a `false` return.
+      const code = (error as { code?: string }).code;
+      if (code === "23505") return false;
+      throw new Error(error.message);
     },
   };
 }

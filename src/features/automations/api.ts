@@ -6,11 +6,14 @@
 import {
   type Automation,
   type AutomationAction,
+  type PlannedAutomation,
   validateAutomations,
 } from "#/features/automations/engine";
-import type {
-  AutomationRunStatus,
-  ExecutedAction,
+import {
+  type AutomationRunsStore,
+  type AutomationRunStatus,
+  executeAutomation,
+  type ExecutedAction,
 } from "#/features/automations/executor";
 
 export type AutomationsStore = {
@@ -100,6 +103,64 @@ export async function listAutomationRuns(
   const next_cursor =
     runs.length === limit ? (runs[runs.length - 1]?.started_at ?? null) : null;
   return { ok: true, runs, next_cursor };
+}
+
+// One-shot dry-run.
+//
+// Runs the executor against a synthetic plan built from the target
+// automation's actions with `dryRun: true`, so side effects are suppressed
+// and a `skipped_dry_run` row lands. Distinct from the persisted `dry_run`
+// flag (#102 / 584690e): the API caller can test a non-flagged automation
+// without flipping the flag, and `options.dryRun` wins over plan-level
+// dry_run in the executor either way.
+//
+// Trigger event id is `dryrun:${id}:${nowIso}` so each invocation lands a
+// fresh row (the unique index is on (automation_id, trigger_event_id) — same
+// timestamp twice would collide, which is desirable for re-press idempotency
+// at the same instant but unlikely in practice). The id factory is injectable
+// for tests.
+export type DryRunResult =
+  | {
+      ok: true;
+      automation_id: string;
+      status: AutomationRunStatus;
+      actions_planned: AutomationAction[];
+      trigger_event_id: string;
+      started_at: string;
+    }
+  | { ok: false; error: string };
+
+export async function dryRunAutomation(
+  automationId: string,
+  store: AutomationsStore,
+  runs: AutomationRunsStore,
+  options: { now?: () => Date } = {},
+): Promise<DryRunResult> {
+  if (!automationId) return { ok: false, error: "automation id required" };
+  const automations = await store.load();
+  const automation = automations.find((a) => a.id === automationId);
+  if (!automation) return { ok: false, error: "automation not found" };
+
+  const now = options.now ?? (() => new Date());
+  const startedAt = now().toISOString();
+  const triggerEventId = `dryrun:${automationId}:${startedAt}`;
+  const plan: PlannedAutomation = {
+    automation_id: automationId,
+    actions: automation.actions,
+  };
+  const result = await executeAutomation(
+    { plan, triggerEventId, signalId: null, signal: null },
+    runs,
+    { dryRun: true, now },
+  );
+  return {
+    ok: true,
+    automation_id: automationId,
+    status: result.status,
+    actions_planned: automation.actions,
+    trigger_event_id: triggerEventId,
+    started_at: startedAt,
+  };
 }
 
 function clampLimit(raw: number | undefined): number {

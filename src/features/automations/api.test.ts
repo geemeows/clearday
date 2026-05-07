@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   type AutomationRunRow,
   type AutomationRunsReader,
+  dryRunAutomation,
   getAutomations,
   listAutomationRuns,
   putAutomations,
@@ -9,6 +10,10 @@ import {
   RUNS_PAGE_LIMIT_MAX,
 } from "#/features/automations/api";
 import type { Automation } from "#/features/automations/engine";
+import type {
+  AutomationRunInsert,
+  AutomationRunsStore,
+} from "#/features/automations/executor";
 
 function memoryStore(initial: Automation[] = []) {
   let automations = initial;
@@ -209,3 +214,91 @@ describe("listAutomationRuns", () => {
     expect(out.runs.map((r) => r.id)).toEqual(["r-2"]);
   });
 });
+
+function memoryRunsStore(): AutomationRunsStore & {
+  inserts: AutomationRunInsert[];
+} {
+  const inserts: AutomationRunInsert[] = [];
+  return {
+    inserts,
+    insertIfNew: async (row) => {
+      if (
+        inserts.some(
+          (r) =>
+            r.automation_id === row.automation_id &&
+            r.trigger_event_id === row.trigger_event_id,
+        )
+      ) {
+        return false;
+      }
+      inserts.push(row);
+      return true;
+    },
+  };
+}
+
+describe("dryRunAutomation", () => {
+  it("rejects an empty automation id", async () => {
+    const out = await dryRunAutomation("", memoryStore(), memoryRunsStore());
+    expect(out).toMatchObject({ ok: false });
+  });
+
+  it("returns an error when the automation is not in the store", async () => {
+    const store = memoryStore([valid]);
+    const runs = memoryRunsStore();
+    const out = await dryRunAutomation("missing", store, runs);
+    expect(out).toMatchObject({ ok: false, error: "automation not found" });
+    expect(runs.inserts).toEqual([]);
+  });
+
+  it("writes a skipped_dry_run row with the automation's actions and returns the planned actions", async () => {
+    const store = memoryStore([valid]);
+    const runs = memoryRunsStore();
+    const fixedNow = new Date("2026-05-07T12:00:00.000Z");
+    const out = await dryRunAutomation(valid.id, store, runs, {
+      now: () => fixedNow,
+    });
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    expect(out.status).toBe("skipped_dry_run");
+    expect(out.actions_planned).toEqual(valid.actions);
+    expect(out.trigger_event_id).toBe(
+      `dryrun:${valid.id}:${fixedNow.toISOString()}`,
+    );
+    expect(runs.inserts).toHaveLength(1);
+    expect(runs.inserts[0]).toMatchObject({
+      automation_id: valid.id,
+      trigger_event_id: `dryrun:${valid.id}:${fixedNow.toISOString()}`,
+      signal_id: null,
+      status: "skipped_dry_run",
+      actions_planned: valid.actions,
+      actions_executed: [],
+      error: null,
+    });
+  });
+
+  it("dry-runs even when the automation has dry_run unset (one-shot, doesn't flip the persisted flag)", async () => {
+    const persisted: Automation = { ...valid, dry_run: undefined };
+    const store = memoryStore([persisted]);
+    const runs = memoryRunsStore();
+    const out = await dryRunAutomation(valid.id, store, runs);
+    expect(out).toMatchObject({ ok: true, status: "skipped_dry_run" });
+    // The store load was hit but save was never called — the persisted row
+    // is unchanged.
+    expect(store.save).not.toHaveBeenCalled();
+  });
+
+  it("each invocation lands a distinct row when called at distinct timestamps", async () => {
+    const store = memoryStore([valid]);
+    const runs = memoryRunsStore();
+    const t1 = new Date("2026-05-07T12:00:00.000Z");
+    const t2 = new Date("2026-05-07T12:00:01.000Z");
+    await dryRunAutomation(valid.id, store, runs, { now: () => t1 });
+    await dryRunAutomation(valid.id, store, runs, { now: () => t2 });
+    expect(runs.inserts).toHaveLength(2);
+    expect(runs.inserts[0]?.trigger_event_id).not.toBe(
+      runs.inserts[1]?.trigger_event_id,
+    );
+  });
+});
+
