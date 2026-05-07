@@ -12,6 +12,7 @@ import type { BriefingResult } from "#/features/briefing/morning-briefing";
 import type { ProfileView } from "#/features/settings/profile/api";
 import { InboxPreviewRow } from "#/features/signals/components/InboxPreviewRow";
 import { SourceGlyph } from "#/features/signals/components/SourceGlyph";
+import { daysInProgress, prRefOf } from "#/features/signals/display";
 import type { MeetingEvent } from "#/features/signals/views/calendar";
 import {
   filterMeetingsToToday,
@@ -24,6 +25,7 @@ import {
 import { NextUpHero } from "#/features/today/NextUpHero";
 import { PulseCard } from "#/features/today/PulseCard";
 import { useAutoRefresh } from "#/hooks/use-auto-refresh";
+import { useDismissedAlerts } from "#/hooks/useDismissedAlerts";
 import { apiFetch } from "#/lib/api-client";
 import type { StoredSignal } from "#/shared/signal";
 
@@ -61,6 +63,8 @@ function TodayPage() {
     return () => clearInterval(t);
   }, []);
 
+  const { alertAlreadyFired, markAlertFired } = useDismissedAlerts();
+
   // Fire the 10-min alert at most once per Signal across reloads / sessions.
   useEffect(() => {
     if (!meetings) return;
@@ -69,7 +73,7 @@ function TodayPage() {
     if (alertAlreadyFired(due.id)) return;
     markAlertFired(due.id);
     setActiveAlertId(due.id);
-  }, [meetings, now]);
+  }, [meetings, now, alertAlreadyFired, markAlertFired]);
 
   const nextUp = useMemo(
     () => (meetings ? pickNextUp(meetings, now) : null),
@@ -899,42 +903,3 @@ export function InProgressCard({
   );
 }
 
-function daysInProgress(s: StoredSignal): number | null {
-  const iso = s.source_created_at;
-  if (!iso) return null;
-  const t = Date.parse(iso);
-  if (!Number.isFinite(t)) return null;
-  const days = Math.max(
-    0,
-    Math.floor((Date.now() - t) / (24 * 60 * 60 * 1000)),
-  );
-  return days;
-}
-
-function prRefOf(s: StoredSignal): string | null {
-  const num = s.payload?.pr_number ?? s.payload?.number;
-  if (typeof num === "number") return `#${num}`;
-  return null;
-}
-
-const ALERT_STORAGE_PREFIX = "clearday:meeting-alert:";
-
-function alertAlreadyFired(id: string): boolean {
-  if (typeof localStorage === "undefined") return false;
-  try {
-    return localStorage.getItem(ALERT_STORAGE_PREFIX + id) != null;
-  } catch {
-    return false;
-  }
-}
-
-function markAlertFired(id: string): void {
-  if (typeof localStorage === "undefined") return;
-  try {
-    localStorage.setItem(ALERT_STORAGE_PREFIX + id, String(Date.now()));
-  } catch {
-    // best-effort; if storage is full or disabled, the next render will
-    // simply re-fire (the inner `setActiveAlertId` is also idempotent in
-    // the active session).
-  }
-}
