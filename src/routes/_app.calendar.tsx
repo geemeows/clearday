@@ -286,7 +286,7 @@ function WeekGrid({
     return ids;
   }, [conflicts]);
 
-  const hours = Array.from({ length: HOURS + 1 }, (_, i) => HOUR_START + i);
+  const hours = Array.from({ length: HOURS }, (_, i) => HOUR_START + i);
   const weekStart = mondayOf(now);
 
   return (
@@ -527,7 +527,7 @@ function DayGrid({
   }, [conflicts]);
   const lanes = layoutLanes(dayEvents);
   const slots = Array.from({ length: HOURS }, (_, i) => HOUR_START + i);
-  const hours = Array.from({ length: HOURS + 1 }, (_, i) => HOUR_START + i);
+  const hours = Array.from({ length: HOURS }, (_, i) => HOUR_START + i);
 
   return (
     <section
