@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   type Automation,
   applyAutomationsToSignal,
+  bucketAutomations,
   cronExpressionValid,
   cronMatchesMinute,
   humanizeCron,
@@ -1129,5 +1130,58 @@ describe("validateAutomations — schedule trigger", () => {
       },
     ]);
     expect(errs.some((e) => e.includes("invalid cron expression"))).toBe(true);
+  });
+});
+
+describe("bucketAutomations", () => {
+  function make(
+    id: string,
+    enabled: boolean,
+    dry_run: boolean | undefined,
+  ): Automation {
+    return {
+      id,
+      name: id,
+      enabled,
+      priority: 100,
+      trigger_kind: "signal_ingested",
+      predicates: [{ type: "kind", kind: "mention" }],
+      actions: [{ type: "tag", tag: "t" }],
+      ...(dry_run === undefined ? {} : { dry_run }),
+    };
+  }
+
+  it("returns zero buckets for an empty list", () => {
+    expect(bucketAutomations([])).toEqual({ active: 0, paused: 0, dryRun: 0 });
+  });
+
+  it("buckets every (enabled, dry_run) combination disjointly", () => {
+    const list: Automation[] = [
+      make("a-active-undefined", true, undefined),
+      make("a-active-false", true, false),
+      make("a-dry", true, true),
+      make("a-paused-false", false, false),
+      make("a-paused-true", false, true),
+      make("a-paused-undefined", false, undefined),
+    ];
+    const buckets = bucketAutomations(list);
+    expect(buckets).toEqual({ active: 2, paused: 3, dryRun: 1 });
+    expect(buckets.active + buckets.paused + buckets.dryRun).toBe(list.length);
+  });
+
+  it("treats missing dry_run as not-dry-run for enabled rows", () => {
+    expect(bucketAutomations([make("a", true, undefined)])).toEqual({
+      active: 1,
+      paused: 0,
+      dryRun: 0,
+    });
+  });
+
+  it("counts a paused dry-run row as paused, not dry-run", () => {
+    expect(bucketAutomations([make("a", false, true)])).toEqual({
+      active: 0,
+      paused: 1,
+      dryRun: 0,
+    });
   });
 });

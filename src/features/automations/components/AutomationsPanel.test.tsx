@@ -245,6 +245,38 @@ describe("AutomationsPanel empty-state Browse templates", () => {
   });
 });
 
+describe("AutomationsPanel count strip", () => {
+  it("renders the active / paused / dry-run summary above the cards", async () => {
+    const mixed: Automation[] = [
+      automation({ id: "a-1", name: "A1", enabled: true }),
+      automation({ id: "a-2", name: "A2", enabled: true }),
+      automation({ id: "a-3", name: "A3", enabled: false }),
+      { ...automation({ id: "a-4", name: "A4", enabled: true }), dry_run: true },
+    ];
+    renderPanel({ loader: vi.fn(async () => ({ automations: mixed })) });
+    const strip = await screen.findByLabelText("Automations summary");
+    expect(strip.textContent).toBe("2 active · 1 paused · 1 dry-run");
+  });
+
+  it("hides the summary when the list is empty", async () => {
+    renderPanel({ loader: vi.fn(async () => ({ automations: [] })) });
+    expect(await screen.findByText(/No automations yet/)).toBeTruthy();
+    expect(screen.queryByLabelText("Automations summary")).toBeNull();
+  });
+
+  it("updates reactively when an automation is toggled", async () => {
+    renderPanel();
+    const strip = await screen.findByLabelText("Automations summary");
+    expect(strip.textContent).toBe("3 active · 0 paused · 0 dry-run");
+    fireEvent.click(screen.getByLabelText("Snooze deps enabled"));
+    await waitFor(() => {
+      expect(
+        screen.getByLabelText("Automations summary").textContent,
+      ).toBe("2 active · 1 paused · 0 dry-run");
+    });
+  });
+});
+
 describe("AutomationsPanel ?demo=1 empty-state toggle", () => {
   it("does not render the toggle when demo is false (default)", async () => {
     renderPanel();

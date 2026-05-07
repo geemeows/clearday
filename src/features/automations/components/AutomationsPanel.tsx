@@ -13,6 +13,7 @@ import {
   type Automation,
   type AutomationAction,
   type AutomationPredicate,
+  bucketAutomations,
   cronExpressionValid,
   humanizeCron,
   previewAutomations,
@@ -322,6 +323,11 @@ export function AutomationsPanel({
     return automations.filter((a) => a.name.toLowerCase().includes(needle));
   }, [automations, q]);
 
+  const buckets = useMemo(
+    () => (automations ? bucketAutomations(automations) : null),
+    [automations],
+  );
+
   return (
     <section aria-label="Automations" className="space-y-6">
       <header className="flex items-end justify-between">
@@ -394,6 +400,15 @@ export function AutomationsPanel({
               className="h-9 w-full rounded-md border border-border bg-background py-1 pr-3 pl-8 text-sm placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
             />
           </div>
+          {buckets && automations.length > 0 && (
+            <p
+              aria-label="Automations summary"
+              className="font-mono text-[11px] text-muted-foreground"
+            >
+              {buckets.active} active · {buckets.paused} paused ·{" "}
+              {buckets.dryRun} dry-run
+            </p>
+          )}
           <div className="space-y-3 rounded-lg border border-border bg-card p-3">
             {automations.length === 0 && (
               <EmptyState

@@ -113,7 +113,37 @@ export type Automation = {
   trigger_config?: AutomationTriggerConfig;
   predicates: AutomationPredicate[];
   actions: AutomationAction[];
+  /**
+   * When true, the executor plans actions but suppresses side effects and
+   * writes `status = 'skipped_dry_run'` rows. Wired up end-to-end by #95;
+   * here as the bucketing surface used by the count strip (#102).
+   */
+  dry_run?: boolean;
 };
+
+/**
+ * Disjoint bucketing used by the Automations count strip. Buckets sum to the
+ * total number of automations.
+ *
+ * - active = enabled && !dry_run
+ * - paused = !enabled (regardless of dry_run)
+ * - dryRun = enabled && dry_run
+ */
+export type AutomationBuckets = {
+  active: number;
+  paused: number;
+  dryRun: number;
+};
+
+export function bucketAutomations(automations: Automation[]): AutomationBuckets {
+  const buckets: AutomationBuckets = { active: 0, paused: 0, dryRun: 0 };
+  for (const a of automations) {
+    if (!a.enabled) buckets.paused += 1;
+    else if (a.dry_run) buckets.dryRun += 1;
+    else buckets.active += 1;
+  }
+  return buckets;
+}
 
 export type SignalIngestedEvent = {
   kind: "signal_ingested";
