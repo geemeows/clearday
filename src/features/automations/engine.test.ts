@@ -1,0 +1,506 @@
+import { describe, expect, it } from "vitest";
+import {
+  type Automation,
+  applyAutomationsToSignal,
+  planAutomations,
+  previewAutomations,
+  validateAutomations,
+} from "#/features/automations/engine";
+import type { Signal } from "#/shared/signal";
+
+function makeSignal(overrides: Partial<Signal> = {}): Signal {
+  return {
+    provider: "github",
+    kind: "pr_review_requested",
+    source_id: "pr-1",
+    title: "feat: add knobs",
+    url: "https://github.com/x/y/pull/1",
+    payload: { author: "alice", repo: "x/y" },
+    requires_action: true,
+    source_created_at: "2026-05-04T10:00:00.000Z",
+    ...overrides,
+  };
+}
+
+function makeAutomation(overrides: Partial<Automation> = {}): Automation {
+  return {
+    id: "a-1",
+    name: "automation",
+    enabled: true,
+    priority: 100,
+    trigger_kind: "signal_ingested",
+    predicates: [{ type: "kind", kind: "pr_review_requested" }],
+    actions: [{ type: "tag", tag: "review" }],
+    ...overrides,
+  };
+}
+
+describe("planAutomations", () => {
+  it("only fires automations whose trigger_kind matches the event", () => {
+    const a = makeAutomation();
+    const out = planAutomations(
+      { kind: "signal_ingested", signal: makeSignal() },
+      [a],
+    );
+    expect(out.map((p) => p.automation_id)).toEqual(["a-1"]);
+  });
+
+  it("returns one entry per matched automation in priority-asc order", () => {
+    const high = makeAutomation({ id: "high", priority: 200 });
+    const low = makeAutomation({ id: "low", priority: 1 });
+    const out = planAutomations(
+      { kind: "signal_ingested", signal: makeSignal() },
+      [high, low],
+    );
+    expect(out.map((p) => p.automation_id)).toEqual(["low", "high"]);
+  });
+
+  it("skips disabled automations", () => {
+    const a = makeAutomation({ enabled: false });
+    const out = planAutomations(
+      { kind: "signal_ingested", signal: makeSignal() },
+      [a],
+    );
+    expect(out).toEqual([]);
+  });
+
+  it("skips automations with empty predicates", () => {
+    const a = makeAutomation({ predicates: [] });
+    const out = planAutomations(
+      { kind: "signal_ingested", signal: makeSignal() },
+      [a],
+    );
+    expect(out).toEqual([]);
+  });
+});
+
+describe("applyAutomationsToSignal — predicates", () => {
+  it("matches by provider", () => {
+    const a = makeAutomation({
+      predicates: [{ type: "provider", provider: "slack" }],
+      actions: [{ type: "tag", tag: "chat" }],
+    });
+    expect(
+      applyAutomationsToSignal(makeSignal({ provider: "slack" }), [a]).tags,
+    ).toEqual(["chat"]);
+    expect(
+      applyAutomationsToSignal(makeSignal({ provider: "github" }), [a])
+        .matched_automation_ids,
+    ).toEqual([]);
+  });
+
+  it("matches by kind", () => {
+    const a = makeAutomation({
+      predicates: [{ type: "kind", kind: "mention" }],
+      actions: [{ type: "tag", tag: "ping" }],
+    });
+    expect(
+      applyAutomationsToSignal(makeSignal({ kind: "mention" }), [a]).tags,
+    ).toEqual(["ping"]);
+    expect(
+      applyAutomationsToSignal(makeSignal({ kind: "dm" }), [a])
+        .matched_automation_ids,
+    ).toEqual([]);
+  });
+
+  it("matches by source_match against payload field", () => {
+    const a = makeAutomation({
+      predicates: [
+        { type: "source_match", field: "author", equals: "dependabot" },
+      ],
+      actions: [{ type: "dismiss" }],
+    });
+    const dependabot = makeSignal({ payload: { author: "dependabot" } });
+    const human = makeSignal({ payload: { author: "alice" } });
+    expect(applyAutomationsToSignal(dependabot, [a]).dismissed).toBe(true);
+    expect(applyAutomationsToSignal(human, [a]).dismissed).toBe(false);
+  });
+
+  it("matches by title_regex", () => {
+    const a = makeAutomation({
+      predicates: [{ type: "title_regex", pattern: "^chore" }],
+      actions: [{ type: "tag", tag: "chore" }],
+    });
+    expect(
+      applyAutomationsToSignal(makeSignal({ title: "chore: bump deps" }), [a])
+        .tags,
+    ).toEqual(["chore"]);
+    expect(
+      applyAutomationsToSignal(makeSignal({ title: "feat: x" }), [a])
+        .matched_automation_ids,
+    ).toEqual([]);
+  });
+
+  it("invalid regex never matches", () => {
+    const a = makeAutomation({
+      predicates: [{ type: "title_regex", pattern: "(unclosed" }],
+      actions: [{ type: "tag", tag: "x" }],
+    });
+    expect(
+      applyAutomationsToSignal(makeSignal(), [a]).matched_automation_ids,
+    ).toEqual([]);
+  });
+
+  it("AND-combines multiple predicates", () => {
+    const a = makeAutomation({
+      predicates: [
+        { type: "provider", provider: "github" },
+        { type: "source_match", field: "author", equals: "dependabot" },
+      ],
+      actions: [{ type: "dismiss" }],
+    });
+    expect(
+      applyAutomationsToSignal(
+        makeSignal({ payload: { author: "dependabot" } }),
+        [a],
+      ).dismissed,
+    ).toBe(true);
+    expect(
+      applyAutomationsToSignal(makeSignal({ payload: { author: "alice" } }), [
+        a,
+      ]).dismissed,
+    ).toBe(false);
+  });
+});
+
+describe("applyAutomationsToSignal — actions", () => {
+  it("dismiss sets dismissed=true", () => {
+    const a = makeAutomation({ actions: [{ type: "dismiss" }] });
+    expect(applyAutomationsToSignal(makeSignal(), [a]).dismissed).toBe(true);
+  });
+
+  it("snooze sets snoozed_until = now + minutes", () => {
+    const now = new Date("2026-05-04T12:00:00.000Z");
+    const a = makeAutomation({ actions: [{ type: "snooze", minutes: 60 }] });
+    const out = applyAutomationsToSignal(makeSignal(), [a], now);
+    expect(out.snoozed_until).toBe("2026-05-04T13:00:00.000Z");
+  });
+
+  it("snooze with non-positive minutes is a no-op", () => {
+    const a = makeAutomation({ actions: [{ type: "snooze", minutes: 0 }] });
+    expect(
+      applyAutomationsToSignal(makeSignal(), [a]).snoozed_until,
+    ).toBeNull();
+  });
+
+  it("multiple snoozes pick the latest", () => {
+    const now = new Date("2026-05-04T12:00:00.000Z");
+    const out = applyAutomationsToSignal(
+      makeSignal(),
+      [
+        makeAutomation({
+          id: "a",
+          priority: 1,
+          actions: [{ type: "snooze", minutes: 30 }],
+        }),
+        makeAutomation({
+          id: "b",
+          priority: 2,
+          actions: [{ type: "snooze", minutes: 120 }],
+        }),
+      ],
+      now,
+    );
+    expect(out.snoozed_until).toBe("2026-05-04T14:00:00.000Z");
+  });
+
+  it("set_priority effect sets priority on the application", () => {
+    const a = makeAutomation({
+      actions: [{ type: "set_priority", value: "high" }],
+    });
+    expect(applyAutomationsToSignal(makeSignal(), [a]).priority).toBe("high");
+  });
+
+  it("higher-priority automation wins last on set_priority", () => {
+    const out = applyAutomationsToSignal(
+      makeSignal(),
+      [
+        makeAutomation({
+          id: "a",
+          priority: 1,
+          actions: [{ type: "set_priority", value: "low" }],
+        }),
+        makeAutomation({
+          id: "b",
+          priority: 2,
+          actions: [{ type: "set_priority", value: "high" }],
+        }),
+      ],
+      new Date(),
+    );
+    expect(out.priority).toBe("high");
+  });
+
+  it("priority defaults to null when no automation sets it", () => {
+    expect(applyAutomationsToSignal(makeSignal(), []).priority).toBeNull();
+    const a = makeAutomation({ actions: [{ type: "tag", tag: "x" }] });
+    expect(applyAutomationsToSignal(makeSignal(), [a]).priority).toBeNull();
+  });
+
+  it("set_channels effect sets channels on the application", () => {
+    const a = makeAutomation({
+      actions: [{ type: "set_channels", channels: ["slack_dm", "email"] }],
+    });
+    expect(applyAutomationsToSignal(makeSignal(), [a]).channels).toEqual([
+      "slack_dm",
+      "email",
+    ]);
+  });
+
+  it("set_channels effect dedupes and drops unknown channels", () => {
+    const a = makeAutomation({
+      actions: [
+        {
+          type: "set_channels",
+          channels: [
+            "slack_dm",
+            "slack_dm",
+            "bogus" as unknown as "email",
+            "email",
+          ],
+        },
+      ],
+    });
+    expect(applyAutomationsToSignal(makeSignal(), [a]).channels).toEqual([
+      "slack_dm",
+      "email",
+    ]);
+  });
+
+  it("set_channels with empty list resolves to empty array (not null)", () => {
+    const a = makeAutomation({
+      actions: [{ type: "set_channels", channels: [] }],
+    });
+    expect(applyAutomationsToSignal(makeSignal(), [a]).channels).toEqual([]);
+  });
+
+  it("tags accumulate without duplicates", () => {
+    const out = applyAutomationsToSignal(
+      makeSignal(),
+      [
+        makeAutomation({
+          id: "a",
+          priority: 1,
+          actions: [{ type: "tag", tag: "x" }],
+        }),
+        makeAutomation({
+          id: "b",
+          priority: 2,
+          actions: [{ type: "tag", tag: "y" }],
+        }),
+        makeAutomation({
+          id: "c",
+          priority: 3,
+          actions: [{ type: "tag", tag: "x" }],
+        }),
+      ],
+      new Date(),
+    );
+    expect(out.tags).toEqual(["x", "y"]);
+    expect(out.matched_automation_ids).toEqual(["a", "b", "c"]);
+  });
+});
+
+describe("applyAutomationsToSignal — ordering and gating", () => {
+  it("respects priority order in matched_automation_ids", () => {
+    const out = applyAutomationsToSignal(
+      makeSignal(),
+      [
+        makeAutomation({
+          id: "high",
+          priority: 200,
+          actions: [{ type: "tag", tag: "h" }],
+        }),
+        makeAutomation({
+          id: "low",
+          priority: 1,
+          actions: [{ type: "tag", tag: "l" }],
+        }),
+      ],
+      new Date(),
+    );
+    expect(out.matched_automation_ids).toEqual(["low", "high"]);
+    expect(out.tags).toEqual(["l", "h"]);
+  });
+
+  it("disabled automations do not fire", () => {
+    const a = makeAutomation({
+      enabled: false,
+      actions: [{ type: "dismiss" }],
+    });
+    expect(applyAutomationsToSignal(makeSignal(), [a]).dismissed).toBe(false);
+  });
+
+  it("integration: dependabot PR lands snoozed", () => {
+    const now = new Date("2026-05-04T12:00:00.000Z");
+    const a: Automation = {
+      id: "snooze-dependabot",
+      name: "Snooze dependabot",
+      enabled: true,
+      priority: 1,
+      trigger_kind: "signal_ingested",
+      predicates: [
+        { type: "provider", provider: "github" },
+        { type: "source_match", field: "author", equals: "dependabot" },
+      ],
+      actions: [
+        { type: "snooze", minutes: 60 * 24 },
+        { type: "tag", tag: "deps" },
+      ],
+    };
+    const out = applyAutomationsToSignal(
+      makeSignal({ payload: { author: "dependabot", repo: "x/y" } }),
+      [a],
+      now,
+    );
+    expect(out.dismissed).toBe(false);
+    expect(out.snoozed_until).toBe("2026-05-05T12:00:00.000Z");
+    expect(out.tags).toEqual(["deps"]);
+    expect(out.matched_automation_ids).toEqual(["snooze-dependabot"]);
+  });
+});
+
+describe("previewAutomations", () => {
+  it("keeps only signals that any automation fired on, preserving order", () => {
+    const automation = makeAutomation({
+      predicates: [
+        { type: "source_match", field: "author", equals: "dependabot" },
+      ],
+      actions: [{ type: "dismiss" }],
+    });
+    const matched = makeSignal({
+      source_id: "pr-1",
+      payload: { author: "dependabot" },
+    });
+    const skipped = makeSignal({
+      source_id: "pr-2",
+      payload: { author: "alice" },
+    });
+    const matched2 = makeSignal({
+      source_id: "pr-3",
+      payload: { author: "dependabot" },
+    });
+    const out = previewAutomations([matched, skipped, matched2], [automation]);
+    expect(out.map((r) => r.signal.source_id)).toEqual(["pr-1", "pr-3"]);
+    expect(out[0].application.dismissed).toBe(true);
+    expect(out[0].application.matched_automation_ids).toEqual(["a-1"]);
+  });
+
+  it("returns an empty list when no automation fires", () => {
+    const automation = makeAutomation({
+      predicates: [{ type: "kind", kind: "ticket_blocked" }],
+      actions: [{ type: "tag", tag: "blocked" }],
+    });
+    expect(previewAutomations([makeSignal()], [automation])).toEqual([]);
+  });
+});
+
+describe("validateAutomations", () => {
+  it("returns no errors for a valid automation list", () => {
+    expect(validateAutomations([])).toEqual([]);
+    expect(
+      validateAutomations([
+        {
+          id: "a-1",
+          name: "x",
+          enabled: true,
+          priority: 1,
+          trigger_kind: "signal_ingested",
+          predicates: [{ type: "kind", kind: "mention" }],
+          actions: [{ type: "tag", tag: "x" }],
+        },
+      ]),
+    ).toEqual([]);
+  });
+
+  it("flags missing fields", () => {
+    const errs = validateAutomations([
+      {
+        id: "",
+        name: "",
+        enabled: true,
+        priority: Number.NaN,
+        trigger_kind: "signal_ingested",
+        predicates: [],
+        actions: [],
+      } as unknown as Automation,
+    ]);
+    expect(errs.length).toBeGreaterThan(0);
+  });
+
+  it("flags duplicate ids", () => {
+    const a: Automation = {
+      id: "x",
+      name: "n",
+      enabled: true,
+      priority: 1,
+      trigger_kind: "signal_ingested",
+      predicates: [{ type: "kind", kind: "mention" }],
+      actions: [{ type: "tag", tag: "t" }],
+    };
+    const errs = validateAutomations([a, { ...a }]);
+    expect(errs.some((e) => e.includes("duplicate"))).toBe(true);
+  });
+
+  it("flags invalid regex predicates", () => {
+    const errs = validateAutomations([
+      {
+        id: "x",
+        name: "n",
+        enabled: true,
+        priority: 1,
+        trigger_kind: "signal_ingested",
+        predicates: [{ type: "title_regex", pattern: "(unclosed" }],
+        actions: [{ type: "tag", tag: "t" }],
+      },
+    ]);
+    expect(errs.some((e) => e.includes("invalid regex"))).toBe(true);
+  });
+
+  it("flags unknown trigger kinds", () => {
+    const errs = validateAutomations([
+      {
+        id: "x",
+        name: "n",
+        enabled: true,
+        priority: 1,
+        trigger_kind: "schedule" as unknown as "signal_ingested",
+        predicates: [{ type: "kind", kind: "mention" }],
+        actions: [{ type: "tag", tag: "t" }],
+      },
+    ]);
+    expect(errs.some((e) => e.includes("trigger_kind"))).toBe(true);
+  });
+
+  it("flags unknown action types", () => {
+    const errs = validateAutomations([
+      {
+        id: "x",
+        name: "n",
+        enabled: true,
+        priority: 1,
+        trigger_kind: "signal_ingested",
+        predicates: [{ type: "kind", kind: "mention" }],
+        actions: [
+          { type: "post_message" } as unknown as { type: "tag"; tag: string },
+        ],
+      },
+    ]);
+    expect(errs.some((e) => e.includes("unknown action type"))).toBe(true);
+  });
+
+  it("flags negative snooze.minutes", () => {
+    const errs = validateAutomations([
+      {
+        id: "x",
+        name: "n",
+        enabled: true,
+        priority: 1,
+        trigger_kind: "signal_ingested",
+        predicates: [{ type: "kind", kind: "mention" }],
+        actions: [{ type: "snooze", minutes: -5 }],
+      },
+    ]);
+    expect(errs.some((e) => e.includes("snooze.minutes"))).toBe(true);
+  });
+});
