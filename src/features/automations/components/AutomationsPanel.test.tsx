@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import type { AutomationRunRow } from "#/features/automations/api";
 import { AutomationsPanel } from "#/features/automations/components/AutomationsPanel";
 import type { Automation } from "#/features/automations/engine";
 import { AUTOMATION_TEMPLATES } from "#/features/automations/templates";
@@ -349,5 +350,77 @@ describe("AutomationsPanel ?demo=1 empty-state toggle", () => {
       expect(screen.getByText("Snooze deps")).toBeTruthy();
     });
     expect(saver).not.toHaveBeenCalled();
+  });
+});
+
+describe("AutomationsPanel runs view", () => {
+  it("loads and renders runs in a dialog when the Runs button is clicked", async () => {
+    const runs: AutomationRunRow[] = [
+      {
+        id: "r-1",
+        automation_id: "a-1",
+        trigger_event_id: "evt-1",
+        signal_id: "sig-1",
+        status: "succeeded",
+        actions_planned: [{ type: "tag", tag: "x" }],
+        actions_executed: [{ type: "tag", ok: true }],
+        error: null,
+        started_at: "2026-05-07T12:00:00.000Z",
+        finished_at: "2026-05-07T12:00:01.000Z",
+      },
+      {
+        id: "r-2",
+        automation_id: "a-1",
+        trigger_event_id: "evt-2",
+        signal_id: null,
+        status: "failed",
+        actions_planned: [{ type: "tag", tag: "x" }],
+        actions_executed: [{ type: "tag", ok: false, error: "boom" }],
+        error: "boom",
+        started_at: "2026-05-07T11:00:00.000Z",
+        finished_at: "2026-05-07T11:00:01.000Z",
+      },
+    ];
+    const runsLoader = vi.fn(async () => ({ runs }));
+    renderPanel({ runsLoader });
+    const runsButton = await screen.findByLabelText(
+      "View runs for Snooze deps",
+    );
+    fireEvent.click(runsButton);
+    expect(runsLoader).toHaveBeenCalledWith("a-1");
+    await waitFor(() => {
+      expect(screen.getByLabelText("Automation runs")).toBeTruthy();
+    });
+    expect(screen.getByText(/Runs · Snooze deps/)).toBeTruthy();
+    const statusChips = screen.getAllByLabelText("Run status");
+    expect(statusChips.map((el) => el.textContent)).toEqual([
+      "succeeded",
+      "failed",
+    ]);
+    expect(screen.getByText("boom")).toBeTruthy();
+  });
+
+  it("renders the empty-state copy when the automation has no runs", async () => {
+    const runsLoader = vi.fn(async () => ({ runs: [] }));
+    renderPanel({ runsLoader });
+    fireEvent.click(
+      await screen.findByLabelText("View runs for Snooze deps"),
+    );
+    await waitFor(() => {
+      expect(screen.getByText(/No runs yet/)).toBeTruthy();
+    });
+  });
+
+  it("surfaces a runs-loader failure inline in the dialog", async () => {
+    const runsLoader = vi.fn(async () => {
+      throw new Error("network down");
+    });
+    renderPanel({ runsLoader });
+    fireEvent.click(
+      await screen.findByLabelText("View runs for Snooze deps"),
+    );
+    await waitFor(() => {
+      expect(screen.getByText("network down")).toBeTruthy();
+    });
   });
 });

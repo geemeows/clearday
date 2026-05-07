@@ -23,8 +23,20 @@ import {
   type AutomationTemplate,
 } from "#/features/automations/templates";
 import { TRIGGER_LIST, TRIGGERS } from "#/features/automations/triggers";
+import type { AutomationRunRow } from "#/features/automations/api";
 import { apiFetch } from "#/lib/api-client";
 import type { StoredSignal } from "#/shared/signal";
+
+type RunsLoader = (automationId: string) => Promise<{
+  runs: AutomationRunRow[];
+}>;
+
+const defaultRunsLoader: RunsLoader = async (automationId) => {
+  const body = (await apiFetch(
+    `/api/automations/${encodeURIComponent(automationId)}/runs`,
+  )) as { ok: boolean; runs: AutomationRunRow[] };
+  return { runs: body.runs ?? [] };
+};
 
 // ---------------------------------------------------------------------------
 // Automations panel — list view + builder modal. Renders the user's
@@ -128,6 +140,7 @@ export function AutomationsPanel({
   loader,
   saver,
   signalsLoader = defaultSignalsLoader,
+  runsLoader = defaultRunsLoader,
   q: qProp,
   onQChange,
   demo = false,
@@ -139,6 +152,7 @@ export function AutomationsPanel({
     error?: string;
   }>;
   signalsLoader?: SignalsLoader;
+  runsLoader?: RunsLoader;
   q?: string;
   onQChange?: (q: string) => void;
   /**
@@ -295,6 +309,32 @@ export function AutomationsPanel({
     [automations, persist],
   );
 
+  const [runsAutomation, setRunsAutomation] = useState<Automation | null>(null);
+  const [runs, setRuns] = useState<AutomationRunRow[] | null>(null);
+  const [runsError, setRunsError] = useState<string | null>(null);
+
+  const openRuns = useCallback(
+    (a: Automation) => {
+      setRunsAutomation(a);
+      setRuns(null);
+      setRunsError(null);
+      runsLoader(a.id)
+        .then((body) => {
+          setRuns(body.runs);
+        })
+        .catch((e) => {
+          setRunsError(e instanceof Error ? e.message : "failed to load runs");
+        });
+    },
+    [runsLoader],
+  );
+
+  const closeRuns = useCallback(() => {
+    setRunsAutomation(null);
+    setRuns(null);
+    setRunsError(null);
+  }, []);
+
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const pendingDelete = useMemo(
     () => automations?.find((a) => a.id === pendingDeleteId) ?? null,
@@ -430,6 +470,7 @@ export function AutomationsPanel({
                 onToggle={(enabled) => onToggle(a.id, enabled)}
                 onEdit={() => openEdit(a)}
                 onDelete={() => requestDelete(a.id)}
+                onViewRuns={() => openRuns(a)}
               />
             ))}
           </div>
@@ -504,6 +545,31 @@ export function AutomationsPanel({
               className="rounded border border-border bg-primary px-3 py-1.5 text-primary-foreground text-sm hover:opacity-90 disabled:opacity-50"
             >
               Save
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={runsAutomation !== null}
+        onOpenChange={(open) => {
+          if (!open) closeRuns();
+        }}
+      >
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>
+              Runs · {runsAutomation?.name ?? ""}
+            </DialogTitle>
+          </DialogHeader>
+          <RunsList runs={runs} error={runsError} />
+          <DialogFooter>
+            <button
+              type="button"
+              onClick={closeRuns}
+              className="rounded border border-border bg-background px-3 py-1.5 text-sm"
+            >
+              Close
             </button>
           </DialogFooter>
         </DialogContent>
@@ -626,12 +692,14 @@ function AutomationRow({
   onToggle,
   onEdit,
   onDelete,
+  onViewRuns,
 }: {
   automation: Automation;
   busy: boolean;
   onToggle: (enabled: boolean) => void;
   onEdit: () => void;
   onDelete: () => void;
+  onViewRuns: () => void;
 }) {
   return (
     <div className="flex items-center gap-3 rounded border border-border bg-background p-3">
@@ -656,6 +724,15 @@ function AutomationRow({
       </div>
       <button
         type="button"
+        aria-label={`View runs for ${automation.name}`}
+        onClick={onViewRuns}
+        disabled={busy}
+        className="rounded border border-border bg-background px-2 py-1 text-xs disabled:opacity-50"
+      >
+        Runs
+      </button>
+      <button
+        type="button"
         onClick={onEdit}
         disabled={busy}
         className="rounded border border-border bg-background px-2 py-1 text-xs disabled:opacity-50"
@@ -672,6 +749,64 @@ function AutomationRow({
         Delete
       </button>
     </div>
+  );
+}
+
+function RunsList({
+  runs,
+  error,
+}: {
+  runs: AutomationRunRow[] | null;
+  error: string | null;
+}) {
+  if (error) {
+    return (
+      <p
+        role="alert"
+        className="rounded border border-destructive/30 bg-destructive/10 px-3 py-2 text-destructive text-sm"
+      >
+        {error}
+      </p>
+    );
+  }
+  if (runs === null) {
+    return <p className="text-muted-foreground text-sm">Loading runs…</p>;
+  }
+  if (runs.length === 0) {
+    return (
+      <p className="text-muted-foreground text-sm">
+        No runs yet. Runs land here as soon as the automation fires.
+      </p>
+    );
+  }
+  return (
+    <ul aria-label="Automation runs" className="space-y-2">
+      {runs.map((r) => (
+        <li
+          key={r.id}
+          className="rounded border border-border bg-muted/40 p-2 text-xs"
+        >
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="font-mono text-[10px] text-muted-foreground">
+              {r.started_at}
+            </span>
+            <span
+              aria-label="Run status"
+              className="rounded-sm border border-border bg-background px-1.5 py-0.5 font-mono text-[10px]"
+            >
+              {r.status}
+            </span>
+          </div>
+          <div className="mt-1 text-muted-foreground">
+            Signal: {r.signal_id ?? "—"} · planned {r.actions_planned.length} ·
+            executed {r.actions_executed.length}
+          </div>
+          {r.error && (
+            <p className="mt-1 text-destructive">{r.error}</p>
+          )}
+        </li>
+      ))}
+    </ul>
   );
 }
 

@@ -30,11 +30,18 @@ import { runAlertQueueDrain } from "#/features/alerts/server/queue-drain";
 import { type AskAiDeps, handleAskAi } from "#/features/ask-ai/api";
 import { isAllowedEmail } from "#/features/auth/gate";
 import {
+  type AutomationRunRow,
+  type AutomationRunsReader,
   type AutomationsStore,
   getAutomations,
+  listAutomationRuns,
   putAutomations,
 } from "#/features/automations/api";
 import type { Automation } from "#/features/automations/engine";
+import type {
+  AutomationRunStatus,
+  ExecutedAction,
+} from "#/features/automations/executor";
 import {
   type BriefingDeps,
   handleBriefingGenerate,
@@ -308,6 +315,31 @@ export default {
         const out = await putAutomations(body, store);
         if (!out.ok) return json({ ok: false, error: out.error }, 400);
         return json({ ok: true, automations: out.automations });
+      }
+    }
+
+    {
+      const runsMatch = url.pathname.match(
+        /^\/api\/automations\/([^/]+)\/runs$/,
+      );
+      if (runsMatch && request.method === "GET") {
+        const automationId = decodeURIComponent(runsMatch[1] ?? "");
+        const limitRaw = url.searchParams.get("limit");
+        const before = url.searchParams.get("before") ?? undefined;
+        const out = await listAutomationRuns(
+          automationId,
+          automationRunsReader(service),
+          {
+            limit: limitRaw === null ? undefined : Number(limitRaw),
+            before,
+          },
+        );
+        if (!out.ok) return json({ ok: false, error: out.error }, 400);
+        return json({
+          ok: true,
+          runs: out.runs,
+          next_cursor: out.next_cursor,
+        });
       }
     }
 
@@ -1949,6 +1981,50 @@ function automationsStore(service: SupabaseService): AutomationsStore {
         .insert(rows);
       if (insError) throw new Error(insError.message);
       return loadAutomationsFromService(service);
+    },
+  };
+}
+
+function automationRunsReader(
+  service: SupabaseService,
+): AutomationRunsReader {
+  return {
+    listForAutomation: async (automationId, opts) => {
+      let q = service
+        .from("automation_runs")
+        .select(
+          "id, automation_id, trigger_event_id, signal_id, status, actions_planned, actions_executed, error, started_at, finished_at",
+        )
+        .eq("automation_id", automationId)
+        .order("started_at", { ascending: false })
+        .limit(opts.limit);
+      if (opts.before !== undefined) q = q.lt("started_at", opts.before);
+      const { data, error } = await q;
+      if (error) throw new Error(error.message);
+      const rows = (data ?? []) as Array<{
+        id: string;
+        automation_id: string;
+        trigger_event_id: string;
+        signal_id: string | null;
+        status: AutomationRunStatus;
+        actions_planned: AutomationRunRow["actions_planned"] | null;
+        actions_executed: ExecutedAction[] | null;
+        error: string | null;
+        started_at: string;
+        finished_at: string | null;
+      }>;
+      return rows.map((r) => ({
+        id: r.id,
+        automation_id: r.automation_id,
+        trigger_event_id: r.trigger_event_id,
+        signal_id: r.signal_id,
+        status: r.status,
+        actions_planned: r.actions_planned ?? [],
+        actions_executed: r.actions_executed ?? [],
+        error: r.error,
+        started_at: r.started_at,
+        finished_at: r.finished_at,
+      }));
     },
   };
 }
