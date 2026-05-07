@@ -2,6 +2,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { Calendar as CalIcon, ChevronRight, Video, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
+import rehypeRaw from "rehype-raw";
+import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import remarkGfm from "remark-gfm";
 import { z } from "zod";
 import { Tabs, TabsList, TabsPanel, TabsTab } from "#/components/coss/tabs";
@@ -20,6 +22,7 @@ import { filterMeetingsToToday } from "#/features/signals/views/today";
 import { useAutoRefresh } from "#/hooks/use-auto-refresh";
 import { apiFetch } from "#/lib/api-client";
 import { cn } from "#/lib/cn";
+import { supabase } from "#/lib/supabase";
 import type { Signal, SignalKind } from "#/shared/signal";
 
 const inboxSearchSchema = z.object({
@@ -1155,6 +1158,118 @@ const defaultPrOverviewLoader: PrOverviewLoader = async ({ repo, number }) => {
   return (await apiFetch(`/api/pr/overview?${qs}`)) as PrOverviewResult;
 };
 
+// rehype-sanitize schema based on the GitHub default but with a few extras
+// commonly found in PR bodies: image dimensions, video poster, and `align` on
+// images / paragraphs (GitHub authors lean on these often).
+const markdownSanitizeSchema = {
+  ...defaultSchema,
+  attributes: {
+    ...defaultSchema.attributes,
+    img: [
+      ...((defaultSchema.attributes?.img as Array<unknown>) ?? []),
+      "align",
+      "width",
+      "height",
+      "loading",
+      "style",
+    ],
+    a: [
+      ...((defaultSchema.attributes?.a as Array<unknown>) ?? []),
+      "rel",
+      "target",
+    ],
+    "*": [
+      ...((defaultSchema.attributes?.["*"] as Array<unknown>) ?? []),
+      "align",
+    ],
+  },
+  tagNames: [
+    ...(defaultSchema.tagNames ?? []),
+    "details",
+    "summary",
+    "video",
+    "source",
+  ],
+};
+
+// Hosts whose images Chrome blocks under ORB or that require a github auth
+// token to fetch (user-attachments). These need to go through our worker
+// proxy at /api/github/asset, which fetches server-side with the user's
+// token and re-emits the bytes from our origin.
+const GITHUB_ASSET_PROXY_HOSTS = new Set([
+  "github.com",
+  "user-images.githubusercontent.com",
+  "raw.githubusercontent.com",
+  "private-user-images.githubusercontent.com",
+  "objects.githubusercontent.com",
+]);
+
+function proxyGithubAssetUrl(
+  src: string | undefined,
+  authToken: string | null,
+): string | undefined {
+  if (!src) return src;
+  let parsed: URL;
+  try {
+    parsed = new URL(src);
+  } catch {
+    return src;
+  }
+  if (parsed.protocol !== "https:") return src;
+  if (!GITHUB_ASSET_PROXY_HOSTS.has(parsed.hostname)) return src;
+  const qs = `url=${encodeURIComponent(parsed.toString())}${
+    authToken ? `&auth=${encodeURIComponent(authToken)}` : ""
+  }`;
+  return `/api/github/asset?${qs}`;
+}
+
+function useSupabaseAccessToken(): string | null {
+  const [token, setToken] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    supabase.auth.getSession().then(({ data }) => {
+      if (cancelled) return;
+      setToken(data.session?.access_token ?? null);
+    });
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
+      setToken(session?.access_token ?? null);
+    });
+    return () => {
+      cancelled = true;
+      sub.subscription.unsubscribe();
+    };
+  }, []);
+  return token;
+}
+
+function Markdown({ children }: { children: string }) {
+  const authToken = useSupabaseAccessToken();
+  return (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      rehypePlugins={[rehypeRaw, [rehypeSanitize, markdownSanitizeSchema]]}
+      components={{
+        a: ({ node: _n, ...props }) => (
+          <a {...props} target="_blank" rel="noopener noreferrer" />
+        ),
+        img: ({ node: _n, src, ...props }) => (
+          <img
+            {...props}
+            src={proxyGithubAssetUrl(
+              typeof src === "string" ? src : undefined,
+              authToken,
+            )}
+            loading="lazy"
+            alt={props.alt ?? ""}
+          />
+        ),
+      }}
+    >
+      {children}
+    </ReactMarkdown>
+  );
+}
+
 function groupCommentsByPath(
   comments: PrReviewComment[],
 ): Record<string, PrReviewComment[]> {
@@ -1241,9 +1356,7 @@ export function PrDescription({
             color: "var(--body, var(--foreground))",
           }}
         >
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>
-            {state.body}
-          </ReactMarkdown>
+          <Markdown>{state.body}</Markdown>
         </div>
       )}
     </section>
@@ -1582,7 +1695,7 @@ function PrCommentCard({ entry }: { entry: PrCommentEntry }) {
           color: "var(--body, var(--foreground))",
         }}
       >
-        <ReactMarkdown remarkPlugins={[remarkGfm]}>{c.body}</ReactMarkdown>
+        <Markdown>{c.body}</Markdown>
       </div>
     </article>
   );

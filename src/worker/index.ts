@@ -28,6 +28,7 @@ import {
 import { runMeetingAlertTick } from "#/features/alerts/server/meeting-tick";
 import { runAlertQueueDrain } from "#/features/alerts/server/queue-drain";
 import { type AskAiDeps, handleAskAi } from "#/features/ask-ai/api";
+import { isAllowedEmail } from "#/features/auth/gate";
 import {
   type BriefingDeps,
   handleBriefingGenerate,
@@ -133,6 +134,21 @@ export default {
 
     if (!url.pathname.startsWith("/api/")) {
       return env_assets_fetch(env, request);
+    }
+
+    // Image-proxy auth runs from query string (browsers can't put a bearer
+    // header on a plain <img> request). Authenticate inline before the
+    // global gate so an unauthorized caller still gets 401, but via the
+    // ?auth= token rather than the Authorization header.
+    if (url.pathname === "/api/github/asset" && request.method === "GET") {
+      const queryToken = url.searchParams.get("auth") ?? "";
+      const getUser = defaultGetUser(env);
+      const user = queryToken ? await getUser(queryToken) : null;
+      if (!user) return json({ error: "missing or invalid token" }, 401);
+      if (!isAllowedEmail(user.email, env.ALLOWED_EMAIL)) {
+        return json({ error: "not authorized for this deployment" }, 403);
+      }
+      return handleGetGithubAsset(url, serviceClient(env));
     }
 
     const gate = await requireAllowedUser(request, env, defaultGetUser(env));
@@ -1095,6 +1111,94 @@ async function handleGetPrOverview(
     { token, fetch: (i, init) => fetch(i, init) },
   );
   return json(out, out.ok ? 200 : 400);
+}
+
+// Proxies images embedded in PR descriptions / comments. GitHub's
+// user-attachments URLs require auth + carry CORP: same-origin, so the
+// browser cannot load them cross-origin. We fetch with the user's token
+// server-side and stream the bytes back as a plain image response.
+const GITHUB_ASSET_HOST_ALLOWLIST = new Set([
+  "github.com",
+  "user-images.githubusercontent.com",
+  "raw.githubusercontent.com",
+  "private-user-images.githubusercontent.com",
+  "objects.githubusercontent.com",
+]);
+
+async function handleGetGithubAsset(
+  url: URL,
+  service: SupabaseService,
+): Promise<Response> {
+  const target = url.searchParams.get("url") ?? "";
+  let parsed: URL;
+  try {
+    parsed = new URL(target);
+  } catch {
+    return new Response("invalid url", { status: 400 });
+  }
+  if (
+    parsed.protocol !== "https:" ||
+    !GITHUB_ASSET_HOST_ALLOWLIST.has(parsed.hostname)
+  ) {
+    return new Response("host not allowed", { status: 400 });
+  }
+
+  const { data, error } = await service
+    .from("provider_accounts")
+    .select("access_token")
+    .eq("provider", "github")
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  const token =
+    (data as { access_token: string | null } | null)?.access_token ?? null;
+
+  // GitHub user-attachments return a 302 to a pre-signed CDN URL (e.g. on
+  // private-user-images.githubusercontent.com). The CDN URL carries its own
+  // auth in the query string and rejects an Authorization header with 401, so
+  // we have to follow redirects manually and drop the bearer on the next hop.
+  const baseHeaders: Record<string, string> = {
+    "user-agent": "clearday-worker",
+    accept: "image/*,video/*,*/*;q=0.8",
+  };
+  let currentUrl = parsed.toString();
+  let useAuth = !!token;
+  let upstream: Response | null = null;
+  for (let i = 0; i < 5; i++) {
+    const headers: Record<string, string> = { ...baseHeaders };
+    if (useAuth && token) headers.authorization = `Bearer ${token}`;
+    upstream = await fetch(currentUrl, {
+      method: "GET",
+      headers,
+      redirect: "manual",
+    });
+    if (upstream.status >= 300 && upstream.status < 400) {
+      const loc = upstream.headers.get("location");
+      if (!loc) break;
+      currentUrl = new URL(loc, currentUrl).toString();
+      // After the first hop, the redirect target carries its own signed
+      // credentials — sending our token would be rejected.
+      useAuth = false;
+      continue;
+    }
+    break;
+  }
+  if (!upstream) {
+    return new Response("upstream error", { status: 502 });
+  }
+  if (!upstream.ok) {
+    return new Response(`upstream ${upstream.status}`, {
+      status: upstream.status,
+    });
+  }
+  const contentType =
+    upstream.headers.get("content-type") ?? "application/octet-stream";
+  return new Response(upstream.body, {
+    status: 200,
+    headers: {
+      "content-type": contentType,
+      "cache-control": "private, max-age=300",
+    },
+  });
 }
 
 async function handlePostSlackReply(
