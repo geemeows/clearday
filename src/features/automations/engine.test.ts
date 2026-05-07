@@ -3,12 +3,14 @@ import {
   type Automation,
   applyAutomationsToSignal,
   bucketAutomations,
+  bucketRunsByDay,
   cronExpressionValid,
   cronMatchesMinute,
   humanizeCron,
   minuteIsoFromDate,
   planAutomations,
   previewAutomations,
+  RUNS_HISTOGRAM_DAYS,
   validateAutomations,
 } from "#/features/automations/engine";
 import type { Signal } from "#/shared/signal";
@@ -1194,6 +1196,104 @@ describe("bucketAutomations", () => {
       active: 0,
       paused: 1,
       dryRun: 0,
+    });
+  });
+});
+
+describe("bucketRunsByDay", () => {
+  const NOW = new Date("2026-05-07T15:00:00Z");
+
+  it("produces 14 UTC-day buckets ordered oldest → newest, ending at today", () => {
+    const days = bucketRunsByDay([], NOW);
+    expect(days.length).toBe(RUNS_HISTOGRAM_DAYS);
+    expect(days[days.length - 1]?.date).toBe("2026-05-07");
+    expect(days[0]?.date).toBe("2026-04-24");
+    for (const d of days) {
+      expect(d).toEqual({
+        date: d.date,
+        succeeded: 0,
+        failed: 0,
+        skipped_dry_run: 0,
+      });
+    }
+  });
+
+  it("bins runs into the right UTC day and stacks by status", () => {
+    const days = bucketRunsByDay(
+      [
+        { status: "succeeded", started_at: "2026-05-07T01:00:00.000Z" },
+        { status: "succeeded", started_at: "2026-05-07T23:59:59.000Z" },
+        { status: "failed", started_at: "2026-05-07T12:00:00.000Z" },
+        { status: "skipped_dry_run", started_at: "2026-05-06T05:00:00.000Z" },
+        { status: "skipped_dry_run", started_at: "2026-04-24T00:00:00.000Z" },
+      ],
+      NOW,
+    );
+    const today = days.find((d) => d.date === "2026-05-07");
+    const yesterday = days.find((d) => d.date === "2026-05-06");
+    const oldest = days.find((d) => d.date === "2026-04-24");
+    expect(today).toEqual({
+      date: "2026-05-07",
+      succeeded: 2,
+      failed: 1,
+      skipped_dry_run: 0,
+    });
+    expect(yesterday).toEqual({
+      date: "2026-05-06",
+      succeeded: 0,
+      failed: 0,
+      skipped_dry_run: 1,
+    });
+    expect(oldest).toEqual({
+      date: "2026-04-24",
+      succeeded: 0,
+      failed: 0,
+      skipped_dry_run: 1,
+    });
+  });
+
+  it("respects UTC day boundaries — 23:30 vs 00:30 land in different buckets", () => {
+    const days = bucketRunsByDay(
+      [
+        { status: "succeeded", started_at: "2026-05-06T23:30:00.000Z" },
+        { status: "succeeded", started_at: "2026-05-07T00:30:00.000Z" },
+      ],
+      NOW,
+    );
+    expect(days.find((d) => d.date === "2026-05-06")?.succeeded).toBe(1);
+    expect(days.find((d) => d.date === "2026-05-07")?.succeeded).toBe(1);
+  });
+
+  it("drops runs outside the 14-day window", () => {
+    const days = bucketRunsByDay(
+      [
+        { status: "succeeded", started_at: "2026-04-23T23:59:59.000Z" },
+        { status: "failed", started_at: "2026-05-08T00:00:01.000Z" },
+      ],
+      NOW,
+    );
+    for (const d of days) {
+      expect(d.succeeded).toBe(0);
+      expect(d.failed).toBe(0);
+      expect(d.skipped_dry_run).toBe(0);
+    }
+  });
+
+  it("ignores statuses outside the stacked set (idempotent / no_capability / pending)", () => {
+    const days = bucketRunsByDay(
+      [
+        { status: "skipped_idempotent", started_at: "2026-05-07T01:00:00.000Z" },
+        { status: "skipped_no_capability", started_at: "2026-05-07T02:00:00.000Z" },
+        { status: "pending", started_at: "2026-05-07T03:00:00.000Z" },
+      ],
+      NOW,
+    );
+    const today = days.find((d) => d.date === "2026-05-07");
+    expect(today).toEqual({
+      date: "2026-05-07",
+      succeeded: 0,
+      failed: 0,
+      skipped_dry_run: 0,
     });
   });
 });

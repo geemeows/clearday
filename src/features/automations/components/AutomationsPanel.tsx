@@ -14,9 +14,11 @@ import {
   type AutomationAction,
   type AutomationPredicate,
   bucketAutomations,
+  bucketRunsByDay,
   cronExpressionValid,
   humanizeCron,
   previewAutomations,
+  type RunsHistogramDay,
 } from "#/features/automations/engine";
 import {
   AUTOMATION_TEMPLATES,
@@ -610,6 +612,7 @@ export function AutomationsPanel({
               Runs · {runsAutomation?.name ?? ""}
             </DialogTitle>
           </DialogHeader>
+          {runs && runs.length > 0 && <RunsHistogram runs={runs} />}
           <RunsList runs={runs} error={runsError} />
           {dryRunMessage && (
             <p
@@ -813,6 +816,99 @@ function AutomationRow({
       >
         Delete
       </button>
+    </div>
+  );
+}
+
+const HISTOGRAM_DATE_FMT = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+  timeZone: "UTC",
+});
+
+function formatHistogramDate(date: string): string {
+  return HISTOGRAM_DATE_FMT.format(new Date(`${date}T00:00:00Z`));
+}
+
+function tooltipText(d: RunsHistogramDay): string {
+  return `${formatHistogramDate(d.date)} · ${d.succeeded} succeeded · ${d.failed} failed · ${d.skipped_dry_run} dry-run`;
+}
+
+function RunsHistogram({ runs }: { runs: AutomationRunRow[] }) {
+  const days = useMemo(() => bucketRunsByDay(runs, new Date()), [runs]);
+  const max = useMemo(
+    () =>
+      days.reduce(
+        (m, d) => Math.max(m, d.succeeded + d.failed + d.skipped_dry_run),
+        0,
+      ),
+    [days],
+  );
+  return (
+    <div
+      aria-label="Runs histogram (14-day)"
+      className="rounded border border-border bg-muted/40 p-2"
+    >
+      <div className="flex h-16 items-end gap-1">
+        {days.map((d) => {
+          const total = d.succeeded + d.failed + d.skipped_dry_run;
+          const heightPct = max > 0 ? (total / max) * 100 : 0;
+          const tooltip = tooltipText(d);
+          return (
+            <div
+              key={d.date}
+              aria-label={tooltip}
+              title={tooltip}
+              className="relative flex h-full flex-1 items-end"
+            >
+              {total > 0 && (
+                <div
+                  className="flex w-full flex-col-reverse overflow-hidden rounded-sm"
+                  style={{ height: `${heightPct}%` }}
+                >
+                  {d.succeeded > 0 && (
+                    <div
+                      data-segment="succeeded"
+                      style={{
+                        flex: d.succeeded,
+                        background: "var(--good)",
+                      }}
+                    />
+                  )}
+                  {d.failed > 0 && (
+                    <div
+                      data-segment="failed"
+                      style={{
+                        flex: d.failed,
+                        background: "var(--destructive)",
+                      }}
+                    />
+                  )}
+                  {d.skipped_dry_run > 0 && (
+                    <div
+                      data-segment="skipped_dry_run"
+                      style={{
+                        flex: d.skipped_dry_run,
+                        background: "var(--warn)",
+                      }}
+                    />
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      <div className="mt-1 flex gap-1">
+        {days.map((d) => (
+          <span
+            key={d.date}
+            className="flex-1 text-center font-mono text-[9px] text-muted-foreground"
+          >
+            {new Date(`${d.date}T00:00:00Z`).getUTCDate()}
+          </span>
+        ))}
+      </div>
     </div>
   );
 }

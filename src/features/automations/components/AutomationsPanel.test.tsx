@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AutomationRunRow } from "#/features/automations/api";
 import { AutomationsPanel } from "#/features/automations/components/AutomationsPanel";
 import type { Automation } from "#/features/automations/engine";
@@ -494,5 +494,98 @@ describe("AutomationsPanel dry-run button", () => {
       );
     });
     expect(runsLoader).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("AutomationsPanel runs histogram", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-05-07T15:00:00Z"));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  function run(
+    overrides: Partial<AutomationRunRow> & { status: AutomationRunRow["status"]; started_at: string },
+  ): AutomationRunRow {
+    return {
+      id: overrides.id ?? `r-${overrides.started_at}`,
+      automation_id: overrides.automation_id ?? "a-1",
+      trigger_event_id: overrides.trigger_event_id ?? `evt-${overrides.started_at}`,
+      signal_id: overrides.signal_id ?? null,
+      status: overrides.status,
+      actions_planned: overrides.actions_planned ?? [],
+      actions_executed: overrides.actions_executed ?? [],
+      error: overrides.error ?? null,
+      started_at: overrides.started_at,
+      finished_at: overrides.finished_at ?? overrides.started_at,
+    };
+  }
+
+  it("renders 14 day-slots above the runs table with stacked segments and tooltips", async () => {
+    const runs: AutomationRunRow[] = [
+      run({ status: "succeeded", started_at: "2026-05-07T01:00:00.000Z" }),
+      run({ status: "succeeded", started_at: "2026-05-07T02:00:00.000Z" }),
+      run({ status: "failed", started_at: "2026-05-07T03:00:00.000Z" }),
+      run({ status: "skipped_dry_run", started_at: "2026-05-06T05:00:00.000Z" }),
+    ];
+    const runsLoader = vi.fn(async () => ({ runs }));
+    renderPanel({ runsLoader });
+    fireEvent.click(
+      await screen.findByLabelText("View runs for Snooze deps"),
+    );
+    const histogram = await screen.findByLabelText("Runs histogram (14-day)");
+    const slots = histogram.querySelectorAll("[aria-label*='·']");
+    expect(slots.length).toBe(14);
+    const today = histogram.querySelector(
+      "[aria-label^='May 7']",
+    ) as HTMLElement | null;
+    expect(today).not.toBeNull();
+    expect(today?.getAttribute("aria-label")).toBe(
+      "May 7 · 2 succeeded · 1 failed · 0 dry-run",
+    );
+    expect(today?.querySelector("[data-segment='succeeded']")).not.toBeNull();
+    expect(today?.querySelector("[data-segment='failed']")).not.toBeNull();
+    expect(today?.querySelector("[data-segment='skipped_dry_run']")).toBeNull();
+    const yesterday = histogram.querySelector(
+      "[aria-label^='May 6']",
+    ) as HTMLElement | null;
+    expect(yesterday?.getAttribute("aria-label")).toBe(
+      "May 6 · 0 succeeded · 0 failed · 1 dry-run",
+    );
+    expect(
+      yesterday?.querySelector("[data-segment='skipped_dry_run']"),
+    ).not.toBeNull();
+  });
+
+  it("renders zero-run days as empty slots (axis label present, no bar drawn)", async () => {
+    const runs: AutomationRunRow[] = [
+      run({ status: "succeeded", started_at: "2026-05-07T01:00:00.000Z" }),
+    ];
+    const runsLoader = vi.fn(async () => ({ runs }));
+    renderPanel({ runsLoader });
+    fireEvent.click(
+      await screen.findByLabelText("View runs for Snooze deps"),
+    );
+    const histogram = await screen.findByLabelText("Runs histogram (14-day)");
+    const empty = histogram.querySelector(
+      "[aria-label^='Apr 30']",
+    ) as HTMLElement | null;
+    expect(empty).not.toBeNull();
+    expect(empty?.getAttribute("aria-label")).toBe(
+      "Apr 30 · 0 succeeded · 0 failed · 0 dry-run",
+    );
+    expect(empty?.querySelector("[data-segment]")).toBeNull();
+  });
+
+  it("does not render the histogram when there are no runs", async () => {
+    const runsLoader = vi.fn(async () => ({ runs: [] }));
+    renderPanel({ runsLoader });
+    fireEvent.click(
+      await screen.findByLabelText("View runs for Snooze deps"),
+    );
+    await screen.findByText(/No runs yet/);
+    expect(screen.queryByLabelText("Runs histogram (14-day)")).toBeNull();
   });
 });

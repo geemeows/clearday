@@ -145,6 +145,50 @@ export function bucketAutomations(automations: Automation[]): AutomationBuckets 
   return buckets;
 }
 
+/**
+ * Per-day bucket for the runs histogram on the per-automation runs view.
+ * Only `succeeded` / `failed` / `skipped_dry_run` are stacked; other statuses
+ * (`skipped_idempotent`, `skipped_no_capability`, `pending`) are rare and
+ * would muddy the at-a-glance read.
+ */
+export type RunsHistogramDay = {
+  /** UTC day, formatted `YYYY-MM-DD`. */
+  date: string;
+  succeeded: number;
+  failed: number;
+  skipped_dry_run: number;
+};
+
+export const RUNS_HISTOGRAM_DAYS = 14;
+
+const MS_PER_DAY = 86_400_000;
+
+export function bucketRunsByDay(
+  runs: ReadonlyArray<{ status: string; started_at: string }>,
+  now: Date,
+): RunsHistogramDay[] {
+  const todayUtc = Date.UTC(
+    now.getUTCFullYear(),
+    now.getUTCMonth(),
+    now.getUTCDate(),
+  );
+  const days: RunsHistogramDay[] = [];
+  for (let i = RUNS_HISTOGRAM_DAYS - 1; i >= 0; i--) {
+    const date = new Date(todayUtc - i * MS_PER_DAY).toISOString().slice(0, 10);
+    days.push({ date, succeeded: 0, failed: 0, skipped_dry_run: 0 });
+  }
+  const byDate = new Map(days.map((d) => [d.date, d]));
+  for (const r of runs) {
+    // started_at is a UTC ISO string; the YYYY-MM-DD prefix is the UTC day.
+    const bucket = byDate.get(r.started_at.slice(0, 10));
+    if (!bucket) continue;
+    if (r.status === "succeeded") bucket.succeeded += 1;
+    else if (r.status === "failed") bucket.failed += 1;
+    else if (r.status === "skipped_dry_run") bucket.skipped_dry_run += 1;
+  }
+  return days;
+}
+
 export type SignalIngestedEvent = {
   kind: "signal_ingested";
   signal: Signal;
