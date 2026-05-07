@@ -47,10 +47,17 @@ export type AutomationRunsReader = {
     automationId: string,
     opts: { limit: number; before?: string },
   ) => Promise<AutomationRunRow[]>;
+  /**
+   * Failed runs across all of the caller's automations, newest first, capped
+   * at `limit`. Caller (`listLatestFailures`) dedups to the most recent
+   * failure per automation; the reader stays a thin DB projection.
+   */
+  listFailures: (limit: number) => Promise<AutomationRunRow[]>;
 };
 
 export const RUNS_PAGE_LIMIT_DEFAULT = 25;
 export const RUNS_PAGE_LIMIT_MAX = 100;
+export const FAILURES_PAGE_LIMIT = 100;
 
 export type GetResult = { automations: Automation[] };
 
@@ -103,6 +110,27 @@ export async function listAutomationRuns(
   const next_cursor =
     runs.length === limit ? (runs[runs.length - 1]?.started_at ?? null) : null;
   return { ok: true, runs, next_cursor };
+}
+
+export type LatestFailuresResult =
+  | { ok: true; failures: AutomationRunRow[] }
+  | { ok: false; error: string };
+
+// Latest failed run per automation, surfaced inline on the Automations list
+// (issue #95). Pulls a recent window of failed rows and dedups to one per
+// automation_id (the newest, since `listFailures` returns newest-first).
+export async function listLatestFailures(
+  reader: AutomationRunsReader,
+): Promise<LatestFailuresResult> {
+  const rows = await reader.listFailures(FAILURES_PAGE_LIMIT);
+  const seen = new Set<string>();
+  const failures: AutomationRunRow[] = [];
+  for (const r of rows) {
+    if (seen.has(r.automation_id)) continue;
+    seen.add(r.automation_id);
+    failures.push(r);
+  }
+  return { ok: true, failures };
 }
 
 // One-shot dry-run.

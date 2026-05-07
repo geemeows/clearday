@@ -5,6 +5,7 @@ import {
   dryRunAutomation,
   getAutomations,
   listAutomationRuns,
+  listLatestFailures,
   putAutomations,
   RUNS_PAGE_LIMIT_DEFAULT,
   RUNS_PAGE_LIMIT_MAX,
@@ -117,6 +118,7 @@ function runRow(overrides: Partial<AutomationRunRow> = {}): AutomationRunRow {
 
 function runsReader(rows: AutomationRunRow[]): AutomationRunsReader & {
   listForAutomation: ReturnType<typeof vi.fn>;
+  listFailures: ReturnType<typeof vi.fn>;
 } {
   return {
     listForAutomation: vi.fn(
@@ -131,6 +133,12 @@ function runsReader(rows: AutomationRunRow[]): AutomationRunsReader & {
         return filtered;
       },
     ),
+    listFailures: vi.fn(async (limit: number) => {
+      return rows
+        .filter((r) => r.status === "failed")
+        .sort((a, b) => (a.started_at < b.started_at ? 1 : -1))
+        .slice(0, limit);
+    }),
   };
 }
 
@@ -212,6 +220,53 @@ describe("listAutomationRuns", () => {
     expect(out.ok).toBe(true);
     if (!out.ok) return;
     expect(out.runs.map((r) => r.id)).toEqual(["r-2"]);
+  });
+});
+
+describe("listLatestFailures", () => {
+  it("returns an empty list when there are no failed runs", async () => {
+    const reader = runsReader([
+      runRow({ id: "r-1", status: "succeeded" }),
+      runRow({ id: "r-2", status: "skipped_dry_run" }),
+    ]);
+    const out = await listLatestFailures(reader);
+    expect(out).toEqual({ ok: true, failures: [] });
+  });
+
+  it("returns the most recent failed run per automation, newest first", async () => {
+    const reader = runsReader([
+      runRow({
+        id: "r-old-a",
+        automation_id: "a-1",
+        status: "failed",
+        error: "stale",
+        started_at: "2026-05-07T10:00:00.000Z",
+      }),
+      runRow({
+        id: "r-new-a",
+        automation_id: "a-1",
+        status: "failed",
+        error: "fresh",
+        started_at: "2026-05-07T12:00:00.000Z",
+      }),
+      runRow({
+        id: "r-b",
+        automation_id: "a-2",
+        status: "failed",
+        error: "boom",
+        started_at: "2026-05-07T11:00:00.000Z",
+      }),
+      runRow({
+        id: "r-c-ok",
+        automation_id: "a-3",
+        status: "succeeded",
+      }),
+    ]);
+    const out = await listLatestFailures(reader);
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    expect(out.failures.map((r) => r.id)).toEqual(["r-new-a", "r-b"]);
+    expect(out.failures.map((r) => r.error)).toEqual(["fresh", "boom"]);
   });
 });
 

@@ -52,6 +52,16 @@ const defaultDryRunInvoker: DryRunInvoker = async (automationId) => {
   )) as Awaited<ReturnType<DryRunInvoker>>;
 };
 
+type LatestFailuresLoader = () => Promise<{ failures: AutomationRunRow[] }>;
+
+const defaultLatestFailuresLoader: LatestFailuresLoader = async () => {
+  const body = (await apiFetch("/api/automations/runs/latest-failures")) as {
+    ok: boolean;
+    failures: AutomationRunRow[];
+  };
+  return { failures: body.failures ?? [] };
+};
+
 // ---------------------------------------------------------------------------
 // Automations panel — list view + builder modal. Renders the user's
 // automations with an enable/disable toggle per row and a "New automation"
@@ -156,6 +166,7 @@ export function AutomationsPanel({
   signalsLoader = defaultSignalsLoader,
   runsLoader = defaultRunsLoader,
   dryRunInvoker = defaultDryRunInvoker,
+  latestFailuresLoader = defaultLatestFailuresLoader,
   q: qProp,
   onQChange,
   demo = false,
@@ -169,6 +180,7 @@ export function AutomationsPanel({
   signalsLoader?: SignalsLoader;
   runsLoader?: RunsLoader;
   dryRunInvoker?: DryRunInvoker;
+  latestFailuresLoader?: LatestFailuresLoader;
   q?: string;
   onQChange?: (q: string) => void;
   /**
@@ -324,6 +336,27 @@ export function AutomationsPanel({
     },
     [automations, persist],
   );
+
+  const [latestFailures, setLatestFailures] = useState<
+    Map<string, AutomationRunRow>
+  >(new Map());
+
+  useEffect(() => {
+    let cancelled = false;
+    latestFailuresLoader()
+      .then(({ failures }) => {
+        if (cancelled) return;
+        const next = new Map<string, AutomationRunRow>();
+        for (const f of failures) next.set(f.automation_id, f);
+        setLatestFailures(next);
+      })
+      .catch(() => {
+        // Surfacing is best-effort; a load error shouldn't block the list.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [latestFailuresLoader]);
 
   const [runsAutomation, setRunsAutomation] = useState<Automation | null>(null);
   const [runs, setRuns] = useState<AutomationRunRow[] | null>(null);
@@ -517,6 +550,7 @@ export function AutomationsPanel({
                 key={a.id}
                 automation={a}
                 busy={busy}
+                latestFailure={latestFailures.get(a.id) ?? null}
                 onToggle={(enabled) => onToggle(a.id, enabled)}
                 onEdit={() => openEdit(a)}
                 onDelete={() => requestDelete(a.id)}
@@ -761,6 +795,7 @@ function TemplateCard({
 function AutomationRow({
   automation,
   busy,
+  latestFailure,
   onToggle,
   onEdit,
   onDelete,
@@ -768,6 +803,7 @@ function AutomationRow({
 }: {
   automation: Automation;
   busy: boolean;
+  latestFailure: AutomationRunRow | null;
   onToggle: (enabled: boolean) => void;
   onEdit: () => void;
   onDelete: () => void;
@@ -793,6 +829,14 @@ function AutomationRow({
           {automation.actions.length} action
           {automation.actions.length === 1 ? "" : "s"}
         </p>
+        {latestFailure && (
+          <p
+            aria-label={`Last failure for ${automation.name}`}
+            className="mt-1 truncate font-mono text-[10px] text-destructive"
+          >
+            Last failure: {latestFailure.error ?? "unknown error"}
+          </p>
+        )}
       </div>
       <button
         type="button"

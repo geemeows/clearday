@@ -28,11 +28,14 @@ function renderPanel(props: Partial<Parameters<typeof AutomationsPanel>[0]> = {}
   const loader = props.loader ?? vi.fn(async () => ({ automations: list }));
   const saver = props.saver ?? vi.fn(async () => ({ ok: true }));
   const signalsLoader = props.signalsLoader ?? vi.fn(async () => []);
+  const latestFailuresLoader =
+    props.latestFailuresLoader ?? vi.fn(async () => ({ failures: [] }));
   return render(
     <AutomationsPanel
       loader={loader}
       saver={saver}
       signalsLoader={signalsLoader}
+      latestFailuresLoader={latestFailuresLoader}
       {...props}
     />,
   );
@@ -690,5 +693,54 @@ describe("AutomationsPanel builder live preview", () => {
     ) as HTMLElement;
     expect(preview.textContent).toContain("PR review on repo/x");
     expect(preview.textContent).not.toContain("Mention one");
+  });
+});
+
+function failureRow(overrides: Partial<AutomationRunRow> = {}): AutomationRunRow {
+  return {
+    id: overrides.id ?? "r-fail-1",
+    automation_id: overrides.automation_id ?? "a-1",
+    trigger_event_id: overrides.trigger_event_id ?? "evt-1",
+    signal_id: overrides.signal_id ?? null,
+    status: "failed",
+    actions_planned: overrides.actions_planned ?? [],
+    actions_executed: overrides.actions_executed ?? [],
+    error: overrides.error ?? "boom",
+    started_at: overrides.started_at ?? "2026-05-07T12:00:00.000Z",
+    finished_at: overrides.finished_at ?? "2026-05-07T12:00:01.000Z",
+  };
+}
+
+describe("AutomationsPanel inline failure surfacing", () => {
+  it("renders the latest failure error inline on the matching row", async () => {
+    renderPanel({
+      latestFailuresLoader: vi.fn(async () => ({
+        failures: [
+          failureRow({
+            automation_id: "a-2",
+            error: "rate_limit_exceeded: 60 actions/minute",
+          }),
+        ],
+      })),
+    });
+    const failureLabel = await screen.findByLabelText(
+      "Last failure for Mute weekend pings",
+    );
+    expect(failureLabel.textContent).toContain(
+      "rate_limit_exceeded: 60 actions/minute",
+    );
+    // Other rows have no failure surfaced.
+    expect(screen.queryByLabelText("Last failure for Snooze deps")).toBeNull();
+    expect(
+      screen.queryByLabelText("Last failure for Tag dependabot PRs"),
+    ).toBeNull();
+  });
+
+  it("renders nothing when there are no failures", async () => {
+    renderPanel({
+      latestFailuresLoader: vi.fn(async () => ({ failures: [] })),
+    });
+    await screen.findByText("Snooze deps");
+    expect(screen.queryByLabelText(/^Last failure for/)).toBeNull();
   });
 });

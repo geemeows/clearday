@@ -36,6 +36,7 @@ import {
   dryRunAutomation,
   getAutomations,
   listAutomationRuns,
+  listLatestFailures,
   putAutomations,
 } from "#/features/automations/api";
 import type { Automation } from "#/features/automations/engine";
@@ -345,6 +346,15 @@ export default {
           started_at: out.started_at,
         });
       }
+    }
+
+    if (
+      url.pathname === "/api/automations/runs/latest-failures" &&
+      request.method === "GET"
+    ) {
+      const out = await listLatestFailures(automationRunsReader(service));
+      if (!out.ok) return json({ ok: false, error: out.error }, 400);
+      return json({ ok: true, failures: out.failures });
     }
 
     {
@@ -2053,6 +2063,41 @@ function automationRunsReader(
         .limit(opts.limit);
       if (opts.before !== undefined) q = q.lt("started_at", opts.before);
       const { data, error } = await q;
+      if (error) throw new Error(error.message);
+      const rows = (data ?? []) as Array<{
+        id: string;
+        automation_id: string;
+        trigger_event_id: string;
+        signal_id: string | null;
+        status: AutomationRunStatus;
+        actions_planned: AutomationRunRow["actions_planned"] | null;
+        actions_executed: ExecutedAction[] | null;
+        error: string | null;
+        started_at: string;
+        finished_at: string | null;
+      }>;
+      return rows.map((r) => ({
+        id: r.id,
+        automation_id: r.automation_id,
+        trigger_event_id: r.trigger_event_id,
+        signal_id: r.signal_id,
+        status: r.status,
+        actions_planned: r.actions_planned ?? [],
+        actions_executed: r.actions_executed ?? [],
+        error: r.error,
+        started_at: r.started_at,
+        finished_at: r.finished_at,
+      }));
+    },
+    listFailures: async (limit) => {
+      const { data, error } = await service
+        .from("automation_runs")
+        .select(
+          "id, automation_id, trigger_event_id, signal_id, status, actions_planned, actions_executed, error, started_at, finished_at",
+        )
+        .eq("status", "failed")
+        .order("started_at", { ascending: false })
+        .limit(limit);
       if (error) throw new Error(error.message);
       const rows = (data ?? []) as Array<{
         id: string;
