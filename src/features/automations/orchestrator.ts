@@ -18,6 +18,7 @@
 
 import {
   type Automation,
+  type FocusBoundaryEvent,
   type SignalStateChangeEvent,
   planAutomations,
 } from "#/features/automations/engine";
@@ -113,6 +114,50 @@ export async function runAutomationsForUpdatedSignals(
     reports.push({ signalId: after.id, results });
   }
   return reports;
+}
+
+export type FocusBoundaryRunResult = {
+  sessionId: string;
+  boundary: FocusBoundaryEvent["kind"];
+  results: ExecuteResult[];
+};
+
+/**
+ * Focus boundary entry point. Mirrors the Signal entry points: builds the
+ * boundary event, plans matching automations, dispatches each plan through
+ * the executor. Trigger event id is `${session_id}:start|end` so re-emitting
+ * the same boundary is idempotent. The caller (worker focus route or focus
+ * session-end watcher) supplies the handler that knows how to execute
+ * `set_focus` against features/focus/session.
+ */
+export async function runFocusBoundaryAutomation(
+  boundary: FocusBoundaryEvent["kind"],
+  sessionId: string,
+  durationMinutes: number,
+  automations: Automation[],
+  store: AutomationRunsStore,
+  options: ExecuteOptions = {},
+): Promise<FocusBoundaryRunResult> {
+  const event: FocusBoundaryEvent = {
+    kind: boundary,
+    session_id: sessionId,
+    duration_minutes: durationMinutes,
+  };
+  const planned = planAutomations(event, automations);
+  if (planned.length === 0) {
+    return { sessionId, boundary, results: [] };
+  }
+  const eventId = triggerEventId(event);
+  const results: ExecuteResult[] = [];
+  for (const plan of planned) {
+    const result = await executeAutomation(
+      { plan, triggerEventId: eventId, signalId: null },
+      store,
+      options,
+    );
+    results.push(result);
+  }
+  return { sessionId, boundary, results };
 }
 
 /**

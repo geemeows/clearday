@@ -49,9 +49,17 @@ export type AutomationAction =
   // Stub action wired ahead of the Linear/Jira capability landing. The
   // planner accepts and persists it, but the executor short-circuits to
   // `skipped_no_capability` until a ticket-tracker capability is registered.
-  | { type: "transition_ticket"; to_status: string };
+  | { type: "transition_ticket"; to_status: string }
+  // Starts an N-minute Focus session via features/focus/session. Routed by
+  // the executor's injected handler — the default no-op handler is replaced
+  // in the worker by a handler that calls startFocusSession.
+  | { type: "set_focus"; duration_minutes: number };
 
-export type AutomationTriggerKind = "signal_ingested" | "signal_state_change";
+export type AutomationTriggerKind =
+  | "signal_ingested"
+  | "signal_state_change"
+  | "focus_started"
+  | "focus_ended";
 
 export type Automation = {
   id: string;
@@ -76,7 +84,18 @@ export type SignalStateChangeEvent = {
   after: Signal;
 };
 
-export type AutomationEvent = SignalIngestedEvent | SignalStateChangeEvent;
+export type FocusBoundaryEvent = {
+  kind: "focus_started" | "focus_ended";
+  /** Stable session identifier; combined with the boundary into the trigger event id. */
+  session_id: string;
+  /** Total session duration in minutes. Carried on both boundaries. */
+  duration_minutes: number;
+};
+
+export type AutomationEvent =
+  | SignalIngestedEvent
+  | SignalStateChangeEvent
+  | FocusBoundaryEvent;
 
 export type PlannedAutomation = {
   automation_id: string;
@@ -95,10 +114,15 @@ export function planAutomations(
 ): PlannedAutomation[] {
   const planned: PlannedAutomation[] = [];
   const ordered = [...automations].sort((a, b) => a.priority - b.priority);
+  const isFocusEvent =
+    event.kind === "focus_started" || event.kind === "focus_ended";
   for (const a of ordered) {
     if (!a.enabled) continue;
     if (a.trigger_kind !== event.kind) continue;
-    if (a.predicates.length === 0) continue;
+    // Focus boundary events have no Signal-shaped fields to filter on, so an
+    // empty predicate list is a valid "fire on every boundary" automation.
+    // Signal triggers still require at least one predicate.
+    if (!isFocusEvent && a.predicates.length === 0) continue;
     if (!a.predicates.every((p) => matchesPredicate(p, event))) continue;
     planned.push({ automation_id: a.id, actions: a.actions });
   }
@@ -109,6 +133,14 @@ function matchesPredicate(
   p: AutomationPredicate,
   event: AutomationEvent,
 ): boolean {
+  // Focus boundary events carry no Signal payload — predicates targeting
+  // signal fields can't match. The planner still calls into here when the
+  // automation has predicates configured (see `every` in planAutomations);
+  // returning false here means a misconfigured Focus automation simply
+  // never fires rather than throwing.
+  if (event.kind !== "signal_ingested" && event.kind !== "signal_state_change") {
+    return false;
+  }
   // For `signal_ingested` we match against the inserted Signal; for
   // `signal_state_change` predicates target the post-update Signal (the
   // dedicated `state_from_to` predicate consults the before/after pair).
@@ -225,6 +257,10 @@ function applyAction(
       // External capability — does not touch the Signal upsert columns.
       // Executor handles routing (or stub status) downstream.
       break;
+    case "set_focus":
+      // External effect (starts a Focus session). Not applied at the Signal
+      // upsert seam; the executor's handler dispatches via features/focus.
+      break;
     case "set_channels": {
       // Last-write-wins per slot, same vocabulary as priority. An empty list
       // is meaningful — it means "this automation says fire no channels" —
@@ -272,6 +308,13 @@ export function previewAutomations(
 const TRIGGER_KINDS: readonly AutomationTriggerKind[] = [
   "signal_ingested",
   "signal_state_change",
+  "focus_started",
+  "focus_ended",
+];
+
+const FOCUS_TRIGGER_KINDS: readonly AutomationTriggerKind[] = [
+  "focus_started",
+  "focus_ended",
 ];
 
 const ACTION_TYPES = new Set<AutomationAction["type"]>([
@@ -281,6 +324,7 @@ const ACTION_TYPES = new Set<AutomationAction["type"]>([
   "set_priority",
   "set_channels",
   "transition_ticket",
+  "set_focus",
 ]);
 
 const PREDICATE_TYPES = new Set<AutomationPredicate["type"]>([
@@ -313,7 +357,12 @@ export function validateAutomations(automations: Automation[]): string[] {
       );
     }
 
-    if (!Array.isArray(a.predicates) || a.predicates.length === 0)
+    const isFocus = FOCUS_TRIGGER_KINDS.includes(
+      a.trigger_kind as AutomationTriggerKind,
+    );
+    if (!Array.isArray(a.predicates))
+      errors.push(`automation ${a.id}: predicates must be an array`);
+    else if (!isFocus && a.predicates.length === 0)
       errors.push(`automation ${a.id}: at least one predicate required`);
     if (!Array.isArray(a.actions) || a.actions.length === 0)
       errors.push(`automation ${a.id}: at least one action required`);
@@ -371,6 +420,17 @@ export function validateAutomations(automations: Automation[]): string[] {
         if (typeof act.to_status !== "string") {
           errors.push(
             `automation ${a.id}: transition_ticket.to_status must be a string`,
+          );
+        }
+      }
+      if (act.type === "set_focus") {
+        if (
+          typeof act.duration_minutes !== "number" ||
+          !Number.isFinite(act.duration_minutes) ||
+          act.duration_minutes <= 0
+        ) {
+          errors.push(
+            `automation ${a.id}: set_focus.duration_minutes must be a positive number`,
           );
         }
       }

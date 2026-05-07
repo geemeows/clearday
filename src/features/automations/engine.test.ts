@@ -499,6 +499,105 @@ describe("planAutomations — signal_state_change", () => {
   });
 });
 
+describe("planAutomations — focus boundary events", () => {
+  function makeFocusAutomation(
+    overrides: Partial<Automation> = {},
+  ): Automation {
+    return {
+      id: "focus-1",
+      name: "Focus auto-reply",
+      enabled: true,
+      priority: 100,
+      trigger_kind: "focus_started",
+      predicates: [],
+      actions: [{ type: "tag", tag: "focus" }],
+      ...overrides,
+    };
+  }
+
+  it("focus_started fires when an automation has matching trigger_kind and no predicates", () => {
+    const out = planAutomations(
+      {
+        kind: "focus_started",
+        session_id: "sess-1",
+        duration_minutes: 25,
+      },
+      [makeFocusAutomation()],
+    );
+    expect(out.map((p) => p.automation_id)).toEqual(["focus-1"]);
+  });
+
+  it("focus_ended fires only on focus_ended automations", () => {
+    const started = makeFocusAutomation({
+      id: "started",
+      trigger_kind: "focus_started",
+    });
+    const ended = makeFocusAutomation({
+      id: "ended",
+      trigger_kind: "focus_ended",
+    });
+    const out = planAutomations(
+      {
+        kind: "focus_ended",
+        session_id: "sess-1",
+        duration_minutes: 25,
+      },
+      [started, ended],
+    );
+    expect(out.map((p) => p.automation_id)).toEqual(["ended"]);
+  });
+
+  it("a focus automation does not fire on signal_ingested events", () => {
+    const a = makeFocusAutomation();
+    const out = planAutomations(
+      { kind: "signal_ingested", signal: makeSignal() },
+      [a],
+    );
+    expect(out).toEqual([]);
+  });
+
+  it("a signal automation does not fire on focus boundaries", () => {
+    const a = makeAutomation();
+    const out = planAutomations(
+      {
+        kind: "focus_started",
+        session_id: "sess-1",
+        duration_minutes: 25,
+      },
+      [a],
+    );
+    expect(out).toEqual([]);
+  });
+
+  it("a focus automation with a Signal-shaped predicate never matches", () => {
+    const a = makeFocusAutomation({
+      predicates: [{ type: "kind", kind: "mention" }],
+    });
+    const out = planAutomations(
+      {
+        kind: "focus_started",
+        session_id: "sess-1",
+        duration_minutes: 25,
+      },
+      [a],
+    );
+    expect(out).toEqual([]);
+  });
+
+  it("respects the disabled flag for focus automations", () => {
+    const a = makeFocusAutomation({ enabled: false });
+    const out = planAutomations(
+      {
+        kind: "focus_started",
+        session_id: "sess-1",
+        duration_minutes: 25,
+      },
+      [a],
+    );
+    expect(out).toEqual([]);
+  });
+});
+
 describe("previewAutomations", () => {
   it("keeps only signals that any automation fired on, preserving order", () => {
     const automation = makeAutomation({
@@ -659,6 +758,48 @@ describe("validateAutomations", () => {
         },
       ]),
     ).toEqual([]);
+  });
+
+  it("accepts focus_started / focus_ended trigger kinds", () => {
+    expect(
+      validateAutomations([
+        {
+          id: "f-start",
+          name: "n",
+          enabled: true,
+          priority: 1,
+          trigger_kind: "focus_started",
+          predicates: [],
+          actions: [{ type: "tag", tag: "t" }],
+        },
+        {
+          id: "f-end",
+          name: "n",
+          enabled: true,
+          priority: 1,
+          trigger_kind: "focus_ended",
+          predicates: [],
+          actions: [{ type: "set_focus", duration_minutes: 25 }],
+        },
+      ]),
+    ).toEqual([]);
+  });
+
+  it("flags non-positive set_focus.duration_minutes", () => {
+    const errs = validateAutomations([
+      {
+        id: "x",
+        name: "n",
+        enabled: true,
+        priority: 1,
+        trigger_kind: "focus_started",
+        predicates: [],
+        actions: [{ type: "set_focus", duration_minutes: 0 }],
+      },
+    ]);
+    expect(errs.some((e) => e.includes("set_focus.duration_minutes"))).toBe(
+      true,
+    );
   });
 
   it("flags negative snooze.minutes", () => {

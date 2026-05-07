@@ -7,6 +7,7 @@ import type {
 import {
   runAutomationsForInsertedSignals,
   runAutomationsForUpdatedSignals,
+  runFocusBoundaryAutomation,
   runSignalIngestedAutomations,
   type SignalLookup,
 } from "#/features/automations/orchestrator";
@@ -278,6 +279,102 @@ describe("runSignalIngestedAutomations — INSERT detection", () => {
       store,
     );
     expect(out).toEqual([]);
+    expect(store.rows).toHaveLength(0);
+  });
+});
+
+const focusStartAutomation: Automation = {
+  id: "focus-start",
+  name: "Focus auto-tag",
+  enabled: true,
+  priority: 1,
+  trigger_kind: "focus_started",
+  predicates: [],
+  actions: [{ type: "tag", tag: "focus" }],
+};
+
+const focusEndAutomation: Automation = {
+  id: "focus-end",
+  name: "Focus end set-focus",
+  enabled: true,
+  priority: 1,
+  trigger_kind: "focus_ended",
+  predicates: [],
+  actions: [{ type: "set_focus", duration_minutes: 25 }],
+};
+
+describe("runFocusBoundaryAutomation", () => {
+  it("focus_started: writes one succeeded run keyed on ${session_id}:start", async () => {
+    const store = memoryRunsStore();
+    const out = await runFocusBoundaryAutomation(
+      "focus_started",
+      "sess-1",
+      25,
+      [focusStartAutomation],
+      store,
+    );
+    expect(out.results).toHaveLength(1);
+    expect(out.results[0].status).toBe("succeeded");
+    expect(store.rows).toHaveLength(1);
+    expect(store.rows[0].trigger_event_id).toBe("sess-1:start");
+    expect(store.rows[0].signal_id).toBeNull();
+  });
+
+  it("focus_ended: dispatches set_focus through the injected handler", async () => {
+    const store = memoryRunsStore();
+    const calls: Array<{ duration_minutes: number }> = [];
+    const out = await runFocusBoundaryAutomation(
+      "focus_ended",
+      "sess-2",
+      25,
+      [focusEndAutomation],
+      store,
+      {
+        internalActionsAppliedByUpsert: false,
+        handler: async (action) => {
+          if (action.type === "set_focus") {
+            calls.push({ duration_minutes: action.duration_minutes });
+            return { type: action.type, ok: true };
+          }
+          return { type: action.type, ok: true };
+        },
+      },
+    );
+    expect(out.results[0].status).toBe("succeeded");
+    expect(calls).toEqual([{ duration_minutes: 25 }]);
+    expect(store.rows[0].trigger_event_id).toBe("sess-2:end");
+  });
+
+  it("re-emitting the same boundary short-circuits to skipped_idempotent", async () => {
+    const store = memoryRunsStore();
+    await runFocusBoundaryAutomation(
+      "focus_started",
+      "sess-3",
+      25,
+      [focusStartAutomation],
+      store,
+    );
+    const out = await runFocusBoundaryAutomation(
+      "focus_started",
+      "sess-3",
+      25,
+      [focusStartAutomation],
+      store,
+    );
+    expect(out.results[0].status).toBe("skipped_idempotent");
+    expect(store.rows).toHaveLength(1);
+  });
+
+  it("returns an empty result when no automation matches the boundary", async () => {
+    const store = memoryRunsStore();
+    const out = await runFocusBoundaryAutomation(
+      "focus_ended",
+      "sess-4",
+      25,
+      [focusStartAutomation],
+      store,
+    );
+    expect(out.results).toEqual([]);
     expect(store.rows).toHaveLength(0);
   });
 });

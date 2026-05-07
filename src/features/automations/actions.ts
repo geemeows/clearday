@@ -15,11 +15,14 @@ export type ActionDescriptor = {
   label: string;
   /**
    * `internal` actions land as columns on the Signal row at upsert time.
+   * `external` actions dispatch through an injected handler (Slack, GitHub,
+   * Focus, …); the default handler is a no-op so unwired actions don't
+   * silently call providers in dev/test.
    * `deferred` actions are registered but have no live capability yet —
    * the executor stamps them `skipped_no_capability` until the relevant
    * provider capability lands.
    */
-  kind: "internal" | "deferred";
+  kind: "internal" | "external" | "deferred";
 };
 
 export const ACTIONS: Record<AutomationAction["type"], ActionDescriptor> = {
@@ -40,6 +43,11 @@ export const ACTIONS: Record<AutomationAction["type"], ActionDescriptor> = {
     type: "transition_ticket",
     label: "Transition ticket",
     kind: "deferred",
+  },
+  set_focus: {
+    type: "set_focus",
+    label: "Start Focus session",
+    kind: "external",
   },
 };
 

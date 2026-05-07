@@ -97,6 +97,8 @@ function defaultAction(type: AutomationAction["type"]): AutomationAction {
       return { type: "set_channels", channels: ["slack_dm"] };
     case "transition_ticket":
       return { type: "transition_ticket", to_status: "Done" };
+    case "set_focus":
+      return { type: "set_focus", duration_minutes: 25 };
   }
 }
 
@@ -909,6 +911,24 @@ function ActionInputs({
           className="w-full rounded border border-border bg-background px-2 py-1 text-xs"
         />
       </div>
+    );
+  }
+  if (action.type === "set_focus") {
+    return (
+      <input
+        type="number"
+        min={1}
+        aria-label="Focus duration minutes"
+        value={action.duration_minutes}
+        onChange={(e) =>
+          onChange({
+            ...action,
+            duration_minutes: Number(e.target.value) || 0,
+          })
+        }
+        placeholder="25"
+        className="w-full rounded border border-border bg-background px-2 py-1 text-xs"
+      />
     );
   }
   if (action.type === "set_priority") {
