@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Calendar as CalIcon, ChevronRight, Video, X } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
@@ -1041,12 +1041,22 @@ function AuthorAvatar({ handle, src }: { handle: string; src?: string }) {
 
 type PrReviewEvent = "APPROVE" | "REQUEST_CHANGES" | "COMMENT";
 
+export type PrReviewSubmitDraft = {
+  path: string;
+  line: number;
+  side: ReviewDraftSide;
+  body: string;
+  start_line?: number;
+  start_side?: ReviewDraftSide;
+};
+
 type PrReviewSubmit = (params: {
   repo: string;
   number: number;
   event: PrReviewEvent;
   body?: string;
   signal_id?: string;
+  comments?: PrReviewSubmitDraft[];
 }) => Promise<{ ok: boolean; error?: string; needs_reauth?: boolean }>;
 
 const defaultPrReviewSubmit: PrReviewSubmit = async (params) =>
@@ -1282,6 +1292,71 @@ function groupCommentsByPath(
   return out;
 }
 
+export type DiffRow = {
+  raw: string;
+  tone: "hunk" | "ctx" | "add" | "del";
+  oldLine?: number;
+  newLine?: number;
+};
+
+// Parse a unified patch into rows annotated with each side's file line
+// number. Inline review comments target one of those line numbers.
+export function parsePatch(patch: string): DiffRow[] {
+  const lines = patch.split("\n");
+  const rows: DiffRow[] = [];
+  let oldLine = 0;
+  let newLine = 0;
+  for (const raw of lines) {
+    if (raw.startsWith("@@")) {
+      const m = raw.match(/^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
+      if (m) {
+        oldLine = Number(m[1]);
+        newLine = Number(m[2]);
+      }
+      rows.push({ raw, tone: "hunk" });
+      continue;
+    }
+    if (raw.startsWith("+") && !raw.startsWith("+++")) {
+      rows.push({ raw, tone: "add", newLine });
+      newLine += 1;
+      continue;
+    }
+    if (raw.startsWith("-") && !raw.startsWith("---")) {
+      rows.push({ raw, tone: "del", oldLine });
+      oldLine += 1;
+      continue;
+    }
+    if (raw.startsWith("---") || raw.startsWith("+++")) {
+      rows.push({ raw, tone: "ctx" });
+      continue;
+    }
+    rows.push({ raw, tone: "ctx", oldLine, newLine });
+    oldLine += 1;
+    newLine += 1;
+  }
+  return rows;
+}
+
+export type ReviewDraftSide = "LEFT" | "RIGHT";
+
+export type ReviewDraft = {
+  path: string;
+  line: number;
+  side: ReviewDraftSide;
+  /** Inclusive start of a multi-line range. Omit for single-line drafts. */
+  startLine?: number;
+  body: string;
+};
+
+export function reviewDraftKey(d: {
+  path: string;
+  line: number;
+  side: ReviewDraftSide;
+  startLine?: number;
+}): string {
+  return `${d.path}|${d.side}|${d.startLine ?? d.line}-${d.line}`;
+}
+
 export function PrDescription({
   repo,
   number,
@@ -1395,10 +1470,24 @@ export function PrPullRequestPanel({
   const [reviewComments, setReviewComments] = useState<PrReviewComment[]>([]);
   const [issueComments, setIssueComments] = useState<PrIssueComment[]>([]);
   const [overviewLoading, setOverviewLoading] = useState(true);
+  const [drafts, setDrafts] = useState<Record<string, ReviewDraft>>({});
   const handleReviewComments = useCallback((comments: PrReviewComment[]) => {
     setReviewComments(comments);
     setOverviewLoading(false);
   }, []);
+  const upsertDraft = useCallback((draft: ReviewDraft) => {
+    setDrafts((prev) => ({ ...prev, [reviewDraftKey(draft)]: draft }));
+  }, []);
+  const removeDraft = useCallback((key: string) => {
+    setDrafts((prev) => {
+      if (!(key in prev)) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  }, []);
+  const clearDrafts = useCallback(() => setDrafts({}), []);
+  const draftCount = Object.keys(drafts).length;
   return (
     <Tabs defaultValue="description">
       <TabsList variant="underline" className="w-full">
@@ -1442,12 +1531,25 @@ export function PrPullRequestPanel({
         />
       </TabsPanel>
       <TabsPanel value="diff" className="pt-3">
-        <PrDiffViewer
-          repo={repo}
-          number={number}
-          load={loadFiles}
-          commentsByPath={commentsByPath}
-        />
+        <div className="flex flex-col" style={{ gap: 12 }}>
+          {draftCount > 0 && (
+            <PrReviewSubmitPanel
+              repo={repo}
+              number={number}
+              drafts={drafts}
+              onCleared={clearDrafts}
+            />
+          )}
+          <PrDiffViewer
+            repo={repo}
+            number={number}
+            load={loadFiles}
+            commentsByPath={commentsByPath}
+            drafts={drafts}
+            onAddDraft={upsertDraft}
+            onRemoveDraft={removeDraft}
+          />
+        </div>
       </TabsPanel>
     </Tabs>
   );
@@ -1458,11 +1560,17 @@ export function PrDiffViewer({
   number,
   load = defaultPrFilesLoader,
   commentsByPath,
+  drafts,
+  onAddDraft,
+  onRemoveDraft,
 }: {
   repo: string;
   number: number;
   load?: PrFilesLoader;
   commentsByPath?: Record<string, PrReviewComment[]>;
+  drafts?: Record<string, ReviewDraft>;
+  onAddDraft?: (draft: ReviewDraft) => void;
+  onRemoveDraft?: (key: string) => void;
 }) {
   const [state, setState] = useState<
     | { kind: "loading" }
@@ -1515,6 +1623,9 @@ export function PrDiffViewer({
               key={f.filename}
               file={f}
               comments={commentsByPath?.[f.filename] ?? []}
+              drafts={drafts}
+              onAddDraft={onAddDraft}
+              onRemoveDraft={onRemoveDraft}
             />
           ))}
         </div>
@@ -1744,10 +1855,16 @@ function PrFilePatch({
   file,
   defaultOpen = false,
   comments = [],
+  drafts,
+  onAddDraft,
+  onRemoveDraft,
 }: {
   file: PrFile;
   defaultOpen?: boolean;
   comments?: PrReviewComment[];
+  drafts?: Record<string, ReviewDraft>;
+  onAddDraft?: (draft: ReviewDraft) => void;
+  onRemoveDraft?: (key: string) => void;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const panelId = `pr-file-${file.filename.replace(/[^a-z0-9]/gi, "-")}`;
@@ -1851,47 +1968,453 @@ function PrFilePatch({
               Patch not available (binary or oversized file).
             </p>
           ) : (
-            <PatchLines patch={file.patch} />
+            <PatchLines
+              path={file.filename}
+              patch={file.patch}
+              comments={comments}
+              drafts={drafts}
+              onAddDraft={onAddDraft}
+              onRemoveDraft={onRemoveDraft}
+            />
           )}
-          {comments.length > 0 && <PrFileComments comments={comments} />}
         </div>
       )}
     </article>
   );
 }
 
-function PrFileComments({ comments }: { comments: PrReviewComment[] }) {
+function PatchLines({
+  path,
+  patch,
+  comments = [],
+  drafts,
+  onAddDraft,
+  onRemoveDraft,
+}: {
+  path: string;
+  patch: string;
+  comments?: PrReviewComment[];
+  drafts?: Record<string, ReviewDraft>;
+  onAddDraft?: (draft: ReviewDraft) => void;
+  onRemoveDraft?: (key: string) => void;
+}) {
+  const rows = useMemo(() => parsePatch(patch), [patch]);
+  const commentsByLine = useMemo(() => {
+    const out: Record<string, PrReviewComment[]> = {};
+    for (const c of comments) {
+      if (typeof c.line !== "number") continue;
+      const side: ReviewDraftSide = c.side === "LEFT" ? "LEFT" : "RIGHT";
+      const key = `${side}|${c.line}`;
+      if (!out[key]) out[key] = [];
+      out[key].push(c);
+    }
+    return out;
+  }, [comments]);
+  // Comments whose target line isn't part of the rendered patch (outdated /
+  // truncated diffs). We surface these below the diff so reviewers don't
+  // miss them.
+  const orphanComments = useMemo(() => {
+    const visibleKeys = new Set<string>();
+    for (const row of rows) {
+      if (typeof row.newLine === "number" && row.tone !== "del") {
+        visibleKeys.add(`RIGHT|${row.newLine}`);
+      }
+      if (typeof row.oldLine === "number" && row.tone !== "add") {
+        visibleKeys.add(`LEFT|${row.oldLine}`);
+      }
+    }
+    return comments.filter((c) => {
+      if (typeof c.line !== "number") return false;
+      const side: ReviewDraftSide = c.side === "LEFT" ? "LEFT" : "RIGHT";
+      return !visibleKeys.has(`${side}|${c.line}`);
+    });
+  }, [comments, rows]);
+  const [composerAt, setComposerAt] = useState<{
+    side: ReviewDraftSide;
+    line: number;
+    startLine?: number;
+  } | null>(null);
+  // Drag-to-select state. While the user holds the pointer down on a "+"
+  // button and moves over other rows, we extend the range. On pointerup we
+  // open the composer for the final span. A single click without movement
+  // falls through to the click handler below for single-line behavior.
+  const [drag, setDrag] = useState<{
+    side: ReviewDraftSide;
+    startLine: number;
+    endLine: number;
+  } | null>(null);
+  const suppressNextClickRef = useRef(false);
+  useEffect(() => {
+    if (!drag) return;
+    const onUp = () => {
+      setDrag((cur) => {
+        if (!cur) return null;
+        const lo = Math.min(cur.startLine, cur.endLine);
+        const hi = Math.max(cur.startLine, cur.endLine);
+        if (lo !== hi) {
+          setComposerAt({
+            side: cur.side,
+            line: hi,
+            startLine: lo,
+          });
+          suppressNextClickRef.current = true;
+        }
+        return null;
+      });
+    };
+    document.addEventListener("pointerup", onUp);
+    return () => document.removeEventListener("pointerup", onUp);
+  }, [drag]);
+  const startDraft = useCallback(
+    (side: ReviewDraftSide, line: number, withShift: boolean) => {
+      setComposerAt((prev) => {
+        // Shift-click extends an existing composer on the same side into a
+        // multi-line range. Without an open composer, shift-click behaves
+        // like a regular click.
+        if (withShift && prev && prev.side === side) {
+          const anchor = prev.startLine ?? prev.line;
+          const lo = Math.min(anchor, line);
+          const hi = Math.max(anchor, line);
+          return {
+            side,
+            line: hi,
+            startLine: lo === hi ? undefined : lo,
+          };
+        }
+        return { side, line };
+      });
+    },
+    [],
+  );
   return (
-    <section
-      aria-label="Review comments"
-      className="flex flex-col"
+    <div
+      className="overflow-x-auto"
       style={{
-        gap: 10,
-        padding: "12px",
-        borderTop: "1px solid var(--hairline-soft)",
+        fontFamily: "ui-monospace, SF Mono, Menlo, monospace",
+        fontSize: 12,
+        lineHeight: 1.55,
+      }}
+    >
+      {rows.map((row, i) => {
+        const bg =
+          row.tone === "add"
+            ? "var(--good-soft)"
+            : row.tone === "del"
+              ? "var(--danger-soft)"
+              : row.tone === "hunk"
+                ? "var(--src-cal-bg)"
+                : "transparent";
+        const fg =
+          row.tone === "add"
+            ? "var(--good)"
+            : row.tone === "del"
+              ? "var(--destructive)"
+              : row.tone === "hunk"
+                ? "var(--src-cal)"
+                : "var(--body, var(--foreground))";
+        const side: ReviewDraftSide | null =
+          row.tone === "del"
+            ? "LEFT"
+            : row.tone === "add" || row.tone === "ctx"
+              ? "RIGHT"
+              : null;
+        const targetLine =
+          side === "LEFT" ? row.oldLine : side === "RIGHT" ? row.newLine : null;
+        const lineKey =
+          side && typeof targetLine === "number"
+            ? `${side}|${targetLine}`
+            : null;
+        const rowComments =
+          lineKey && commentsByLine[lineKey] ? commentsByLine[lineKey] : [];
+        const draft =
+          side && typeof targetLine === "number" && drafts
+            ? Object.values(drafts).find(
+                (d) =>
+                  d.path === path && d.side === side && d.line === targetLine,
+              )
+            : undefined;
+        const composerOpen =
+          composerAt &&
+          side === composerAt.side &&
+          targetLine === composerAt.line;
+        const canComment = side !== null && typeof targetLine === "number";
+        const inDragRange =
+          drag &&
+          side === drag.side &&
+          typeof targetLine === "number" &&
+          targetLine >= Math.min(drag.startLine, drag.endLine) &&
+          targetLine <= Math.max(drag.startLine, drag.endLine);
+        return (
+          <div
+            // biome-ignore lint/suspicious/noArrayIndexKey: patch rows are positional and may repeat verbatim
+            key={`r-${i}`}
+            data-line-key={lineKey ?? undefined}
+            onPointerEnter={() => {
+              if (!drag) return;
+              if (!side || drag.side !== side) return;
+              if (typeof targetLine !== "number") return;
+              setDrag((cur) =>
+                cur && cur.endLine === targetLine
+                  ? cur
+                  : cur
+                    ? { ...cur, endLine: targetLine }
+                    : cur,
+              );
+            }}
+          >
+            <div
+              className="group flex items-stretch"
+              data-tone={row.tone}
+              data-drag-selected={inDragRange ? "true" : undefined}
+              style={{
+                background: inDragRange
+                  ? `color-mix(in oklab, var(--primary) 14%, ${bg})`
+                  : bg,
+                color: fg,
+                boxShadow: inDragRange
+                  ? "inset 3px 0 0 0 var(--primary)"
+                  : undefined,
+              }}
+            >
+              <span
+                aria-hidden
+                className="select-none text-right"
+                style={{
+                  flex: "0 0 38px",
+                  padding: "0 6px",
+                  color: "var(--muted-foreground)",
+                  borderRight: "1px solid var(--hairline-soft)",
+                }}
+              >
+                {typeof row.oldLine === "number" && row.tone !== "add"
+                  ? row.oldLine
+                  : ""}
+              </span>
+              <span
+                aria-hidden
+                className="select-none text-right"
+                style={{
+                  flex: "0 0 38px",
+                  padding: "0 6px",
+                  color: "var(--muted-foreground)",
+                  borderRight: "1px solid var(--hairline-soft)",
+                }}
+              >
+                {typeof row.newLine === "number" && row.tone !== "del"
+                  ? row.newLine
+                  : ""}
+              </span>
+              {canComment && onAddDraft ? (
+                <button
+                  type="button"
+                  onPointerDown={() => {
+                    if (!side || typeof targetLine !== "number") return;
+                    setDrag({
+                      side,
+                      startLine: targetLine,
+                      endLine: targetLine,
+                    });
+                  }}
+                  onClick={(e) => {
+                    if (suppressNextClickRef.current) {
+                      suppressNextClickRef.current = false;
+                      return;
+                    }
+                    if (!side || typeof targetLine !== "number") return;
+                    startDraft(side, targetLine, e.shiftKey);
+                  }}
+                  aria-label={`Comment on ${side === "LEFT" ? "old" : "new"} line ${targetLine}`}
+                  title="Click to comment, shift-click or click-and-drag to span a range"
+                  data-slot="add-comment"
+                  className={cn(
+                    "inline-flex shrink-0 items-center justify-center group-hover:opacity-100",
+                    inDragRange ? "opacity-100" : "opacity-0",
+                  )}
+                  style={{
+                    width: 18,
+                    height: 16,
+                    margin: "auto 2px",
+                    fontSize: 12,
+                    lineHeight: 1,
+                    color: "var(--canvas)",
+                    background: "var(--primary)",
+                    borderRadius: 4,
+                    border: 0,
+                    cursor: "pointer",
+                  }}
+                >
+                  +
+                </button>
+              ) : (
+                <span style={{ width: 22 }} aria-hidden />
+              )}
+              <span
+                className="flex-1"
+                style={{ padding: "0 8px", whiteSpace: "pre" }}
+              >
+                {row.raw || " "}
+              </span>
+            </div>
+            {(rowComments.length > 0 || draft || composerOpen) &&
+              side &&
+              typeof targetLine === "number" && (
+                <InlineThread
+                  path={path}
+                  side={side}
+                  line={targetLine}
+                  startLine={
+                    composerOpen ? composerAt?.startLine : draft?.startLine
+                  }
+                  comments={rowComments}
+                  draft={draft}
+                  showComposer={!!composerOpen && !draft}
+                  onCancelComposer={() => setComposerAt(null)}
+                  onAddDraft={(d) => {
+                    onAddDraft?.(d);
+                    setComposerAt(null);
+                  }}
+                  onEditDraft={() =>
+                    setComposerAt({
+                      side,
+                      line: targetLine,
+                      startLine: draft?.startLine,
+                    })
+                  }
+                  onRemoveDraft={(k) => onRemoveDraft?.(k)}
+                />
+              )}
+          </div>
+        );
+      })}
+      {orphanComments.length > 0 && (
+        <section
+          aria-label="Outdated review comments"
+          data-slot="orphan-comments"
+          className="flex flex-col"
+          style={{
+            gap: 8,
+            padding: 12,
+            borderTop: "1px solid var(--hairline-soft)",
+            background: "var(--surface-soft)",
+          }}
+        >
+          <span
+            style={{
+              fontSize: 10,
+              fontWeight: 600,
+              textTransform: "uppercase",
+              letterSpacing: 0.4,
+              color: "var(--muted-foreground)",
+            }}
+          >
+            Outdated
+          </span>
+          {orphanComments.map((c) => (
+            <article
+              key={c.id}
+              style={{
+                padding: "8px 10px",
+                borderRadius: 8,
+                background: "var(--canvas)",
+                border: "1px solid var(--hairline-soft)",
+              }}
+            >
+              <header
+                className="flex items-center"
+                style={{ gap: 8, marginBottom: 4 }}
+              >
+                <span style={{ fontSize: 12, fontWeight: 600 }}>
+                  @{c.user ?? "unknown"}
+                </span>
+                {typeof c.line === "number" && (
+                  <span
+                    style={{
+                      fontSize: 11,
+                      fontFamily: "ui-monospace, SF Mono, Menlo, monospace",
+                      color: "var(--muted-foreground)",
+                    }}
+                  >
+                    line {c.line}
+                  </span>
+                )}
+              </header>
+              <div
+                className="markdown-body"
+                style={{ fontSize: 13, lineHeight: 1.5 }}
+              >
+                <Markdown>{c.body}</Markdown>
+              </div>
+            </article>
+          ))}
+        </section>
+      )}
+    </div>
+  );
+}
+
+function InlineThread({
+  path,
+  side,
+  line,
+  startLine,
+  comments,
+  draft,
+  showComposer,
+  onCancelComposer,
+  onAddDraft,
+  onEditDraft,
+  onRemoveDraft,
+}: {
+  path: string;
+  side: ReviewDraftSide;
+  line: number;
+  startLine?: number;
+  comments: PrReviewComment[];
+  draft?: ReviewDraft;
+  showComposer: boolean;
+  onCancelComposer: () => void;
+  onAddDraft: (d: ReviewDraft) => void;
+  onEditDraft: () => void;
+  onRemoveDraft: (key: string) => void;
+}) {
+  const sideLabel = side === "LEFT" ? "old" : "new";
+  const rangeLabel =
+    typeof startLine === "number" && startLine !== line
+      ? `${sideLabel} lines ${startLine}–${line}`
+      : `${sideLabel} line ${line}`;
+  return (
+    <div
+      data-slot="inline-thread"
+      style={{
         background: "var(--surface-soft)",
+        borderTop: "1px solid var(--hairline-soft)",
+        borderBottom: "1px solid var(--hairline-soft)",
+        padding: "10px 12px",
+        display: "flex",
+        flexDirection: "column",
+        gap: 8,
       }}
     >
       {comments.map((c) => (
         <article
           key={c.id}
           style={{
-            padding: "10px 12px",
-            borderRadius: 10,
+            padding: "8px 10px",
+            borderRadius: 8,
             background: "var(--canvas)",
             border: "1px solid var(--hairline-soft)",
           }}
         >
           <header
             className="flex items-center"
-            style={{ gap: 8, marginBottom: 6 }}
+            style={{ gap: 8, marginBottom: 4 }}
           >
             {c.user_avatar_url ? (
               <img
                 src={c.user_avatar_url}
                 alt={c.user ? `@${c.user}` : "reviewer"}
-                width={20}
-                height={20}
+                width={18}
+                height={18}
                 style={{
                   borderRadius: "50%",
                   border: "1px solid var(--hairline-soft)",
@@ -1903,8 +2426,8 @@ function PrFileComments({ comments }: { comments: PrReviewComment[] }) {
                 aria-hidden
                 className="inline-flex items-center justify-center"
                 style={{
-                  width: 20,
-                  height: 20,
+                  width: 18,
+                  height: 18,
                   borderRadius: "50%",
                   background: "var(--surface-strong)",
                   color: "var(--ink)",
@@ -1918,17 +2441,85 @@ function PrFileComments({ comments }: { comments: PrReviewComment[] }) {
             <span style={{ fontSize: 12, fontWeight: 600 }}>
               @{c.user ?? "unknown"}
             </span>
-            {typeof c.line === "number" && (
-              <span
-                style={{
-                  fontSize: 11,
-                  fontFamily: "ui-monospace, SF Mono, Menlo, monospace",
-                  color: "var(--muted-foreground)",
-                }}
-              >
-                line {c.line}
-              </span>
-            )}
+            <span
+              style={{
+                fontSize: 11,
+                fontFamily: "ui-monospace, SF Mono, Menlo, monospace",
+                color: "var(--muted-foreground)",
+              }}
+            >
+              line {c.line}
+            </span>
+          </header>
+          <div
+            className="markdown-body"
+            style={{ fontSize: 13, lineHeight: 1.5 }}
+          >
+            <Markdown>{c.body}</Markdown>
+          </div>
+        </article>
+      ))}
+      {draft && !showComposer && (
+        <article
+          data-slot="draft-comment"
+          style={{
+            padding: "8px 10px",
+            borderRadius: 8,
+            background: "var(--canvas)",
+            border: "1px dashed var(--primary)",
+          }}
+        >
+          <header
+            className="flex items-center"
+            style={{ gap: 8, marginBottom: 4 }}
+          >
+            <span
+              style={{
+                fontSize: 10,
+                fontWeight: 600,
+                textTransform: "uppercase",
+                letterSpacing: 0.4,
+                color: "var(--primary)",
+              }}
+            >
+              Pending — {rangeLabel}
+            </span>
+            <button
+              type="button"
+              onClick={onEditDraft}
+              className="ml-auto"
+              style={{
+                fontSize: 11,
+                color: "var(--muted-foreground)",
+                background: "transparent",
+                border: 0,
+                cursor: "pointer",
+              }}
+            >
+              Edit
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                onRemoveDraft(
+                  reviewDraftKey({
+                    path,
+                    line,
+                    side,
+                    startLine: draft.startLine,
+                  }),
+                )
+              }
+              style={{
+                fontSize: 11,
+                color: "var(--destructive)",
+                background: "transparent",
+                border: 0,
+                cursor: "pointer",
+              }}
+            >
+              Discard
+            </button>
           </header>
           <p
             className="m-0 whitespace-pre-line"
@@ -1938,68 +2529,316 @@ function PrFileComments({ comments }: { comments: PrReviewComment[] }) {
               color: "var(--body, var(--foreground))",
             }}
           >
-            {c.body}
+            {draft.body}
           </p>
         </article>
-      ))}
-    </section>
+      )}
+      {showComposer && (
+        <InlineComposer
+          path={path}
+          side={side}
+          line={line}
+          startLine={startLine}
+          rangeLabel={rangeLabel}
+          initialBody={draft?.body ?? ""}
+          onCancel={onCancelComposer}
+          onSubmit={onAddDraft}
+        />
+      )}
+    </div>
   );
 }
 
-function PatchLines({ patch }: { patch: string }) {
-  const lines = patch.split("\n");
+function InlineComposer({
+  path,
+  side,
+  line,
+  startLine,
+  rangeLabel,
+  initialBody,
+  onCancel,
+  onSubmit,
+}: {
+  path: string;
+  side: ReviewDraftSide;
+  line: number;
+  startLine?: number;
+  rangeLabel: string;
+  initialBody: string;
+  onCancel: () => void;
+  onSubmit: (d: ReviewDraft) => void;
+}) {
+  const [body, setBody] = useState(initialBody);
+  const trimmed = body.trim();
   return (
-    <pre
-      className="m-0 overflow-x-auto"
+    <div
+      data-slot="inline-composer"
       style={{
-        fontFamily: "ui-monospace, SF Mono, Menlo, monospace",
-        fontSize: 12,
-        lineHeight: 1.55,
+        padding: "8px 10px",
+        borderRadius: 8,
+        background: "var(--canvas)",
+        border: "1px solid var(--primary)",
       }}
     >
-      {lines.map((line, i) => {
-        const tone =
-          line.startsWith("+") && !line.startsWith("+++")
-            ? "add"
-            : line.startsWith("-") && !line.startsWith("---")
-              ? "del"
-              : line.startsWith("@@")
-                ? "hunk"
-                : "ctx";
-        const bg =
-          tone === "add"
-            ? "var(--good-soft)"
-            : tone === "del"
-              ? "var(--danger-soft)"
-              : tone === "hunk"
-                ? "var(--src-cal-bg)"
-                : "transparent";
-        const fg =
-          tone === "add"
-            ? "var(--good)"
-            : tone === "del"
-              ? "var(--destructive)"
-              : tone === "hunk"
-                ? "var(--src-cal)"
-                : "var(--body, var(--foreground))";
-        return (
-          <span
-            // biome-ignore lint/suspicious/noArrayIndexKey: patch lines are positional and may repeat verbatim
-            key={`${i}-${line}`}
-            data-tone={tone}
-            style={{
-              display: "block",
-              padding: "0 12px",
-              background: bg,
-              color: fg,
-              whiteSpace: "pre",
-            }}
+      <div
+        className="flex items-center"
+        style={{ gap: 8, marginBottom: 6, fontSize: 11 }}
+      >
+        <span style={{ fontWeight: 600, color: "var(--primary)" }}>
+          New comment
+        </span>
+        <span style={{ color: "var(--muted-foreground)" }}>{rangeLabel}</span>
+      </div>
+      <textarea
+        value={body}
+        onChange={(e) => setBody(e.target.value)}
+        placeholder="Leave a comment on this line"
+        aria-label="Inline review comment"
+        rows={3}
+        style={{
+          width: "100%",
+          padding: 8,
+          fontSize: 13,
+          fontFamily: "inherit",
+          borderRadius: 6,
+          border: "1px solid var(--hairline-soft)",
+          resize: "vertical",
+          background: "var(--canvas)",
+          color: "var(--foreground)",
+        }}
+      />
+      <div
+        className="flex items-center"
+        style={{ gap: 6, marginTop: 6, justifyContent: "flex-end" }}
+      >
+        <button
+          type="button"
+          onClick={onCancel}
+          style={{
+            fontSize: 12,
+            padding: "4px 10px",
+            border: "1px solid var(--hairline-soft)",
+            borderRadius: 6,
+            background: "transparent",
+            color: "var(--foreground)",
+            cursor: "pointer",
+          }}
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          disabled={trimmed.length === 0}
+          onClick={() =>
+            onSubmit({
+              path,
+              side,
+              line,
+              startLine: startLine !== line ? startLine : undefined,
+              body: trimmed,
+            })
+          }
+          style={{
+            fontSize: 12,
+            padding: "4px 10px",
+            borderRadius: 6,
+            border: 0,
+            background:
+              trimmed.length === 0 ? "var(--surface-strong)" : "var(--primary)",
+            color:
+              trimmed.length === 0
+                ? "var(--muted-foreground)"
+                : "var(--canvas)",
+            cursor: trimmed.length === 0 ? "not-allowed" : "pointer",
+          }}
+        >
+          Add to review
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export function PrReviewSubmitPanel({
+  repo,
+  number,
+  drafts,
+  onCleared,
+  submit = defaultPrReviewSubmit,
+}: {
+  repo: string;
+  number: number;
+  drafts: Record<string, ReviewDraft>;
+  onCleared: () => void;
+  submit?: PrReviewSubmit;
+}) {
+  const draftList = Object.values(drafts);
+  const [body, setBody] = useState("");
+  const [event, setEvent] = useState<PrReviewEvent>("COMMENT");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  if (draftList.length === 0) return null;
+  const onSubmit = async () => {
+    setSubmitting(true);
+    setError(null);
+    try {
+      const out = await submit({
+        repo,
+        number,
+        event,
+        body: body.trim() || undefined,
+        comments: draftList.map((d) => {
+          const out: PrReviewSubmitDraft = {
+            path: d.path,
+            line: d.line,
+            side: d.side,
+            body: d.body,
+          };
+          if (typeof d.startLine === "number" && d.startLine < d.line) {
+            out.start_line = d.startLine;
+            out.start_side = d.side;
+          }
+          return out;
+        }),
+      } as Parameters<PrReviewSubmit>[0]);
+      if (!out.ok) {
+        setError(out.error ?? "submission failed");
+        return;
+      }
+      onCleared();
+      setBody("");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "submission failed");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+  return (
+    <section
+      aria-label="Pending review"
+      data-slot="review-submit-panel"
+      style={{
+        padding: "12px 14px",
+        borderRadius: 12,
+        border: "1px solid var(--primary)",
+        background: "var(--surface-soft)",
+        display: "flex",
+        flexDirection: "column",
+        gap: 10,
+      }}
+    >
+      <header className="flex items-center" style={{ gap: 10 }}>
+        <span style={{ fontSize: 13, fontWeight: 600 }}>
+          Pending review · {draftList.length}
+          {draftList.length === 1 ? " comment" : " comments"}
+        </span>
+        <button
+          type="button"
+          onClick={onCleared}
+          className="ml-auto"
+          style={{
+            fontSize: 11,
+            color: "var(--muted-foreground)",
+            background: "transparent",
+            border: 0,
+            cursor: "pointer",
+          }}
+        >
+          Discard all
+        </button>
+      </header>
+      <ul
+        className="m-0 flex flex-col"
+        style={{ gap: 4, fontSize: 12, padding: 0, listStyle: "none" }}
+      >
+        {draftList.map((d) => (
+          <li
+            key={reviewDraftKey(d)}
+            className="flex items-center"
+            style={{ gap: 8, color: "var(--muted-foreground)" }}
           >
-            {line || " "}
-          </span>
-        );
-      })}
-    </pre>
+            <span
+              style={{
+                fontFamily: "ui-monospace, SF Mono, Menlo, monospace",
+                color: "var(--ink)",
+              }}
+            >
+              {d.path}:{d.line}
+            </span>
+            <span className="truncate">{d.body}</span>
+          </li>
+        ))}
+      </ul>
+      <textarea
+        value={body}
+        onChange={(e) => setBody(e.target.value)}
+        placeholder="Optional review summary"
+        aria-label="Review summary"
+        rows={2}
+        style={{
+          width: "100%",
+          padding: 8,
+          fontSize: 13,
+          fontFamily: "inherit",
+          borderRadius: 6,
+          border: "1px solid var(--hairline-soft)",
+          resize: "vertical",
+          background: "var(--canvas)",
+          color: "var(--foreground)",
+        }}
+      />
+      <div className="flex items-center" style={{ gap: 8, flexWrap: "wrap" }}>
+        {(["COMMENT", "APPROVE", "REQUEST_CHANGES"] as PrReviewEvent[]).map(
+          (ev) => (
+            <label
+              key={ev}
+              className="inline-flex items-center"
+              style={{ gap: 6, fontSize: 12, cursor: "pointer" }}
+            >
+              <input
+                type="radio"
+                name="review-event"
+                value={ev}
+                checked={event === ev}
+                onChange={() => setEvent(ev)}
+              />
+              {ev === "APPROVE"
+                ? "Approve"
+                : ev === "REQUEST_CHANGES"
+                  ? "Request changes"
+                  : "Comment"}
+            </label>
+          ),
+        )}
+        <button
+          type="button"
+          onClick={onSubmit}
+          disabled={submitting}
+          className="ml-auto"
+          style={{
+            fontSize: 12,
+            padding: "6px 12px",
+            borderRadius: 6,
+            border: 0,
+            background: submitting ? "var(--surface-strong)" : "var(--primary)",
+            color: submitting ? "var(--muted-foreground)" : "var(--canvas)",
+            cursor: submitting ? "wait" : "pointer",
+            fontWeight: 600,
+          }}
+        >
+          {submitting ? "Submitting…" : "Submit review"}
+        </button>
+      </div>
+      {error && (
+        <p
+          role="alert"
+          className="m-0"
+          style={{ fontSize: 12, color: "var(--destructive)" }}
+        >
+          {error}
+        </p>
+      )}
+    </section>
   );
 }
 

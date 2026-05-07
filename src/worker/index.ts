@@ -1023,6 +1023,7 @@ async function handleSubmitPrReview(
     event?: unknown;
     body?: unknown;
     signal_id?: unknown;
+    comments?: unknown;
   };
   try {
     body = (await request.json()) as typeof body;
@@ -1037,6 +1038,30 @@ async function handleSubmitPrReview(
     typeof body.signal_id === "string" && body.signal_id.length > 0
       ? body.signal_id
       : null;
+  const draftComments = Array.isArray(body.comments)
+    ? body.comments.flatMap((raw) => {
+        if (!raw || typeof raw !== "object") return [];
+        const c = raw as Record<string, unknown>;
+        const path = typeof c.path === "string" ? c.path : "";
+        const line = Number(c.line);
+        const side =
+          c.side === "LEFT" || c.side === "RIGHT"
+            ? (c.side as "LEFT" | "RIGHT")
+            : undefined;
+        const draftBody = typeof c.body === "string" ? c.body : "";
+        if (!path || !Number.isInteger(line) || !draftBody) return [];
+        const startLineRaw = Number(c.start_line);
+        const start_line =
+          Number.isInteger(startLineRaw) && startLineRaw > 0
+            ? startLineRaw
+            : undefined;
+        const start_side =
+          c.start_side === "LEFT" || c.start_side === "RIGHT"
+            ? (c.start_side as "LEFT" | "RIGHT")
+            : undefined;
+        return [{ path, line, side, start_line, start_side, body: draftBody }];
+      })
+    : [];
 
   const { data, error } = await service
     .from("provider_accounts")
@@ -1048,7 +1073,7 @@ async function handleSubmitPrReview(
     (data as { access_token: string | null } | null)?.access_token ?? null;
 
   const out = await PROVIDERS.github.capabilities.submitPrReview(
-    { repo, number, event, body: message },
+    { repo, number, event, body: message, comments: draftComments },
     { token, fetch: (i, init) => fetch(i, init) },
   );
   if (out.ok && signalId) {

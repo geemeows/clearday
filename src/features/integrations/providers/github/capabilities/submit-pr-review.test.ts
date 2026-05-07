@@ -111,6 +111,92 @@ describe("submitPrReview", () => {
     }
   });
 
+  it("forwards inline draft comments under the comments[] field with default RIGHT side", async () => {
+    const { fn, calls } = recordingFetch(() => jsonResponse(200, { id: 9 }));
+    await submitPrReview(
+      {
+        repo: "o/r",
+        number: 1,
+        event: "COMMENT",
+        body: "round of feedback",
+        comments: [
+          { path: "src/a.ts", line: 12, body: "rename this" },
+          { path: "src/b.ts", line: 4, side: "LEFT", body: "  why?  " },
+          { path: "src/c.ts", line: 1, body: "   " }, // dropped: empty body
+        ],
+      },
+      { token: "t", fetch: fn },
+    );
+    const sent = JSON.parse(calls[0].init.body as string);
+    expect(sent.event).toBe("COMMENT");
+    expect(sent.body).toBe("round of feedback");
+    expect(sent.comments).toEqual([
+      { path: "src/a.ts", line: 12, side: "RIGHT", body: "rename this" },
+      { path: "src/b.ts", line: 4, side: "LEFT", body: "why?" },
+    ]);
+  });
+
+  it("forwards multi-line drafts with start_line / start_side and defaults start_side to side", async () => {
+    const { fn, calls } = recordingFetch(() => jsonResponse(200, { id: 9 }));
+    await submitPrReview(
+      {
+        repo: "o/r",
+        number: 1,
+        event: "COMMENT",
+        comments: [
+          {
+            path: "src/a.ts",
+            line: 14,
+            start_line: 10,
+            body: "extract this block",
+          },
+          // start_line >= line is ignored (degenerates to single-line):
+          {
+            path: "src/b.ts",
+            line: 5,
+            start_line: 5,
+            body: "noop range",
+          },
+        ],
+      },
+      { token: "t", fetch: fn },
+    );
+    const sent = JSON.parse(calls[0].init.body as string);
+    expect(sent.comments).toEqual([
+      {
+        path: "src/a.ts",
+        line: 14,
+        side: "RIGHT",
+        start_line: 10,
+        start_side: "RIGHT",
+        body: "extract this block",
+      },
+      {
+        path: "src/b.ts",
+        line: 5,
+        side: "RIGHT",
+        body: "noop range",
+      },
+    ]);
+  });
+
+  it("allows COMMENT / REQUEST_CHANGES with no body when at least one inline comment is provided", async () => {
+    const { fn, calls } = recordingFetch(() => jsonResponse(200, { id: 1 }));
+    const out = await submitPrReview(
+      {
+        repo: "o/r",
+        number: 1,
+        event: "REQUEST_CHANGES",
+        comments: [{ path: "src/a.ts", line: 2, body: "broken" }],
+      },
+      { token: "t", fetch: fn },
+    );
+    expect(out.ok).toBe(true);
+    const sent = JSON.parse(calls[0].init.body as string);
+    expect(sent.body).toBeUndefined();
+    expect(sent.comments).toHaveLength(1);
+  });
+
   it("surfaces non-2xx with status", async () => {
     const { fn } = recordingFetch(() =>
       jsonResponse(422, { message: "Validation Failed" }),

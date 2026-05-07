@@ -8,11 +8,23 @@
 
 export type PrReviewEvent = "APPROVE" | "REQUEST_CHANGES" | "COMMENT";
 
+export type PrReviewDraftComment = {
+  path: string;
+  line: number;
+  side?: "LEFT" | "RIGHT";
+  /** When set, the comment spans the range [start_line .. line]. GitHub
+   * requires start_side too — we default it to side. */
+  start_line?: number;
+  start_side?: "LEFT" | "RIGHT";
+  body: string;
+};
+
 export type SubmitPrReviewParams = {
   repo: string; // "owner/repo"
   number: number;
   event: PrReviewEvent;
   body?: string;
+  comments?: PrReviewDraftComment[];
 };
 
 export type GithubFetch = typeof fetch;
@@ -60,10 +72,13 @@ export async function submitPrReview(
     };
   }
   const body = (params.body ?? "").trim();
-  if (params.event !== "APPROVE" && body.length === 0) {
+  const drafts = (params.comments ?? []).filter(
+    (c) => typeof c.body === "string" && c.body.trim().length > 0,
+  );
+  if (params.event !== "APPROVE" && body.length === 0 && drafts.length === 0) {
     return {
       ok: false,
-      error: "body required for request changes / comment",
+      error: "body or inline comments required for request changes / comment",
       reason: "missing_body",
     };
   }
@@ -78,6 +93,26 @@ export async function submitPrReview(
   const url = `https://api.github.com/repos/${repo}/pulls/${params.number}/reviews`;
   const payload: Record<string, unknown> = { event: params.event };
   if (body.length > 0) payload.body = body;
+  if (drafts.length > 0) {
+    payload.comments = drafts.map((c) => {
+      const side = c.side ?? "RIGHT";
+      const out: Record<string, unknown> = {
+        path: c.path,
+        line: c.line,
+        side,
+        body: c.body.trim(),
+      };
+      if (
+        typeof c.start_line === "number" &&
+        c.start_line > 0 &&
+        c.start_line < c.line
+      ) {
+        out.start_line = c.start_line;
+        out.start_side = c.start_side ?? side;
+      }
+      return out;
+    });
+  }
   let res: Awaited<ReturnType<GithubFetch>>;
   try {
     res = await deps.fetch(url, {
