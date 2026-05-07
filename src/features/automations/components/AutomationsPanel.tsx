@@ -38,6 +38,18 @@ const defaultRunsLoader: RunsLoader = async (automationId) => {
   return { runs: body.runs ?? [] };
 };
 
+type DryRunInvoker = (automationId: string) => Promise<
+  | { ok: true; status: string; trigger_event_id: string }
+  | { ok: false; error: string }
+>;
+
+const defaultDryRunInvoker: DryRunInvoker = async (automationId) => {
+  return (await apiFetch(
+    `/api/automations/${encodeURIComponent(automationId)}/dry-run`,
+    { method: "POST" },
+  )) as Awaited<ReturnType<DryRunInvoker>>;
+};
+
 // ---------------------------------------------------------------------------
 // Automations panel — list view + builder modal. Renders the user's
 // automations with an enable/disable toggle per row and a "New automation"
@@ -141,6 +153,7 @@ export function AutomationsPanel({
   saver,
   signalsLoader = defaultSignalsLoader,
   runsLoader = defaultRunsLoader,
+  dryRunInvoker = defaultDryRunInvoker,
   q: qProp,
   onQChange,
   demo = false,
@@ -153,6 +166,7 @@ export function AutomationsPanel({
   }>;
   signalsLoader?: SignalsLoader;
   runsLoader?: RunsLoader;
+  dryRunInvoker?: DryRunInvoker;
   q?: string;
   onQChange?: (q: string) => void;
   /**
@@ -312,13 +326,12 @@ export function AutomationsPanel({
   const [runsAutomation, setRunsAutomation] = useState<Automation | null>(null);
   const [runs, setRuns] = useState<AutomationRunRow[] | null>(null);
   const [runsError, setRunsError] = useState<string | null>(null);
+  const [dryRunBusy, setDryRunBusy] = useState(false);
+  const [dryRunMessage, setDryRunMessage] = useState<string | null>(null);
 
-  const openRuns = useCallback(
-    (a: Automation) => {
-      setRunsAutomation(a);
-      setRuns(null);
-      setRunsError(null);
-      runsLoader(a.id)
+  const loadRuns = useCallback(
+    (id: string) => {
+      runsLoader(id)
         .then((body) => {
           setRuns(body.runs);
         })
@@ -329,11 +342,46 @@ export function AutomationsPanel({
     [runsLoader],
   );
 
+  const openRuns = useCallback(
+    (a: Automation) => {
+      setRunsAutomation(a);
+      setRuns(null);
+      setRunsError(null);
+      setDryRunMessage(null);
+      loadRuns(a.id);
+    },
+    [loadRuns],
+  );
+
   const closeRuns = useCallback(() => {
     setRunsAutomation(null);
     setRuns(null);
     setRunsError(null);
+    setDryRunMessage(null);
   }, []);
+
+  const triggerDryRun = useCallback(async () => {
+    if (!runsAutomation) return;
+    const id = runsAutomation.id;
+    setDryRunBusy(true);
+    setDryRunMessage(null);
+    try {
+      const out = await dryRunInvoker(id);
+      if (!out.ok) {
+        setDryRunMessage(`Dry-run failed: ${out.error}`);
+      } else {
+        setDryRunMessage(`Dry-run ${out.status}`);
+        setRuns(null);
+        loadRuns(id);
+      }
+    } catch (e) {
+      setDryRunMessage(
+        `Dry-run failed: ${e instanceof Error ? e.message : "unknown error"}`,
+      );
+    } finally {
+      setDryRunBusy(false);
+    }
+  }, [runsAutomation, dryRunInvoker, loadRuns]);
 
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const pendingDelete = useMemo(
@@ -563,7 +611,24 @@ export function AutomationsPanel({
             </DialogTitle>
           </DialogHeader>
           <RunsList runs={runs} error={runsError} />
+          {dryRunMessage && (
+            <p
+              aria-label="Dry-run result"
+              className="rounded border border-border bg-muted/40 px-3 py-2 font-mono text-[11px] text-muted-foreground"
+            >
+              {dryRunMessage}
+            </p>
+          )}
           <DialogFooter>
+            <button
+              type="button"
+              aria-label="Test automation in dry-run mode"
+              onClick={triggerDryRun}
+              disabled={dryRunBusy}
+              className="rounded border border-border bg-background px-3 py-1.5 text-sm disabled:opacity-50"
+            >
+              {dryRunBusy ? "Running…" : "Test (dry-run)"}
+            </button>
             <button
               type="button"
               onClick={closeRuns}

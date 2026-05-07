@@ -424,3 +424,75 @@ describe("AutomationsPanel runs view", () => {
     });
   });
 });
+
+describe("AutomationsPanel dry-run button", () => {
+  it("posts to the dry-run invoker, surfaces the result, and reloads runs", async () => {
+    const dryRunRow: AutomationRunRow = {
+      id: "r-dry",
+      automation_id: "a-1",
+      trigger_event_id: "dryrun:a-1:2026-05-07T13:00:00.000Z",
+      signal_id: null,
+      status: "skipped_dry_run",
+      actions_planned: [{ type: "tag", tag: "x" }],
+      actions_executed: [],
+      error: null,
+      started_at: "2026-05-07T13:00:00.000Z",
+      finished_at: "2026-05-07T13:00:00.000Z",
+    };
+    const runsLoader = vi
+      .fn<(id: string) => Promise<{ runs: AutomationRunRow[] }>>()
+      .mockResolvedValueOnce({ runs: [] })
+      .mockResolvedValueOnce({ runs: [dryRunRow] });
+    const dryRunInvoker = vi.fn(async () => ({
+      ok: true as const,
+      status: "skipped_dry_run",
+      trigger_event_id: dryRunRow.trigger_event_id,
+    }));
+    renderPanel({ runsLoader, dryRunInvoker });
+    fireEvent.click(
+      await screen.findByLabelText("View runs for Snooze deps"),
+    );
+    await waitFor(() => {
+      expect(screen.getByText(/No runs yet/)).toBeTruthy();
+    });
+    fireEvent.click(
+      screen.getByLabelText("Test automation in dry-run mode"),
+    );
+    await waitFor(() => {
+      expect(dryRunInvoker).toHaveBeenCalledWith("a-1");
+    });
+    await waitFor(() => {
+      expect(screen.getByLabelText("Dry-run result").textContent).toBe(
+        "Dry-run skipped_dry_run",
+      );
+    });
+    await waitFor(() => {
+      expect(runsLoader).toHaveBeenCalledTimes(2);
+    });
+    expect(
+      screen.getAllByLabelText("Run status").map((el) => el.textContent),
+    ).toEqual(["skipped_dry_run"]);
+  });
+
+  it("surfaces a dry-run invoker failure inline without clobbering runs", async () => {
+    const runsLoader = vi.fn(async () => ({ runs: [] }));
+    const dryRunInvoker = vi.fn(async () => ({
+      ok: false as const,
+      error: "automation not found",
+    }));
+    renderPanel({ runsLoader, dryRunInvoker });
+    fireEvent.click(
+      await screen.findByLabelText("View runs for Snooze deps"),
+    );
+    await screen.findByText(/No runs yet/);
+    fireEvent.click(
+      screen.getByLabelText("Test automation in dry-run mode"),
+    );
+    await waitFor(() => {
+      expect(screen.getByLabelText("Dry-run result").textContent).toBe(
+        "Dry-run failed: automation not found",
+      );
+    });
+    expect(runsLoader).toHaveBeenCalledTimes(1);
+  });
+});
