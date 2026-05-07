@@ -412,9 +412,13 @@ describe("InboxDetailPane", () => {
     );
     const pane = screen.getByLabelText("Signal detail");
     expect(within(pane).getByText("Add cron orchestrator")).toBeTruthy();
-    expect(within(pane).getByText("owner/repo#42")).toBeTruthy();
+    expect(within(pane).getByText("owner/repo #42")).toBeTruthy();
     expect(within(pane).getByText("@alice")).toBeTruthy();
-    expect(within(pane).getByText(/awaiting your action/i)).toBeTruthy();
+    expect(
+      within(pane).getByText("Open · review requested", {
+        selector: '[data-slot="pr-status-chip"]',
+      }),
+    ).toBeTruthy();
     const open = within(pane).getByRole("link", { name: /open in github/i });
     expect(open.getAttribute("href")).toBe(
       "https://github.com/owner/repo/pull/42",
@@ -634,7 +638,7 @@ describe("PR detail extras", () => {
       />,
     );
     expect(screen.getByText("+42")).toBeTruthy();
-    expect(screen.getByText("-7")).toBeTruthy();
+    expect(screen.getByText("−7")).toBeTruthy();
     expect(screen.getByLabelText("AI summary")).toBeTruthy();
     expect(screen.getByLabelText("Files changed")).toBeTruthy();
     expect(screen.getByText("src/cron.ts")).toBeTruthy();

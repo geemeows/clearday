@@ -627,6 +627,8 @@ export function InboxDetailPane({
     );
   }
   const group = kindGroup(signal.kind);
+  const prRepo = signal.payload?.repo as string | undefined;
+  const prNumber = signal.payload?.number as number | undefined;
   return (
     <aside
       aria-label="Signal detail"
@@ -639,17 +641,32 @@ export function InboxDetailPane({
         style={{ gap: 8, marginBottom: 12 }}
       >
         <SourceGlyph source={providerSourceKind(signal.provider)} size={20} />
-        <span
-          className="font-medium uppercase tracking-wider"
-          style={{
-            fontSize: 11,
-            color: "var(--muted-foreground)",
-            fontFamily: "ui-monospace, SF Mono, Menlo, monospace",
-          }}
-        >
-          {signalKindLabel(signal.kind)}
-        </span>
+        {group === "pr" && prRepo ? (
+          <span
+            className="font-medium"
+            style={{
+              fontSize: 12,
+              color: "var(--muted-foreground)",
+              fontFamily: "ui-monospace, SF Mono, Menlo, monospace",
+            }}
+          >
+            {prRepo}
+            {typeof prNumber === "number" ? ` #${prNumber}` : ""}
+          </span>
+        ) : (
+          <span
+            className="font-medium uppercase tracking-wider"
+            style={{
+              fontSize: 11,
+              color: "var(--muted-foreground)",
+              fontFamily: "ui-monospace, SF Mono, Menlo, monospace",
+            }}
+          >
+            {signalKindLabel(signal.kind)}
+          </span>
+        )}
         <span className="flex-1" />
+        {group === "pr" && <PrStatusChip signal={signal} />}
         <button
           type="button"
           aria-label="Close detail"
@@ -667,11 +684,12 @@ export function InboxDetailPane({
           lineHeight: 1.18,
           letterSpacing: "-0.4px",
           color: "var(--ink)",
-          margin: "0 0 14px",
+          margin: group === "pr" ? "0 0 14px" : "0 0 14px",
         }}
       >
         {signal.title}
       </h2>
+      {group === "pr" && <PrMetaRow signal={signal} />}
       {group === "pr" && (
         <PRDetail
           signal={signal}
@@ -772,6 +790,115 @@ export function TaskDetail({ signal }: { signal: StoredSignal }) {
   );
 }
 
+function PrStatusChip({ signal }: { signal: StoredSignal }) {
+  const merged = Boolean(signal.payload?.merged);
+  const closed = Boolean(signal.payload?.closed) && !merged;
+  const draft = Boolean(signal.payload?.draft);
+  const tone: "good" | "muted" | "ai" | "danger" = merged
+    ? "ai"
+    : closed
+      ? "danger"
+      : draft
+        ? "muted"
+        : "good";
+  const label = merged
+    ? "Merged"
+    : closed
+      ? "Closed"
+      : draft
+        ? "Draft"
+        : signal.kind === "pr_review_requested"
+          ? "Open · review requested"
+          : signal.kind === "pr_authored"
+            ? "Open · authored by you"
+            : "Open";
+  const palette: Record<typeof tone, { bg: string; fg: string }> = {
+    good: { bg: "var(--good-soft)", fg: "var(--good)" },
+    danger: { bg: "var(--danger-soft)", fg: "var(--destructive)" },
+    ai: { bg: "var(--src-ai-bg)", fg: "var(--src-ai)" },
+    muted: { bg: "var(--surface-strong)", fg: "var(--muted-foreground)" },
+  };
+  return (
+    <span
+      data-slot="pr-status-chip"
+      className="inline-flex items-center rounded-full"
+      style={{
+        padding: "2px 10px",
+        fontSize: 11,
+        background: palette[tone].bg,
+        color: palette[tone].fg,
+      }}
+    >
+      {label}
+    </span>
+  );
+}
+
+function PrMetaRow({ signal }: { signal: StoredSignal }) {
+  const author = signal.payload?.author as string | undefined;
+  const authorAvatar = signal.payload?.author_avatar_url as string | undefined;
+  const additions = signal.payload?.additions as number | undefined;
+  const deletions = signal.payload?.deletions as number | undefined;
+  const filesChanged =
+    (signal.payload?.files_changed as Array<{ path: string }> | undefined) ??
+    [];
+  const filesCount =
+    (signal.payload?.files_count as number | undefined) ?? filesChanged.length;
+  const opened = signal.source_created_at
+    ? relAgo(signal.source_created_at, new Date().toISOString())
+    : "";
+  return (
+    <div
+      data-slot="pr-meta"
+      className="flex flex-wrap items-center"
+      style={{ gap: 16, marginBottom: 20 }}
+    >
+      {author && (
+        <span className="flex items-center" style={{ gap: 8 }}>
+          <AuthorAvatar handle={author} src={authorAvatar} />
+          <span style={{ fontSize: 13, fontWeight: 500 }}>@{author}</span>
+        </span>
+      )}
+      {opened && (
+        <span
+          style={{
+            fontSize: 12,
+            color: "var(--muted-foreground)",
+            fontFamily: "ui-monospace, SF Mono, Menlo, monospace",
+          }}
+        >
+          opened {opened}
+        </span>
+      )}
+      {(typeof additions === "number" || typeof deletions === "number") && (
+        <span
+          style={{
+            fontSize: 12,
+            fontFamily: "ui-monospace, SF Mono, Menlo, monospace",
+          }}
+        >
+          {typeof additions === "number" && (
+            <span style={{ color: "var(--good)" }}>+{additions}</span>
+          )}
+          {typeof additions === "number" && typeof deletions === "number" && (
+            <span style={{ color: "var(--muted-soft)", margin: "0 4px" }}>
+              ·
+            </span>
+          )}
+          {typeof deletions === "number" && (
+            <span style={{ color: "var(--destructive)" }}>−{deletions}</span>
+          )}
+          {filesCount > 0 && (
+            <span style={{ color: "var(--muted-foreground)" }}>
+              {` across ${filesCount} ${filesCount === 1 ? "file" : "files"}`}
+            </span>
+          )}
+        </span>
+      )}
+    </div>
+  );
+}
+
 export function PRDetail({
   signal,
   onReplyStart,
@@ -783,11 +910,6 @@ export function PRDetail({
 }) {
   const repo = signal.payload?.repo as string | undefined;
   const number = signal.payload?.number as number | undefined;
-  const author = signal.payload?.author as string | undefined;
-  const authorAvatar = signal.payload?.author_avatar_url as string | undefined;
-  const additions = signal.payload?.additions as number | undefined;
-  const deletions = signal.payload?.deletions as number | undefined;
-  const draft = Boolean(signal.payload?.draft);
   const aiSummary = signal.payload?.ai_summary as string | undefined;
   const filesChanged =
     (signal.payload?.files_changed as
@@ -798,50 +920,7 @@ export function PRDetail({
       | Array<{ author: string; body: string; created_at?: string }>
       | undefined) ?? [];
   return (
-    <div data-slot="pr-detail" className="mt-3 space-y-4">
-      <dl className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1.5 text-sm">
-        {repo && (
-          <>
-            <dt className="text-muted-foreground">Repo</dt>
-            <dd className="text-foreground">
-              {repo}
-              {typeof number === "number" ? `#${number}` : ""}
-            </dd>
-          </>
-        )}
-        {author && (
-          <>
-            <dt className="text-muted-foreground">Author</dt>
-            <dd className="flex items-center gap-2 text-foreground">
-              <AuthorAvatar handle={author} src={authorAvatar} />
-              <span>@{author}</span>
-            </dd>
-          </>
-        )}
-        {(typeof additions === "number" || typeof deletions === "number") && (
-          <>
-            <dt className="text-muted-foreground">Diff</dt>
-            <dd className="font-mono text-xs">
-              {typeof additions === "number" && (
-                <span className="text-emerald-600">+{additions}</span>
-              )}
-              {typeof additions === "number" &&
-                typeof deletions === "number" && <span> </span>}
-              {typeof deletions === "number" && (
-                <span className="text-destructive">-{deletions}</span>
-              )}
-            </dd>
-          </>
-        )}
-        <dt className="text-muted-foreground">Status</dt>
-        <dd className="text-foreground">
-          {draft
-            ? "Draft"
-            : signal.requires_action
-              ? "Awaiting your action"
-              : "Tracking"}
-        </dd>
-      </dl>
+    <div data-slot="pr-detail" className="space-y-4">
       {aiSummary && (
         <section
           aria-label="AI summary"
@@ -1006,7 +1085,7 @@ export function PRDetail({
           </ol>
         </section>
       )}
-      {repo && typeof number === "number" && !draft && (
+      {repo && typeof number === "number" && !signal.payload?.draft && (
         <PrReviewActions
           repo={repo}
           number={number}
