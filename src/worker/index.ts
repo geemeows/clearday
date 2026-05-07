@@ -73,6 +73,7 @@ import {
   type ProviderAccountRow,
 } from "#/features/integrations/api/integrations-api";
 import { runScheduledPoll } from "#/features/integrations/orchestrator";
+import { runScheduleAutomations } from "#/features/automations/orchestrator";
 import { PROVIDERS } from "#/features/integrations/providers";
 import type { PrReviewEvent } from "#/features/integrations/providers/github";
 import { handleOAuthExchange } from "#/features/integrations/server/oauth-exchange-handler";
@@ -848,6 +849,32 @@ export default {
         })
         .catch((err) => {
           console.error("[cron] web-push prune failed", err);
+        }),
+    );
+
+    ctx.waitUntil(
+      (async () => {
+        const automations = await loadAutomationsFromService(service);
+        const scheduleAutomations = automations.filter(
+          (a) => a.enabled && a.trigger_kind === "schedule",
+        );
+        if (scheduleAutomations.length === 0) return;
+        return runScheduleAutomations(
+          new Date(),
+          scheduleAutomations,
+          automationRunsStore(service),
+        );
+      })()
+        .then((report) => {
+          if (!report) return;
+          for (const r of report.results) {
+            console.log(
+              `[cron] automation-schedule ${report.minuteIso} ${r.automation_id}: ${r.status}`,
+            );
+          }
+        })
+        .catch((err) => {
+          console.error("[cron] automation-schedule failed", err);
         }),
     );
 
