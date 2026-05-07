@@ -1,6 +1,9 @@
 import { createFileRoute, Link, Outlet } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Checkbox } from "#/components/coss/checkbox";
+import { SettingsPanel } from "#/components/ui/SettingsPanel";
 import type { IntegrationView } from "#/features/integrations/api/integrations-api";
+import { useAsyncPanel } from "#/hooks/useAsyncPanel";
 import {
   DEFAULT_RETENTION_DAYS,
   type ExportPayload,
@@ -111,11 +114,6 @@ export function NotificationsPanel({
     errors?: Record<string, string>;
   }>;
 } = {}) {
-  const [enabled, setEnabled] = useState<Set<string> | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [status, setStatus] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-
   const load = useMemo(
     () =>
       loader ?? (() => apiFetch("/api/preferences") as Promise<LoadResponse>),
@@ -144,45 +142,29 @@ export function NotificationsPanel({
     [tester],
   );
 
-  useEffect(() => {
-    let cancelled = false;
-    load()
-      .then((body) => {
-        if (cancelled) return;
-        setEnabled(new Set(body.alert_channels));
-      })
-      .catch((e) => {
-        if (cancelled) return;
-        setError(e instanceof Error ? e.message : "failed to load");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [load]);
+  const { data, error, busy, persist } = useAsyncPanel<LoadResponse>({
+    load,
+    save: async (next) => {
+      await save(next.alert_channels);
+    },
+  });
+
+  const [status, setStatus] = useState<string | null>(null);
+  const [testing, setTesting] = useState(false);
 
   const toggle = useCallback(
-    async (channel: string) => {
-      if (!enabled) return;
-      const next = new Set(enabled);
-      if (next.has(channel)) next.delete(channel);
-      else next.add(channel);
-      setEnabled(next);
-      setBusy(true);
-      try {
-        const body = await save([...next]);
-        setEnabled(new Set(body.alert_channels));
-        setError(null);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "save failed");
-      } finally {
-        setBusy(false);
-      }
+    (channel: string) => {
+      if (!data) return;
+      const set = new Set(data.alert_channels);
+      if (set.has(channel)) set.delete(channel);
+      else set.add(channel);
+      persist({ alert_channels: [...set] });
     },
-    [enabled, save],
+    [data, persist],
   );
 
   const sendTest = useCallback(async () => {
-    setBusy(true);
+    setTesting(true);
     setStatus(null);
     try {
       const result = await test();
@@ -205,57 +187,46 @@ export function NotificationsPanel({
     } catch (e) {
       setStatus(`Failed: ${e instanceof Error ? e.message : "unknown error"}`);
     } finally {
-      setBusy(false);
+      setTesting(false);
     }
   }, [test]);
 
+  const channels = data?.alert_channels;
+
   return (
-    <section
-      aria-label="Notifications"
-      className="mt-8 rounded border border-zinc-200 bg-white p-5"
+    <SettingsPanel
+      title="Notifications"
+      desc="Where Clearday pings you when a Signal needs you."
+      error={error}
+      busy={busy && !data}
     >
-      <h2 className="text-base font-semibold text-zinc-900">Notifications</h2>
-      <p className="mt-1 text-sm text-zinc-500">
-        Where Clearday pings you when a Signal needs you.
-      </p>
-
-      {error && (
-        <p className="mt-3 rounded border border-red-200 bg-red-50 p-2 text-sm text-red-700">
-          {error}
-        </p>
-      )}
-
-      {enabled == null && !error && (
-        <p className="mt-3 text-sm text-zinc-500">Loading…</p>
-      )}
-
-      {enabled && (
+      {channels && (
         <div className="mt-4 space-y-3">
           <label className="flex items-center gap-3 text-sm">
-            <input
-              type="checkbox"
-              checked={enabled.has("slack_dm")}
-              onChange={() => toggle("slack_dm")}
-              disabled={busy}
+            <Checkbox
+              aria-label="Slack self-DM"
+              checked={channels.includes("slack_dm")}
+              onCheckedChange={() => toggle("slack_dm")}
+              loading={busy}
             />
             <span>
               <strong className="font-medium">Slack self-DM</strong>
-              <span className="ml-2 text-zinc-500">
+              <span className="ml-2 text-muted-foreground">
                 Posts to your Slackbot DM via your connected Slack account.
               </span>
             </span>
           </label>
 
           <label className="flex items-center gap-3 text-sm">
-            <input
-              type="checkbox"
-              checked={enabled.has("web_push")}
-              onChange={() => toggle("web_push")}
-              disabled={busy}
+            <Checkbox
+              aria-label="Web Push"
+              checked={channels.includes("web_push")}
+              onCheckedChange={() => toggle("web_push")}
+              loading={busy}
             />
             <span>
               <strong className="font-medium">Web Push</strong>
-              <span className="ml-2 text-zinc-500">
+              <span className="ml-2 text-muted-foreground">
                 Native browser notifications on devices you've registered below.
               </span>
             </span>
@@ -264,18 +235,18 @@ export function NotificationsPanel({
           <button
             type="button"
             onClick={sendTest}
-            disabled={busy || enabled.size === 0}
-            className="rounded border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50 disabled:opacity-50"
+            disabled={busy || testing || channels.length === 0}
+            className="rounded border border-border px-3 py-1.5 text-sm hover:bg-muted/50 disabled:opacity-50"
           >
             Send test notification
           </button>
 
           {status && (
-            <output className="text-sm text-zinc-600">{status}</output>
+            <output className="text-muted-foreground text-sm">{status}</output>
           )}
         </div>
       )}
-    </section>
+    </SettingsPanel>
   );
 }
 

@@ -131,10 +131,10 @@ describe("NotificationsPanel", () => {
     render(
       <NotificationsPanel loader={loader} saver={saver} tester={tester} />,
     );
-    const toggle = (await screen.findByRole("checkbox", {
+    const toggle = await screen.findByRole("checkbox", {
       name: /slack self-dm/i,
-    })) as HTMLInputElement;
-    expect(toggle.checked).toBe(true);
+    });
+    expect(toggle.getAttribute("aria-checked")).toBe("true");
     expect(loader).toHaveBeenCalledTimes(1);
   });
 
@@ -142,11 +142,35 @@ describe("NotificationsPanel", () => {
     const loader = vi.fn(async () => ({ alert_channels: [] }));
     const saver = vi.fn(async (cs: string[]) => ({ alert_channels: cs }));
     render(<NotificationsPanel loader={loader} saver={saver} />);
-    const toggle = (await screen.findByRole("checkbox", {
+    const toggle = await screen.findByRole("checkbox", {
       name: /slack self-dm/i,
-    })) as HTMLInputElement;
+    });
     fireEvent.click(toggle);
     await waitFor(() => expect(saver).toHaveBeenCalledWith(["slack_dm"]));
+  });
+
+  it("updates the checkbox only after the save resolves (pessimistic)", async () => {
+    const resolvers: Array<() => void> = [];
+    const loader = vi.fn(async () => ({ alert_channels: [] }));
+    const saver = vi.fn(
+      (cs: string[]) =>
+        new Promise<{ alert_channels: string[] }>((resolve) => {
+          resolvers.push(() => resolve({ alert_channels: cs }));
+        }),
+    );
+    render(<NotificationsPanel loader={loader} saver={saver} />);
+    const toggle = await screen.findByRole("checkbox", {
+      name: /slack self-dm/i,
+    });
+    expect(toggle.getAttribute("aria-checked")).toBe("false");
+    fireEvent.click(toggle);
+    await waitFor(() => expect(saver).toHaveBeenCalledTimes(1));
+    expect(toggle.getAttribute("aria-checked")).toBe("false");
+    expect(toggle.getAttribute("aria-busy")).toBe("true");
+    resolvers[0]?.();
+    await waitFor(() =>
+      expect(toggle.getAttribute("aria-checked")).toBe("true"),
+    );
   });
 
   it("fires a test notification through the tester and surfaces success", async () => {
