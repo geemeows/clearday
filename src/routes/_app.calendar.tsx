@@ -22,13 +22,14 @@ export const Route = createFileRoute("/_app/calendar")({
 });
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri"] as const;
-const HOUR_START = 8;
-const HOUR_END = 18;
+const HOUR_START = 0;
+const HOUR_END = 24;
 const HOURS = HOUR_END - HOUR_START;
 const DAY_START_MIN = HOUR_START * 60;
 const DAY_END_MIN = HOUR_END * 60;
-const SLOT_PX = 48;
+const SLOT_PX = 44;
 const GRID_PX = HOURS * SLOT_PX;
+const GRID_MAX_HEIGHT = "min(70vh, 720px)";
 
 type EventKind = "focus" | "meeting" | "break";
 
@@ -121,7 +122,7 @@ export function CalendarView({
     mode === "week"
       ? `${conflicts.length} conflict${conflicts.length === 1 ? "" : "s"} · ${focusHours}h focus scheduled`
       : mode === "day"
-        ? "8:00–18:00"
+        ? "00:00–23:00"
         : "Mon–Sun";
   const rangeLabel =
     mode === "week"
@@ -336,49 +337,49 @@ function WeekGrid({
           );
         })}
       </div>
-      <div
-        className="relative grid"
-        style={{
-          gridTemplateColumns: "64px repeat(5, 1fr)",
-          height: `${GRID_PX}px`,
-        }}
-      >
+      <div className="overflow-y-auto" style={{ maxHeight: GRID_MAX_HEIGHT }}>
         <div
-          className="relative"
+          className="relative grid"
           style={{
-            borderRight: "1px solid var(--hairline-soft, var(--border))",
+            gridTemplateColumns: "64px repeat(5, 1fr)",
+            height: `${GRID_PX}px`,
           }}
         >
-          {hours.map((h) => (
-            <div
-              key={`hour-${h}`}
-              className="absolute right-0 left-0 px-2 text-right"
-              style={{
-                top: `${(h - HOUR_START) * SLOT_PX}px`,
-                borderTop:
-                  h === HOUR_START
-                    ? "none"
-                    : "1px solid var(--hairline-soft, var(--border))",
-              }}
-            >
-              <span
-                className="inline-block translate-y-[-6px] font-mono text-[10px] text-muted-foreground"
+          <div
+            className="relative"
+            style={{
+              borderRight: "1px solid var(--hairline-soft, var(--border))",
+            }}
+          >
+            {hours.map((h) => (
+              <div
+                key={`hour-${h}`}
+                className="absolute right-0 left-0 px-2 text-right"
+                style={{
+                  top: `${(h - HOUR_START) * SLOT_PX}px`,
+                  borderTop:
+                    h === HOUR_START
+                      ? "none"
+                      : "1px solid var(--hairline-soft, var(--border))",
+                }}
               >
-                {h}:00
-              </span>
-            </div>
+                <span className="inline-block translate-y-[-6px] font-mono text-[10px] text-muted-foreground">
+                  {fmtHour(h)}
+                </span>
+              </div>
+            ))}
+          </div>
+          {WEEKDAYS.map((label, dayIdx) => (
+            <DayColumn
+              key={label}
+              dayIdx={dayIdx}
+              events={events.filter((e) => e.day === dayIdx)}
+              conflictIds={conflictIds}
+              isToday={todayCol === dayIdx}
+              now={now}
+            />
           ))}
         </div>
-        {WEEKDAYS.map((label, dayIdx) => (
-          <DayColumn
-            key={label}
-            dayIdx={dayIdx}
-            events={events.filter((e) => e.day === dayIdx)}
-            conflictIds={conflictIds}
-            isToday={todayCol === dayIdx}
-            now={now}
-          />
-        ))}
       </div>
       {conflicts.length > 0 && <ConflictBanner pairs={conflicts} now={now} />}
     </section>
@@ -466,6 +467,9 @@ function EventBlock({
           "repeating-linear-gradient(45deg, rgba(193,53,21,0.18) 0 6px, transparent 6px 12px)",
       }
     : undefined;
+  const blockHeight = Math.max(16, height - 2);
+  const compact = blockHeight < 40;
+  const timeLabel = `${fmtMinutes(event.start)}–${fmtMinutes(event.end)}`;
   return (
     <article
       aria-label={event.title}
@@ -473,21 +477,29 @@ function EventBlock({
       data-kind={event.kind}
       data-conflict={isConflict || undefined}
       className={cn(
-        "absolute flex flex-col overflow-hidden rounded-md px-2 py-1.5 font-semibold text-[11px] leading-tight",
+        "absolute overflow-hidden rounded-md font-semibold text-[11px] leading-tight",
+        compact
+          ? "flex items-center gap-1.5 px-2 py-0.5"
+          : "flex flex-col px-2 py-1.5",
         tone,
         isConflict && "ring-1 ring-destructive/40",
       )}
       style={{
         top: `${top + 1}px`,
-        height: `${Math.max(16, height - 2)}px`,
+        height: `${blockHeight}px`,
         left: `calc(${leftPct}% + 3px)`,
         width: `calc(${widthPct}% - 6px)`,
         ...(hatched ?? {}),
       }}
     >
-      <span className="block truncate">{event.title}</span>
-      <span className="mt-auto block font-mono text-[10px] opacity-75">
-        {fmtMinutes(event.start)}–{fmtMinutes(event.end)}
+      <span className="min-w-0 flex-1 truncate">{event.title}</span>
+      <span
+        className={cn(
+          "block font-mono text-[10px] opacity-75",
+          compact ? "shrink-0" : "mt-auto",
+        )}
+      >
+        {timeLabel}
       </span>
     </article>
   );
@@ -523,68 +535,70 @@ function DayGrid({
       className="overflow-hidden rounded-lg bg-card"
       style={{ border: "1px solid var(--hairline-soft, var(--border))" }}
     >
-      <div
-        className="relative grid"
-        style={{
-          gridTemplateColumns: "64px 1fr",
-          height: `${GRID_PX}px`,
-        }}
-      >
+      <div className="overflow-y-auto" style={{ maxHeight: GRID_MAX_HEIGHT }}>
         <div
-          className="relative"
+          className="relative grid"
           style={{
-            borderRight: "1px solid var(--hairline-soft, var(--border))",
+            gridTemplateColumns: "64px 1fr",
+            height: `${GRID_PX}px`,
           }}
         >
-          {hours.map((h) => (
-            <div
-              key={`hour-${h}`}
-              className="absolute right-0 left-0 px-2 text-right"
-              style={{
-                top: `${(h - HOUR_START) * SLOT_PX}px`,
-                borderTop:
-                  h === HOUR_START
-                    ? "none"
-                    : "1px solid var(--hairline-soft, var(--border))",
-              }}
-            >
-              <span className="inline-block translate-y-[-6px] font-mono text-[10px] text-muted-foreground">
-                {h}:00
-              </span>
-            </div>
-          ))}
-        </div>
-        <div
-          data-day-col={dayCol}
-          data-today={todayCol === dayCol || undefined}
-          className="relative"
-        >
-          {slots.map((h, hi) => (
-            <div
-              key={`slot-${h}`}
-              className="absolute right-0 left-0"
-              style={{
-                top: `${(h - HOUR_START) * SLOT_PX}px`,
-                height: `${SLOT_PX}px`,
-                borderTop:
-                  hi === 0
-                    ? "none"
-                    : "1px solid var(--hairline-soft, var(--border))",
-              }}
-            />
-          ))}
-          {dayEvents.map((e) => {
-            const lane = lanes.get(e.id) ?? { col: 0, of: 1 };
-            return (
-              <EventBlock
-                key={e.id}
-                event={e}
-                lane={lane}
-                isConflict={conflictIds.has(e.id)}
+          <div
+            className="relative"
+            style={{
+              borderRight: "1px solid var(--hairline-soft, var(--border))",
+            }}
+          >
+            {hours.map((h) => (
+              <div
+                key={`hour-${h}`}
+                className="absolute right-0 left-0 px-2 text-right"
+                style={{
+                  top: `${(h - HOUR_START) * SLOT_PX}px`,
+                  borderTop:
+                    h === HOUR_START
+                      ? "none"
+                      : "1px solid var(--hairline-soft, var(--border))",
+                }}
+              >
+                <span className="inline-block translate-y-[-6px] font-mono text-[10px] text-muted-foreground">
+                  {fmtHour(h)}
+                </span>
+              </div>
+            ))}
+          </div>
+          <div
+            data-day-col={dayCol}
+            data-today={todayCol === dayCol || undefined}
+            className="relative"
+          >
+            {slots.map((h, hi) => (
+              <div
+                key={`slot-${h}`}
+                className="absolute right-0 left-0"
+                style={{
+                  top: `${(h - HOUR_START) * SLOT_PX}px`,
+                  height: `${SLOT_PX}px`,
+                  borderTop:
+                    hi === 0
+                      ? "none"
+                      : "1px solid var(--hairline-soft, var(--border))",
+                }}
               />
-            );
-          })}
-          {todayCol === dayCol && <NowLine now={now} />}
+            ))}
+            {dayEvents.map((e) => {
+              const lane = lanes.get(e.id) ?? { col: 0, of: 1 };
+              return (
+                <EventBlock
+                  key={e.id}
+                  event={e}
+                  lane={lane}
+                  isConflict={conflictIds.has(e.id)}
+                />
+              );
+            })}
+            {todayCol === dayCol && <NowLine now={now} />}
+          </div>
         </div>
       </div>
     </section>
@@ -711,7 +725,10 @@ function ConflictBanner({
         background: "var(--danger-soft, rgba(193,53,21,0.08))",
       }}
     >
-      <ul className="divide-y" style={{ color: "var(--ink, var(--foreground))" }}>
+      <ul
+        className="divide-y"
+        style={{ color: "var(--ink, var(--foreground))" }}
+      >
         {pairs.map((p) => (
           <li
             key={`${p.a.id}-${p.b.id}`}
@@ -763,6 +780,10 @@ function kindClass(kind: EventKind): string {
   if (kind === "focus") return "bg-foreground text-background";
   if (kind === "break") return "bg-secondary text-foreground";
   return "bg-primary text-primary-foreground";
+}
+
+function fmtHour(h: number): string {
+  return `${h.toString().padStart(2, "0")}:00`;
 }
 
 function fmtMinutes(min: number): string {
