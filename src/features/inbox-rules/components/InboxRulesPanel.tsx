@@ -14,6 +14,9 @@ import type { StoredSignal } from "#/shared/signal";
 // enable / reorder. Each rule is a single predicate + single effect for v1
 // to keep the form-shape simple; the engine itself supports rule lists with
 // multiple predicates/effects for future panels.
+//
+// Deliberately not migrated to useAsyncPanel + <SettingsPanel> (#69 / #82):
+// it's a CRUD list with reorder, not a shallow-merge load-and-persist panel.
 // ---------------------------------------------------------------------------
 
 const PREDICATE_TYPES: Array<{ id: RulePredicate["type"]; label: string }> = [

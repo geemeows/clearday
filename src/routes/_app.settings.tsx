@@ -1734,24 +1734,6 @@ export function EmailDigestPanel({
   >;
   tester?: () => Promise<{ ok: boolean; error?: string }>;
 } = {}) {
-  const [view, setView] = useState<EmailDigestSettingsView | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [status, setStatus] = useState<string | null>(null);
-  const [draft, setDraft] = useState<{
-    api_key: string;
-    from_email: string;
-    to_email: string;
-    hour_utc: number;
-    transport: EmailTransport;
-  }>({
-    api_key: "",
-    from_email: "",
-    to_email: "",
-    hour_utc: 13,
-    transport: "resend",
-  });
-
   const load = useMemo(
     () =>
       loader ??
@@ -1781,33 +1763,60 @@ export function EmailDigestPanel({
     [tester],
   );
 
+  // The three actions (Save, toggle Enabled, Send test) compose different
+  // PUT bodies, so useAsyncPanel drives the load lifecycle only and each
+  // action feeds its server response back through persist({...settings})
+  // so local state mirrors the server without an extra GET. Mirrors the
+  // AiProviderPanel pattern from batch A (#80).
+  const {
+    data: view,
+    error: loadError,
+    busy,
+    persist,
+  } = useAsyncPanel<EmailDigestSettingsView>({
+    load,
+    save: async () => {},
+  });
+
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
+  const [actionBusy, setActionBusy] = useState(false);
+  const [draft, setDraft] = useState<{
+    api_key: string;
+    from_email: string;
+    to_email: string;
+    hour_utc: number;
+    transport: EmailTransport;
+  }>({
+    api_key: "",
+    from_email: "",
+    to_email: "",
+    hour_utc: 13,
+    transport: "resend",
+  });
+
+  const lastSnapshotRef = useRef<EmailDigestSettingsView | null>(null);
   useEffect(() => {
-    let cancelled = false;
-    load()
-      .then((v) => {
-        if (cancelled) return;
-        setView(v);
-        setDraft((d) => ({
-          ...d,
-          from_email: v.from_email ?? "",
-          to_email: v.to_email ?? "",
-          hour_utc: v.hour_utc,
-          transport: v.transport,
-        }));
-      })
-      .catch((e) => {
-        if (cancelled) return;
-        setError(e instanceof Error ? e.message : "failed to load");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [load]);
+    if (view && view !== lastSnapshotRef.current) {
+      setDraft((d) => ({
+        ...d,
+        api_key: "",
+        from_email: view.from_email ?? "",
+        to_email: view.to_email ?? "",
+        hour_utc: view.hour_utc,
+        transport: view.transport,
+      }));
+      lastSnapshotRef.current = view;
+    }
+  }, [view]);
+
+  const error =
+    actionError ?? (loadError ? loadError.message : null);
 
   const onSave = useCallback(async () => {
-    setBusy(true);
+    setActionBusy(true);
     setStatus(null);
-    setError(null);
+    setActionError(null);
     try {
       const body: EmailDigestPutBody = {
         from_email: draft.from_email.trim() || null,
@@ -1818,70 +1827,56 @@ export function EmailDigestPanel({
       if (draft.api_key.trim().length > 0) body.api_key = draft.api_key.trim();
       const out = await save(body);
       if (out.ok) {
-        setView(out.settings);
-        setDraft((d) => ({ ...d, api_key: "" }));
-        setStatus("Saved.");
+        persist(out.settings);
       } else {
-        setError(out.error);
+        setActionError(out.error);
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "save failed");
+      setActionError(e instanceof Error ? e.message : "save failed");
     } finally {
-      setBusy(false);
+      setActionBusy(false);
     }
-  }, [draft, save]);
+  }, [draft, persist, save]);
 
   const onToggleEnabled = useCallback(async () => {
     if (!view) return;
-    setBusy(true);
-    setError(null);
+    setActionBusy(true);
+    setActionError(null);
     try {
       const out = await save({ enabled: !view.enabled });
-      if (out.ok) setView(out.settings);
-      else setError(out.error);
+      if (out.ok) persist(out.settings);
+      else setActionError(out.error);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "save failed");
+      setActionError(e instanceof Error ? e.message : "save failed");
     } finally {
-      setBusy(false);
+      setActionBusy(false);
     }
-  }, [save, view]);
+  }, [persist, save, view]);
 
   const onTest = useCallback(async () => {
-    setBusy(true);
+    setActionBusy(true);
     setStatus(null);
-    setError(null);
+    setActionError(null);
     try {
       const out = await test();
       setStatus(out.ok ? "Test email sent." : null);
-      if (!out.ok) setError(out.error ?? "test failed");
+      if (!out.ok) setActionError(out.error ?? "test failed");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "test failed");
+      setActionError(e instanceof Error ? e.message : "test failed");
     } finally {
-      setBusy(false);
+      setActionBusy(false);
     }
   }, [test]);
 
+  const isBusy = busy || actionBusy;
+
   return (
-    <section
-      aria-label="Email digest"
-      className="mt-8 rounded border border-zinc-200 bg-white p-5"
+    <SettingsPanel
+      title="Email digest"
+      desc="Daily morning email summarizing new Signals. Bring your own Resend or Postmark API key — Clearday never operates a shared mailer."
+      error={error}
+      busy={busy && !view}
     >
-      <h2 className="text-base font-semibold text-zinc-900">Email digest</h2>
-      <p className="mt-1 text-sm text-zinc-500">
-        Daily morning email summarizing new Signals. Bring your own Resend or
-        Postmark API key — Clearday never operates a shared mailer.
-      </p>
-
-      {error && (
-        <p className="mt-3 rounded border border-red-200 bg-red-50 p-2 text-sm text-red-700">
-          {error}
-        </p>
-      )}
-
-      {view == null && !error && (
-        <p className="mt-3 text-sm text-zinc-500">Loading…</p>
-      )}
-
       {view && (
         <div className="mt-4 space-y-3 text-sm">
           <label className="flex items-center gap-3">
@@ -1889,11 +1884,11 @@ export function EmailDigestPanel({
               type="checkbox"
               checked={view.enabled}
               onChange={onToggleEnabled}
-              disabled={busy}
+              disabled={isBusy}
             />
             <span>
               <strong className="font-medium">Daily digest</strong>
-              <span className="ml-2 text-zinc-500">
+              <span className="ml-2 text-muted-foreground">
                 {view.enabled
                   ? `Sends each day at ${view.hour_utc}:00 UTC`
                   : "Disabled"}
@@ -1904,7 +1899,7 @@ export function EmailDigestPanel({
           <div>
             <label
               htmlFor="email-digest-transport"
-              className="block text-xs uppercase tracking-wide text-zinc-500"
+              className="block text-muted-foreground text-xs uppercase tracking-wide"
             >
               Transport
             </label>
@@ -1917,8 +1912,8 @@ export function EmailDigestPanel({
                   transport: e.target.value as EmailTransport,
                 }))
               }
-              disabled={busy}
-              className="mt-1 w-full rounded border border-zinc-200 px-2 py-1"
+              disabled={isBusy}
+              className="mt-1 w-full rounded-md border border-input bg-background px-2 py-1"
             >
               <option value="resend">Resend</option>
               <option value="postmark">Postmark</option>
@@ -1928,7 +1923,7 @@ export function EmailDigestPanel({
           <div>
             <label
               htmlFor="email-digest-from"
-              className="block text-xs uppercase tracking-wide text-zinc-500"
+              className="block text-muted-foreground text-xs uppercase tracking-wide"
             >
               From address
             </label>
@@ -1940,15 +1935,15 @@ export function EmailDigestPanel({
               onChange={(e) =>
                 setDraft((d) => ({ ...d, from_email: e.target.value }))
               }
-              disabled={busy}
-              className="mt-1 w-full rounded border border-zinc-200 px-2 py-1"
+              disabled={isBusy}
+              className="mt-1 w-full rounded-md border border-input bg-background px-2 py-1"
             />
           </div>
 
           <div>
             <label
               htmlFor="email-digest-to"
-              className="block text-xs uppercase tracking-wide text-zinc-500"
+              className="block text-muted-foreground text-xs uppercase tracking-wide"
             >
               To address
             </label>
@@ -1960,15 +1955,15 @@ export function EmailDigestPanel({
               onChange={(e) =>
                 setDraft((d) => ({ ...d, to_email: e.target.value }))
               }
-              disabled={busy}
-              className="mt-1 w-full rounded border border-zinc-200 px-2 py-1"
+              disabled={isBusy}
+              className="mt-1 w-full rounded-md border border-input bg-background px-2 py-1"
             />
           </div>
 
           <div>
             <label
               htmlFor="email-digest-hour"
-              className="block text-xs uppercase tracking-wide text-zinc-500"
+              className="block text-muted-foreground text-xs uppercase tracking-wide"
             >
               Send hour (UTC)
             </label>
@@ -1987,15 +1982,15 @@ export function EmailDigestPanel({
                   ),
                 }))
               }
-              disabled={busy}
-              className="mt-1 w-24 rounded border border-zinc-200 px-2 py-1"
+              disabled={isBusy}
+              className="mt-1 w-24 rounded-md border border-input bg-background px-2 py-1"
             />
           </div>
 
           <div>
             <label
               htmlFor="email-digest-key"
-              className="block text-xs uppercase tracking-wide text-zinc-500"
+              className="block text-muted-foreground text-xs uppercase tracking-wide"
             >
               {draft.transport === "postmark" ? "Postmark" : "Resend"} API key
             </label>
@@ -2013,10 +2008,10 @@ export function EmailDigestPanel({
               onChange={(e) =>
                 setDraft((d) => ({ ...d, api_key: e.target.value }))
               }
-              disabled={busy}
-              className="mt-1 w-full rounded border border-zinc-200 px-2 py-1"
+              disabled={isBusy}
+              className="mt-1 w-full rounded-md border border-input bg-background px-2 py-1"
             />
-            <p className="mt-1 text-xs text-zinc-500">
+            <p className="mt-1 text-muted-foreground text-xs">
               Stored encrypted at rest; the key is only sent to{" "}
               {draft.transport === "postmark" ? "Postmark" : "Resend"}.
             </p>
@@ -2026,32 +2021,34 @@ export function EmailDigestPanel({
             <button
               type="button"
               onClick={onSave}
-              disabled={busy}
-              className="rounded border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50 disabled:opacity-50"
+              disabled={isBusy}
+              className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted/50 disabled:opacity-50"
             >
               Save
             </button>
             <button
               type="button"
               onClick={onTest}
-              disabled={busy || !view.has_api_key}
-              className="rounded border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50 disabled:opacity-50"
+              disabled={isBusy || !view.has_api_key}
+              className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted/50 disabled:opacity-50"
             >
               Send test email
             </button>
             {status && (
-              <output className="text-sm text-zinc-600">{status}</output>
+              <output className="text-muted-foreground text-sm">
+                {status}
+              </output>
             )}
           </div>
 
           {view.last_sent_date && (
-            <p className="text-xs text-zinc-500">
+            <p className="text-muted-foreground text-xs">
               Last digest sent on {view.last_sent_date}.
             </p>
           )}
         </div>
       )}
-    </section>
+    </SettingsPanel>
   );
 }
 
@@ -2080,11 +2077,6 @@ export function ThemePanel({
   loader?: () => Promise<ThemeView>;
   saver?: (patch: ThemeView) => Promise<ThemeSaveResult>;
 } = {}) {
-  const [view, setView] = useState<ThemeView | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [status, setStatus] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-
   const load = useMemo(
     () => loader ?? (() => apiFetch("/api/theme") as Promise<ThemeView>),
     [loader],
@@ -2100,68 +2092,44 @@ export function ThemePanel({
     [saver],
   );
 
-  useEffect(() => {
-    let cancelled = false;
-    load()
-      .then((t) => {
-        if (!cancelled) setView(t);
-      })
-      .catch((e) => {
-        if (!cancelled) setError(e instanceof Error ? e.message : String(e));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [load]);
-
-  const update = async (patch: Partial<ThemeView>) => {
-    if (!view) return;
-    const next: ThemeView = { ...view, ...patch };
-    setView(next);
-    setStatus(null);
-    setError(null);
-    setBusy(true);
-    try {
+  // The save callback unwraps the saver's discriminated result and
+  // dispatches the theme-updated event on success so the live theme
+  // applies without a reload. Throwing on `ok: false` flows the message
+  // through the hook's error path.
+  const { data, error, busy, persist } = useAsyncPanel<ThemeView>({
+    load,
+    save: async (next) => {
       const out = await save(next);
-      if (!out.ok) {
-        setError(out.error);
-        return;
-      }
-      setView(out.theme);
-      setStatus("Saved.");
+      if (!out.ok) throw new Error(out.error);
       window.dispatchEvent(
         new CustomEvent(THEME_UPDATED_EVENT, { detail: out.theme }),
       );
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  };
+    },
+  });
 
-  const current = view ?? DEFAULT_THEME;
+  const current = data ?? DEFAULT_THEME;
 
   return (
-    <section className="mt-8">
-      <h2 className="text-lg font-semibold">Theme & layout</h2>
-      <p className="mt-1 text-sm text-zinc-500">
-        Light / dark / system, density, and accent color. Changes apply
-        immediately without a reload.
-      </p>
-      {view === null ? (
-        <p className="mt-3 text-sm text-zinc-500">Loading…</p>
-      ) : (
+    <SettingsPanel
+      title="Theme & layout"
+      desc="Light / dark / system, density, and accent color. Changes apply immediately without a reload."
+      error={error}
+      busy={busy && !data}
+    >
+      {data && (
         <div className="mt-3 grid gap-4">
           <fieldset>
-            <legend className="text-sm font-medium text-zinc-700">Theme</legend>
+            <legend className="font-medium text-foreground text-sm">
+              Theme
+            </legend>
             <div className="mt-2 flex gap-2">
               {THEMES.map((t: Theme) => (
                 <label
                   key={t}
-                  className={`cursor-pointer rounded border px-3 py-1.5 text-sm capitalize ${
+                  className={`cursor-pointer rounded-md border px-3 py-1.5 text-sm capitalize ${
                     current.theme === t
-                      ? "border-zinc-900 bg-zinc-900 text-white"
-                      : "border-zinc-300 hover:bg-zinc-50"
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-border hover:bg-muted/50"
                   }`}
                 >
                   <input
@@ -2169,7 +2137,7 @@ export function ThemePanel({
                     name="theme"
                     className="sr-only"
                     checked={current.theme === t}
-                    onChange={() => update({ theme: t })}
+                    onChange={() => persist({ theme: t })}
                   />
                   {t}
                 </label>
@@ -2178,17 +2146,17 @@ export function ThemePanel({
           </fieldset>
 
           <fieldset>
-            <legend className="text-sm font-medium text-zinc-700">
+            <legend className="font-medium text-foreground text-sm">
               Density
             </legend>
             <div className="mt-2 flex gap-2">
               {DENSITIES.map((d: Density) => (
                 <label
                   key={d}
-                  className={`cursor-pointer rounded border px-3 py-1.5 text-sm capitalize ${
+                  className={`cursor-pointer rounded-md border px-3 py-1.5 text-sm capitalize ${
                     current.density === d
-                      ? "border-zinc-900 bg-zinc-900 text-white"
-                      : "border-zinc-300 hover:bg-zinc-50"
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-border hover:bg-muted/50"
                   }`}
                 >
                   <input
@@ -2196,7 +2164,7 @@ export function ThemePanel({
                     name="density"
                     className="sr-only"
                     checked={current.density === d}
-                    onChange={() => update({ density: d })}
+                    onChange={() => persist({ density: d })}
                   />
                   {d}
                 </label>
@@ -2205,7 +2173,7 @@ export function ThemePanel({
           </fieldset>
 
           <fieldset>
-            <legend className="text-sm font-medium text-zinc-700">
+            <legend className="font-medium text-foreground text-sm">
               Accent color
             </legend>
             <div className="mt-2 flex gap-2">
@@ -2213,10 +2181,10 @@ export function ThemePanel({
                 <label
                   key={a}
                   aria-label={ACCENT_LABELS[a]}
-                  className={`flex cursor-pointer items-center gap-2 rounded border px-3 py-1.5 text-sm ${
+                  className={`flex cursor-pointer items-center gap-2 rounded-md border px-3 py-1.5 text-sm ${
                     current.accent === a
-                      ? "border-zinc-900"
-                      : "border-zinc-300 hover:bg-zinc-50"
+                      ? "border-primary"
+                      : "border-border hover:bg-muted/50"
                   }`}
                 >
                   <input
@@ -2224,7 +2192,7 @@ export function ThemePanel({
                     name="accent"
                     className="sr-only"
                     checked={current.accent === a}
-                    onChange={() => update({ accent: a })}
+                    onChange={() => persist({ accent: a })}
                   />
                   <span
                     aria-hidden="true"
@@ -2236,20 +2204,9 @@ export function ThemePanel({
               ))}
             </div>
           </fieldset>
-
-          <div className="flex items-center gap-3" aria-busy={busy}>
-            {status && (
-              <output className="text-sm text-emerald-700">{status}</output>
-            )}
-            {error && (
-              <p role="alert" className="text-sm text-red-700">
-                {error}
-              </p>
-            )}
-          </div>
         </div>
       )}
-    </section>
+    </SettingsPanel>
   );
 }
 
@@ -2272,17 +2229,6 @@ export function DataPrivacyPanel({
   retentionLoader?: () => Promise<RetentionView>;
   retentionSaver?: (patch: RetentionView) => Promise<RetentionSaveResult>;
 } = {}) {
-  const [retention, setRetention] = useState<RetentionView | null>(null);
-  const [retentionError, setRetentionError] = useState<string | null>(null);
-  const [retentionStatus, setRetentionStatus] = useState<string | null>(null);
-  const [exportError, setExportError] = useState<string | null>(null);
-  const [exportBusy, setExportBusy] = useState(false);
-  const [purgeOpen, setPurgeOpen] = useState(false);
-  const [purgeInput, setPurgeInput] = useState("");
-  const [purgeBusy, setPurgeBusy] = useState(false);
-  const [purgeError, setPurgeError] = useState<string | null>(null);
-  const [purgeStatus, setPurgeStatus] = useState<string | null>(null);
-
   const loadRetention = useMemo(
     () =>
       retentionLoader ??
@@ -2316,36 +2262,45 @@ export function DataPrivacyPanel({
     [purger],
   );
 
-  useEffect(() => {
-    let cancelled = false;
-    loadRetention()
-      .then((r) => {
-        if (!cancelled) setRetention(r);
-      })
-      .catch((e) => {
-        if (!cancelled)
-          setRetentionError(e instanceof Error ? e.message : String(e));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [loadRetention]);
+  // useAsyncPanel drives the retention load + Save lifecycle. A local draft
+  // tracks the keystroke value so pessimistic save doesn't gate typing;
+  // clicking Save flushes the draft through persist(). Export and Purge
+  // remain bespoke action handlers — they're side-effecting one-shots, not
+  // shallow-merge persists.
+  const {
+    data: retention,
+    error: retentionError,
+    busy: retentionBusy,
+    persist: persistRetention,
+  } = useAsyncPanel<RetentionView>({
+    load: loadRetention,
+    save: async (next) => {
+      const out = await saveRetention(next);
+      if (!out.ok) throw new Error(out.error);
+    },
+  });
 
-  const onSaveRetention = async () => {
-    if (!retention) return;
-    setRetentionError(null);
-    setRetentionStatus(null);
-    try {
-      const out = await saveRetention(retention);
-      if (!out.ok) {
-        setRetentionError(out.error);
-        return;
-      }
-      setRetention(out.retention);
-      setRetentionStatus("Saved.");
-    } catch (e) {
-      setRetentionError(e instanceof Error ? e.message : String(e));
-    }
+  const [draftDays, setDraftDays] = useState<number>(DEFAULT_RETENTION_DAYS);
+  const lastSnapshotRef = useRef<RetentionView | null>(null);
+  // Sync the draft from the persisted snapshot during render so a freshly
+  // loaded value is reflected in the input on its first paint, mirroring
+  // batch B's FocusBlockPanel local-draft pattern but without the effect lag.
+  if (retention && retention !== lastSnapshotRef.current) {
+    lastSnapshotRef.current = retention;
+    setDraftDays(retention.retention_days);
+  }
+
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [exportBusy, setExportBusy] = useState(false);
+  const [purgeOpen, setPurgeOpen] = useState(false);
+  const [purgeInput, setPurgeInput] = useState("");
+  const [purgeBusy, setPurgeBusy] = useState(false);
+  const [purgeError, setPurgeError] = useState<string | null>(null);
+  const [purgeStatus, setPurgeStatus] = useState<string | null>(null);
+
+  const onSaveRetention = () => {
+    if (retention == null) return;
+    persistRetention({ retention_days: draftDays });
   };
 
   const onExport = async () => {
@@ -2394,17 +2349,18 @@ export function DataPrivacyPanel({
   };
 
   return (
-    <section className="mt-8">
-      <h2 className="text-lg font-semibold">Data & privacy</h2>
-      <p className="mt-1 text-sm text-zinc-500">
-        Export or purge your Signals and rollups, and override how long raw
-        Signals are retained before rollup.
-      </p>
-
+    <SettingsPanel
+      title="Data & privacy"
+      desc="Export or purge your Signals and rollups, and override how long raw Signals are retained before rollup."
+      error={retentionError}
+      busy={retentionBusy && !retention}
+    >
       <div className="mt-4 grid gap-4">
         <div>
-          <h3 className="text-sm font-medium text-zinc-700">Export all data</h3>
-          <p className="mt-1 text-xs text-zinc-500">
+          <h3 className="font-medium text-foreground text-sm">
+            Export all data
+          </h3>
+          <p className="mt-1 text-muted-foreground text-xs">
             Downloads a JSON file with all your Signals, rollups, settings, and
             inbox rules. Excludes encrypted secrets.
           </p>
@@ -2413,62 +2369,56 @@ export function DataPrivacyPanel({
               type="button"
               onClick={onExport}
               disabled={exportBusy}
-              className="rounded border px-3 py-1.5 text-sm hover:bg-zinc-50 disabled:opacity-50"
+              className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted/50 disabled:opacity-50"
             >
               {exportBusy ? "Exporting…" : "Export all data"}
             </button>
             {exportError && (
-              <p role="alert" className="text-sm text-red-700">
+              <p role="alert" className="text-destructive text-sm">
                 {exportError}
               </p>
             )}
           </div>
         </div>
 
-        <div>
-          <label className="block text-sm">
-            <span className="text-zinc-700">Retention (days)</span>
-            <input
-              type="number"
-              min={MIN_RETENTION_DAYS}
-              max={MAX_RETENTION_DAYS}
-              className="mt-1 block w-32 rounded border border-zinc-300 px-2 py-1.5 text-sm"
-              value={retention?.retention_days ?? DEFAULT_RETENTION_DAYS}
-              onChange={(e) => {
-                const n = Number.parseInt(e.target.value, 10);
-                if (Number.isFinite(n)) setRetention({ retention_days: n });
-              }}
-            />
-          </label>
-          <p className="mt-1 text-xs text-zinc-500">
-            Raw Signals older than this are rolled up into period aggregates and
-            removed from the hot table. Default: {DEFAULT_RETENTION_DAYS}.
-          </p>
-          <div className="mt-2 flex items-center gap-3">
-            <button
-              type="button"
-              onClick={onSaveRetention}
-              disabled={retention === null}
-              className="rounded border px-3 py-1.5 text-sm hover:bg-zinc-50 disabled:opacity-50"
-            >
-              Save retention
-            </button>
-            {retentionStatus && (
-              <output className="text-sm text-emerald-700">
-                {retentionStatus}
-              </output>
-            )}
-            {retentionError && (
-              <p role="alert" className="text-sm text-red-700">
-                {retentionError}
-              </p>
-            )}
+        {retention && (
+          <div>
+            <label className="block text-sm">
+              <span className="text-foreground">Retention (days)</span>
+              <input
+                type="number"
+                min={MIN_RETENTION_DAYS}
+                max={MAX_RETENTION_DAYS}
+                className="mt-1 block w-32 rounded-md border border-input bg-background px-2 py-1.5 text-sm"
+                value={draftDays}
+                onChange={(e) => {
+                  const n = Number.parseInt(e.target.value, 10);
+                  if (Number.isFinite(n)) setDraftDays(n);
+                }}
+                disabled={retentionBusy}
+              />
+            </label>
+            <p className="mt-1 text-muted-foreground text-xs">
+              Raw Signals older than this are rolled up into period aggregates
+              and removed from the hot table. Default: {DEFAULT_RETENTION_DAYS}.
+            </p>
+            <div className="mt-2 flex items-center gap-3">
+              <button
+                type="button"
+                onClick={onSaveRetention}
+                className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted/50 disabled:opacity-50"
+              >
+                Save retention
+              </button>
+            </div>
           </div>
-        </div>
+        )}
 
         <div>
-          <h3 className="text-sm font-medium text-red-700">Purge all data</h3>
-          <p className="mt-1 text-xs text-zinc-500">
+          <h3 className="font-medium text-destructive text-sm">
+            Purge all data
+          </h3>
+          <p className="mt-1 text-muted-foreground text-xs">
             Permanently deletes every Signal and rollup. This cannot be undone.
           </p>
           {!purgeOpen ? (
@@ -2480,12 +2430,12 @@ export function DataPrivacyPanel({
                   setPurgeStatus(null);
                   setPurgeError(null);
                 }}
-                className="rounded border border-red-300 px-3 py-1.5 text-sm text-red-700 hover:bg-red-50"
+                className="rounded-md border border-destructive/40 px-3 py-1.5 text-destructive text-sm hover:bg-destructive/5"
               >
                 Purge all data…
               </button>
               {purgeStatus && (
-                <output className="text-sm text-emerald-700">
+                <output className="text-muted-foreground text-sm">
                   {purgeStatus}
                 </output>
               )}
@@ -2494,16 +2444,16 @@ export function DataPrivacyPanel({
             <div
               role="dialog"
               aria-label="Confirm purge"
-              className="mt-2 rounded border border-red-300 bg-red-50 p-3"
+              className="mt-2 rounded-md border border-destructive/40 bg-destructive/5 p-3"
             >
-              <p className="text-sm text-red-800">
+              <p className="text-destructive text-sm">
                 Type <code className="font-mono">{PURGE_CONFIRMATION}</code> to
                 confirm. This cannot be undone.
               </p>
               <input
                 type="text"
                 aria-label="Purge confirmation"
-                className="mt-2 block w-full rounded border border-red-300 px-2 py-1.5 text-sm"
+                className="mt-2 block w-full rounded-md border border-destructive/40 bg-background px-2 py-1.5 text-sm"
                 value={purgeInput}
                 onChange={(e) => setPurgeInput(e.target.value)}
               />
@@ -2512,7 +2462,7 @@ export function DataPrivacyPanel({
                   type="button"
                   onClick={onPurgeConfirm}
                   disabled={purgeInput !== PURGE_CONFIRMATION || purgeBusy}
-                  className="rounded border border-red-400 bg-red-600 px-3 py-1.5 text-sm text-white hover:bg-red-700 disabled:opacity-50"
+                  className="rounded-md border border-destructive bg-destructive px-3 py-1.5 text-destructive-foreground text-sm hover:bg-destructive/90 disabled:opacity-50"
                 >
                   {purgeBusy ? "Purging…" : "Confirm purge"}
                 </button>
@@ -2523,12 +2473,12 @@ export function DataPrivacyPanel({
                     setPurgeInput("");
                   }}
                   disabled={purgeBusy}
-                  className="rounded border px-3 py-1.5 text-sm hover:bg-zinc-50 disabled:opacity-50"
+                  className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted/50 disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 {purgeError && (
-                  <p role="alert" className="text-sm text-red-700">
+                  <p role="alert" className="text-destructive text-sm">
                     {purgeError}
                   </p>
                 )}
@@ -2537,7 +2487,7 @@ export function DataPrivacyPanel({
           )}
         </div>
       </div>
-    </section>
+    </SettingsPanel>
   );
 }
 

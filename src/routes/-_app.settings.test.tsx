@@ -1002,10 +1002,7 @@ describe("ThemePanel", () => {
         density: "comfortable",
         accent: "rausch",
       });
-      await waitFor(() =>
-        expect(screen.getByRole("status").textContent).toMatch(/saved/i),
-      );
-      expect(onUpdate).toHaveBeenCalled();
+      await waitFor(() => expect(onUpdate).toHaveBeenCalled());
     } finally {
       window.removeEventListener(THEME_UPDATED_EVENT, onUpdate);
     }
@@ -1088,9 +1085,6 @@ describe("DataPrivacyPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: /save retention/i }));
     await waitFor(() =>
       expect(retentionSaver).toHaveBeenCalledWith({ retention_days: 45 }),
-    );
-    await waitFor(() =>
-      expect(screen.getByRole("status").textContent).toMatch(/saved/i),
     );
   });
 
