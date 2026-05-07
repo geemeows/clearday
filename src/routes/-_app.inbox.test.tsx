@@ -416,7 +416,7 @@ describe("InboxDetailPane", () => {
     expect(within(pane).getByText("@alice")).toBeTruthy();
     expect(
       within(pane).getByText("Open · review requested", {
-        selector: '[data-slot="pr-status-chip"]',
+        selector: '[data-slot="status-badge"]',
       }),
     ).toBeTruthy();
     const open = within(pane).getByRole("link", { name: /open in github/i });

@@ -8,6 +8,8 @@ import remarkGfm from "remark-gfm";
 import { z } from "zod";
 import { Tabs, TabsList, TabsPanel, TabsTab } from "#/components/coss/tabs";
 import { Skeleton } from "#/components/ui/skeleton";
+import { StatusBadge } from "#/components/ui/StatusBadge";
+import { UserAvatar } from "#/components/ui/UserAvatar";
 import {
   providerOpenLabel,
   providerSourceKind,
@@ -471,34 +473,26 @@ export function InboxRow({
   const chips = (
     <>
       {severity === "ci_fail" && (
-        <SeverityChip tone="danger">CI FAIL</SeverityChip>
+        <StatusBadge tone="danger">CI FAIL</StatusBadge>
       )}
       {severity === "conflict" && (
-        <SeverityChip tone="warning">CONFLICT</SeverityChip>
+        <StatusBadge tone="warning">CONFLICT</StatusBadge>
       )}
-      {isAutoRule && <SeverityChip tone="muted">RULE</SeverityChip>}
-      {replied && (
-        <SeverityChip tone="success" className="uppercase tracking-wide">
-          Replied
-        </SeverityChip>
-      )}
+      {isAutoRule && <StatusBadge tone="muted">RULE</StatusBadge>}
+      {replied && <StatusBadge tone="success">Replied</StatusBadge>}
       {signal.priority === "high" && (
-        <SeverityChip tone="danger" className="uppercase tracking-wide">
-          High
-        </SeverityChip>
+        <StatusBadge tone="danger">High</StatusBadge>
       )}
       {signal.priority === "low" && (
-        <SeverityChip tone="muted" className="uppercase tracking-wide">
-          Low
-        </SeverityChip>
+        <StatusBadge tone="muted">Low</StatusBadge>
       )}
       {snoozed && (
-        <SeverityChip
+        <StatusBadge
           tone="warning"
           title={`Returns at ${formatSnoozeReturn(signal.snoozed_until)}`}
         >
           Snoozed · returns {formatSnoozeReturn(signal.snoozed_until)}
-        </SeverityChip>
+        </StatusBadge>
       )}
     </>
   );
@@ -526,44 +520,6 @@ export function InboxRow({
         />
       </button>
     </li>
-  );
-}
-
-function SeverityChip({
-  tone,
-  className,
-  children,
-  title,
-}: {
-  tone: "danger" | "warning" | "muted" | "success";
-  className?: string;
-  children: React.ReactNode;
-  title?: string;
-}) {
-  const style: React.CSSProperties =
-    tone === "danger"
-      ? { background: "var(--danger-soft)", color: "var(--destructive)" }
-      : tone === "warning"
-        ? { background: "var(--warn-soft)", color: "var(--warn)" }
-        : tone === "success"
-          ? { background: "var(--good-soft)", color: "var(--good)" }
-          : {
-              background: "var(--surface-strong)",
-              color: "var(--muted-foreground)",
-            };
-  return (
-    <span
-      data-slot="severity-chip"
-      data-tone={tone}
-      title={title}
-      className={cn(
-        "shrink-0 rounded-full px-[7px] py-px font-bold uppercase tracking-wide",
-        className,
-      )}
-      style={{ fontSize: 10, lineHeight: 1.4, ...style }}
-    >
-      {children}
-    </span>
   );
 }
 
@@ -676,9 +632,7 @@ export function InboxDetailPane({
           </span>
         )}
         <span className="flex-1" />
-        {group === "pr" && (
-          <PrStatusChip signal={signal} liveState={liveState} />
-        )}
+        {group === "pr" && <PrStatusBadge signal={signal} liveState={liveState} />}
         <button
           type="button"
           aria-label="Close detail"
@@ -803,27 +757,25 @@ export function TaskDetail({ signal }: { signal: StoredSignal }) {
   );
 }
 
-function PrStatusChip({
+function PrStatusBadge({
   signal,
   liveState,
 }: {
   signal: StoredSignal;
   liveState: PrLiveState | null;
 }) {
-  // Live overview is the source of truth when available — the poll only
-  // covers open PRs, so signal.payload doesn't track merge/close.
   const merged = liveState ? liveState.merged : Boolean(signal.payload?.merged);
   const closed = liveState
     ? liveState.state === "closed" && !liveState.merged
     : Boolean(signal.payload?.closed) && !merged;
   const draft = Boolean(signal.payload?.draft);
-  const tone: "good" | "muted" | "ai" | "danger" = merged
-    ? "ai"
+  const tone: "success" | "info" | "danger" | "muted" = merged
+    ? "info"
     : closed
       ? "danger"
       : draft
         ? "muted"
-        : "good";
+        : "success";
   const label = merged
     ? "Merged"
     : closed
@@ -835,31 +787,11 @@ function PrStatusChip({
           : signal.kind === "pr_authored"
             ? "Open · authored by you"
             : "Open";
-  const palette: Record<typeof tone, { bg: string; fg: string }> = {
-    good: { bg: "var(--good-soft)", fg: "var(--good)" },
-    danger: { bg: "var(--danger-soft)", fg: "var(--destructive)" },
-    ai: { bg: "var(--src-ai-bg)", fg: "var(--src-ai)" },
-    muted: { bg: "var(--surface-strong)", fg: "var(--muted-foreground)" },
-  };
-  return (
-    <span
-      data-slot="pr-status-chip"
-      className="inline-flex items-center rounded-full"
-      style={{
-        padding: "2px 10px",
-        fontSize: 11,
-        background: palette[tone].bg,
-        color: palette[tone].fg,
-      }}
-    >
-      {label}
-    </span>
-  );
+  return <StatusBadge tone={tone}>{label}</StatusBadge>;
 }
 
 function PrMetaRow({ signal }: { signal: StoredSignal }) {
   const author = signal.payload?.author as string | undefined;
-  const authorAvatar = signal.payload?.author_avatar_url as string | undefined;
   const additions = signal.payload?.additions as number | undefined;
   const deletions = signal.payload?.deletions as number | undefined;
   const filesChanged =
@@ -878,7 +810,7 @@ function PrMetaRow({ signal }: { signal: StoredSignal }) {
     >
       {author && (
         <span className="flex items-center" style={{ gap: 8 }}>
-          <AuthorAvatar handle={author} src={authorAvatar} />
+          <UserAvatar name={author} size="sm" />
           <span style={{ fontSize: 13, fontWeight: 500 }}>@{author}</span>
         </span>
       )}
@@ -1120,26 +1052,6 @@ export function PRDetail({
         />
       )}
     </div>
-  );
-}
-
-function AuthorAvatar({ handle, src }: { handle: string; src?: string }) {
-  if (src) {
-    return (
-      <img
-        src={src}
-        alt={`@${handle}`}
-        className="h-5 w-5 rounded-full border border-border object-cover"
-      />
-    );
-  }
-  return (
-    <span
-      aria-hidden="true"
-      className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-muted text-[10px] font-medium uppercase text-muted-foreground"
-    >
-      {handle.slice(0, 1)}
-    </span>
   );
 }
 
@@ -3698,13 +3610,28 @@ export function AttendeeStack({
   const overflow = sorted.length - visible.length;
   return (
     <div className="flex items-center" style={{ paddingLeft: 8 }}>
-      {visible.map((a, i) => (
-        <AttendeeAvatar
-          key={attendeeKey(a, i)}
-          attendee={a}
-          stackedAfterFirst={i > 0}
-        />
-      ))}
+      {visible.map((a, i) => {
+        const label = attendeeLabel(a);
+        const declined = a.response === "declined";
+        return (
+          <UserAvatar
+            key={attendeeKey(a, i)}
+            name={label}
+            size="md"
+            title={
+              a.response && a.response !== "accepted"
+                ? `${label} · ${a.response}`
+                : label
+            }
+            data-response={a.response ?? undefined}
+            style={{
+              border: "2px solid var(--canvas)",
+              marginLeft: i > 0 ? -8 : 0,
+              opacity: declined ? 0.5 : 1,
+            }}
+          />
+        );
+      })}
       {overflow > 0 && (
         <span
           title={sorted
@@ -3731,69 +3658,12 @@ export function AttendeeStack({
   );
 }
 
-function AttendeeAvatar({
-  attendee,
-  stackedAfterFirst,
-}: {
-  attendee: MeetingAttendee;
-  stackedAfterFirst: boolean;
-}) {
-  const label = attendeeLabel(attendee);
-  const opacity = attendee.response === "declined" ? 0.5 : 1;
-  return (
-    <span
-      title={
-        attendee.response && attendee.response !== "accepted"
-          ? `${label} · ${attendee.response}`
-          : label
-      }
-      data-response={attendee.response ?? undefined}
-      className="inline-flex items-center justify-center"
-      style={{
-        width: 24,
-        height: 24,
-        borderRadius: "50%",
-        background: avatarTint(label),
-        color: "var(--ink)",
-        fontSize: 10,
-        fontWeight: 600,
-        border: "2px solid var(--canvas)",
-        marginLeft: stackedAfterFirst ? -8 : 0,
-        opacity,
-      }}
-    >
-      {initials(label)}
-    </span>
-  );
-}
-
-const ATTENDEE_TINTS = [
-  "var(--src-git-bg)",
-  "var(--src-slack-bg)",
-  "var(--src-cal-bg)",
-  "var(--src-task-bg)",
-  "var(--src-ai-bg)",
-];
-
-function avatarTint(label: string): string {
-  let h = 0;
-  for (let i = 0; i < label.length; i++) h = (h * 31 + label.charCodeAt(i)) | 0;
-  return ATTENDEE_TINTS[Math.abs(h) % ATTENDEE_TINTS.length];
-}
-
 function attendeeKey(a: MeetingAttendee, i: number): string {
   return a.email ?? a.name ?? `idx-${i}`;
 }
 
 function attendeeLabel(a: MeetingAttendee): string {
   return a.name?.trim() || a.email?.trim() || "Guest";
-}
-
-function initials(label: string): string {
-  const parts = label.split(/[\s@._-]+/).filter(Boolean);
-  if (parts.length === 0) return "?";
-  if (parts.length === 1) return parts[0][0]?.toUpperCase() ?? "?";
-  return ((parts[0][0] ?? "") + (parts[1][0] ?? "")).toUpperCase();
 }
 
 function byResponse(a: MeetingAttendee, b: MeetingAttendee): number {

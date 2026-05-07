@@ -33,6 +33,7 @@ export function UserAvatar({
   size = "md",
   className,
   title,
+  style,
   ...rest
 }: {
   name: string;
@@ -40,7 +41,10 @@ export function UserAvatar({
   size?: Size;
   className?: string;
   title?: string;
-} & Omit<React.HTMLAttributes<HTMLSpanElement>, "title">): React.ReactElement {
+} & Omit<
+  React.HTMLAttributes<HTMLSpanElement>,
+  "title"
+>): React.ReactElement {
   const px = SIZE_PX[size];
   const fontSize = FONT_PX[size];
   const background = tint ?? hashTint(name);
@@ -59,6 +63,7 @@ export function UserAvatar({
         background,
         color: "var(--ink)",
         fontSize,
+        ...style,
       }}
       {...rest}
     >
