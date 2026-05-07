@@ -1,10 +1,8 @@
-// PR overview capability: fetch the PR body (description) and the per-line
-// review comments via:
+// PR overview capability: fetch the PR body (description), the per-line
+// review comments, and the top-level conversation (issue) comments via:
 //   GET /repos/{owner}/{repo}/pulls/{number}             → body
-//   GET /repos/{owner}/{repo}/pulls/{number}/comments    → review comments
-// (the /comments endpoint returns "review comments" which are the inline
-// per-file comments on the diff; issue-level comments live on /issues/N/comments
-// and are NOT what reviewers leave on hunks).
+//   GET /repos/{owner}/{repo}/pulls/{number}/comments    → review comments (inline, on diff hunks)
+//   GET /repos/{owner}/{repo}/issues/{number}/comments   → issue comments (top-level conversation)
 
 export type FetchPrOverviewParams = {
   repo: string;
@@ -30,6 +28,14 @@ export type PrReviewComment = {
   created_at: string | null;
 };
 
+export type PrIssueComment = {
+  id: number;
+  body: string;
+  user: string | null;
+  user_avatar_url: string | null;
+  created_at: string | null;
+};
+
 export type FetchPrOverviewResult =
   | {
       ok: true;
@@ -37,6 +43,7 @@ export type FetchPrOverviewResult =
       author: string | null;
       author_avatar_url: string | null;
       review_comments: PrReviewComment[];
+      issue_comments: PrIssueComment[];
     }
   | {
       ok: false;
@@ -80,12 +87,15 @@ export async function fetchPrOverview(
   };
   const prUrl = `https://api.github.com/repos/${repo}/pulls/${params.number}`;
   const commentsUrl = `https://api.github.com/repos/${repo}/pulls/${params.number}/comments?per_page=100`;
+  const issueCommentsUrl = `https://api.github.com/repos/${repo}/issues/${params.number}/comments?per_page=100`;
   let prRes: Awaited<ReturnType<GithubFetch>>;
   let commentsRes: Awaited<ReturnType<GithubFetch>>;
+  let issueCommentsRes: Awaited<ReturnType<GithubFetch>>;
   try {
-    [prRes, commentsRes] = await Promise.all([
+    [prRes, commentsRes, issueCommentsRes] = await Promise.all([
       deps.fetch(prUrl, { method: "GET", headers }),
       deps.fetch(commentsUrl, { method: "GET", headers }),
+      deps.fetch(issueCommentsUrl, { method: "GET", headers }),
     ]);
   } catch (err) {
     return {
@@ -94,7 +104,7 @@ export async function fetchPrOverview(
       reason: "api_error",
     };
   }
-  for (const res of [prRes, commentsRes]) {
+  for (const res of [prRes, commentsRes, issueCommentsRes]) {
     if (!res.ok) {
       const text = await safeText(res);
       const needsReauth =
@@ -112,6 +122,9 @@ export async function fetchPrOverview(
   }
   const prBody = (await safeJson(prRes)) as Record<string, unknown> | null;
   const commentsBody = (await safeJson(commentsRes)) as Array<
+    Record<string, unknown>
+  > | null;
+  const issueCommentsBody = (await safeJson(issueCommentsRes)) as Array<
     Record<string, unknown>
   > | null;
 
@@ -148,6 +161,23 @@ export async function fetchPrOverview(
       }))
     : [];
 
+  const issue_comments: PrIssueComment[] = Array.isArray(issueCommentsBody)
+    ? issueCommentsBody.map((c) => {
+        const cu = c.user as
+          | { login?: string; avatar_url?: string }
+          | undefined;
+        return {
+          id: typeof c.id === "number" ? c.id : 0,
+          body: typeof c.body === "string" ? c.body : "",
+          user: typeof cu?.login === "string" ? cu.login : null,
+          user_avatar_url:
+            typeof cu?.avatar_url === "string" ? cu.avatar_url : null,
+          created_at:
+            typeof c.created_at === "string" ? (c.created_at as string) : null,
+        };
+      })
+    : [];
+
   return {
     ok: true,
     body: typeof prBody?.body === "string" ? (prBody.body as string) : null,
@@ -155,6 +185,7 @@ export async function fetchPrOverview(
     author_avatar_url:
       typeof user?.avatar_url === "string" ? user.avatar_url : null,
     review_comments,
+    issue_comments,
   };
 }
 

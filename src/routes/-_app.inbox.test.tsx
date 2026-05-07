@@ -12,6 +12,7 @@ import {
   InboxDetailPane,
   InboxView,
   MeetingDetail,
+  PrComments,
   PrDescription,
   PrDiffViewer,
   PrReviewActions,
@@ -1408,6 +1409,7 @@ describe("PrDescription", () => {
           created_at: null,
         },
       ],
+      issue_comments: [],
     }));
     render(
       <PrDescription
@@ -1433,6 +1435,7 @@ describe("PrDescription", () => {
       author: null,
       author_avatar_url: null,
       review_comments: [],
+      issue_comments: [],
     }));
     render(<PrDescription repo="o/r" number={1} load={load} />);
     await waitFor(() => screen.getByText(/no description provided/i));
@@ -1446,6 +1449,63 @@ describe("PrDescription", () => {
     render(<PrDescription repo="o/r" number={1} load={load} />);
     await waitFor(() => screen.getByRole("alert"));
     expect(screen.getByRole("alert").textContent).toMatch(/github HTTP 500/);
+  });
+});
+
+describe("PrComments", () => {
+  it("shows a skeleton while loading", () => {
+    render(
+      <PrComments loading={true} reviewComments={[]} issueComments={[]} />,
+    );
+    expect(screen.getByLabelText(/loading comments/i)).toBeTruthy();
+  });
+
+  it("renders an empty state when there are no comments", () => {
+    render(
+      <PrComments loading={false} reviewComments={[]} issueComments={[]} />,
+    );
+    expect(screen.getByText(/no comments yet/i)).toBeTruthy();
+  });
+
+  it("merges issue + review comments into one chronological timeline and renders bodies as markdown", () => {
+    render(
+      <PrComments
+        loading={false}
+        reviewComments={[
+          {
+            id: 7,
+            path: "src/a.ts",
+            line: 12,
+            side: "RIGHT",
+            diff_hunk: null,
+            body: "**nit**: rename this",
+            user: "rahul",
+            user_avatar_url: null,
+            created_at: "2026-05-02T10:00:00Z",
+          },
+        ]}
+        issueComments={[
+          {
+            id: 100,
+            body: "looks good to me",
+            user: "carol",
+            user_avatar_url: null,
+            created_at: "2026-05-01T09:00:00Z",
+          },
+        ]}
+      />,
+    );
+    const articles = screen.getAllByRole("article");
+    expect(articles).toHaveLength(2);
+    expect(articles[0].textContent).toMatch(/looks good to me/);
+    expect(articles[1].textContent).toMatch(/nit/);
+    expect(within(articles[1]).getByText(/src\/a\.ts:12/)).toBeTruthy();
+    expect(
+      within(articles[1]).getByText("Review", {
+        selector: '[data-slot="comment-kind"]',
+      }),
+    ).toBeTruthy();
+    expect(within(articles[1]).getByText("nit").tagName).toBe("STRONG");
   });
 });
 
