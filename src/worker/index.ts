@@ -30,6 +30,12 @@ import { runAlertQueueDrain } from "#/features/alerts/server/queue-drain";
 import { type AskAiDeps, handleAskAi } from "#/features/ask-ai/api";
 import { isAllowedEmail } from "#/features/auth/gate";
 import {
+  type AutomationsStore,
+  getAutomations,
+  putAutomations,
+} from "#/features/automations/api";
+import type { Automation } from "#/features/automations/engine";
+import {
   type BriefingDeps,
   handleBriefingGenerate,
   runBriefingTick,
@@ -49,12 +55,6 @@ import {
   sendEmailDigestTest,
 } from "#/features/email-digest/api";
 import { startFocusSession } from "#/features/focus/session";
-import {
-  getInboxRules,
-  type InboxRulesStore,
-  putInboxRules,
-} from "#/features/inbox-rules/api";
-import type { InboxRule } from "#/features/inbox-rules/engine";
 import {
   disconnectIntegration,
   getIntegrations,
@@ -293,10 +293,10 @@ export default {
       return json(out, out.ok ? 200 : out.reason === "error" ? 400 : 200);
     }
 
-    if (url.pathname === "/api/inbox-rules") {
-      const store = inboxRulesStore(service);
+    if (url.pathname === "/api/automations") {
+      const store = automationsStore(service);
       if (request.method === "GET") {
-        return json(await getInboxRules(store));
+        return json(await getAutomations(store));
       }
       if (request.method === "PUT") {
         let body: unknown;
@@ -305,9 +305,9 @@ export default {
         } catch {
           return json({ ok: false, error: "invalid json" }, 400);
         }
-        const out = await putInboxRules(body, store);
+        const out = await putAutomations(body, store);
         if (!out.ok) return json({ ok: false, error: out.error }, 400);
-        return json({ ok: true, rules: out.rules });
+        return json({ ok: true, automations: out.automations });
       }
     }
 
@@ -596,7 +596,7 @@ export default {
       fetch(input, init);
     ctx.waitUntil(
       runScheduledPoll({
-        loadInboxRules: () => loadInboxRulesFromService(service),
+        loadAutomations: () => loadAutomationsFromService(service),
         loadAccounts: async () => {
           const { data, error } = await service
             .from("provider_accounts")
@@ -1570,7 +1570,7 @@ function dataPrivacyDeps(service: SupabaseService): ExportDeps {
   return {
     loadSignals: () => loadAllRows(service, "signals"),
     loadRollups: () => loadAllRows(service, "signal_rollups"),
-    loadInboxRules: () => loadAllRows(service, "inbox_rules"),
+    loadAutomations: () => loadAllRows(service, "automations"),
     loadSlackAllowlist: () => loadAllRows(service, "slack_channel_allowlist"),
     loadUserPreferences: () => loadSingleton(service, "user_preferences"),
     loadAiSettings: () => loadSingleton(service, "ai_settings"),
@@ -1891,12 +1891,14 @@ function rollupDeps(service: SupabaseService) {
   };
 }
 
-async function loadInboxRulesFromService(
+async function loadAutomationsFromService(
   service: SupabaseService,
-): Promise<InboxRule[]> {
+): Promise<Automation[]> {
   const { data, error } = await service
-    .from("inbox_rules")
-    .select("id, name, enabled, priority, match, action")
+    .from("automations")
+    .select(
+      "id, name, enabled, priority, trigger_kind, trigger_config, predicates, actions",
+    )
     .order("priority", { ascending: true });
   if (error) throw new Error(error.message);
   const rows = (data ?? []) as Array<{
@@ -1904,43 +1906,47 @@ async function loadInboxRulesFromService(
     name: string;
     enabled: boolean;
     priority: number;
-    match: { predicates?: InboxRule["predicates"] } | null;
-    action: { effects?: InboxRule["effects"] } | null;
+    trigger_kind: Automation["trigger_kind"];
+    predicates: Automation["predicates"] | null;
+    actions: Automation["actions"] | null;
   }>;
   return rows.map((r) => ({
     id: r.id,
     name: r.name,
     enabled: r.enabled,
     priority: r.priority,
-    predicates: r.match?.predicates ?? [],
-    effects: r.action?.effects ?? [],
+    trigger_kind: r.trigger_kind,
+    predicates: r.predicates ?? [],
+    actions: r.actions ?? [],
   }));
 }
 
-function inboxRulesStore(service: SupabaseService): InboxRulesStore {
+function automationsStore(service: SupabaseService): AutomationsStore {
   return {
-    load: () => loadInboxRulesFromService(service),
-    save: async (rules) => {
+    load: () => loadAutomationsFromService(service),
+    save: async (automations) => {
       // Delete then insert: simplest correct semantics for "replace whole list".
       const { error: delError } = await service
-        .from("inbox_rules")
+        .from("automations")
         .delete()
         .neq("id", "00000000-0000-0000-0000-000000000000");
       if (delError) throw new Error(delError.message);
-      if (rules.length === 0) return [];
-      const rows = rules.map((r) => ({
-        id: r.id,
-        name: r.name,
-        enabled: r.enabled,
-        priority: r.priority,
-        match: { predicates: r.predicates },
-        action: { effects: r.effects },
+      if (automations.length === 0) return [];
+      const rows = automations.map((a) => ({
+        id: a.id,
+        name: a.name,
+        enabled: a.enabled,
+        priority: a.priority,
+        trigger_kind: a.trigger_kind,
+        trigger_config: {},
+        predicates: a.predicates,
+        actions: a.actions,
       }));
       const { error: insError } = await service
-        .from("inbox_rules")
+        .from("automations")
         .insert(rows);
       if (insError) throw new Error(insError.message);
-      return loadInboxRulesFromService(service);
+      return loadAutomationsFromService(service);
     },
   };
 }

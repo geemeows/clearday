@@ -20,7 +20,7 @@ export type ExportPayload = {
   exported_at: string;
   signals: SignalRow[];
   signal_rollups: RollupRow[];
-  inbox_rules: RuleRow[];
+  automations: RuleRow[];
   slack_channel_allowlist: AllowlistRow[];
   user_preferences: Record<string, unknown> | null;
   ai_settings: Record<string, unknown> | null;
@@ -29,7 +29,7 @@ export type ExportPayload = {
 export type ExportDeps = {
   loadSignals: () => Promise<SignalRow[]>;
   loadRollups: () => Promise<RollupRow[]>;
-  loadInboxRules: () => Promise<RuleRow[]>;
+  loadAutomations: () => Promise<RuleRow[]>;
   loadSlackAllowlist: () => Promise<AllowlistRow[]>;
   loadUserPreferences: () => Promise<Record<string, unknown> | null>;
   loadAiSettings: () => Promise<Record<string, unknown> | null>;
@@ -54,20 +54,21 @@ function stripSecrets(
 }
 
 export async function exportData(deps: ExportDeps): Promise<ExportPayload> {
-  const [signals, rollups, rules, allowlist, prefs, ai] = await Promise.all([
-    deps.loadSignals(),
-    deps.loadRollups(),
-    deps.loadInboxRules(),
-    deps.loadSlackAllowlist(),
-    deps.loadUserPreferences(),
-    deps.loadAiSettings(),
-  ]);
+  const [signals, rollups, automations, allowlist, prefs, ai] =
+    await Promise.all([
+      deps.loadSignals(),
+      deps.loadRollups(),
+      deps.loadAutomations(),
+      deps.loadSlackAllowlist(),
+      deps.loadUserPreferences(),
+      deps.loadAiSettings(),
+    ]);
   const now = deps.now?.() ?? new Date();
   return {
     exported_at: now.toISOString(),
     signals,
     signal_rollups: rollups,
-    inbox_rules: rules,
+    automations,
     slack_channel_allowlist: allowlist,
     user_preferences: prefs,
     ai_settings: stripSecrets(ai, AI_SECRET_FIELDS),

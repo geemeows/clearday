@@ -85,7 +85,7 @@ describe("Settings hub layout", () => {
     });
   });
 
-  it("renders six sub-sidebar tabs", async () => {
+  it("renders five sub-sidebar tabs", async () => {
     await renderSettings("/settings/integrations");
     const nav = await screen.findByRole("navigation", {
       name: /settings sections/i,
@@ -93,7 +93,6 @@ describe("Settings hub layout", () => {
     for (const label of [
       "Integrations",
       "Notifications",
-      "Inbox rules",
       "AI provider",
       "Self-host",
       "Profile",
@@ -114,11 +113,11 @@ describe("Settings hub layout", () => {
   });
 
   it("active tab has the active styling", async () => {
-    await renderSettings("/settings/rules");
+    await renderSettings("/settings/notifications");
     const nav = await screen.findByRole("navigation", {
       name: /settings sections/i,
     });
-    const active = within(nav).getByRole("link", { name: /inbox rules/i });
+    const active = within(nav).getByRole("link", { name: /notifications/i });
     expect(active.className).toMatch(/font-medium/);
   });
 });
@@ -1093,7 +1092,7 @@ describe("DataPrivacyPanel", () => {
       exported_at: "2026-05-04T10:00:00.000Z",
       signals: [],
       signal_rollups: [],
-      inbox_rules: [],
+      automations: [],
       slack_channel_allowlist: [],
       user_preferences: null,
       ai_settings: null,

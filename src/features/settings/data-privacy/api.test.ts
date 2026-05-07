@@ -17,7 +17,7 @@ describe("exportData", () => {
     const out = await exportData({
       loadSignals: async () => [{ id: "s1" }],
       loadRollups: async () => [{ id: "r1" }],
-      loadInboxRules: async () => [{ id: "ir1" }],
+      loadAutomations: async () => [{ id: "a1" }],
       loadSlackAllowlist: async () => [{ channel_id: "C1" }],
       loadUserPreferences: async () => ({ alert_channels: ["slack_dm"] }),
       loadAiSettings: async () => ({ provider: "openai", model: "gpt-4o" }),
@@ -27,7 +27,7 @@ describe("exportData", () => {
       exported_at: "2026-05-04T10:00:00.000Z",
       signals: [{ id: "s1" }],
       signal_rollups: [{ id: "r1" }],
-      inbox_rules: [{ id: "ir1" }],
+      automations: [{ id: "a1" }],
       slack_channel_allowlist: [{ channel_id: "C1" }],
       user_preferences: { alert_channels: ["slack_dm"] },
       ai_settings: { provider: "openai", model: "gpt-4o" },
@@ -40,7 +40,7 @@ describe("exportData", () => {
     const out = await exportData({
       loadSignals: async () => [],
       loadRollups: async () => [],
-      loadInboxRules: async () => [],
+      loadAutomations: async () => [],
       loadSlackAllowlist: async () => [],
       loadUserPreferences: async () => null,
       loadAiSettings: async () => ({
@@ -57,7 +57,7 @@ describe("exportData", () => {
     const out = await exportData({
       loadSignals: async () => [],
       loadRollups: async () => [],
-      loadInboxRules: async () => [],
+      loadAutomations: async () => [],
       loadSlackAllowlist: async () => [],
       loadUserPreferences: async () => null,
       loadAiSettings: async () => null,
