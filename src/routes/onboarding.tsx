@@ -1,12 +1,14 @@
 import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { Check } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "#/components/coss/button";
+import { SettingsPanel } from "#/components/ui/SettingsPanel";
 import { signOut, useAuth } from "#/features/auth/auth";
 import {
   SourceGlyph,
   type SourceKind,
 } from "#/features/signals/components/SourceGlyph";
+import { useAsyncPanel } from "#/hooks/useAsyncPanel";
 import { apiFetch } from "#/lib/api-client";
 
 export const Route = createFileRoute("/onboarding")({
@@ -310,12 +312,6 @@ export function SlackAllowlistPanel({
   saver?: AllowlistSaver;
   suggestionsLoader?: SuggestionsLoader;
 } = {}) {
-  const [draft, setDraft] = useState<string | null>(null);
-  const [saved, setSaved] = useState<string[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [status, setStatus] = useState<string | null>(null);
-
   const load = useMemo(
     () =>
       loader ??
@@ -339,52 +335,54 @@ export function SlackAllowlistPanel({
     [suggestionsLoader],
   );
 
-  useEffect(() => {
-    let cancelled = false;
-    load()
-      .then((body) => {
-        if (cancelled) return;
-        setSaved(body.channels);
-        setDraft(body.channels.join("\n"));
-      })
-      .catch((e) => {
-        if (cancelled) return;
-        setError(e instanceof Error ? e.message : "failed to load");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [load]);
+  const {
+    data,
+    error: panelError,
+    busy,
+    persist,
+  } = useAsyncPanel<AllowlistView>({
+    load,
+    save: async (next) => {
+      await save(next.channels);
+    },
+  });
 
-  const onSave = useCallback(async () => {
+  const [draft, setDraft] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
+  const [suggesting, setSuggesting] = useState(false);
+
+  // Sync the textarea draft from the persisted snapshot whenever a fresh one
+  // lands (initial load and after a successful save).
+  const lastDataRef = useRef<AllowlistView | null>(null);
+  useEffect(() => {
+    if (data && data !== lastDataRef.current) {
+      setDraft(data.channels.join("\n"));
+      lastDataRef.current = data;
+    }
+  }, [data]);
+
+  const onSave = useCallback(() => {
     if (draft == null) return;
     const channels = draft
       .split("\n")
       .map((s) => s.trim())
       .filter(Boolean);
-    setBusy(true);
+    setActionError(null);
     setStatus(null);
-    try {
-      const body = await save(channels);
-      setSaved(body.channels);
-      setDraft(body.channels.join("\n"));
-      setStatus("Saved");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "save failed");
-    } finally {
-      setBusy(false);
-    }
-  }, [draft, save]);
+    setDraft(channels.join("\n"));
+    persist({ channels });
+  }, [draft, persist]);
 
   const onSuggest = useCallback(async () => {
     if (draft == null) return;
-    setBusy(true);
+    setSuggesting(true);
     setStatus(null);
-    setError(null);
+    setActionError(null);
     try {
       const out = await loadSuggestions();
       if (!out.ok) {
-        setError(out.error || "could not load Slack channels");
+        setActionError(out.error || "could not load Slack channels");
         return;
       }
       const existing = draft
@@ -402,33 +400,22 @@ export function SlackAllowlistPanel({
           : `Added ${out.channels.length} from Slack`,
       );
     } catch (e) {
-      setError(e instanceof Error ? e.message : "suggest failed");
+      setActionError(e instanceof Error ? e.message : "suggest failed");
     } finally {
-      setBusy(false);
+      setSuggesting(false);
     }
   }, [draft, loadSuggestions]);
 
+  const error = actionError ?? panelError;
+  const isBusy = busy || suggesting;
+
   return (
-    <div>
-      <h2 className="text-base font-semibold text-zinc-900">
-        Slack channel allowlist
-      </h2>
-      <p className="mt-1 text-sm text-zinc-500">
-        Channels listed here will capture <code>@here</code> /{" "}
-        <code>@channel</code> as Signals. DMs and explicit @-mentions are always
-        captured. One channel ID per line (e.g. <code>C0123ABCD</code>).
-      </p>
-
-      {error && (
-        <p className="mt-3 rounded border border-red-200 bg-red-50 p-2 text-sm text-red-700">
-          {error}
-        </p>
-      )}
-
-      {draft == null && !error && (
-        <p className="mt-3 text-sm text-zinc-500">Loading…</p>
-      )}
-
+    <SettingsPanel
+      title="Slack allowlist"
+      desc="Channels listed here capture @here / @channel as Signals. DMs and explicit @-mentions are always captured. One channel ID per line (e.g. C0123ABCD)."
+      error={error}
+      busy={busy && !data}
+    >
       {draft != null && (
         <>
           <textarea
@@ -436,39 +423,41 @@ export function SlackAllowlistPanel({
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             rows={6}
-            disabled={busy}
+            disabled={isBusy}
             placeholder="C0123ABCD"
-            className="mt-3 w-full rounded border border-zinc-200 px-2 py-1.5 font-mono text-sm"
+            className="mt-3 w-full rounded border border-border bg-background px-2 py-1.5 font-mono text-sm"
           />
           <div className="mt-2 flex items-center gap-3">
             <button
               type="button"
               onClick={onSave}
-              disabled={busy}
-              className="rounded border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50 disabled:opacity-50"
+              disabled={isBusy}
+              className="rounded border border-border px-3 py-1.5 text-sm hover:bg-muted/50 disabled:opacity-50"
             >
               Save
             </button>
             <button
               type="button"
               onClick={onSuggest}
-              disabled={busy}
-              className="rounded border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50 disabled:opacity-50"
+              disabled={isBusy}
+              className="rounded border border-border px-3 py-1.5 text-sm hover:bg-muted/50 disabled:opacity-50"
             >
               Suggest from Slack
             </button>
-            {saved && (
-              <span className="text-xs text-zinc-500">
-                {saved.length} {saved.length === 1 ? "channel" : "channels"}{" "}
-                allowed
+            {data && (
+              <span className="text-muted-foreground text-xs">
+                {data.channels.length}{" "}
+                {data.channels.length === 1 ? "channel" : "channels"} allowed
               </span>
             )}
             {status && (
-              <output className="text-xs text-zinc-600">{status}</output>
+              <output className="text-muted-foreground text-xs">
+                {status}
+              </output>
             )}
           </div>
         </>
       )}
-    </div>
+    </SettingsPanel>
   );
 }
