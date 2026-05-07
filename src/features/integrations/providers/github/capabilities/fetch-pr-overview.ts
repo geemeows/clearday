@@ -42,6 +42,9 @@ export type FetchPrOverviewResult =
       body: string | null;
       author: string | null;
       author_avatar_url: string | null;
+      state: "open" | "closed";
+      merged: boolean;
+      merged_at: string | null;
       review_comments: PrReviewComment[];
       issue_comments: PrIssueComment[];
     }
@@ -178,12 +181,21 @@ export async function fetchPrOverview(
       })
     : [];
 
+  const state: "open" | "closed" =
+    prBody?.state === "closed" ? "closed" : "open";
+  const merged = Boolean(prBody?.merged);
+  const merged_at =
+    typeof prBody?.merged_at === "string" ? (prBody.merged_at as string) : null;
+
   return {
     ok: true,
     body: typeof prBody?.body === "string" ? (prBody.body as string) : null,
     author: typeof user?.login === "string" ? user.login : null,
     author_avatar_url:
       typeof user?.avatar_url === "string" ? user.avatar_url : null,
+    state,
+    merged,
+    merged_at,
     review_comments,
     issue_comments,
   };

@@ -1417,6 +1417,9 @@ describe("PrDescription", () => {
         },
       ],
       issue_comments: [],
+      state: "open" as const,
+      merged: false,
+      merged_at: null,
     }));
     render(
       <PrDescription
@@ -1443,9 +1446,36 @@ describe("PrDescription", () => {
       author_avatar_url: null,
       review_comments: [],
       issue_comments: [],
+      state: "open" as const,
+      merged: false,
+      merged_at: null,
     }));
     render(<PrDescription repo="o/r" number={1} load={load} />);
     await waitFor(() => screen.getByText(/no description provided/i));
+  });
+
+  it("forwards the live PR state via onPrState so the chip can flip to Merged without a re-poll", async () => {
+    const onPrState = vi.fn();
+    const load = vi.fn(async () => ({
+      ok: true as const,
+      body: "shipped",
+      author: "alice",
+      author_avatar_url: null,
+      review_comments: [],
+      issue_comments: [],
+      state: "closed" as const,
+      merged: true,
+      merged_at: "2026-05-02T11:00:00Z",
+    }));
+    render(
+      <PrDescription repo="o/r" number={2} load={load} onPrState={onPrState} />,
+    );
+    await waitFor(() => expect(onPrState).toHaveBeenCalledTimes(1));
+    expect(onPrState).toHaveBeenCalledWith({
+      state: "closed",
+      merged: true,
+      merged_at: "2026-05-02T11:00:00Z",
+    });
   });
 
   it("surfaces description-load failures via an alert", async () => {

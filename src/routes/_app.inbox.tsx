@@ -615,6 +615,16 @@ export function InboxDetailPane({
   onReplyStart?: (id: string) => void;
   onReplyRollback?: (id: string) => void;
 }) {
+  const [liveState, setLiveState] = useState<PrLiveState | null>(null);
+  const signalId = signal?.id;
+  // Reset whenever a different signal is selected so the chip doesn't
+  // briefly show the previous PR's merged state. Biome can't see that
+  // signalId is the trigger (the body doesn't read it), but we need the
+  // effect to refire on selection change.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: signalId is the reset trigger
+  useEffect(() => {
+    setLiveState(null);
+  }, [signalId]);
   if (!signal) {
     return (
       <aside
@@ -666,7 +676,9 @@ export function InboxDetailPane({
           </span>
         )}
         <span className="flex-1" />
-        {group === "pr" && <PrStatusChip signal={signal} />}
+        {group === "pr" && (
+          <PrStatusChip signal={signal} liveState={liveState} />
+        )}
         <button
           type="button"
           aria-label="Close detail"
@@ -695,6 +707,7 @@ export function InboxDetailPane({
           signal={signal}
           onReplyStart={onReplyStart}
           onReplyRollback={onReplyRollback}
+          onPrState={setLiveState}
         />
       )}
       {group === "slack" && (
@@ -790,9 +803,19 @@ export function TaskDetail({ signal }: { signal: StoredSignal }) {
   );
 }
 
-function PrStatusChip({ signal }: { signal: StoredSignal }) {
-  const merged = Boolean(signal.payload?.merged);
-  const closed = Boolean(signal.payload?.closed) && !merged;
+function PrStatusChip({
+  signal,
+  liveState,
+}: {
+  signal: StoredSignal;
+  liveState: PrLiveState | null;
+}) {
+  // Live overview is the source of truth when available — the poll only
+  // covers open PRs, so signal.payload doesn't track merge/close.
+  const merged = liveState ? liveState.merged : Boolean(signal.payload?.merged);
+  const closed = liveState
+    ? liveState.state === "closed" && !liveState.merged
+    : Boolean(signal.payload?.closed) && !merged;
   const draft = Boolean(signal.payload?.draft);
   const tone: "good" | "muted" | "ai" | "danger" = merged
     ? "ai"
@@ -903,10 +926,12 @@ export function PRDetail({
   signal,
   onReplyStart,
   onReplyRollback,
+  onPrState,
 }: {
   signal: StoredSignal;
   onReplyStart?: (id: string) => void;
   onReplyRollback?: (id: string) => void;
+  onPrState?: (state: PrLiveState) => void;
 }) {
   const repo = signal.payload?.repo as string | undefined;
   const number = signal.payload?.number as number | undefined;
@@ -1019,7 +1044,7 @@ export function PRDetail({
         </section>
       )}
       {repo && typeof number === "number" && (
-        <PrPullRequestPanel repo={repo} number={number} />
+        <PrPullRequestPanel repo={repo} number={number} onPrState={onPrState} />
       )}
       {recentComments.length > 0 && (
         <section aria-label="Recent comments">
@@ -1226,15 +1251,21 @@ export type PrIssueComment = {
   created_at: string | null;
 };
 
+export type PrLiveState = {
+  state: "open" | "closed";
+  merged: boolean;
+  merged_at: string | null;
+};
+
 export type PrOverviewResult =
-  | {
+  | ({
       ok: true;
       body: string | null;
       author: string | null;
       author_avatar_url: string | null;
       review_comments: PrReviewComment[];
       issue_comments: PrIssueComment[];
-    }
+    } & PrLiveState)
   | { ok: false; error: string; reason?: string; needs_reauth?: boolean };
 
 export type PrOverviewLoader = (params: {
@@ -1443,6 +1474,7 @@ export function PrDescription({
   onComments,
   onReviewComments,
   onIssueComments,
+  onPrState,
 }: {
   repo: string;
   number: number;
@@ -1450,6 +1482,7 @@ export function PrDescription({
   onComments?: (commentsByPath: Record<string, PrReviewComment[]>) => void;
   onReviewComments?: (comments: PrReviewComment[]) => void;
   onIssueComments?: (comments: PrIssueComment[]) => void;
+  onPrState?: (state: PrLiveState) => void;
 }) {
   const [state, setState] = useState<
     | { kind: "loading" }
@@ -1468,6 +1501,11 @@ export function PrDescription({
           onComments?.(groupCommentsByPath(out.review_comments));
           onReviewComments?.(out.review_comments);
           onIssueComments?.(out.issue_comments);
+          onPrState?.({
+            state: out.state,
+            merged: out.merged,
+            merged_at: out.merged_at,
+          });
         } else {
           setState({ kind: "error", message: out.error });
         }
@@ -1482,7 +1520,15 @@ export function PrDescription({
     return () => {
       cancelled = true;
     };
-  }, [repo, number, load, onComments, onReviewComments, onIssueComments]);
+  }, [
+    repo,
+    number,
+    load,
+    onComments,
+    onReviewComments,
+    onIssueComments,
+    onPrState,
+  ]);
 
   return (
     <section aria-label="PR description">
@@ -1537,11 +1583,13 @@ export function PrPullRequestPanel({
   number,
   loadOverview,
   loadFiles,
+  onPrState,
 }: {
   repo: string;
   number: number;
   loadOverview?: PrOverviewLoader;
   loadFiles?: PrFilesLoader;
+  onPrState?: (state: PrLiveState) => void;
 }) {
   const [commentsByPath, setCommentsByPath] = useState<
     Record<string, PrReviewComment[]>
@@ -1600,6 +1648,7 @@ export function PrPullRequestPanel({
           onComments={setCommentsByPath}
           onReviewComments={handleReviewComments}
           onIssueComments={setIssueComments}
+          onPrState={onPrState}
         />
       </TabsPanel>
       <TabsPanel value="comments" className="pt-3">
