@@ -4,6 +4,7 @@ import type { AutomationRunRow } from "#/features/automations/api";
 import { AutomationsPanel } from "#/features/automations/components/AutomationsPanel";
 import type { Automation } from "#/features/automations/engine";
 import { AUTOMATION_TEMPLATES } from "#/features/automations/templates";
+import type { StoredSignal } from "#/shared/signal";
 
 function automation(overrides: Partial<Automation> = {}): Automation {
   return {
@@ -587,5 +588,107 @@ describe("AutomationsPanel runs histogram", () => {
     );
     await screen.findByText(/No runs yet/);
     expect(screen.queryByLabelText("Runs histogram (14-day)")).toBeNull();
+  });
+});
+
+describe("AutomationsPanel builder live preview", () => {
+  function signal(overrides: Partial<StoredSignal> = {}): StoredSignal {
+    return {
+      provider: overrides.provider ?? "github",
+      kind: overrides.kind ?? "mention",
+      source_id: overrides.source_id ?? "s-1",
+      title: overrides.title ?? "Untitled",
+      url: overrides.url ?? null,
+      payload: overrides.payload ?? {},
+      requires_action: overrides.requires_action ?? false,
+      source_created_at: overrides.source_created_at ?? null,
+      id: overrides.id ?? "row-1",
+      unread_count: overrides.unread_count ?? 0,
+      created_at: overrides.created_at ?? "2026-05-07T00:00:00Z",
+      updated_at: overrides.updated_at ?? "2026-05-07T00:00:00Z",
+      dismissed_at: overrides.dismissed_at ?? null,
+      priority: overrides.priority ?? null,
+      snoozed_until: overrides.snoozed_until ?? null,
+      alert_channels_override: overrides.alert_channels_override ?? null,
+      tags: overrides.tags ?? null,
+    };
+  }
+
+  it("renders matching signals scoped to the editing automation in the builder", async () => {
+    const signals: StoredSignal[] = [
+      signal({
+        id: "row-1",
+        source_id: "s-1",
+        kind: "mention",
+        title: "Mention from Alice",
+      }),
+      signal({
+        id: "row-2",
+        source_id: "s-2",
+        kind: "pr_review_requested",
+        title: "PR review on repo/x",
+      }),
+    ];
+    const single: Automation[] = [
+      automation({ id: "a-1", name: "Snooze deps" }),
+    ];
+    renderPanel({
+      loader: vi.fn(async () => ({ automations: single })),
+      signalsLoader: vi.fn(async () => signals),
+    });
+    fireEvent.click(await screen.findByText("Edit"));
+    await screen.findByLabelText("Builder live preview");
+    await waitFor(() => {
+      expect(
+        screen.getByText("1 of 2 recent Signals match these predicates."),
+      ).toBeTruthy();
+    });
+    const preview = screen.getByLabelText(
+      "Builder live preview",
+    ) as HTMLElement;
+    expect(preview.textContent).toContain("Mention from Alice");
+    expect(preview.textContent).not.toContain("PR review on repo/x");
+  });
+
+  it("updates the match count live as predicates are edited", async () => {
+    const signals: StoredSignal[] = [
+      signal({
+        id: "row-1",
+        source_id: "s-1",
+        kind: "mention",
+        title: "Mention one",
+      }),
+      signal({
+        id: "row-2",
+        source_id: "s-2",
+        kind: "pr_review_requested",
+        title: "PR review on repo/x",
+      }),
+    ];
+    const single: Automation[] = [
+      automation({ id: "a-1", name: "Snooze deps" }),
+    ];
+    renderPanel({
+      loader: vi.fn(async () => ({ automations: single })),
+      signalsLoader: vi.fn(async () => signals),
+    });
+    fireEvent.click(await screen.findByText("Edit"));
+    await waitFor(() => {
+      expect(
+        screen.getByText("1 of 2 recent Signals match these predicates."),
+      ).toBeTruthy();
+    });
+    const kindInput = screen.getByLabelText("Kind value") as HTMLInputElement;
+    fireEvent.change(kindInput, { target: { value: "pr_review_requested" } });
+    await waitFor(() => {
+      expect(
+        screen.getByText("1 of 2 recent Signals match these predicates."),
+      ).toBeTruthy();
+    });
+    const preview = screen.getByLabelText(
+      "Builder live preview",
+    ) as HTMLElement;
+    expect(preview.textContent).toContain("PR review on repo/x");
+    expect(preview.textContent).not.toContain("Mention one");
   });
 });

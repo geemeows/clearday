@@ -578,7 +578,11 @@ export function AutomationsPanel({
             </DialogTitle>
           </DialogHeader>
           {editing && (
-            <AutomationBuilder automation={editing} onChange={setEditing} />
+            <AutomationBuilder
+              automation={editing}
+              onChange={setEditing}
+              signals={previewSignals ?? []}
+            />
           )}
           <DialogFooter>
             <button
@@ -1021,9 +1025,11 @@ function AutomationsPreview({
 function AutomationBuilder({
   automation,
   onChange,
+  signals,
 }: {
   automation: Automation;
   onChange: (next: Automation) => void;
+  signals: StoredSignal[];
 }) {
   const set = (patch: Partial<Automation>) =>
     onChange({ ...automation, ...patch });
@@ -1149,7 +1155,46 @@ function AutomationBuilder({
           Add action
         </button>
       </fieldset>
+
+      <BuilderPreview automation={automation} signals={signals} />
     </div>
+  );
+}
+
+function BuilderPreview({
+  automation,
+  signals,
+}: {
+  automation: Automation;
+  signals: StoredSignal[];
+}) {
+  const matches = useMemo(
+    () => previewAutomations(signals, [automation]),
+    [automation, signals],
+  );
+  return (
+    <section
+      aria-label="Builder live preview"
+      className="space-y-2 rounded border border-border bg-muted/40 p-3"
+    >
+      <h4 className="font-semibold text-xs">Live preview</h4>
+      <p className="font-mono text-[11px] text-muted-foreground">
+        {matches.length} of {signals.length} recent Signals match these
+        predicates.
+      </p>
+      {matches.length > 0 && (
+        <ul className="space-y-1.5">
+          {matches.slice(0, 5).map(({ signal }) => (
+            <li
+              key={`${signal.provider}:${signal.kind}:${signal.source_id}`}
+              className="truncate rounded border border-border bg-background px-2 py-1 text-xs"
+            >
+              {signal.title}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 
