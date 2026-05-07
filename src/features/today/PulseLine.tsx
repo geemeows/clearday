@@ -34,7 +34,9 @@ export function PulseLine({
     return [x, y];
   });
   const path = points
-    .map((p, i) => `${i === 0 ? "M" : "L"} ${p[0].toFixed(1)} ${p[1].toFixed(1)}`)
+    .map(
+      (p, i) => `${i === 0 ? "M" : "L"} ${p[0].toFixed(1)} ${p[1].toFixed(1)}`,
+    )
     .join(" ");
   const last = points[points.length - 1];
   const lastValue = values[values.length - 1];

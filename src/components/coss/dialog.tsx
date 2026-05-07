@@ -7,10 +7,7 @@ import { cn } from "#/lib/utils";
 function Dialog({
   onOpenChange,
   ...props
-}: Omit<
-  React.ComponentProps<typeof DialogPrimitive.Root>,
-  "onOpenChange"
-> & {
+}: Omit<React.ComponentProps<typeof DialogPrimitive.Root>, "onOpenChange"> & {
   onOpenChange?: (open: boolean) => void;
 }) {
   return (

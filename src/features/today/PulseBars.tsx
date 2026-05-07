@@ -11,10 +11,7 @@ export function PulseBars({
   data: PulseBarsDatum[];
   height?: number;
 }) {
-  const max = Math.max(
-    1,
-    ...data.map((d) => Math.max(d.prs, d.tickets)),
-  );
+  const max = Math.max(1, ...data.map((d) => Math.max(d.prs, d.tickets)));
   const slot = 46;
   const width = 8 + data.length * slot;
   return (

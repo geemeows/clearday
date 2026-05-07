@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { PulseBars } from "#/features/today/PulseBars";
-import { PulseDonut, type PulseDonutSlice } from "#/features/today/PulseDonut";
-import { PulseLine } from "#/features/today/PulseLine";
 import {
   computeWeekStats,
   type PulseSourceKey,
   type WeekStats,
 } from "#/features/signals/views/today";
+import { PulseBars } from "#/features/today/PulseBars";
+import { PulseDonut, type PulseDonutSlice } from "#/features/today/PulseDonut";
+import { PulseLine } from "#/features/today/PulseLine";
 import { apiFetch } from "#/lib/api-client";
 import type { StoredSignal } from "#/shared/signal";
 

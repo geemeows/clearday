@@ -30,11 +30,11 @@ import {
   THEME_UPDATED_EVENT,
   type ThemeView,
 } from "#/features/settings/theme/api";
+import type { SourceKind } from "#/features/signals/components/SourceGlyph";
 import {
   pickActiveFocus,
   toMeetingEvents,
 } from "#/features/signals/views/calendar";
-import type { SourceKind } from "#/features/signals/components/SourceGlyph";
 import { apiFetch } from "#/lib/api-client";
 import type { Signal, SignalKind, StoredSignal } from "#/shared/signal";
 
@@ -125,7 +125,10 @@ export function AppShell() {
     try {
       await apiFetch("/api/focus", {
         method: "POST",
-        body: { duration_minutes: minutes, message: message.trim() || undefined },
+        body: {
+          duration_minutes: minutes,
+          message: message.trim() || undefined,
+        },
       });
     } catch {
       // Best-effort; the FocusActiveBlock will reflect calendar state on the
@@ -192,9 +195,9 @@ function useActiveFocus(): FocusState {
     let cancelled = false;
     const refresh = async () => {
       try {
-        const body = (await apiFetch(
-          "/api/signals?filter=meetings",
-        )) as { signals: StoredSignal[] };
+        const body = (await apiFetch("/api/signals?filter=meetings")) as {
+          signals: StoredSignal[];
+        };
         if (cancelled) return;
         const events = toMeetingEvents(body.signals);
         const block = pickActiveFocus(events, new Date());
@@ -205,7 +208,9 @@ function useActiveFocus(): FocusState {
         const now = Date.now();
         const total = Math.max(
           1,
-          Math.round((block.endsAt.getTime() - block.startsAt.getTime()) / 1000),
+          Math.round(
+            (block.endsAt.getTime() - block.startsAt.getTime()) / 1000,
+          ),
         );
         const remaining = Math.max(
           0,

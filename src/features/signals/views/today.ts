@@ -52,12 +52,7 @@ export type WeekStats = {
   shippedByDay: ShippedByDayEntry[];
 };
 
-export type PulseSourceKey =
-  | "github"
-  | "slack"
-  | "calendar"
-  | "linear"
-  | "ai";
+export type PulseSourceKey = "github" | "slack" | "calendar" | "linear" | "ai";
 
 export type SourceMixEntry = {
   source: PulseSourceKey;
@@ -300,7 +295,9 @@ function computeSourceMix(
   const counts = new Map<PulseSourceKey, number>();
   for (const k of PULSE_SOURCE_ORDER) counts.set(k, 0);
   for (const s of signals) {
-    const t = s.source_created_at ? Date.parse(s.source_created_at) : Number.NaN;
+    const t = s.source_created_at
+      ? Date.parse(s.source_created_at)
+      : Number.NaN;
     if (Number.isNaN(t)) continue;
     if (t < weekAgo || t > now.getTime()) continue;
     const key = classifySource(s);

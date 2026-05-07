@@ -1,7 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ExternalLink, RefreshCw, Video, X } from "lucide-react";
-import { SourceGlyph } from "#/features/signals/components/SourceGlyph";
-import { InboxPreviewRow } from "#/features/signals/components/InboxPreviewRow";
 import {
   type ReactNode,
   useCallback,
@@ -12,6 +10,8 @@ import {
 import { Button as CossButton } from "#/components/coss/button";
 import type { BriefingResult } from "#/features/briefing/morning-briefing";
 import type { ProfileView } from "#/features/settings/profile/api";
+import { InboxPreviewRow } from "#/features/signals/components/InboxPreviewRow";
+import { SourceGlyph } from "#/features/signals/components/SourceGlyph";
 import type { MeetingEvent } from "#/features/signals/views/calendar";
 import {
   filterMeetingsToToday,
@@ -904,7 +904,10 @@ function daysInProgress(s: StoredSignal): number | null {
   if (!iso) return null;
   const t = Date.parse(iso);
   if (!Number.isFinite(t)) return null;
-  const days = Math.max(0, Math.floor((Date.now() - t) / (24 * 60 * 60 * 1000)));
+  const days = Math.max(
+    0,
+    Math.floor((Date.now() - t) / (24 * 60 * 60 * 1000)),
+  );
   return days;
 }
 

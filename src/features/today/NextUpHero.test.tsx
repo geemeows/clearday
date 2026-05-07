@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { NextUpHero } from "#/features/today/NextUpHero";
 import type { NextUpMeeting } from "#/features/signals/views/today";
+import { NextUpHero } from "#/features/today/NextUpHero";
 import type { StoredSignal } from "#/shared/signal";
 
 const meetingSignal: StoredSignal = {
@@ -96,7 +96,9 @@ describe("NextUpHero", () => {
         onSkipAlert={() => {}}
       />,
     );
-    expect(screen.queryByRole("button", { name: /skip 10-min alert/i })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /skip 10-min alert/i }),
+    ).toBeNull();
   });
 
   it("renders agenda items derived from linked invite items", () => {

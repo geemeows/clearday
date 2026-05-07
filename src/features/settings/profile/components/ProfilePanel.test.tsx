@@ -66,7 +66,9 @@ describe("ProfilePanel", () => {
   it("renders the theme toggle alongside the profile fields", async () => {
     render(<ProfilePanel loader={async () => FIELDS} />);
     expect(
-      await screen.findByRole("button", { name: /switch to (light|dark) mode/i }),
+      await screen.findByRole("button", {
+        name: /switch to (light|dark) mode/i,
+      }),
     ).toBeTruthy();
   });
 

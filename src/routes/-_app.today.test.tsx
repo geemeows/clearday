@@ -17,6 +17,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { BriefingResult } from "#/features/briefing/morning-briefing";
 import { UpcomingEventsCard } from "#/features/signals/components/UpcomingEventsCard";
 import { toMeetingEvents } from "#/features/signals/views/calendar";
+import { PulseCard } from "#/features/today/PulseCard";
 import {
   BriefingCard,
   formatGreeting,
@@ -26,7 +27,6 @@ import {
   TodaySchedule,
   TodayView,
 } from "#/routes/_app.today";
-import { PulseCard } from "#/features/today/PulseCard";
 import type { StoredSignal } from "#/shared/signal";
 
 const meetingSignal = (id = "m1"): StoredSignal => ({
@@ -479,9 +479,7 @@ describe("PulseCard", () => {
         ] as StoredSignal[],
     );
     const { container } = render(<PulseCard now={now} loader={loader} />);
-    await waitFor(() =>
-      screen.getByRole("article", { name: /pulse/i }),
-    );
+    await waitFor(() => screen.getByRole("article", { name: /pulse/i }));
     await waitFor(() =>
       expect(
         container.querySelectorAll("circle[data-source]").length,

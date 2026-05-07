@@ -1,8 +1,8 @@
 import { CalendarClock, ExternalLink, Video, X } from "lucide-react";
 import { Button as CossButton } from "#/components/coss/button";
-import { CountdownRing } from "#/features/today/CountdownRing";
 import { SourceGlyph } from "#/features/signals/components/SourceGlyph";
 import type { NextUpMeeting } from "#/features/signals/views/today";
+import { CountdownRing } from "#/features/today/CountdownRing";
 
 export function NextUpHero({
   meeting,

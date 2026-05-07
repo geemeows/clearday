@@ -31,7 +31,11 @@ const COLUMNS: ReadonlyArray<{
   label: string;
   dotStyle: { background: string };
 }> = [
-  { status: "todo", label: "To do", dotStyle: { background: "var(--muted-soft)" } },
+  {
+    status: "todo",
+    label: "To do",
+    dotStyle: { background: "var(--muted-soft)" },
+  },
   {
     status: "in_progress",
     label: "In progress",

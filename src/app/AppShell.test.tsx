@@ -108,6 +108,8 @@ describe("AppShell sidebar", () => {
     fireEvent.click(trigger);
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByText(/start focus session/i)).toBeTruthy();
-    expect(within(dialog).getByRole("group", { name: /duration/i })).toBeTruthy();
+    expect(
+      within(dialog).getByRole("group", { name: /duration/i }),
+    ).toBeTruthy();
   });
 });
