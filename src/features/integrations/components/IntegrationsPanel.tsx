@@ -10,15 +10,17 @@
 // edits update local state only, matching the per-section slice pattern.
 
 import { Plus, X } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "#/components/coss/button";
 import { Input } from "#/components/coss/input";
 import { Switch } from "#/components/coss/switch";
+import { SettingsPanel } from "#/components/ui/SettingsPanel";
 import type { ProviderAccountStatus } from "#/features/integrations/provider-account-status";
 import {
   SourceGlyph,
   type SourceKind,
 } from "#/features/signals/components/SourceGlyph";
+import { useAsyncPanel } from "#/hooks/useAsyncPanel";
 import { apiFetch } from "#/lib/api-client";
 import { cn } from "#/lib/cn";
 
@@ -91,6 +93,8 @@ export type IntegrationsPanelProps = {
   openUrl?: (url: string) => void;
 };
 
+type PanelData = { statuses: Record<string, RowStatus> };
+
 export function IntegrationsPanel({
   sourcesLoader,
   initialAllowlist,
@@ -99,7 +103,6 @@ export function IntegrationsPanel({
   connectUrl,
   openUrl,
 }: IntegrationsPanelProps = {}) {
-  const [statuses, setStatuses] = useState<Record<string, RowStatus>>({});
   const [enabled, setEnabled] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(ROWS.map((r) => [r.id, true])),
   );
@@ -108,7 +111,7 @@ export function IntegrationsPanel({
   );
   const [draft, setDraft] = useState("");
   const [busyProvider, setBusyProvider] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const load = useMemo(
     () =>
@@ -143,46 +146,42 @@ export function IntegrationsPanel({
     [openUrl],
   );
 
-  const refresh = useCallback(() => {
-    let cancelled = false;
-    load()
-      .then((body) => {
-        if (cancelled) return;
-        const next: Record<string, RowStatus> = {};
-        for (const row of ROWS) {
-          if (row.isMock) {
-            next[row.id] = { status: "neutral", lastPolledAt: null };
-            continue;
-          }
-          const match = body.sources.find(
-            (s) => s.provider === row.providerKey,
-          );
-          next[row.id] = {
-            status: match?.status ?? "neutral",
-            lastPolledAt: match?.last_polled_at ?? null,
-          };
+  // Toggle / allowlist are local-only state per the panel's design (no backend
+  // persistence yet), so save is a no-op. The hook drives the load + reload
+  // path; reauthorize/disconnect remain bespoke action handlers since they
+  // aren't shallow-merge persists.
+  const { data, error: loadError, busy, reload } = useAsyncPanel<PanelData>({
+    load: async () => {
+      const body = await load();
+      const statuses: Record<string, RowStatus> = {};
+      for (const row of ROWS) {
+        if (row.isMock) {
+          statuses[row.id] = { status: "neutral", lastPolledAt: null };
+          continue;
         }
-        setStatuses(next);
-      })
-      .catch(() => {
-        // Leave dots neutral on auth/network failure.
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [load]);
+        const match = body.sources.find((s) => s.provider === row.providerKey);
+        statuses[row.id] = {
+          status: match?.status ?? "neutral",
+          lastPolledAt: match?.last_polled_at ?? null,
+        };
+      }
+      return { statuses };
+    },
+    save: async () => {},
+  });
 
-  useEffect(() => refresh(), [refresh]);
+  const statuses = data?.statuses ?? {};
+  const error = actionError ?? (loadError ? loadError.message : null);
 
   const onReauthorize = async (providerKey: string) => {
     setBusyProvider(providerKey);
-    setError(null);
+    setActionError(null);
     try {
       const out = await doConnectUrl(providerKey);
       if (out.ok && out.url) doOpen(out.url);
-      else setError(out.error ?? "could not start connection");
+      else setActionError(out.error ?? "could not start connection");
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setActionError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusyProvider(null);
     }
@@ -190,16 +189,16 @@ export function IntegrationsPanel({
 
   const onDisconnect = async (providerKey: string) => {
     setBusyProvider(providerKey);
-    setError(null);
+    setActionError(null);
     try {
       const out = await doDisconnect(providerKey);
       if (!out.ok) {
-        setError(out.error ?? "disconnect failed");
+        setActionError(out.error ?? "disconnect failed");
         return;
       }
-      refresh();
+      reload();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setActionError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusyProvider(null);
     }
@@ -222,20 +221,13 @@ export function IntegrationsPanel({
   };
 
   return (
-    <section className="space-y-6">
-      <header>
-        <h2 className="font-semibold text-2xl tracking-tight">Integrations</h2>
-        <p className="mt-1 font-mono text-[11px] text-muted-foreground">
-          Per-user backend — refresh tokens stored in your own Supabase.
-        </p>
-      </header>
-
-      {error ? (
-        <p role="alert" className="text-destructive text-sm">
-          {error}
-        </p>
-      ) : null}
-
+    <SettingsPanel
+      title="Integrations"
+      desc="Per-user backend — refresh tokens stored in your own Supabase."
+      error={error}
+      busy={busy && !data}
+      className="space-y-6"
+    >
       <ul
         aria-label="Integration providers"
         className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-card"
@@ -309,6 +301,7 @@ export function IntegrationsPanel({
               <Switch
                 aria-label={`${row.label} enabled`}
                 checked={isEnabled}
+                loading={isBusy}
                 onCheckedChange={(next) =>
                   setEnabled((prev) => ({ ...prev, [row.id]: next }))
                 }
@@ -373,7 +366,7 @@ export function IntegrationsPanel({
           </Button>
         </form>
       </section>
-    </section>
+    </SettingsPanel>
   );
 }
 

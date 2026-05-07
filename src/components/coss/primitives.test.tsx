@@ -41,6 +41,58 @@ describe("coss Checkbox", () => {
     fireEvent.click(cb);
     expect(cb.getAttribute("aria-checked")).toBe("true");
   });
+
+  it("renders a spinner in place of the indicator when loading", () => {
+    render(<Checkbox aria-label="agree" loading defaultChecked />);
+    const cb = screen.getByRole("checkbox", { name: /agree/i });
+    expect(cb.querySelector("[data-slot='checkbox-spinner']")).toBeTruthy();
+    expect(cb.querySelector("[data-slot='checkbox-indicator']")).toBeNull();
+  });
+
+  it("rejects interaction while loading and preserves the checked value", () => {
+    const onCheckedChange = vi.fn();
+    render(
+      <Checkbox
+        aria-label="agree"
+        loading
+        defaultChecked={true}
+        onCheckedChange={onCheckedChange}
+      />,
+    );
+    const cb = screen.getByRole("checkbox", { name: /agree/i });
+    expect(cb.getAttribute("aria-busy")).toBe("true");
+    expect(cb.getAttribute("aria-checked")).toBe("true");
+    fireEvent.click(cb);
+    expect(onCheckedChange).not.toHaveBeenCalled();
+    expect(cb.getAttribute("aria-checked")).toBe("true");
+  });
+
+  it("re-enables interaction when loading is removed", () => {
+    const onCheckedChange = vi.fn();
+    const { rerender } = render(
+      <Checkbox
+        aria-label="agree"
+        loading
+        defaultChecked={false}
+        onCheckedChange={onCheckedChange}
+      />,
+    );
+    const cb = screen.getByRole("checkbox", { name: /agree/i });
+    fireEvent.click(cb);
+    expect(onCheckedChange).not.toHaveBeenCalled();
+
+    rerender(
+      <Checkbox
+        aria-label="agree"
+        loading={false}
+        defaultChecked={false}
+        onCheckedChange={onCheckedChange}
+      />,
+    );
+    fireEvent.click(cb);
+    expect(onCheckedChange).toHaveBeenCalled();
+    expect(cb.getAttribute("aria-busy")).toBeNull();
+  });
 });
 
 describe("coss Input", () => {
@@ -73,6 +125,57 @@ describe("coss Switch", () => {
     expect(sw.getAttribute("aria-checked")).toBe("false");
     fireEvent.click(sw);
     expect(sw.getAttribute("aria-checked")).toBe("true");
+  });
+
+  it("renders a spinner inside the thumb when loading", () => {
+    render(<Switch aria-label="notify" loading />);
+    const thumb = document.querySelector("[data-slot='switch-thumb']");
+    expect(thumb?.querySelector("[data-slot='switch-thumb-spinner']")).toBeTruthy();
+  });
+
+  it("rejects interaction while loading and preserves the checked value", () => {
+    const onCheckedChange = vi.fn();
+    render(
+      <Switch
+        aria-label="notify"
+        loading
+        defaultChecked={false}
+        onCheckedChange={onCheckedChange}
+      />,
+    );
+    const sw = screen.getByRole("switch", { name: /notify/i });
+    expect(sw.getAttribute("aria-busy")).toBe("true");
+    expect(sw.getAttribute("aria-checked")).toBe("false");
+    fireEvent.click(sw);
+    expect(onCheckedChange).not.toHaveBeenCalled();
+    expect(sw.getAttribute("aria-checked")).toBe("false");
+  });
+
+  it("re-enables interaction when loading is removed", () => {
+    const onCheckedChange = vi.fn();
+    const { rerender } = render(
+      <Switch
+        aria-label="notify"
+        loading
+        defaultChecked={false}
+        onCheckedChange={onCheckedChange}
+      />,
+    );
+    const sw = screen.getByRole("switch", { name: /notify/i });
+    fireEvent.click(sw);
+    expect(onCheckedChange).not.toHaveBeenCalled();
+
+    rerender(
+      <Switch
+        aria-label="notify"
+        loading={false}
+        defaultChecked={false}
+        onCheckedChange={onCheckedChange}
+      />,
+    );
+    fireEvent.click(sw);
+    expect(onCheckedChange).toHaveBeenCalled();
+    expect(sw.getAttribute("aria-busy")).toBeNull();
   });
 });
 

@@ -16,7 +16,7 @@ import type { ReactElement } from "react";
 import { describe, expect, it, vi } from "vitest";
 import type { BriefingResult } from "#/features/briefing/morning-briefing";
 import { UpcomingEventsCard } from "#/features/signals/components/UpcomingEventsCard";
-import { toMeetingEvents } from "#/features/signals/views/calendar";
+import { toMeetingEvents } from "#/features/calendar/events";
 import { PulseCard } from "#/features/today/PulseCard";
 import {
   BriefingCard,

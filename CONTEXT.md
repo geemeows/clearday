@@ -31,6 +31,21 @@ payload carrying kind-specific fields (e.g. a meeting's `starts_at` and join
 URL, a mention's channel and thread). The schema stays loose on purpose so
 adding a new provider or kind doesn't require a migration.
 
+### SignalGroup
+
+The UI-layer rollup over `Signal.kind`. Multiple kinds collapse to one group
+because the inbox / detail surfaces don't need to distinguish them:
+
+- `pr` — `pr_review_requested`, `pr_authored`, `pr_assigned`
+- `slack` — `dm`, `mention`, `thread_reply`
+- `meeting` — `meeting`
+- `ticket` — `ticket_assigned`, `ticket_in_progress`, `ticket_in_review`,
+  `ticket_blocked`
+
+Used to drive filter pills, the per-kind detail dispatcher, and any other
+"render once per group" UI. Lives in `features/signals/display.ts`. Domain
+state still discriminates on `kind`; `SignalGroup` is presentation-only.
+
 ### App login vs integration login
 
 Two distinct concepts that both happen to use Google:

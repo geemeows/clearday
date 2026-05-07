@@ -34,7 +34,7 @@ import type { SourceKind } from "#/features/signals/components/SourceGlyph";
 import {
   pickActiveFocus,
   toMeetingEvents,
-} from "#/features/signals/views/calendar";
+} from "#/features/calendar/events";
 import { apiFetch } from "#/lib/api-client";
 import type { Signal, SignalKind, StoredSignal } from "#/shared/signal";
 

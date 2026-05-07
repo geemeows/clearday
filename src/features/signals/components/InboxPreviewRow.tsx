@@ -5,7 +5,7 @@ import {
   signalKindLabel,
 } from "#/features/integrations/display";
 import { SourceGlyph } from "#/features/signals/components/SourceGlyph";
-import { relAgo, secondaryLabel } from "#/routes/_app.inbox";
+import { relAgo, secondaryLabel } from "#/features/signals/display";
 import type { Signal } from "#/shared/signal";
 
 // Minimal row contract: a Signal plus optional unread_count (used elsewhere

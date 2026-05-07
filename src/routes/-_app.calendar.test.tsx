@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import type { MeetingEvent } from "#/features/signals/views/calendar";
+import type { MeetingEvent } from "#/features/calendar/events";
 import { CalendarView, type WeekEvent } from "#/routes/_app.calendar";
 import type { StoredSignal } from "#/shared/signal";
 

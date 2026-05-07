@@ -8,7 +8,6 @@ import {
 import { describe, expect, it, vi } from "vitest";
 import {
   AttendeeStack,
-  computeFilterCounts,
   InboxDetailPane,
   InboxView,
   MeetingDetail,
@@ -18,7 +17,6 @@ import {
   PrReviewActions,
   PrReviewSubmitPanel,
   parsePatch,
-  relAgo,
   reviewDraftKey,
   SlackReplyComposer,
   SlackThreadContext,
@@ -416,7 +414,7 @@ describe("InboxDetailPane", () => {
     expect(within(pane).getByText("@alice")).toBeTruthy();
     expect(
       within(pane).getByText("Open · review requested", {
-        selector: '[data-slot="pr-status-chip"]',
+        selector: '[data-slot="status-badge"]',
       }),
     ).toBeTruthy();
     const open = within(pane).getByRole("link", { name: /open in github/i });
@@ -644,55 +642,6 @@ describe("PR detail extras", () => {
     expect(screen.getByText("src/cron.ts")).toBeTruthy();
     expect(screen.getByLabelText("Recent comments")).toBeTruthy();
     expect(screen.getByText("lgtm with nits")).toBeTruthy();
-  });
-});
-
-describe("computeFilterCounts", () => {
-  it("counts signals by group", () => {
-    const sig = (kind: Signal["kind"], i: number) =>
-      ({
-        id: `s${i}`,
-        provider: "github",
-        kind,
-        source_id: `s${i}`,
-        title: "t",
-        url: null,
-        payload: {},
-        requires_action: false,
-        source_created_at: null,
-        dismissed_at: null,
-      }) as Signal & { id: string; dismissed_at: string | null };
-    const counts = computeFilterCounts([
-      sig("pr_review_requested", 1),
-      sig("pr_authored", 2),
-      sig("mention", 3),
-      sig("meeting", 4),
-      sig("ticket_assigned", 5),
-    ]);
-    expect(counts.all).toBe(5);
-    expect(counts.prs).toBe(2);
-    expect(counts.mentions).toBe(1);
-    expect(counts.meetings).toBe(1);
-    expect(counts.tickets).toBe(1);
-  });
-});
-
-describe("relAgo", () => {
-  const now = "2026-05-06T12:00:00.000Z";
-  it("returns minutes for sub-hour gaps", () => {
-    expect(relAgo("2026-05-06T11:55:00.000Z", now)).toBe("5m ago");
-  });
-  it("returns hours for sub-day gaps", () => {
-    expect(relAgo("2026-05-06T09:00:00.000Z", now)).toBe("3h ago");
-  });
-  it("returns days for multi-day gaps", () => {
-    expect(relAgo("2026-05-04T12:00:00.000Z", now)).toBe("2d ago");
-  });
-  it("returns 'in Nm' for future timestamps", () => {
-    expect(relAgo("2026-05-06T12:10:00.000Z", now)).toBe("in 10m");
-  });
-  it("returns empty string when iso is null", () => {
-    expect(relAgo(null, now)).toBe("");
   });
 });
 

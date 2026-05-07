@@ -1,6 +1,9 @@
 import { createFileRoute, Link, Outlet } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Checkbox } from "#/components/coss/checkbox";
+import { SettingsPanel } from "#/components/ui/SettingsPanel";
 import type { IntegrationView } from "#/features/integrations/api/integrations-api";
+import { useAsyncPanel } from "#/hooks/useAsyncPanel";
 import {
   DEFAULT_RETENTION_DAYS,
   type ExportPayload,
@@ -111,11 +114,6 @@ export function NotificationsPanel({
     errors?: Record<string, string>;
   }>;
 } = {}) {
-  const [enabled, setEnabled] = useState<Set<string> | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [status, setStatus] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-
   const load = useMemo(
     () =>
       loader ?? (() => apiFetch("/api/preferences") as Promise<LoadResponse>),
@@ -144,45 +142,29 @@ export function NotificationsPanel({
     [tester],
   );
 
-  useEffect(() => {
-    let cancelled = false;
-    load()
-      .then((body) => {
-        if (cancelled) return;
-        setEnabled(new Set(body.alert_channels));
-      })
-      .catch((e) => {
-        if (cancelled) return;
-        setError(e instanceof Error ? e.message : "failed to load");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [load]);
+  const { data, error, busy, persist } = useAsyncPanel<LoadResponse>({
+    load,
+    save: async (next) => {
+      await save(next.alert_channels);
+    },
+  });
+
+  const [status, setStatus] = useState<string | null>(null);
+  const [testing, setTesting] = useState(false);
 
   const toggle = useCallback(
-    async (channel: string) => {
-      if (!enabled) return;
-      const next = new Set(enabled);
-      if (next.has(channel)) next.delete(channel);
-      else next.add(channel);
-      setEnabled(next);
-      setBusy(true);
-      try {
-        const body = await save([...next]);
-        setEnabled(new Set(body.alert_channels));
-        setError(null);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "save failed");
-      } finally {
-        setBusy(false);
-      }
+    (channel: string) => {
+      if (!data) return;
+      const set = new Set(data.alert_channels);
+      if (set.has(channel)) set.delete(channel);
+      else set.add(channel);
+      persist({ alert_channels: [...set] });
     },
-    [enabled, save],
+    [data, persist],
   );
 
   const sendTest = useCallback(async () => {
-    setBusy(true);
+    setTesting(true);
     setStatus(null);
     try {
       const result = await test();
@@ -205,57 +187,46 @@ export function NotificationsPanel({
     } catch (e) {
       setStatus(`Failed: ${e instanceof Error ? e.message : "unknown error"}`);
     } finally {
-      setBusy(false);
+      setTesting(false);
     }
   }, [test]);
 
+  const channels = data?.alert_channels;
+
   return (
-    <section
-      aria-label="Notifications"
-      className="mt-8 rounded border border-zinc-200 bg-white p-5"
+    <SettingsPanel
+      title="Notifications"
+      desc="Where Clearday pings you when a Signal needs you."
+      error={error}
+      busy={busy && !data}
     >
-      <h2 className="text-base font-semibold text-zinc-900">Notifications</h2>
-      <p className="mt-1 text-sm text-zinc-500">
-        Where Clearday pings you when a Signal needs you.
-      </p>
-
-      {error && (
-        <p className="mt-3 rounded border border-red-200 bg-red-50 p-2 text-sm text-red-700">
-          {error}
-        </p>
-      )}
-
-      {enabled == null && !error && (
-        <p className="mt-3 text-sm text-zinc-500">Loading…</p>
-      )}
-
-      {enabled && (
+      {channels && (
         <div className="mt-4 space-y-3">
           <label className="flex items-center gap-3 text-sm">
-            <input
-              type="checkbox"
-              checked={enabled.has("slack_dm")}
-              onChange={() => toggle("slack_dm")}
-              disabled={busy}
+            <Checkbox
+              aria-label="Slack self-DM"
+              checked={channels.includes("slack_dm")}
+              onCheckedChange={() => toggle("slack_dm")}
+              loading={busy}
             />
             <span>
               <strong className="font-medium">Slack self-DM</strong>
-              <span className="ml-2 text-zinc-500">
+              <span className="ml-2 text-muted-foreground">
                 Posts to your Slackbot DM via your connected Slack account.
               </span>
             </span>
           </label>
 
           <label className="flex items-center gap-3 text-sm">
-            <input
-              type="checkbox"
-              checked={enabled.has("web_push")}
-              onChange={() => toggle("web_push")}
-              disabled={busy}
+            <Checkbox
+              aria-label="Web Push"
+              checked={channels.includes("web_push")}
+              onCheckedChange={() => toggle("web_push")}
+              loading={busy}
             />
             <span>
               <strong className="font-medium">Web Push</strong>
-              <span className="ml-2 text-zinc-500">
+              <span className="ml-2 text-muted-foreground">
                 Native browser notifications on devices you've registered below.
               </span>
             </span>
@@ -264,18 +235,18 @@ export function NotificationsPanel({
           <button
             type="button"
             onClick={sendTest}
-            disabled={busy || enabled.size === 0}
-            className="rounded border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50 disabled:opacity-50"
+            disabled={busy || testing || channels.length === 0}
+            className="rounded border border-border px-3 py-1.5 text-sm hover:bg-muted/50 disabled:opacity-50"
           >
             Send test notification
           </button>
 
           {status && (
-            <output className="text-sm text-zinc-600">{status}</output>
+            <output className="text-muted-foreground text-sm">{status}</output>
           )}
         </div>
       )}
-    </section>
+    </SettingsPanel>
   );
 }
 
@@ -302,9 +273,8 @@ export function WebPushDevicesPanel({
   vapidLoader?: () => Promise<{ publicKey: string | null }>;
   renamer?: (id: string, label: string) => Promise<DeviceView>;
 } = {}) {
-  const [devices, setDevices] = useState<DeviceView[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionBusy, setActionBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [vapidConfigured, setVapidConfigured] = useState<boolean | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -355,21 +325,22 @@ export function WebPushDevicesPanel({
     [vapidLoader],
   );
 
-  useEffect(() => {
-    let cancelled = false;
-    load()
-      .then((body) => {
-        if (cancelled) return;
-        setDevices(body.devices);
-      })
-      .catch((e) => {
-        if (cancelled) return;
-        setError(e instanceof Error ? e.message : "failed to load devices");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [load]);
+  // register / remove / rename are bespoke action handlers (each hits its
+  // own endpoint and returns a single device). useAsyncPanel drives the
+  // initial device-list load; persist({ devices }) is used to fold the
+  // action results back into local state without re-fetching.
+  const {
+    data,
+    error: loadError,
+    busy,
+    persist,
+  } = useAsyncPanel<{ devices: DeviceView[] }>({
+    load,
+    save: async () => {},
+  });
+  const devices = data?.devices ?? null;
+  const error =
+    actionError ?? (loadError ? loadError.message : null);
 
   useEffect(() => {
     let cancelled = false;
@@ -388,82 +359,76 @@ export function WebPushDevicesPanel({
   }, [loadVapid]);
 
   const onRegister = useCallback(async () => {
-    setBusy(true);
+    setActionBusy(true);
     setStatus(null);
     try {
       const device = await reg();
-      setDevices((current) => {
-        const next = current ? [...current] : [];
-        const existing = next.findIndex((d) => d.id === device.id);
-        if (existing >= 0) next[existing] = device;
-        else next.unshift(device);
-        return next;
-      });
+      const current = data?.devices ?? [];
+      const next = [...current];
+      const existing = next.findIndex((d) => d.id === device.id);
+      if (existing >= 0) next[existing] = device;
+      else next.unshift(device);
+      persist({ devices: next });
       setStatus("This device is registered for push.");
-      setError(null);
+      setActionError(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "registration failed");
+      setActionError(e instanceof Error ? e.message : "registration failed");
     } finally {
-      setBusy(false);
+      setActionBusy(false);
     }
-  }, [reg]);
+  }, [data?.devices, persist, reg]);
 
   const onRemove = useCallback(
     async (id: string) => {
-      setBusy(true);
+      setActionBusy(true);
       try {
         await remove(id);
-        setDevices((current) => current?.filter((d) => d.id !== id) ?? null);
+        const current = data?.devices ?? [];
+        persist({ devices: current.filter((d) => d.id !== id) });
       } catch (e) {
-        setError(e instanceof Error ? e.message : "remove failed");
+        setActionError(e instanceof Error ? e.message : "remove failed");
       } finally {
-        setBusy(false);
+        setActionBusy(false);
       }
     },
-    [remove],
+    [data?.devices, persist, remove],
   );
 
   const onRenameSubmit = useCallback(
     async (id: string) => {
       const label = draftLabel.trim();
       if (label.length === 0) {
-        setError("device_label must not be empty");
+        setActionError("device_label must not be empty");
         return;
       }
-      setBusy(true);
+      setActionBusy(true);
       try {
         const updated = await rename(id, label);
-        setDevices(
-          (current) => current?.map((d) => (d.id === id ? updated : d)) ?? null,
-        );
-        setError(null);
+        const current = data?.devices ?? [];
+        persist({
+          devices: current.map((d) => (d.id === id ? updated : d)),
+        });
+        setActionError(null);
         setEditingId(null);
         setDraftLabel("");
       } catch (e) {
-        setError(e instanceof Error ? e.message : "rename failed");
+        setActionError(e instanceof Error ? e.message : "rename failed");
       } finally {
-        setBusy(false);
+        setActionBusy(false);
       }
     },
-    [draftLabel, rename],
+    [data?.devices, draftLabel, persist, rename],
   );
 
+  const isBusy = busy || actionBusy;
+
   return (
-    <section
-      aria-label="Push devices"
-      className="mt-8 rounded border border-zinc-200 bg-white p-5"
+    <SettingsPanel
+      title="Push devices"
+      desc="Devices registered for Web Push delivery."
+      error={error}
+      busy={busy && !data}
     >
-      <h2 className="text-base font-semibold text-zinc-900">Push devices</h2>
-      <p className="mt-1 text-sm text-zinc-500">
-        Devices registered for Web Push delivery.
-      </p>
-
-      {error && (
-        <p className="mt-3 rounded border border-red-200 bg-red-50 p-2 text-sm text-red-700">
-          {error}
-        </p>
-      )}
-
       {vapidConfigured === false && (
         <p className="mt-3 rounded border border-amber-200 bg-amber-50 p-2 text-sm text-amber-800">
           VAPID not configured — set the <code>VAPID_PUBLIC_KEY</code>,{" "}
@@ -476,22 +441,22 @@ export function WebPushDevicesPanel({
         <button
           type="button"
           onClick={onRegister}
-          disabled={busy || vapidConfigured === false}
-          className="rounded border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50 disabled:opacity-50"
+          disabled={isBusy || vapidConfigured === false}
+          className="rounded border border-border px-3 py-1.5 text-sm hover:bg-muted/50 disabled:opacity-50"
         >
           Register this device
         </button>
         {status && (
-          <output className="ml-3 text-sm text-zinc-600">{status}</output>
+          <output className="ml-3 text-muted-foreground text-sm">
+            {status}
+          </output>
         )}
       </div>
 
-      {devices == null && !error && (
-        <p className="mt-3 text-sm text-zinc-500">Loading…</p>
-      )}
-
       {devices && devices.length === 0 && (
-        <p className="mt-4 text-sm text-zinc-500">No devices registered yet.</p>
+        <p className="mt-4 text-muted-foreground text-sm">
+          No devices registered yet.
+        </p>
       )}
 
       {devices && devices.length > 0 && (
@@ -515,12 +480,12 @@ export function WebPushDevicesPanel({
                     value={draftLabel}
                     onChange={(e) => setDraftLabel(e.target.value)}
                     maxLength={64}
-                    className="flex-1 rounded border border-zinc-200 px-2 py-1 text-sm"
+                    className="flex-1 rounded border border-border px-2 py-1 text-sm"
                   />
                   <button
                     type="submit"
-                    disabled={busy}
-                    className="text-xs text-zinc-700 underline hover:text-zinc-900 disabled:opacity-50"
+                    disabled={isBusy}
+                    className="text-foreground text-xs underline hover:text-foreground disabled:opacity-50"
                   >
                     Save
                   </button>
@@ -530,8 +495,8 @@ export function WebPushDevicesPanel({
                       setEditingId(null);
                       setDraftLabel("");
                     }}
-                    disabled={busy}
-                    className="text-xs text-zinc-500 underline hover:text-zinc-700 disabled:opacity-50"
+                    disabled={isBusy}
+                    className="text-muted-foreground text-xs underline hover:text-foreground disabled:opacity-50"
                   >
                     Cancel
                   </button>
@@ -542,7 +507,7 @@ export function WebPushDevicesPanel({
                     <strong className="font-medium">
                       {d.device_label ?? "Unknown device"}
                     </strong>
-                    <span className="ml-2 text-zinc-500">
+                    <span className="ml-2 text-muted-foreground">
                       {d.last_delivered_at
                         ? `Last delivered ${formatRelative(d.last_delivered_at)}`
                         : "Never delivered"}
@@ -555,16 +520,16 @@ export function WebPushDevicesPanel({
                         setEditingId(d.id);
                         setDraftLabel(d.device_label ?? "");
                       }}
-                      disabled={busy}
-                      className="text-xs text-zinc-500 underline hover:text-zinc-700 disabled:opacity-50"
+                      disabled={isBusy}
+                      className="text-muted-foreground text-xs underline hover:text-foreground disabled:opacity-50"
                     >
                       Rename
                     </button>
                     <button
                       type="button"
                       onClick={() => onRemove(d.id)}
-                      disabled={busy}
-                      className="text-xs text-zinc-500 underline hover:text-zinc-700 disabled:opacity-50"
+                      disabled={isBusy}
+                      className="text-muted-foreground text-xs underline hover:text-foreground disabled:opacity-50"
                     >
                       Remove
                     </button>
@@ -575,7 +540,7 @@ export function WebPushDevicesPanel({
           ))}
         </ul>
       )}
-    </section>
+    </SettingsPanel>
   );
 }
 
@@ -625,47 +590,41 @@ export function InstallPwaPanel() {
     }
   }, [prompt]);
 
+  // No async load lifecycle — the panel reacts to browser-native install
+  // events, so useAsyncPanel is intentionally not used here. Only the chrome
+  // migrates to <SettingsPanel>.
   if (installed) {
     return (
-      <section
-        aria-label="Install Clearday"
-        className="mt-8 rounded border border-zinc-200 bg-white p-5"
-      >
-        <h2 className="text-base font-semibold text-zinc-900">
-          Install Clearday
-        </h2>
-        <p className="mt-1 text-sm text-zinc-500">Clearday is installed.</p>
-      </section>
+      <SettingsPanel
+        title="Install Clearday"
+        desc="Clearday is installed."
+      />
     );
   }
 
   if (!prompt && !status) return null;
 
   return (
-    <section
-      aria-label="Install Clearday"
-      className="mt-8 rounded border border-zinc-200 bg-white p-5"
+    <SettingsPanel
+      title="Install Clearday"
+      desc="Add Clearday to your dock or home screen for an app-like experience."
     >
-      <h2 className="text-base font-semibold text-zinc-900">
-        Install Clearday
-      </h2>
-      <p className="mt-1 text-sm text-zinc-500">
-        Add Clearday to your dock or home screen for an app-like experience.
-      </p>
       <div className="mt-4 flex items-center gap-3">
         {prompt && (
           <button
             type="button"
             onClick={onInstall}
             disabled={busy}
-            className="rounded border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50 disabled:opacity-50"
+            className="rounded border border-border px-3 py-1.5 text-sm hover:bg-muted/50 disabled:opacity-50"
           >
             Install Clearday
           </button>
         )}
-        {status && <output className="text-sm text-zinc-600">{status}</output>}
+        {status && (
+          <output className="text-muted-foreground text-sm">{status}</output>
+        )}
       </div>
-    </section>
+    </SettingsPanel>
   );
 }
 
@@ -784,9 +743,8 @@ export function AiProviderPanel({
   saver?: (body: AiPutBody) => Promise<AiSettingsView>;
   tester?: () => Promise<{ ok?: boolean; model?: string; error?: string }>;
 } = {}) {
-  const [view, setView] = useState<AiSettingsView | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionBusy, setActionBusy] = useState(false);
   const [testStatus, setTestStatus] = useState<string | null>(null);
   const [draftKey, setDraftKey] = useState("");
   const [draftModel, setDraftModel] = useState("");
@@ -819,48 +777,57 @@ export function AiProviderPanel({
     [tester],
   );
 
+  // selectProvider / saveDraft / runTest are bespoke action handlers (each
+  // composes a different AiPutBody body or hits a different endpoint), so
+  // useAsyncPanel drives only the load lifecycle. Successful actions feed
+  // their server response back through persist({...next}) so the local view
+  // mirrors the server without an extra GET.
+  const {
+    data: view,
+    error: loadError,
+    busy,
+    persist,
+  } = useAsyncPanel<AiSettingsView>({
+    load,
+    save: async () => {},
+  });
+  const error =
+    actionError ?? (loadError ? loadError.message : null);
+
+  // Sync drafts from the persisted snapshot when a fresh one lands.
+  const lastViewRef = useRef<AiSettingsView | null>(null);
   useEffect(() => {
-    let cancelled = false;
-    load()
-      .then((v) => {
-        if (cancelled) return;
-        setView(v);
-        setDraftModel(v.default_model ?? "");
-        setDraftBaseUrl(v.base_url ?? "");
-      })
-      .catch((e) => {
-        if (cancelled) return;
-        setError(e instanceof Error ? e.message : "failed to load");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [load]);
+    if (view && view !== lastViewRef.current) {
+      setDraftModel(view.default_model ?? "");
+      setDraftBaseUrl(view.base_url ?? "");
+      lastViewRef.current = view;
+    }
+  }, [view]);
 
   const selectProvider = useCallback(
     async (provider: AiProvider) => {
-      setBusy(true);
+      setActionBusy(true);
       try {
         const next = await save({
           provider,
           default_model: draftModel || DEFAULT_MODELS[provider],
           base_url: draftBaseUrl || undefined,
         });
-        setView(next);
+        persist({ ...next });
         setDraftModel(next.default_model ?? DEFAULT_MODELS[provider]);
-        setError(null);
+        setActionError(null);
       } catch (e) {
-        setError(e instanceof Error ? e.message : "save failed");
+        setActionError(e instanceof Error ? e.message : "save failed");
       } finally {
-        setBusy(false);
+        setActionBusy(false);
       }
     },
-    [draftBaseUrl, draftModel, save],
+    [draftBaseUrl, draftModel, persist, save],
   );
 
   const saveDraft = useCallback(async () => {
     if (!view?.provider) return;
-    setBusy(true);
+    setActionBusy(true);
     try {
       const next = await save({
         provider: view.provider,
@@ -868,18 +835,18 @@ export function AiProviderPanel({
         base_url: draftBaseUrl || undefined,
         api_key: draftKey || undefined,
       });
-      setView(next);
+      persist({ ...next });
       setDraftKey("");
-      setError(null);
+      setActionError(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "save failed");
+      setActionError(e instanceof Error ? e.message : "save failed");
     } finally {
-      setBusy(false);
+      setActionBusy(false);
     }
-  }, [draftBaseUrl, draftKey, draftModel, save, view?.provider]);
+  }, [draftBaseUrl, draftKey, draftModel, persist, save, view?.provider]);
 
   const runTest = useCallback(async () => {
-    setBusy(true);
+    setActionBusy(true);
     setTestStatus(null);
     try {
       const result = await test();
@@ -887,41 +854,29 @@ export function AiProviderPanel({
       else setTestStatus(`Failed: ${result.error ?? "unknown error"}`);
       // Reload so last_validated_at refreshes.
       const fresh = await load();
-      setView(fresh);
+      persist({ ...fresh });
     } catch (e) {
       setTestStatus(
         `Failed: ${e instanceof Error ? e.message : "unknown error"}`,
       );
     } finally {
-      setBusy(false);
+      setActionBusy(false);
     }
-  }, [load, test]);
+  }, [load, persist, test]);
 
   const activeProvider = view?.provider ?? null;
   const needsKey = activeProvider
     ? (AI_PROVIDERS.find((p) => p.id === activeProvider)?.needsKey ?? true)
     : true;
+  const isBusy = busy || actionBusy;
 
   return (
-    <section
-      aria-label="AI provider"
-      className="mt-8 rounded border border-zinc-200 bg-white p-5"
+    <SettingsPanel
+      title="AI provider"
+      desc="Bring your own LLM API key. Clearday never operates a shared model."
+      error={error}
+      busy={busy && !view}
     >
-      <h2 className="text-base font-semibold text-zinc-900">AI provider</h2>
-      <p className="mt-1 text-sm text-zinc-500">
-        Bring your own LLM API key. Clearday never operates a shared model.
-      </p>
-
-      {error && (
-        <p className="mt-3 rounded border border-red-200 bg-red-50 p-2 text-sm text-red-700">
-          {error}
-        </p>
-      )}
-
-      {view == null && !error && (
-        <p className="mt-3 text-sm text-zinc-500">Loading…</p>
-      )}
-
       {view && (
         <div className="mt-4 space-y-5">
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
@@ -933,7 +888,7 @@ export function AiProviderPanel({
                   type="button"
                   aria-pressed={active}
                   onClick={() => selectProvider(p.id)}
-                  disabled={busy}
+                  disabled={isBusy}
                   className={`rounded border px-3 py-2 text-left text-sm ${
                     active
                       ? "border-zinc-900 bg-zinc-900 text-white"
@@ -962,28 +917,30 @@ export function AiProviderPanel({
               placeholder={
                 activeProvider ? DEFAULT_MODELS[activeProvider] : "model id"
               }
-              className="mt-1 w-full rounded border border-zinc-200 px-2 py-1.5 text-sm"
-              disabled={busy || !activeProvider}
+              className="mt-1 w-full rounded border border-border px-2 py-1.5 text-sm"
+              disabled={isBusy || !activeProvider}
             />
           </label>
 
           {activeProvider === "ollama" && (
             <label className="block text-sm">
-              <span className="block font-medium text-zinc-900">Base URL</span>
+              <span className="block font-medium text-foreground">
+                Base URL
+              </span>
               <input
                 type="text"
                 value={draftBaseUrl}
                 onChange={(e) => setDraftBaseUrl(e.target.value)}
                 placeholder="http://localhost:11434"
-                className="mt-1 w-full rounded border border-zinc-200 px-2 py-1.5 text-sm"
-                disabled={busy}
+                className="mt-1 w-full rounded border border-border px-2 py-1.5 text-sm"
+                disabled={isBusy}
               />
             </label>
           )}
 
           {needsKey && (
             <label className="block text-sm">
-              <span className="block font-medium text-zinc-900">API key</span>
+              <span className="block font-medium text-foreground">API key</span>
               <input
                 type="password"
                 value={draftKey}
@@ -991,11 +948,11 @@ export function AiProviderPanel({
                 placeholder={
                   view.has_api_key ? "•••••• (already set)" : "Paste your key"
                 }
-                className="mt-1 w-full rounded border border-zinc-200 px-2 py-1.5 text-sm font-mono"
-                disabled={busy}
+                className="mt-1 w-full rounded border border-border px-2 py-1.5 font-mono text-sm"
+                disabled={isBusy}
                 autoComplete="off"
               />
-              <span className="mt-1 block text-xs text-zinc-500">
+              <span className="mt-1 block text-muted-foreground text-xs">
                 Stored encrypted. Never returned to the browser in plaintext.
               </span>
             </label>
@@ -1005,8 +962,8 @@ export function AiProviderPanel({
             <button
               type="button"
               onClick={saveDraft}
-              disabled={busy || !activeProvider}
-              className="rounded border border-zinc-900 bg-zinc-900 px-3 py-1.5 text-sm text-white hover:bg-zinc-800 disabled:opacity-50"
+              disabled={isBusy || !activeProvider}
+              className="rounded border border-foreground bg-foreground px-3 py-1.5 text-background text-sm hover:opacity-90 disabled:opacity-50"
             >
               Save
             </button>
@@ -1014,16 +971,16 @@ export function AiProviderPanel({
               type="button"
               onClick={runTest}
               disabled={
-                busy ||
+                isBusy ||
                 !activeProvider ||
                 (needsKey && !view.has_api_key && !draftKey)
               }
-              className="rounded border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50 disabled:opacity-50"
+              className="rounded border border-border px-3 py-1.5 text-sm hover:bg-muted/50 disabled:opacity-50"
             >
               Test connection
             </button>
             {view.last_validated_at && (
-              <span className="text-xs text-zinc-500">
+              <span className="text-muted-foreground text-xs">
                 Last validated{" "}
                 {new Date(view.last_validated_at).toLocaleString()}
               </span>
@@ -1031,13 +988,13 @@ export function AiProviderPanel({
           </div>
 
           {testStatus && (
-            <output className="block text-sm text-zinc-600">
+            <output className="block text-muted-foreground text-sm">
               {testStatus}
             </output>
           )}
         </div>
       )}
-    </section>
+    </SettingsPanel>
   );
 }
 
@@ -1048,9 +1005,7 @@ export function AiSafeguardsPanel({
   loader?: () => Promise<AiSettingsView>;
   saver?: (body: AiPutBody) => Promise<AiSettingsView>;
 } = {}) {
-  const [view, setView] = useState<AiSettingsView | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [draftBudget, setDraftBudget] = useState("");
   const [draftFallback, setDraftFallback] = useState("");
   const [draftPatterns, setDraftPatterns] = useState("");
@@ -1071,83 +1026,75 @@ export function AiSafeguardsPanel({
     [saver],
   );
 
-  useEffect(() => {
-    let cancelled = false;
-    load()
-      .then((v) => {
-        if (cancelled) return;
-        setView(v);
-        setDraftBudget(String(v.monthly_budget_usd ?? 25));
-        setDraftFallback(v.fallback_model ?? "");
-        setDraftPatterns((v.redact_patterns ?? []).join("\n"));
-      })
-      .catch((e) => {
-        if (cancelled) return;
-        setError(e instanceof Error ? e.message : "failed to load");
+  // The patches on this panel (privacy toggle, ai_disabled toggle, budget +
+  // fallback, redact_patterns) project 1:1 onto the AiSettingsView, so
+  // useAsyncPanel.persist drives the save lifecycle. The save callback
+  // bridges the merged view onto an AiPutBody for the API.
+  const {
+    data: view,
+    error: panelError,
+    busy,
+    persist,
+  } = useAsyncPanel<AiSettingsView>({
+    load,
+    save: async (next) => {
+      if (!next.provider) return;
+      await save({
+        provider: next.provider,
+        monthly_budget_usd: next.monthly_budget_usd,
+        fallback_model: next.fallback_model,
+        privacy_mode: next.privacy_mode,
+        redact_patterns: next.redact_patterns,
+        ai_disabled: next.ai_disabled,
       });
-    return () => {
-      cancelled = true;
-    };
-  }, [load]);
-
-  const persist = useCallback(
-    async (patch: Partial<AiPutBody>) => {
-      if (!view?.provider) return;
-      setBusy(true);
-      try {
-        const next = await save({ provider: view.provider, ...patch });
-        setView(next);
-        setError(null);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "save failed");
-      } finally {
-        setBusy(false);
-      }
     },
-    [save, view?.provider],
-  );
+  });
+  const error = errorMsg ?? (panelError ? panelError.message : null);
 
-  const saveBudget = useCallback(async () => {
+  // Sync drafts from the persisted snapshot when a fresh one lands.
+  const lastViewRef = useRef<AiSettingsView | null>(null);
+  useEffect(() => {
+    if (view && view !== lastViewRef.current) {
+      setDraftBudget(String(view.monthly_budget_usd ?? 25));
+      setDraftFallback(view.fallback_model ?? "");
+      setDraftPatterns((view.redact_patterns ?? []).join("\n"));
+      lastViewRef.current = view;
+    }
+  }, [view]);
+
+  const saveBudget = useCallback(() => {
     const n = Number(draftBudget);
     if (!Number.isFinite(n) || n < 0) {
-      setError("Budget must be a non-negative number.");
+      setErrorMsg("Budget must be a non-negative number.");
       return;
     }
-    await persist({
+    setErrorMsg(null);
+    persist({
       monthly_budget_usd: n,
       fallback_model: draftFallback || null,
     });
   }, [draftBudget, draftFallback, persist]);
 
-  const savePatterns = useCallback(async () => {
+  const savePatterns = useCallback(() => {
     const patterns = draftPatterns
       .split("\n")
       .map((s) => s.trim())
       .filter((s) => s.length > 0);
-    await persist({ redact_patterns: patterns });
+    setErrorMsg(null);
+    persist({ redact_patterns: patterns });
   }, [draftPatterns, persist]);
 
-  const togglePrivacy = useCallback(async () => {
+  const togglePrivacy = useCallback(() => {
     if (!view) return;
-    await persist({ privacy_mode: !view.privacy_mode });
+    setErrorMsg(null);
+    persist({ privacy_mode: !view.privacy_mode });
   }, [persist, view]);
 
-  const toggleDisabled = useCallback(async () => {
+  const toggleDisabled = useCallback(() => {
     if (!view) return;
-    await persist({ ai_disabled: !view.ai_disabled });
+    setErrorMsg(null);
+    persist({ ai_disabled: !view.ai_disabled });
   }, [persist, view]);
-
-  if (view == null && !error) {
-    return (
-      <section
-        aria-label="AI safeguards"
-        className="mt-8 rounded border border-zinc-200 bg-white p-5"
-      >
-        <h2 className="text-base font-semibold text-zinc-900">AI safeguards</h2>
-        <p className="mt-3 text-sm text-zinc-500">Loading…</p>
-      </section>
-    );
-  }
 
   const budget = view?.monthly_budget_usd ?? 25;
   const spent = view?.month_spent_usd ?? 0;
@@ -1155,151 +1102,146 @@ export function AiSafeguardsPanel({
   const overFallback = ratio >= 0.8;
   const overBudget = ratio >= 1;
   const pctClass = overBudget
-    ? "bg-red-500"
+    ? "bg-destructive"
     : overFallback
       ? "bg-amber-500"
       : "bg-emerald-500";
 
   return (
-    <section
-      aria-label="AI safeguards"
-      className="mt-8 rounded border border-zinc-200 bg-white p-5"
+    <SettingsPanel
+      title="AI safeguards"
+      desc="Caps cost and keeps sensitive content out of the model provider."
+      error={error}
+      busy={busy && !view}
     >
-      <h2 className="text-base font-semibold text-zinc-900">AI safeguards</h2>
-      <p className="mt-1 text-sm text-zinc-500">
-        Caps cost and keeps sensitive content out of the model provider.
-      </p>
-
-      {error && (
-        <p className="mt-3 rounded border border-red-200 bg-red-50 p-2 text-sm text-red-700">
-          {error}
-        </p>
-      )}
-
-      <div className="mt-4 space-y-6">
-        <div>
-          <div className="flex items-baseline justify-between">
-            <span className="text-sm font-medium text-zinc-900">
-              Monthly spend
-            </span>
-            <span className="text-sm text-zinc-700">
-              ${spent.toFixed(2)} of ${budget.toFixed(2)}
-            </span>
+      {view && (
+        <div className="mt-4 space-y-6">
+          <div>
+            <div className="flex items-baseline justify-between">
+              <span className="font-medium text-foreground text-sm">
+                Monthly spend
+              </span>
+              <span className="text-foreground text-sm">
+                ${spent.toFixed(2)} of ${budget.toFixed(2)}
+              </span>
+            </div>
+            <div className="mt-2 h-2 w-full overflow-hidden rounded bg-muted">
+              <div
+                className={`h-full ${pctClass}`}
+                style={{ width: `${Math.min(100, Math.round(ratio * 100))}%` }}
+              />
+            </div>
+            {overBudget && (
+              <p className="mt-2 text-destructive text-sm">
+                AI disabled — monthly budget reached.
+              </p>
+            )}
+            {overFallback && !overBudget && (
+              <p className="mt-2 text-amber-700 text-sm">
+                Running on fallback model (≥80% of budget spent).
+              </p>
+            )}
           </div>
-          <div className="mt-2 h-2 w-full overflow-hidden rounded bg-zinc-100">
-            <div
-              className={`h-full ${pctClass}`}
-              style={{ width: `${Math.min(100, Math.round(ratio * 100))}%` }}
+
+          <label className="block text-sm">
+            <span className="block font-medium text-foreground">
+              Monthly budget (USD)
+            </span>
+            <input
+              type="number"
+              min="0"
+              step="0.5"
+              value={draftBudget}
+              onChange={(e) => setDraftBudget(e.target.value)}
+              className="mt-1 w-40 rounded border border-border px-2 py-1.5 text-sm"
+              disabled={busy}
             />
-          </div>
-          {overBudget && (
-            <p className="mt-2 text-sm text-red-700">
-              AI disabled — monthly budget reached.
-            </p>
-          )}
-          {overFallback && !overBudget && (
-            <p className="mt-2 text-sm text-amber-700">
-              Running on fallback model (≥80% of budget spent).
-            </p>
-          )}
-        </div>
+          </label>
 
-        <label className="block text-sm">
-          <span className="block font-medium text-zinc-900">
-            Monthly budget (USD)
-          </span>
-          <input
-            type="number"
-            min="0"
-            step="0.5"
-            value={draftBudget}
-            onChange={(e) => setDraftBudget(e.target.value)}
-            className="mt-1 w-40 rounded border border-zinc-200 px-2 py-1.5 text-sm"
-            disabled={busy}
-          />
-        </label>
-
-        <label className="block text-sm">
-          <span className="block font-medium text-zinc-900">
-            Fallback model
-          </span>
-          <input
-            type="text"
-            value={draftFallback}
-            onChange={(e) => setDraftFallback(e.target.value)}
-            placeholder="e.g. gpt-4o-mini"
-            className="mt-1 w-full rounded border border-zinc-200 px-2 py-1.5 text-sm"
-            disabled={busy}
-          />
-          <span className="mt-1 block text-xs text-zinc-500">
-            Used in place of your default model once 80% of the budget has been
-            spent.
-          </span>
-        </label>
-
-        <button
-          type="button"
-          onClick={saveBudget}
-          disabled={busy || !view?.provider}
-          className="rounded border border-zinc-900 bg-zinc-900 px-3 py-1.5 text-sm text-white hover:bg-zinc-800 disabled:opacity-50"
-        >
-          Save budget
-        </button>
-
-        <label className="flex items-center gap-3 border-t border-zinc-100 pt-4 text-sm">
-          <input
-            type="checkbox"
-            checked={!!view?.privacy_mode}
-            onChange={togglePrivacy}
-            disabled={busy}
-          />
-          <span>
-            <strong className="font-medium">Redact sensitive content</strong>
-            <span className="ml-2 text-zinc-500">
-              Strips code blocks, secrets, paths, and PR diffs from prompts
-              before they leave the Worker.
+          <label className="block text-sm">
+            <span className="block font-medium text-foreground">
+              Fallback model
             </span>
-          </span>
-        </label>
+            <input
+              type="text"
+              value={draftFallback}
+              onChange={(e) => setDraftFallback(e.target.value)}
+              placeholder="e.g. gpt-4o-mini"
+              className="mt-1 w-full rounded border border-border px-2 py-1.5 text-sm"
+              disabled={busy}
+            />
+            <span className="mt-1 block text-muted-foreground text-xs">
+              Used in place of your default model once 80% of the budget has
+              been spent.
+            </span>
+          </label>
 
-        <label className="block text-sm">
-          <span className="block font-medium text-zinc-900">
-            Custom redaction patterns
-          </span>
-          <textarea
-            value={draftPatterns}
-            onChange={(e) => setDraftPatterns(e.target.value)}
-            placeholder="One regex per line"
-            rows={3}
-            className="mt-1 w-full rounded border border-zinc-200 px-2 py-1.5 font-mono text-xs"
-            disabled={busy}
-          />
           <button
             type="button"
-            onClick={savePatterns}
-            disabled={busy || !view?.provider}
-            className="mt-2 rounded border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50 disabled:opacity-50"
+            onClick={saveBudget}
+            disabled={busy || !view.provider}
+            className="rounded border border-foreground bg-foreground px-3 py-1.5 text-background text-sm hover:opacity-90 disabled:opacity-50"
           >
-            Save patterns
+            Save budget
           </button>
-        </label>
 
-        <label className="flex items-center gap-3 border-t border-zinc-100 pt-4 text-sm">
-          <input
-            type="checkbox"
-            checked={!!view?.ai_disabled}
-            onChange={toggleDisabled}
-            disabled={busy}
-          />
-          <span>
-            <strong className="font-medium">Disable AI on this account</strong>
-            <span className="ml-2 text-zinc-500">
-              Skips every AI call regardless of budget or provider config.
+          <div className="flex items-center gap-3 border-border border-t pt-4 text-sm">
+            <Checkbox
+              aria-label="Redact sensitive content"
+              checked={!!view.privacy_mode}
+              onCheckedChange={togglePrivacy}
+              loading={busy}
+            />
+            <span>
+              <strong className="font-medium">Redact sensitive content</strong>
+              <span className="ml-2 text-muted-foreground">
+                Strips code blocks, secrets, paths, and PR diffs from prompts
+                before they leave the Worker.
+              </span>
             </span>
-          </span>
-        </label>
-      </div>
-    </section>
+          </div>
+
+          <label className="block text-sm">
+            <span className="block font-medium text-foreground">
+              Custom redaction patterns
+            </span>
+            <textarea
+              value={draftPatterns}
+              onChange={(e) => setDraftPatterns(e.target.value)}
+              placeholder="One regex per line"
+              rows={3}
+              className="mt-1 w-full rounded border border-border px-2 py-1.5 font-mono text-xs"
+              disabled={busy}
+            />
+            <button
+              type="button"
+              onClick={savePatterns}
+              disabled={busy || !view.provider}
+              className="mt-2 rounded border border-border px-3 py-1.5 text-sm hover:bg-muted/50 disabled:opacity-50"
+            >
+              Save patterns
+            </button>
+          </label>
+
+          <div className="flex items-center gap-3 border-border border-t pt-4 text-sm">
+            <Checkbox
+              aria-label="Disable AI on this account"
+              checked={!!view.ai_disabled}
+              onCheckedChange={toggleDisabled}
+              loading={busy}
+            />
+            <span>
+              <strong className="font-medium">
+                Disable AI on this account
+              </strong>
+              <span className="ml-2 text-muted-foreground">
+                Skips every AI call regardless of budget or provider config.
+              </span>
+            </span>
+          </div>
+        </div>
+      )}
+    </SettingsPanel>
   );
 }
 
@@ -1359,74 +1301,38 @@ export function NotificationMatrixPanel({
   loader?: () => Promise<PreferencesView>;
   saver?: (patch: PreferencesPatch) => Promise<PreferencesView>;
 } = {}) {
-  const [matrix, setMatrix] = useState<Record<string, string[]> | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-
   const load = useMemo(() => loader ?? defaultPrefsLoader, [loader]);
   const save = useMemo(() => saver ?? defaultPrefsSaver, [saver]);
 
-  useEffect(() => {
-    let cancelled = false;
-    load()
-      .then((view) => {
-        if (cancelled) return;
-        setMatrix(view.notification_matrix ?? {});
-      })
-      .catch((e) => {
-        if (cancelled) return;
-        setError(e instanceof Error ? e.message : "failed to load");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [load]);
+  const { data, error, busy, persist } = useAsyncPanel<{
+    matrix: Record<string, string[]>;
+  }>({
+    load: async () => ({ matrix: (await load()).notification_matrix ?? {} }),
+    save: async (next) => {
+      await save({ notification_matrix: next.matrix });
+    },
+  });
+  const matrix = data?.matrix ?? null;
 
   const toggle = useCallback(
-    async (kind: string, channel: string) => {
+    (kind: string, channel: string) => {
       if (!matrix) return;
       const cur = matrix[kind] ?? [];
       const next = cur.includes(channel)
         ? cur.filter((c) => c !== channel)
         : [...cur, channel];
-      const nextMatrix = { ...matrix, [kind]: next };
-      setMatrix(nextMatrix);
-      setBusy(true);
-      try {
-        const view = await save({ notification_matrix: nextMatrix });
-        setMatrix(view.notification_matrix ?? nextMatrix);
-        setError(null);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "save failed");
-      } finally {
-        setBusy(false);
-      }
+      persist({ matrix: { ...matrix, [kind]: next } });
     },
-    [matrix, save],
+    [matrix, persist],
   );
 
   return (
-    <section
-      aria-label="Per-event channel matrix"
-      className="mt-8 rounded border border-zinc-200 bg-white p-5"
+    <SettingsPanel
+      title="Per-event channels"
+      desc="Pick which channels fire for each kind of Signal."
+      error={error}
+      busy={busy && !matrix}
     >
-      <h2 className="text-base font-semibold text-zinc-900">
-        Per-event channels
-      </h2>
-      <p className="mt-1 text-sm text-zinc-500">
-        Pick which channels fire for each kind of Signal.
-      </p>
-
-      {error && (
-        <p className="mt-3 rounded border border-red-200 bg-red-50 p-2 text-sm text-red-700">
-          {error}
-        </p>
-      )}
-
-      {matrix == null && !error && (
-        <p className="mt-3 text-sm text-zinc-500">Loading…</p>
-      )}
-
       {matrix && (
         <table className="mt-4 w-full text-sm">
           <thead>
@@ -1463,7 +1369,7 @@ export function NotificationMatrixPanel({
           </tbody>
         </table>
       )}
-    </section>
+    </SettingsPanel>
   );
 }
 
@@ -1514,75 +1420,44 @@ export function QuietHoursPanel({
   loader?: () => Promise<PreferencesView>;
   saver?: (patch: PreferencesPatch) => Promise<PreferencesView>;
 } = {}) {
-  const [state, setState] = useState<QuietHoursState | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-
   const load = useMemo(() => loader ?? defaultPrefsLoader, [loader]);
   const save = useMemo(() => saver ?? defaultPrefsSaver, [saver]);
 
-  useEffect(() => {
-    let cancelled = false;
-    load()
-      .then((view) => {
-        if (cancelled) return;
-        setState(defaultQuietHoursState(view.quiet_hours_v2 ?? {}));
-      })
-      .catch((e) => {
-        if (cancelled) return;
-        setError(e instanceof Error ? e.message : "failed to load");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [load]);
-
-  const persist = useCallback(
-    async (next: QuietHoursState) => {
-      setState(next);
-      setBusy(true);
-      try {
-        await save({
-          quiet_hours_v2: next as unknown as Record<string, unknown>,
-        });
-        setError(null);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "save failed");
-      } finally {
-        setBusy(false);
-      }
+  const { data, error, busy, persist } = useAsyncPanel<QuietHoursState>({
+    load: async () => defaultQuietHoursState((await load()).quiet_hours_v2 ?? {}),
+    save: async (next) => {
+      await save({ quiet_hours_v2: next as unknown as Record<string, unknown> });
     },
-    [save],
-  );
+  });
+
+  // Local drafts for the time inputs so typing isn't gated on save (pessimistic
+  // useAsyncPanel only updates `data` once the save resolves). Synced from the
+  // last persisted snapshot when a fresh one lands.
+  const [draftStart, setDraftStart] = useState("");
+  const [draftEnd, setDraftEnd] = useState("");
+  const lastSnapshotRef = useRef<QuietHoursState | null>(null);
+  useEffect(() => {
+    if (data && data !== lastSnapshotRef.current) {
+      setDraftStart(data.start);
+      setDraftEnd(data.end);
+      lastSnapshotRef.current = data;
+    }
+  }, [data]);
 
   return (
-    <section
-      aria-label="Quiet hours"
-      className="mt-8 rounded border border-zinc-200 bg-white p-5"
+    <SettingsPanel
+      title="Quiet hours"
+      desc="Hold non-urgent alerts until the window ends. Allow-through kinds deliver immediately."
+      error={error}
+      busy={busy && !data}
     >
-      <h2 className="text-base font-semibold text-zinc-900">Quiet hours</h2>
-      <p className="mt-1 text-sm text-zinc-500">
-        Hold non-urgent alerts until the window ends. Allow-through kinds
-        deliver immediately.
-      </p>
-
-      {error && (
-        <p className="mt-3 rounded border border-red-200 bg-red-50 p-2 text-sm text-red-700">
-          {error}
-        </p>
-      )}
-
-      {state == null && !error && (
-        <p className="mt-3 text-sm text-zinc-500">Loading…</p>
-      )}
-
-      {state && (
+      {data && (
         <div className="mt-4 space-y-4 text-sm">
           <label className="flex items-center gap-3">
             <input
               type="checkbox"
-              checked={state.enabled}
-              onChange={() => persist({ ...state, enabled: !state.enabled })}
+              checked={data.enabled}
+              onChange={() => persist({ enabled: !data.enabled })}
               disabled={busy}
             />
             <span>Enable quiet hours</span>
@@ -1594,10 +1469,10 @@ export function QuietHoursPanel({
               <input
                 type="time"
                 aria-label="Quiet hours start"
-                value={state.start}
-                onChange={(e) => setState({ ...state, start: e.target.value })}
-                onBlur={() => persist(state)}
-                disabled={busy || !state.enabled}
+                value={draftStart}
+                onChange={(e) => setDraftStart(e.target.value)}
+                onBlur={() => persist({ start: draftStart })}
+                disabled={busy || !data.enabled}
                 className="rounded border border-zinc-200 px-2 py-1"
               />
             </label>
@@ -1606,10 +1481,10 @@ export function QuietHoursPanel({
               <input
                 type="time"
                 aria-label="Quiet hours end"
-                value={state.end}
-                onChange={(e) => setState({ ...state, end: e.target.value })}
-                onBlur={() => persist(state)}
-                disabled={busy || !state.enabled}
+                value={draftEnd}
+                onChange={(e) => setDraftEnd(e.target.value)}
+                onBlur={() => persist({ end: draftEnd })}
+                disabled={busy || !data.enabled}
                 className="rounded border border-zinc-200 px-2 py-1"
               />
             </label>
@@ -1619,7 +1494,7 @@ export function QuietHoursPanel({
             <p className="mb-2 text-zinc-500">Days</p>
             <div className="flex flex-wrap gap-2">
               {DAYS_OF_WEEK.map((d) => {
-                const on = state.days.includes(d.id);
+                const on = data.days.includes(d.id);
                 return (
                   <button
                     key={d.id}
@@ -1628,11 +1503,11 @@ export function QuietHoursPanel({
                     aria-label={`Quiet on ${d.label}`}
                     onClick={() => {
                       const days = on
-                        ? state.days.filter((x) => x !== d.id)
-                        : [...state.days, d.id].sort();
-                      persist({ ...state, days });
+                        ? data.days.filter((x) => x !== d.id)
+                        : [...data.days, d.id].sort();
+                      persist({ days });
                     }}
-                    disabled={busy || !state.enabled}
+                    disabled={busy || !data.enabled}
                     className={`rounded border px-2 py-1 ${
                       on
                         ? "border-zinc-900 bg-zinc-900 text-white"
@@ -1647,7 +1522,7 @@ export function QuietHoursPanel({
           </div>
         </div>
       )}
-    </section>
+    </SettingsPanel>
   );
 }
 
@@ -1676,75 +1551,41 @@ export function FocusBlockPanel({
   loader?: () => Promise<PreferencesView>;
   saver?: (patch: PreferencesPatch) => Promise<PreferencesView>;
 } = {}) {
-  const [state, setState] = useState<FocusBlockState | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-
   const load = useMemo(() => loader ?? defaultPrefsLoader, [loader]);
   const save = useMemo(() => saver ?? defaultPrefsSaver, [saver]);
 
-  useEffect(() => {
-    let cancelled = false;
-    load()
-      .then((view) => {
-        if (cancelled) return;
-        setState(defaultFocusState(view.focus_block ?? {}));
-      })
-      .catch((e) => {
-        if (cancelled) return;
-        setError(e instanceof Error ? e.message : "failed to load");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [load]);
-
-  const persist = useCallback(
-    async (next: FocusBlockState) => {
-      setState(next);
-      setBusy(true);
-      try {
-        await save({ focus_block: next as unknown as Record<string, unknown> });
-        setError(null);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "save failed");
-      } finally {
-        setBusy(false);
-      }
+  const { data, error, busy, persist } = useAsyncPanel<FocusBlockState>({
+    load: async () => defaultFocusState((await load()).focus_block ?? {}),
+    save: async (next) => {
+      await save({ focus_block: next as unknown as Record<string, unknown> });
     },
-    [save],
-  );
+  });
+
+  // Local draft for the imminent-meeting number input — pessimistic save
+  // shouldn't gate keystrokes. Synced from the last persisted snapshot.
+  const [draftMinutes, setDraftMinutes] = useState(0);
+  const lastSnapshotRef = useRef<FocusBlockState | null>(null);
+  useEffect(() => {
+    if (data && data !== lastSnapshotRef.current) {
+      setDraftMinutes(data.allow_imminent_meeting_minutes);
+      lastSnapshotRef.current = data;
+    }
+  }, [data]);
 
   return (
-    <section
-      aria-label="Focus block auto-suppression"
-      className="mt-8 rounded border border-zinc-200 bg-white p-5"
+    <SettingsPanel
+      title="Auto focus-block"
+      desc="While a calendar Focus event is active, silence everything except what you allow."
+      error={error}
+      busy={busy && !data}
     >
-      <h2 className="text-base font-semibold text-zinc-900">
-        Auto focus-block
-      </h2>
-      <p className="mt-1 text-sm text-zinc-500">
-        While a calendar Focus event is active, silence everything except what
-        you allow.
-      </p>
-
-      {error && (
-        <p className="mt-3 rounded border border-red-200 bg-red-50 p-2 text-sm text-red-700">
-          {error}
-        </p>
-      )}
-
-      {state == null && !error && (
-        <p className="mt-3 text-sm text-zinc-500">Loading…</p>
-      )}
-
-      {state && (
+      {data && (
         <div className="mt-4 space-y-3 text-sm">
           <label className="flex items-center gap-3">
             <input
               type="checkbox"
-              checked={state.enabled}
-              onChange={() => persist({ ...state, enabled: !state.enabled })}
+              checked={data.enabled}
+              onChange={() => persist({ enabled: !data.enabled })}
               disabled={busy}
             />
             <span>Auto-suppress alerts during focus blocks</span>
@@ -1752,11 +1593,9 @@ export function FocusBlockPanel({
           <label className="flex items-center gap-3">
             <input
               type="checkbox"
-              checked={state.allow_mentions}
-              onChange={() =>
-                persist({ ...state, allow_mentions: !state.allow_mentions })
-              }
-              disabled={busy || !state.enabled}
+              checked={data.allow_mentions}
+              onChange={() => persist({ allow_mentions: !data.allow_mentions })}
+              disabled={busy || !data.enabled}
             />
             <span>Let mentions and DMs through</span>
           </label>
@@ -1767,22 +1606,21 @@ export function FocusBlockPanel({
               min={0}
               max={60}
               aria-label="Imminent meeting minutes"
-              value={state.allow_imminent_meeting_minutes}
+              value={draftMinutes}
               onChange={(e) =>
-                setState({
-                  ...state,
-                  allow_imminent_meeting_minutes: Number(e.target.value) || 0,
-                })
+                setDraftMinutes(Number(e.target.value) || 0)
               }
-              onBlur={() => persist(state)}
-              disabled={busy || !state.enabled}
+              onBlur={() =>
+                persist({ allow_imminent_meeting_minutes: draftMinutes })
+              }
+              disabled={busy || !data.enabled}
               className="w-20 rounded border border-zinc-200 px-2 py-1"
             />
             <span className="text-zinc-500">min</span>
           </label>
         </div>
       )}
-    </section>
+    </SettingsPanel>
   );
 }
 
@@ -1807,82 +1645,57 @@ export function FocusDefaultsPanel({
   loader?: () => Promise<PreferencesView>;
   saver?: (patch: PreferencesPatch) => Promise<PreferencesView>;
 } = {}) {
-  const [emoji, setEmoji] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-
   const load = useMemo(() => loader ?? defaultPrefsLoader, [loader]);
   const save = useMemo(() => saver ?? defaultPrefsSaver, [saver]);
 
-  useEffect(() => {
-    let cancelled = false;
-    load()
-      .then((view) => {
-        if (cancelled) return;
-        setEmoji(readFocusEmoji(view.focus_defaults ?? {}));
-      })
-      .catch((e) => {
-        if (cancelled) return;
-        setError(e instanceof Error ? e.message : "failed to load");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [load]);
+  const { data, error, busy, persist } = useAsyncPanel<{ emoji: string }>({
+    load: async () => ({
+      emoji: readFocusEmoji((await load()).focus_defaults ?? {}),
+    }),
+    save: async (next) => {
+      await save({ focus_defaults: { status_emoji: next.emoji } });
+    },
+  });
 
-  const persist = useCallback(async () => {
-    if (emoji == null) return;
-    const trimmed = emoji.trim() || DEFAULT_FOCUS_STATUS_EMOJI;
-    setBusy(true);
-    try {
-      await save({ focus_defaults: { status_emoji: trimmed } });
-      setEmoji(trimmed);
-      setError(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "save failed");
-    } finally {
-      setBusy(false);
+  // Local draft for the text input — synced from the last persisted snapshot.
+  const [draftEmoji, setDraftEmoji] = useState("");
+  const lastSnapshotRef = useRef<{ emoji: string } | null>(null);
+  useEffect(() => {
+    if (data && data !== lastSnapshotRef.current) {
+      setDraftEmoji(data.emoji);
+      lastSnapshotRef.current = data;
     }
-  }, [emoji, save]);
+  }, [data]);
+
+  const commit = useCallback(() => {
+    const trimmed = draftEmoji.trim() || DEFAULT_FOCUS_STATUS_EMOJI;
+    setDraftEmoji(trimmed);
+    persist({ emoji: trimmed });
+  }, [draftEmoji, persist]);
 
   return (
-    <section
-      aria-label="Focus session defaults"
-      className="mt-8 rounded border border-zinc-200 bg-white p-5"
+    <SettingsPanel
+      title="Focus defaults"
+      desc="Slack status emoji applied while a focus session is active. Use any Slack-supported shortcode (e.g. :no_bell:, :headphones:)."
+      error={error}
+      busy={busy && !data}
     >
-      <h2 className="text-base font-semibold text-zinc-900">Focus defaults</h2>
-      <p className="mt-1 text-sm text-zinc-500">
-        Slack status emoji applied while a focus session is active. Use any
-        Slack-supported shortcode (e.g. <code>:no_bell:</code>,{" "}
-        <code>:headphones:</code>).
-      </p>
-
-      {error && (
-        <p className="mt-3 rounded border border-red-200 bg-red-50 p-2 text-sm text-red-700">
-          {error}
-        </p>
-      )}
-
-      {emoji == null && !error && (
-        <p className="mt-3 text-sm text-zinc-500">Loading…</p>
-      )}
-
-      {emoji != null && (
+      {data && (
         <label className="mt-4 flex items-center gap-3 text-sm">
           <span className="text-zinc-500">Slack status emoji</span>
           <input
             type="text"
             aria-label="Slack status emoji"
-            value={emoji}
+            value={draftEmoji}
             placeholder={DEFAULT_FOCUS_STATUS_EMOJI}
-            onChange={(e) => setEmoji(e.target.value)}
-            onBlur={() => persist()}
+            onChange={(e) => setDraftEmoji(e.target.value)}
+            onBlur={commit}
             disabled={busy}
             className="w-40 rounded border border-zinc-200 px-2 py-1 font-mono"
           />
         </label>
       )}
-    </section>
+    </SettingsPanel>
   );
 }
 
@@ -1921,24 +1734,6 @@ export function EmailDigestPanel({
   >;
   tester?: () => Promise<{ ok: boolean; error?: string }>;
 } = {}) {
-  const [view, setView] = useState<EmailDigestSettingsView | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [status, setStatus] = useState<string | null>(null);
-  const [draft, setDraft] = useState<{
-    api_key: string;
-    from_email: string;
-    to_email: string;
-    hour_utc: number;
-    transport: EmailTransport;
-  }>({
-    api_key: "",
-    from_email: "",
-    to_email: "",
-    hour_utc: 13,
-    transport: "resend",
-  });
-
   const load = useMemo(
     () =>
       loader ??
@@ -1968,33 +1763,60 @@ export function EmailDigestPanel({
     [tester],
   );
 
+  // The three actions (Save, toggle Enabled, Send test) compose different
+  // PUT bodies, so useAsyncPanel drives the load lifecycle only and each
+  // action feeds its server response back through persist({...settings})
+  // so local state mirrors the server without an extra GET. Mirrors the
+  // AiProviderPanel pattern from batch A (#80).
+  const {
+    data: view,
+    error: loadError,
+    busy,
+    persist,
+  } = useAsyncPanel<EmailDigestSettingsView>({
+    load,
+    save: async () => {},
+  });
+
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
+  const [actionBusy, setActionBusy] = useState(false);
+  const [draft, setDraft] = useState<{
+    api_key: string;
+    from_email: string;
+    to_email: string;
+    hour_utc: number;
+    transport: EmailTransport;
+  }>({
+    api_key: "",
+    from_email: "",
+    to_email: "",
+    hour_utc: 13,
+    transport: "resend",
+  });
+
+  const lastSnapshotRef = useRef<EmailDigestSettingsView | null>(null);
   useEffect(() => {
-    let cancelled = false;
-    load()
-      .then((v) => {
-        if (cancelled) return;
-        setView(v);
-        setDraft((d) => ({
-          ...d,
-          from_email: v.from_email ?? "",
-          to_email: v.to_email ?? "",
-          hour_utc: v.hour_utc,
-          transport: v.transport,
-        }));
-      })
-      .catch((e) => {
-        if (cancelled) return;
-        setError(e instanceof Error ? e.message : "failed to load");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [load]);
+    if (view && view !== lastSnapshotRef.current) {
+      setDraft((d) => ({
+        ...d,
+        api_key: "",
+        from_email: view.from_email ?? "",
+        to_email: view.to_email ?? "",
+        hour_utc: view.hour_utc,
+        transport: view.transport,
+      }));
+      lastSnapshotRef.current = view;
+    }
+  }, [view]);
+
+  const error =
+    actionError ?? (loadError ? loadError.message : null);
 
   const onSave = useCallback(async () => {
-    setBusy(true);
+    setActionBusy(true);
     setStatus(null);
-    setError(null);
+    setActionError(null);
     try {
       const body: EmailDigestPutBody = {
         from_email: draft.from_email.trim() || null,
@@ -2005,70 +1827,56 @@ export function EmailDigestPanel({
       if (draft.api_key.trim().length > 0) body.api_key = draft.api_key.trim();
       const out = await save(body);
       if (out.ok) {
-        setView(out.settings);
-        setDraft((d) => ({ ...d, api_key: "" }));
-        setStatus("Saved.");
+        persist(out.settings);
       } else {
-        setError(out.error);
+        setActionError(out.error);
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "save failed");
+      setActionError(e instanceof Error ? e.message : "save failed");
     } finally {
-      setBusy(false);
+      setActionBusy(false);
     }
-  }, [draft, save]);
+  }, [draft, persist, save]);
 
   const onToggleEnabled = useCallback(async () => {
     if (!view) return;
-    setBusy(true);
-    setError(null);
+    setActionBusy(true);
+    setActionError(null);
     try {
       const out = await save({ enabled: !view.enabled });
-      if (out.ok) setView(out.settings);
-      else setError(out.error);
+      if (out.ok) persist(out.settings);
+      else setActionError(out.error);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "save failed");
+      setActionError(e instanceof Error ? e.message : "save failed");
     } finally {
-      setBusy(false);
+      setActionBusy(false);
     }
-  }, [save, view]);
+  }, [persist, save, view]);
 
   const onTest = useCallback(async () => {
-    setBusy(true);
+    setActionBusy(true);
     setStatus(null);
-    setError(null);
+    setActionError(null);
     try {
       const out = await test();
       setStatus(out.ok ? "Test email sent." : null);
-      if (!out.ok) setError(out.error ?? "test failed");
+      if (!out.ok) setActionError(out.error ?? "test failed");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "test failed");
+      setActionError(e instanceof Error ? e.message : "test failed");
     } finally {
-      setBusy(false);
+      setActionBusy(false);
     }
   }, [test]);
 
+  const isBusy = busy || actionBusy;
+
   return (
-    <section
-      aria-label="Email digest"
-      className="mt-8 rounded border border-zinc-200 bg-white p-5"
+    <SettingsPanel
+      title="Email digest"
+      desc="Daily morning email summarizing new Signals. Bring your own Resend or Postmark API key — Clearday never operates a shared mailer."
+      error={error}
+      busy={busy && !view}
     >
-      <h2 className="text-base font-semibold text-zinc-900">Email digest</h2>
-      <p className="mt-1 text-sm text-zinc-500">
-        Daily morning email summarizing new Signals. Bring your own Resend or
-        Postmark API key — Clearday never operates a shared mailer.
-      </p>
-
-      {error && (
-        <p className="mt-3 rounded border border-red-200 bg-red-50 p-2 text-sm text-red-700">
-          {error}
-        </p>
-      )}
-
-      {view == null && !error && (
-        <p className="mt-3 text-sm text-zinc-500">Loading…</p>
-      )}
-
       {view && (
         <div className="mt-4 space-y-3 text-sm">
           <label className="flex items-center gap-3">
@@ -2076,11 +1884,11 @@ export function EmailDigestPanel({
               type="checkbox"
               checked={view.enabled}
               onChange={onToggleEnabled}
-              disabled={busy}
+              disabled={isBusy}
             />
             <span>
               <strong className="font-medium">Daily digest</strong>
-              <span className="ml-2 text-zinc-500">
+              <span className="ml-2 text-muted-foreground">
                 {view.enabled
                   ? `Sends each day at ${view.hour_utc}:00 UTC`
                   : "Disabled"}
@@ -2091,7 +1899,7 @@ export function EmailDigestPanel({
           <div>
             <label
               htmlFor="email-digest-transport"
-              className="block text-xs uppercase tracking-wide text-zinc-500"
+              className="block text-muted-foreground text-xs uppercase tracking-wide"
             >
               Transport
             </label>
@@ -2104,8 +1912,8 @@ export function EmailDigestPanel({
                   transport: e.target.value as EmailTransport,
                 }))
               }
-              disabled={busy}
-              className="mt-1 w-full rounded border border-zinc-200 px-2 py-1"
+              disabled={isBusy}
+              className="mt-1 w-full rounded-md border border-input bg-background px-2 py-1"
             >
               <option value="resend">Resend</option>
               <option value="postmark">Postmark</option>
@@ -2115,7 +1923,7 @@ export function EmailDigestPanel({
           <div>
             <label
               htmlFor="email-digest-from"
-              className="block text-xs uppercase tracking-wide text-zinc-500"
+              className="block text-muted-foreground text-xs uppercase tracking-wide"
             >
               From address
             </label>
@@ -2127,15 +1935,15 @@ export function EmailDigestPanel({
               onChange={(e) =>
                 setDraft((d) => ({ ...d, from_email: e.target.value }))
               }
-              disabled={busy}
-              className="mt-1 w-full rounded border border-zinc-200 px-2 py-1"
+              disabled={isBusy}
+              className="mt-1 w-full rounded-md border border-input bg-background px-2 py-1"
             />
           </div>
 
           <div>
             <label
               htmlFor="email-digest-to"
-              className="block text-xs uppercase tracking-wide text-zinc-500"
+              className="block text-muted-foreground text-xs uppercase tracking-wide"
             >
               To address
             </label>
@@ -2147,15 +1955,15 @@ export function EmailDigestPanel({
               onChange={(e) =>
                 setDraft((d) => ({ ...d, to_email: e.target.value }))
               }
-              disabled={busy}
-              className="mt-1 w-full rounded border border-zinc-200 px-2 py-1"
+              disabled={isBusy}
+              className="mt-1 w-full rounded-md border border-input bg-background px-2 py-1"
             />
           </div>
 
           <div>
             <label
               htmlFor="email-digest-hour"
-              className="block text-xs uppercase tracking-wide text-zinc-500"
+              className="block text-muted-foreground text-xs uppercase tracking-wide"
             >
               Send hour (UTC)
             </label>
@@ -2174,15 +1982,15 @@ export function EmailDigestPanel({
                   ),
                 }))
               }
-              disabled={busy}
-              className="mt-1 w-24 rounded border border-zinc-200 px-2 py-1"
+              disabled={isBusy}
+              className="mt-1 w-24 rounded-md border border-input bg-background px-2 py-1"
             />
           </div>
 
           <div>
             <label
               htmlFor="email-digest-key"
-              className="block text-xs uppercase tracking-wide text-zinc-500"
+              className="block text-muted-foreground text-xs uppercase tracking-wide"
             >
               {draft.transport === "postmark" ? "Postmark" : "Resend"} API key
             </label>
@@ -2200,10 +2008,10 @@ export function EmailDigestPanel({
               onChange={(e) =>
                 setDraft((d) => ({ ...d, api_key: e.target.value }))
               }
-              disabled={busy}
-              className="mt-1 w-full rounded border border-zinc-200 px-2 py-1"
+              disabled={isBusy}
+              className="mt-1 w-full rounded-md border border-input bg-background px-2 py-1"
             />
-            <p className="mt-1 text-xs text-zinc-500">
+            <p className="mt-1 text-muted-foreground text-xs">
               Stored encrypted at rest; the key is only sent to{" "}
               {draft.transport === "postmark" ? "Postmark" : "Resend"}.
             </p>
@@ -2213,32 +2021,34 @@ export function EmailDigestPanel({
             <button
               type="button"
               onClick={onSave}
-              disabled={busy}
-              className="rounded border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50 disabled:opacity-50"
+              disabled={isBusy}
+              className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted/50 disabled:opacity-50"
             >
               Save
             </button>
             <button
               type="button"
               onClick={onTest}
-              disabled={busy || !view.has_api_key}
-              className="rounded border border-zinc-200 px-3 py-1.5 text-sm hover:bg-zinc-50 disabled:opacity-50"
+              disabled={isBusy || !view.has_api_key}
+              className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted/50 disabled:opacity-50"
             >
               Send test email
             </button>
             {status && (
-              <output className="text-sm text-zinc-600">{status}</output>
+              <output className="text-muted-foreground text-sm">
+                {status}
+              </output>
             )}
           </div>
 
           {view.last_sent_date && (
-            <p className="text-xs text-zinc-500">
+            <p className="text-muted-foreground text-xs">
               Last digest sent on {view.last_sent_date}.
             </p>
           )}
         </div>
       )}
-    </section>
+    </SettingsPanel>
   );
 }
 
@@ -2267,11 +2077,6 @@ export function ThemePanel({
   loader?: () => Promise<ThemeView>;
   saver?: (patch: ThemeView) => Promise<ThemeSaveResult>;
 } = {}) {
-  const [view, setView] = useState<ThemeView | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [status, setStatus] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-
   const load = useMemo(
     () => loader ?? (() => apiFetch("/api/theme") as Promise<ThemeView>),
     [loader],
@@ -2287,68 +2092,44 @@ export function ThemePanel({
     [saver],
   );
 
-  useEffect(() => {
-    let cancelled = false;
-    load()
-      .then((t) => {
-        if (!cancelled) setView(t);
-      })
-      .catch((e) => {
-        if (!cancelled) setError(e instanceof Error ? e.message : String(e));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [load]);
-
-  const update = async (patch: Partial<ThemeView>) => {
-    if (!view) return;
-    const next: ThemeView = { ...view, ...patch };
-    setView(next);
-    setStatus(null);
-    setError(null);
-    setBusy(true);
-    try {
+  // The save callback unwraps the saver's discriminated result and
+  // dispatches the theme-updated event on success so the live theme
+  // applies without a reload. Throwing on `ok: false` flows the message
+  // through the hook's error path.
+  const { data, error, busy, persist } = useAsyncPanel<ThemeView>({
+    load,
+    save: async (next) => {
       const out = await save(next);
-      if (!out.ok) {
-        setError(out.error);
-        return;
-      }
-      setView(out.theme);
-      setStatus("Saved.");
+      if (!out.ok) throw new Error(out.error);
       window.dispatchEvent(
         new CustomEvent(THEME_UPDATED_EVENT, { detail: out.theme }),
       );
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  };
+    },
+  });
 
-  const current = view ?? DEFAULT_THEME;
+  const current = data ?? DEFAULT_THEME;
 
   return (
-    <section className="mt-8">
-      <h2 className="text-lg font-semibold">Theme & layout</h2>
-      <p className="mt-1 text-sm text-zinc-500">
-        Light / dark / system, density, and accent color. Changes apply
-        immediately without a reload.
-      </p>
-      {view === null ? (
-        <p className="mt-3 text-sm text-zinc-500">Loading…</p>
-      ) : (
+    <SettingsPanel
+      title="Theme & layout"
+      desc="Light / dark / system, density, and accent color. Changes apply immediately without a reload."
+      error={error}
+      busy={busy && !data}
+    >
+      {data && (
         <div className="mt-3 grid gap-4">
           <fieldset>
-            <legend className="text-sm font-medium text-zinc-700">Theme</legend>
+            <legend className="font-medium text-foreground text-sm">
+              Theme
+            </legend>
             <div className="mt-2 flex gap-2">
               {THEMES.map((t: Theme) => (
                 <label
                   key={t}
-                  className={`cursor-pointer rounded border px-3 py-1.5 text-sm capitalize ${
+                  className={`cursor-pointer rounded-md border px-3 py-1.5 text-sm capitalize ${
                     current.theme === t
-                      ? "border-zinc-900 bg-zinc-900 text-white"
-                      : "border-zinc-300 hover:bg-zinc-50"
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-border hover:bg-muted/50"
                   }`}
                 >
                   <input
@@ -2356,7 +2137,7 @@ export function ThemePanel({
                     name="theme"
                     className="sr-only"
                     checked={current.theme === t}
-                    onChange={() => update({ theme: t })}
+                    onChange={() => persist({ theme: t })}
                   />
                   {t}
                 </label>
@@ -2365,17 +2146,17 @@ export function ThemePanel({
           </fieldset>
 
           <fieldset>
-            <legend className="text-sm font-medium text-zinc-700">
+            <legend className="font-medium text-foreground text-sm">
               Density
             </legend>
             <div className="mt-2 flex gap-2">
               {DENSITIES.map((d: Density) => (
                 <label
                   key={d}
-                  className={`cursor-pointer rounded border px-3 py-1.5 text-sm capitalize ${
+                  className={`cursor-pointer rounded-md border px-3 py-1.5 text-sm capitalize ${
                     current.density === d
-                      ? "border-zinc-900 bg-zinc-900 text-white"
-                      : "border-zinc-300 hover:bg-zinc-50"
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-border hover:bg-muted/50"
                   }`}
                 >
                   <input
@@ -2383,7 +2164,7 @@ export function ThemePanel({
                     name="density"
                     className="sr-only"
                     checked={current.density === d}
-                    onChange={() => update({ density: d })}
+                    onChange={() => persist({ density: d })}
                   />
                   {d}
                 </label>
@@ -2392,7 +2173,7 @@ export function ThemePanel({
           </fieldset>
 
           <fieldset>
-            <legend className="text-sm font-medium text-zinc-700">
+            <legend className="font-medium text-foreground text-sm">
               Accent color
             </legend>
             <div className="mt-2 flex gap-2">
@@ -2400,10 +2181,10 @@ export function ThemePanel({
                 <label
                   key={a}
                   aria-label={ACCENT_LABELS[a]}
-                  className={`flex cursor-pointer items-center gap-2 rounded border px-3 py-1.5 text-sm ${
+                  className={`flex cursor-pointer items-center gap-2 rounded-md border px-3 py-1.5 text-sm ${
                     current.accent === a
-                      ? "border-zinc-900"
-                      : "border-zinc-300 hover:bg-zinc-50"
+                      ? "border-primary"
+                      : "border-border hover:bg-muted/50"
                   }`}
                 >
                   <input
@@ -2411,7 +2192,7 @@ export function ThemePanel({
                     name="accent"
                     className="sr-only"
                     checked={current.accent === a}
-                    onChange={() => update({ accent: a })}
+                    onChange={() => persist({ accent: a })}
                   />
                   <span
                     aria-hidden="true"
@@ -2423,20 +2204,9 @@ export function ThemePanel({
               ))}
             </div>
           </fieldset>
-
-          <div className="flex items-center gap-3" aria-busy={busy}>
-            {status && (
-              <output className="text-sm text-emerald-700">{status}</output>
-            )}
-            {error && (
-              <p role="alert" className="text-sm text-red-700">
-                {error}
-              </p>
-            )}
-          </div>
         </div>
       )}
-    </section>
+    </SettingsPanel>
   );
 }
 
@@ -2459,17 +2229,6 @@ export function DataPrivacyPanel({
   retentionLoader?: () => Promise<RetentionView>;
   retentionSaver?: (patch: RetentionView) => Promise<RetentionSaveResult>;
 } = {}) {
-  const [retention, setRetention] = useState<RetentionView | null>(null);
-  const [retentionError, setRetentionError] = useState<string | null>(null);
-  const [retentionStatus, setRetentionStatus] = useState<string | null>(null);
-  const [exportError, setExportError] = useState<string | null>(null);
-  const [exportBusy, setExportBusy] = useState(false);
-  const [purgeOpen, setPurgeOpen] = useState(false);
-  const [purgeInput, setPurgeInput] = useState("");
-  const [purgeBusy, setPurgeBusy] = useState(false);
-  const [purgeError, setPurgeError] = useState<string | null>(null);
-  const [purgeStatus, setPurgeStatus] = useState<string | null>(null);
-
   const loadRetention = useMemo(
     () =>
       retentionLoader ??
@@ -2503,36 +2262,45 @@ export function DataPrivacyPanel({
     [purger],
   );
 
-  useEffect(() => {
-    let cancelled = false;
-    loadRetention()
-      .then((r) => {
-        if (!cancelled) setRetention(r);
-      })
-      .catch((e) => {
-        if (!cancelled)
-          setRetentionError(e instanceof Error ? e.message : String(e));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [loadRetention]);
+  // useAsyncPanel drives the retention load + Save lifecycle. A local draft
+  // tracks the keystroke value so pessimistic save doesn't gate typing;
+  // clicking Save flushes the draft through persist(). Export and Purge
+  // remain bespoke action handlers — they're side-effecting one-shots, not
+  // shallow-merge persists.
+  const {
+    data: retention,
+    error: retentionError,
+    busy: retentionBusy,
+    persist: persistRetention,
+  } = useAsyncPanel<RetentionView>({
+    load: loadRetention,
+    save: async (next) => {
+      const out = await saveRetention(next);
+      if (!out.ok) throw new Error(out.error);
+    },
+  });
 
-  const onSaveRetention = async () => {
-    if (!retention) return;
-    setRetentionError(null);
-    setRetentionStatus(null);
-    try {
-      const out = await saveRetention(retention);
-      if (!out.ok) {
-        setRetentionError(out.error);
-        return;
-      }
-      setRetention(out.retention);
-      setRetentionStatus("Saved.");
-    } catch (e) {
-      setRetentionError(e instanceof Error ? e.message : String(e));
-    }
+  const [draftDays, setDraftDays] = useState<number>(DEFAULT_RETENTION_DAYS);
+  const lastSnapshotRef = useRef<RetentionView | null>(null);
+  // Sync the draft from the persisted snapshot during render so a freshly
+  // loaded value is reflected in the input on its first paint, mirroring
+  // batch B's FocusBlockPanel local-draft pattern but without the effect lag.
+  if (retention && retention !== lastSnapshotRef.current) {
+    lastSnapshotRef.current = retention;
+    setDraftDays(retention.retention_days);
+  }
+
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [exportBusy, setExportBusy] = useState(false);
+  const [purgeOpen, setPurgeOpen] = useState(false);
+  const [purgeInput, setPurgeInput] = useState("");
+  const [purgeBusy, setPurgeBusy] = useState(false);
+  const [purgeError, setPurgeError] = useState<string | null>(null);
+  const [purgeStatus, setPurgeStatus] = useState<string | null>(null);
+
+  const onSaveRetention = () => {
+    if (retention == null) return;
+    persistRetention({ retention_days: draftDays });
   };
 
   const onExport = async () => {
@@ -2581,17 +2349,18 @@ export function DataPrivacyPanel({
   };
 
   return (
-    <section className="mt-8">
-      <h2 className="text-lg font-semibold">Data & privacy</h2>
-      <p className="mt-1 text-sm text-zinc-500">
-        Export or purge your Signals and rollups, and override how long raw
-        Signals are retained before rollup.
-      </p>
-
+    <SettingsPanel
+      title="Data & privacy"
+      desc="Export or purge your Signals and rollups, and override how long raw Signals are retained before rollup."
+      error={retentionError}
+      busy={retentionBusy && !retention}
+    >
       <div className="mt-4 grid gap-4">
         <div>
-          <h3 className="text-sm font-medium text-zinc-700">Export all data</h3>
-          <p className="mt-1 text-xs text-zinc-500">
+          <h3 className="font-medium text-foreground text-sm">
+            Export all data
+          </h3>
+          <p className="mt-1 text-muted-foreground text-xs">
             Downloads a JSON file with all your Signals, rollups, settings, and
             inbox rules. Excludes encrypted secrets.
           </p>
@@ -2600,62 +2369,56 @@ export function DataPrivacyPanel({
               type="button"
               onClick={onExport}
               disabled={exportBusy}
-              className="rounded border px-3 py-1.5 text-sm hover:bg-zinc-50 disabled:opacity-50"
+              className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted/50 disabled:opacity-50"
             >
               {exportBusy ? "Exporting…" : "Export all data"}
             </button>
             {exportError && (
-              <p role="alert" className="text-sm text-red-700">
+              <p role="alert" className="text-destructive text-sm">
                 {exportError}
               </p>
             )}
           </div>
         </div>
 
-        <div>
-          <label className="block text-sm">
-            <span className="text-zinc-700">Retention (days)</span>
-            <input
-              type="number"
-              min={MIN_RETENTION_DAYS}
-              max={MAX_RETENTION_DAYS}
-              className="mt-1 block w-32 rounded border border-zinc-300 px-2 py-1.5 text-sm"
-              value={retention?.retention_days ?? DEFAULT_RETENTION_DAYS}
-              onChange={(e) => {
-                const n = Number.parseInt(e.target.value, 10);
-                if (Number.isFinite(n)) setRetention({ retention_days: n });
-              }}
-            />
-          </label>
-          <p className="mt-1 text-xs text-zinc-500">
-            Raw Signals older than this are rolled up into period aggregates and
-            removed from the hot table. Default: {DEFAULT_RETENTION_DAYS}.
-          </p>
-          <div className="mt-2 flex items-center gap-3">
-            <button
-              type="button"
-              onClick={onSaveRetention}
-              disabled={retention === null}
-              className="rounded border px-3 py-1.5 text-sm hover:bg-zinc-50 disabled:opacity-50"
-            >
-              Save retention
-            </button>
-            {retentionStatus && (
-              <output className="text-sm text-emerald-700">
-                {retentionStatus}
-              </output>
-            )}
-            {retentionError && (
-              <p role="alert" className="text-sm text-red-700">
-                {retentionError}
-              </p>
-            )}
+        {retention && (
+          <div>
+            <label className="block text-sm">
+              <span className="text-foreground">Retention (days)</span>
+              <input
+                type="number"
+                min={MIN_RETENTION_DAYS}
+                max={MAX_RETENTION_DAYS}
+                className="mt-1 block w-32 rounded-md border border-input bg-background px-2 py-1.5 text-sm"
+                value={draftDays}
+                onChange={(e) => {
+                  const n = Number.parseInt(e.target.value, 10);
+                  if (Number.isFinite(n)) setDraftDays(n);
+                }}
+                disabled={retentionBusy}
+              />
+            </label>
+            <p className="mt-1 text-muted-foreground text-xs">
+              Raw Signals older than this are rolled up into period aggregates
+              and removed from the hot table. Default: {DEFAULT_RETENTION_DAYS}.
+            </p>
+            <div className="mt-2 flex items-center gap-3">
+              <button
+                type="button"
+                onClick={onSaveRetention}
+                className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted/50 disabled:opacity-50"
+              >
+                Save retention
+              </button>
+            </div>
           </div>
-        </div>
+        )}
 
         <div>
-          <h3 className="text-sm font-medium text-red-700">Purge all data</h3>
-          <p className="mt-1 text-xs text-zinc-500">
+          <h3 className="font-medium text-destructive text-sm">
+            Purge all data
+          </h3>
+          <p className="mt-1 text-muted-foreground text-xs">
             Permanently deletes every Signal and rollup. This cannot be undone.
           </p>
           {!purgeOpen ? (
@@ -2667,12 +2430,12 @@ export function DataPrivacyPanel({
                   setPurgeStatus(null);
                   setPurgeError(null);
                 }}
-                className="rounded border border-red-300 px-3 py-1.5 text-sm text-red-700 hover:bg-red-50"
+                className="rounded-md border border-destructive/40 px-3 py-1.5 text-destructive text-sm hover:bg-destructive/5"
               >
                 Purge all data…
               </button>
               {purgeStatus && (
-                <output className="text-sm text-emerald-700">
+                <output className="text-muted-foreground text-sm">
                   {purgeStatus}
                 </output>
               )}
@@ -2681,16 +2444,16 @@ export function DataPrivacyPanel({
             <div
               role="dialog"
               aria-label="Confirm purge"
-              className="mt-2 rounded border border-red-300 bg-red-50 p-3"
+              className="mt-2 rounded-md border border-destructive/40 bg-destructive/5 p-3"
             >
-              <p className="text-sm text-red-800">
+              <p className="text-destructive text-sm">
                 Type <code className="font-mono">{PURGE_CONFIRMATION}</code> to
                 confirm. This cannot be undone.
               </p>
               <input
                 type="text"
                 aria-label="Purge confirmation"
-                className="mt-2 block w-full rounded border border-red-300 px-2 py-1.5 text-sm"
+                className="mt-2 block w-full rounded-md border border-destructive/40 bg-background px-2 py-1.5 text-sm"
                 value={purgeInput}
                 onChange={(e) => setPurgeInput(e.target.value)}
               />
@@ -2699,7 +2462,7 @@ export function DataPrivacyPanel({
                   type="button"
                   onClick={onPurgeConfirm}
                   disabled={purgeInput !== PURGE_CONFIRMATION || purgeBusy}
-                  className="rounded border border-red-400 bg-red-600 px-3 py-1.5 text-sm text-white hover:bg-red-700 disabled:opacity-50"
+                  className="rounded-md border border-destructive bg-destructive px-3 py-1.5 text-destructive-foreground text-sm hover:bg-destructive/90 disabled:opacity-50"
                 >
                   {purgeBusy ? "Purging…" : "Confirm purge"}
                 </button>
@@ -2710,12 +2473,12 @@ export function DataPrivacyPanel({
                     setPurgeInput("");
                   }}
                   disabled={purgeBusy}
-                  className="rounded border px-3 py-1.5 text-sm hover:bg-zinc-50 disabled:opacity-50"
+                  className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted/50 disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 {purgeError && (
-                  <p role="alert" className="text-sm text-red-700">
+                  <p role="alert" className="text-destructive text-sm">
                     {purgeError}
                   </p>
                 )}
@@ -2724,7 +2487,7 @@ export function DataPrivacyPanel({
           )}
         </div>
       </div>
-    </section>
+    </SettingsPanel>
   );
 }
 
