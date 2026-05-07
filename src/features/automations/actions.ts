@@ -49,6 +49,11 @@ export const ACTIONS: Record<AutomationAction["type"], ActionDescriptor> = {
     label: "Start Focus session",
     kind: "external",
   },
+  post_message: {
+    type: "post_message",
+    label: "Post Slack message",
+    kind: "external",
+  },
 };
 
 export const ACTION_LIST: ActionDescriptor[] = Object.values(ACTIONS);

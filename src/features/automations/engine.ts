@@ -53,7 +53,18 @@ export type AutomationAction =
   // Starts an N-minute Focus session via features/focus/session. Routed by
   // the executor's injected handler — the default no-op handler is replaced
   // in the worker by a handler that calls startFocusSession.
-  | { type: "set_focus"; duration_minutes: number };
+  | { type: "set_focus"; duration_minutes: number }
+  // Slack `post_message` action. Stub registered ahead of the Slack
+  // capability wiring (issue #90) — the planner accepts and persists it but
+  // the executor's default external handler is a no-op until that slice
+  // lands. `target` selects between a configured channel, the user's self
+  // DM, or a thread-reply to the triggering Slack signal.
+  | {
+      type: "post_message";
+      target: "channel" | "self_dm" | "thread_reply";
+      body: string;
+      channel?: string;
+    };
 
 export type AutomationTriggerKind =
   | "signal_ingested"
@@ -294,6 +305,11 @@ function applyAction(
       // External effect (starts a Focus session). Not applied at the Signal
       // upsert seam; the executor's handler dispatches via features/focus.
       break;
+    case "post_message":
+      // External Slack capability — does not touch the Signal upsert columns.
+      // Routed by the executor's injected handler once the Slack wiring lands
+      // in #90; the default handler is a no-op.
+      break;
     case "set_channels": {
       // Last-write-wins per slot, same vocabulary as priority. An empty list
       // is meaningful — it means "this automation says fire no channels" —
@@ -360,6 +376,7 @@ const ACTION_TYPES = new Set<AutomationAction["type"]>([
   "set_channels",
   "transition_ticket",
   "set_focus",
+  "post_message",
 ]);
 
 const PREDICATE_TYPES = new Set<AutomationPredicate["type"]>([
@@ -478,6 +495,29 @@ export function validateAutomations(automations: Automation[]): string[] {
           errors.push(
             `automation ${a.id}: set_focus.duration_minutes must be a positive number`,
           );
+        }
+      }
+      if (act.type === "post_message") {
+        if (
+          act.target !== "channel" &&
+          act.target !== "self_dm" &&
+          act.target !== "thread_reply"
+        ) {
+          errors.push(
+            `automation ${a.id}: post_message.target must be one of channel, self_dm, thread_reply`,
+          );
+        }
+        if (typeof act.body !== "string") {
+          errors.push(
+            `automation ${a.id}: post_message.body must be a string`,
+          );
+        }
+        if (act.target === "channel") {
+          if (typeof act.channel !== "string" || act.channel.length === 0) {
+            errors.push(
+              `automation ${a.id}: post_message with target "channel" requires a channel`,
+            );
+          }
         }
       }
       if (act.type === "set_channels") {

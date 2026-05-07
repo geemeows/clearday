@@ -101,6 +101,8 @@ function defaultAction(type: AutomationAction["type"]): AutomationAction {
       return { type: "transition_ticket", to_status: "Done" };
     case "set_focus":
       return { type: "set_focus", duration_minutes: 25 };
+    case "post_message":
+      return { type: "post_message", target: "self_dm", body: "" };
   }
 }
 
@@ -982,6 +984,48 @@ function ActionInputs({
         placeholder="25"
         className="w-full rounded border border-border bg-background px-2 py-1 text-xs"
       />
+    );
+  }
+  if (action.type === "post_message") {
+    return (
+      <div className="space-y-2">
+        <select
+          aria-label="Slack target"
+          value={action.target}
+          onChange={(e) =>
+            onChange({
+              ...action,
+              target: e.target.value as
+                | "channel"
+                | "self_dm"
+                | "thread_reply",
+            })
+          }
+          className="w-full rounded border border-border bg-background px-2 py-1 text-xs"
+        >
+          <option value="self_dm">Self DM</option>
+          <option value="channel">Channel</option>
+          <option value="thread_reply">Reply in thread</option>
+        </select>
+        {action.target === "channel" && (
+          <input
+            type="text"
+            aria-label="Slack channel"
+            value={action.channel ?? ""}
+            onChange={(e) => onChange({ ...action, channel: e.target.value })}
+            placeholder="#channel"
+            className="w-full rounded border border-border bg-background px-2 py-1 text-xs"
+          />
+        )}
+        <textarea
+          aria-label="Slack message body"
+          value={action.body}
+          onChange={(e) => onChange({ ...action, body: e.target.value })}
+          placeholder="{{signal.title}}"
+          rows={3}
+          className="w-full rounded border border-border bg-background px-2 py-1 font-mono text-xs"
+        />
+      </div>
     );
   }
   if (action.type === "set_priority") {

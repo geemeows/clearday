@@ -724,7 +724,7 @@ describe("validateAutomations", () => {
         trigger_kind: "signal_ingested",
         predicates: [{ type: "kind", kind: "mention" }],
         actions: [
-          { type: "post_message" } as unknown as { type: "tag"; tag: string },
+          { type: "frobnicate" } as unknown as { type: "tag"; tag: string },
         ],
       },
     ]);
@@ -804,6 +804,64 @@ describe("validateAutomations", () => {
     expect(errs.some((e) => e.includes("set_focus.duration_minutes"))).toBe(
       true,
     );
+  });
+
+  it("accepts a post_message action with target self_dm and a body", () => {
+    expect(
+      validateAutomations([
+        {
+          id: "p",
+          name: "n",
+          enabled: true,
+          priority: 1,
+          trigger_kind: "schedule",
+          trigger_config: { cron: "0 9 * * 1-5" },
+          predicates: [],
+          actions: [
+            { type: "post_message", target: "self_dm", body: "hello" },
+          ],
+        },
+      ]),
+    ).toEqual([]);
+  });
+
+  it("flags post_message with target=channel but no channel", () => {
+    const errs = validateAutomations([
+      {
+        id: "p",
+        name: "n",
+        enabled: true,
+        priority: 1,
+        trigger_kind: "signal_ingested",
+        predicates: [{ type: "kind", kind: "mention" }],
+        actions: [{ type: "post_message", target: "channel", body: "hi" }],
+      },
+    ]);
+    expect(
+      errs.some((e) => e.includes("post_message with target \"channel\"")),
+    ).toBe(true);
+  });
+
+  it("flags post_message with an unknown target", () => {
+    const errs = validateAutomations([
+      {
+        id: "p",
+        name: "n",
+        enabled: true,
+        priority: 1,
+        trigger_kind: "signal_ingested",
+        predicates: [{ type: "kind", kind: "mention" }],
+        actions: [
+          {
+            type: "post_message",
+            // biome-ignore lint/suspicious/noExplicitAny: covering the runtime branch
+            target: "bogus" as any,
+            body: "hi",
+          },
+        ],
+      },
+    ]);
+    expect(errs.some((e) => e.includes("post_message.target"))).toBe(true);
   });
 
   it("flags negative snooze.minutes", () => {
@@ -1028,6 +1086,33 @@ describe("validateAutomations — schedule trigger", () => {
     expect(
       errs.some((e) => e.includes("schedule trigger requires trigger_config.cron")),
     ).toBe(true);
+  });
+
+  it("a disabled schedule fixture (cron 0 9 * * 1-5) does not fire on a matching weekday 9am tick", () => {
+    // Mirrors the seeded sixth fixture (issue #99): enabled=false, so the
+    // cron-matching minute must still produce no plan.
+    const fixture = {
+      id: "fixture-99",
+      name: "Daily 9am merged-PR roundup",
+      enabled: false,
+      priority: 100,
+      trigger_kind: "schedule" as const,
+      trigger_config: { cron: "0 9 * * 1-5" },
+      predicates: [],
+      actions: [
+        {
+          type: "post_message" as const,
+          target: "self_dm" as const,
+          body: "{{schedule.merged_prs_summary}}",
+        },
+      ],
+    };
+    // 2026-05-04 is a Monday — within 1-5. Cron would match if enabled.
+    const out = planAutomations(
+      { kind: "schedule", minute_iso: "2026-05-04T09:00:00.000Z" },
+      [fixture],
+    );
+    expect(out).toEqual([]);
   });
 
   it("rejects a schedule automation with an invalid cron", () => {
