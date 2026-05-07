@@ -1,21 +1,24 @@
 import type { StoredSignal } from "#/features/signals/components/InboxView";
 import { groupOf } from "#/features/signals/display";
 import { MeetingDetail } from "./meeting";
+import { PRDetail } from "./pr";
+import type { PrLiveState } from "./pr/_shared";
 import { SlackDetail } from "./slack";
 import { TaskDetail } from "./task";
 
-// Per-kind detail dispatcher. The PR group is not yet routed through this
-// dispatcher; the inbox route still renders it inline (migrated in a follow-up
-// slice). Returning null for unknown / not-yet-routed groups keeps this
-// component a safe no-op rather than a crash.
+// Per-kind detail dispatcher. Routes the visible signal to the matching
+// kind module. Returns null for unknown groups so unrouted kinds are a
+// safe no-op rather than a crash.
 export function SignalDetail({
   signal,
   onReplyStart,
   onReplyRollback,
+  onPrState,
 }: {
   signal: StoredSignal;
   onReplyStart?: (id: string) => void;
   onReplyRollback?: (id: string) => void;
+  onPrState?: (state: PrLiveState) => void;
 }) {
   const group = groupOf(signal);
   switch (group) {
@@ -29,6 +32,15 @@ export function SignalDetail({
           signal={signal}
           onReplyStart={onReplyStart}
           onReplyRollback={onReplyRollback}
+        />
+      );
+    case "pr":
+      return (
+        <PRDetail
+          signal={signal}
+          onReplyStart={onReplyStart}
+          onReplyRollback={onReplyRollback}
+          onPrState={onPrState}
         />
       );
     default:

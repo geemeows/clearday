@@ -53,13 +53,14 @@ describe("SignalDetail dispatcher", () => {
     expect(screen.getByText("#engineering")).toBeTruthy();
   });
 
-  it("returns null (no crash) for groups not yet routed", () => {
-    const prSignal: StoredSignal = {
+  it("renders PRDetail for pr signals", () => {
+    const signal: StoredSignal = {
       ...baseSignal,
       id: "p",
       kind: "pr_review_requested",
+      payload: { ai_summary: "summary text" },
     };
-    const { container } = render(<SignalDetail signal={prSignal} />);
-    expect(container.firstChild).toBeNull();
+    render(<SignalDetail signal={signal} />);
+    expect(screen.getByText("summary text")).toBeTruthy();
   });
 });
