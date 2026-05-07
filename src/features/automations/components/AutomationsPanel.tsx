@@ -1,0 +1,781 @@
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "#/components/coss/dialog";
+import type { AlertChannel } from "#/features/alerts/dispatcher";
+import { ACTION_LIST } from "#/features/automations/actions";
+import {
+  type Automation,
+  type AutomationAction,
+  type AutomationPredicate,
+  previewAutomations,
+} from "#/features/automations/engine";
+import { TRIGGER_LIST } from "#/features/automations/triggers";
+import { apiFetch } from "#/lib/api-client";
+import type { StoredSignal } from "#/shared/signal";
+
+// ---------------------------------------------------------------------------
+// Automations panel — list view + builder modal. Renders the user's
+// automations with an enable/disable toggle per row and a "New automation"
+// button that opens the builder modal. The builder edits trigger, predicates,
+// and a fan-out action list.
+//
+// The CRUD API replaces the entire list on every save (matching
+// /api/automations); the panel sends the full set on each persist.
+// ---------------------------------------------------------------------------
+
+const PREDICATE_TYPES: Array<{
+  id: AutomationPredicate["type"];
+  label: string;
+}> = [
+  { id: "provider", label: "Provider is" },
+  { id: "kind", label: "Kind is" },
+  { id: "source_match", label: "Payload field equals" },
+  { id: "title_regex", label: "Title matches regex" },
+];
+
+const ALERT_CHANNEL_OPTIONS: Array<{ id: AlertChannel; label: string }> = [
+  { id: "slack_dm", label: "Slack DM" },
+  { id: "web_push", label: "Web Push" },
+  { id: "email", label: "Email" },
+  { id: "desktop", label: "Desktop" },
+];
+
+function newId(): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+  return `automation-${Math.random().toString(36).slice(2)}`;
+}
+
+function emptyAutomation(): Automation {
+  return {
+    id: newId(),
+    name: "New automation",
+    enabled: true,
+    priority: 100,
+    trigger_kind: "signal_ingested",
+    predicates: [{ type: "kind", kind: "mention" }],
+    actions: [{ type: "tag", tag: "" }],
+  };
+}
+
+function defaultPredicate(
+  type: AutomationPredicate["type"],
+): AutomationPredicate {
+  switch (type) {
+    case "provider":
+      return { type: "provider", provider: "github" };
+    case "kind":
+      return { type: "kind", kind: "mention" };
+    case "source_match":
+      return { type: "source_match", field: "author", equals: "" };
+    case "title_regex":
+      return { type: "title_regex", pattern: "" };
+  }
+}
+
+function defaultAction(type: AutomationAction["type"]): AutomationAction {
+  switch (type) {
+    case "dismiss":
+      return { type: "dismiss" };
+    case "snooze":
+      return { type: "snooze", minutes: 60 };
+    case "tag":
+      return { type: "tag", tag: "" };
+    case "set_priority":
+      return { type: "set_priority", value: "high" };
+    case "set_channels":
+      return { type: "set_channels", channels: ["slack_dm"] };
+  }
+}
+
+type SignalsLoader = () => Promise<StoredSignal[]>;
+
+const defaultSignalsLoader: SignalsLoader = async () => {
+  const body = (await apiFetch("/api/signals?filter=all")) as {
+    signals: StoredSignal[];
+  };
+  return body.signals;
+};
+
+export function AutomationsPanel({
+  loader,
+  saver,
+  signalsLoader = defaultSignalsLoader,
+}: {
+  loader?: () => Promise<{ automations: Automation[] }>;
+  saver?: (automations: Automation[]) => Promise<{
+    ok: boolean;
+    automations?: Automation[];
+    error?: string;
+  }>;
+  signalsLoader?: SignalsLoader;
+} = {}) {
+  const [automations, setAutomations] = useState<Automation[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [previewSignals, setPreviewSignals] = useState<StoredSignal[] | null>(
+    null,
+  );
+  const [builderOpen, setBuilderOpen] = useState(false);
+  const [editing, setEditing] = useState<Automation | null>(null);
+
+  const load = useMemo(
+    () =>
+      loader ??
+      (() =>
+        apiFetch("/api/automations") as Promise<{
+          automations: Automation[];
+        }>),
+    [loader],
+  );
+  const save = useMemo(
+    () =>
+      saver ??
+      ((next: Automation[]) =>
+        apiFetch("/api/automations", {
+          method: "PUT",
+          body: { automations: next },
+        }) as Promise<{
+          ok: boolean;
+          automations?: Automation[];
+          error?: string;
+        }>),
+    [saver],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    load()
+      .then((body) => {
+        if (cancelled) return;
+        setAutomations(body.automations);
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        setError(e instanceof Error ? e.message : "failed to load");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [load]);
+
+  useEffect(() => {
+    let cancelled = false;
+    signalsLoader()
+      .then((list) => {
+        if (cancelled) return;
+        setPreviewSignals(list);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setPreviewSignals([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [signalsLoader]);
+
+  const persist = useCallback(
+    async (next: Automation[]) => {
+      setAutomations(next);
+      setBusy(true);
+      try {
+        const out = await save(next);
+        if (!out.ok) {
+          setError(out.error ?? "save failed");
+        } else {
+          if (out.automations) setAutomations(out.automations);
+          setError(null);
+        }
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "save failed");
+      } finally {
+        setBusy(false);
+      }
+    },
+    [save],
+  );
+
+  const openNew = useCallback(() => {
+    setEditing(emptyAutomation());
+    setBuilderOpen(true);
+  }, []);
+
+  const openEdit = useCallback((a: Automation) => {
+    setEditing({ ...a });
+    setBuilderOpen(true);
+  }, []);
+
+  const closeBuilder = useCallback(() => {
+    setBuilderOpen(false);
+    setEditing(null);
+  }, []);
+
+  const onBuilderSave = useCallback(
+    async (next: Automation) => {
+      const list = automations ?? [];
+      const exists = list.some((a) => a.id === next.id);
+      const merged = exists
+        ? list.map((a) => (a.id === next.id ? next : a))
+        : [...list, next];
+      closeBuilder();
+      await persist(merged);
+    },
+    [automations, closeBuilder, persist],
+  );
+
+  const onToggle = useCallback(
+    (id: string, enabled: boolean) => {
+      if (!automations) return;
+      persist(automations.map((a) => (a.id === id ? { ...a, enabled } : a)));
+    },
+    [automations, persist],
+  );
+
+  const onDelete = useCallback(
+    (id: string) => {
+      if (!automations) return;
+      persist(automations.filter((a) => a.id !== id));
+    },
+    [automations, persist],
+  );
+
+  return (
+    <section aria-label="Automations" className="space-y-6">
+      <header className="flex items-end justify-between">
+        <div>
+          <h2 className="font-semibold text-2xl tracking-tight">Automations</h2>
+          <p className="mt-1 font-mono text-[11px] text-muted-foreground">
+            Trigger → predicates → actions, evaluated when a Signal lands.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={openNew}
+          disabled={busy || automations === null}
+          className="rounded-md border border-border bg-primary px-3 py-1.5 text-primary-foreground text-sm hover:opacity-90 disabled:opacity-50"
+        >
+          New automation
+        </button>
+      </header>
+
+      {error && (
+        <p
+          role="alert"
+          className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-destructive text-sm"
+        >
+          {error}
+        </p>
+      )}
+
+      {automations == null && !error && (
+        <p className="text-muted-foreground text-sm">Loading…</p>
+      )}
+
+      {automations && (
+        <div className="space-y-2 rounded-lg border border-border bg-card p-3">
+          {automations.length === 0 && (
+            <p className="text-muted-foreground text-sm">
+              No automations yet. Create one to start shaping incoming Signals.
+            </p>
+          )}
+          {automations.map((a) => (
+            <AutomationRow
+              key={a.id}
+              automation={a}
+              busy={busy}
+              onToggle={(enabled) => onToggle(a.id, enabled)}
+              onEdit={() => openEdit(a)}
+              onDelete={() => onDelete(a.id)}
+            />
+          ))}
+        </div>
+      )}
+
+      {automations && previewSignals && (
+        <AutomationsPreview
+          automations={automations}
+          signals={previewSignals}
+        />
+      )}
+
+      <Dialog open={builderOpen} onOpenChange={setBuilderOpen}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>
+              {editing && automations?.some((a) => a.id === editing.id)
+                ? "Edit automation"
+                : "New automation"}
+            </DialogTitle>
+          </DialogHeader>
+          {editing && (
+            <AutomationBuilder automation={editing} onChange={setEditing} />
+          )}
+          <DialogFooter>
+            <button
+              type="button"
+              onClick={closeBuilder}
+              className="rounded border border-border bg-background px-3 py-1.5 text-sm"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={!editing}
+              onClick={() => editing && onBuilderSave(editing)}
+              className="rounded border border-border bg-primary px-3 py-1.5 text-primary-foreground text-sm hover:opacity-90 disabled:opacity-50"
+            >
+              Save
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </section>
+  );
+}
+
+function AutomationRow({
+  automation,
+  busy,
+  onToggle,
+  onEdit,
+  onDelete,
+}: {
+  automation: Automation;
+  busy: boolean;
+  onToggle: (enabled: boolean) => void;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-3 rounded border border-border bg-background p-3">
+      <label className="flex items-center gap-2 text-xs text-muted-foreground">
+        <input
+          type="checkbox"
+          aria-label={`${automation.name} enabled`}
+          checked={automation.enabled}
+          onChange={(e) => onToggle(e.target.checked)}
+          disabled={busy}
+        />
+        Enabled
+      </label>
+      <div className="min-w-0 flex-1">
+        <p className="truncate font-medium text-sm">{automation.name}</p>
+        <p className="truncate font-mono text-[10px] text-muted-foreground">
+          {automation.trigger_kind} · {automation.predicates.length} predicate
+          {automation.predicates.length === 1 ? "" : "s"} ·{" "}
+          {automation.actions.length} action
+          {automation.actions.length === 1 ? "" : "s"}
+        </p>
+      </div>
+      <button
+        type="button"
+        onClick={onEdit}
+        disabled={busy}
+        className="rounded border border-border bg-background px-2 py-1 text-xs disabled:opacity-50"
+      >
+        Edit
+      </button>
+      <button
+        type="button"
+        aria-label={`Delete ${automation.name}`}
+        onClick={onDelete}
+        disabled={busy}
+        className="rounded border border-destructive/40 bg-background px-2 py-1 text-destructive text-xs hover:bg-destructive/10 disabled:opacity-50"
+      >
+        Delete
+      </button>
+    </div>
+  );
+}
+
+function AutomationsPreview({
+  automations,
+  signals,
+}: {
+  automations: Automation[];
+  signals: StoredSignal[];
+}) {
+  const matches = useMemo(
+    () => previewAutomations(signals, automations),
+    [automations, signals],
+  );
+  const names = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const a of automations) map.set(a.id, a.name || "Unnamed");
+    return map;
+  }, [automations]);
+
+  return (
+    <section
+      aria-label="Automations preview"
+      className="border-t border-border pt-4"
+    >
+      <h3 className="font-semibold text-sm">Preview against recent Signals</h3>
+      <p className="mt-1 text-muted-foreground text-xs">
+        {matches.length} of {signals.length} recent Signals would be affected.
+      </p>
+      {matches.length > 0 && (
+        <ul className="mt-3 space-y-2">
+          {matches.slice(0, 10).map(({ signal, application }) => (
+            <li
+              key={`${signal.provider}:${signal.kind}:${signal.source_id}`}
+              className="rounded border border-border bg-muted/40 p-2 text-xs"
+            >
+              <div className="font-medium">{signal.title}</div>
+              <div className="mt-0.5 text-muted-foreground">
+                {application.matched_automation_ids
+                  .map((id) => names.get(id) ?? id)
+                  .join(", ")}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function AutomationBuilder({
+  automation,
+  onChange,
+}: {
+  automation: Automation;
+  onChange: (next: Automation) => void;
+}) {
+  const set = (patch: Partial<Automation>) =>
+    onChange({ ...automation, ...patch });
+
+  return (
+    <div className="space-y-4 text-sm">
+      <label className="flex flex-col gap-1">
+        <span className="text-xs text-muted-foreground">Name</span>
+        <input
+          type="text"
+          aria-label="Automation name"
+          value={automation.name}
+          onChange={(e) => set({ name: e.target.value })}
+          className="rounded border border-border bg-background px-2 py-1"
+        />
+      </label>
+
+      <label className="flex flex-col gap-1">
+        <span className="text-xs text-muted-foreground">Trigger</span>
+        <select
+          aria-label="Trigger kind"
+          value={automation.trigger_kind}
+          onChange={(e) =>
+            set({
+              trigger_kind: e.target.value as Automation["trigger_kind"],
+            })
+          }
+          className="rounded border border-border bg-background px-2 py-1"
+        >
+          {TRIGGER_LIST.map((t) => (
+            <option key={t.kind} value={t.kind}>
+              {t.label}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <fieldset className="space-y-2 rounded border border-border p-3">
+        <legend className="px-1 text-xs text-muted-foreground">When</legend>
+        {automation.predicates.map((p, i) => (
+          <PredicateEditor
+            // biome-ignore lint/suspicious/noArrayIndexKey: predicates list is locally edited; index is stable enough for inputs
+            key={i}
+            predicate={p}
+            onChange={(next) => {
+              const arr = [...automation.predicates];
+              arr[i] = next;
+              set({ predicates: arr });
+            }}
+            onDelete={() => {
+              const arr = automation.predicates.filter((_, j) => j !== i);
+              set({ predicates: arr });
+            }}
+          />
+        ))}
+        <button
+          type="button"
+          onClick={() =>
+            set({
+              predicates: [...automation.predicates, defaultPredicate("kind")],
+            })
+          }
+          className="rounded border border-border bg-background px-2 py-1 text-xs"
+        >
+          Add predicate
+        </button>
+      </fieldset>
+
+      <fieldset className="space-y-2 rounded border border-border p-3">
+        <legend className="px-1 text-xs text-muted-foreground">Then</legend>
+        {automation.actions.map((a, i) => (
+          <ActionEditor
+            // biome-ignore lint/suspicious/noArrayIndexKey: actions list is locally edited; index is stable enough for inputs
+            key={i}
+            action={a}
+            onChange={(next) => {
+              const arr = [...automation.actions];
+              arr[i] = next;
+              set({ actions: arr });
+            }}
+            onDelete={() => {
+              const arr = automation.actions.filter((_, j) => j !== i);
+              set({ actions: arr });
+            }}
+          />
+        ))}
+        <button
+          type="button"
+          onClick={() =>
+            set({ actions: [...automation.actions, defaultAction("tag")] })
+          }
+          className="rounded border border-border bg-background px-2 py-1 text-xs"
+        >
+          Add action
+        </button>
+      </fieldset>
+    </div>
+  );
+}
+
+function PredicateEditor({
+  predicate,
+  onChange,
+  onDelete,
+}: {
+  predicate: AutomationPredicate;
+  onChange: (next: AutomationPredicate) => void;
+  onDelete: () => void;
+}) {
+  return (
+    <div className="space-y-2 rounded border border-border bg-muted/40 p-2">
+      <div className="flex items-center gap-2">
+        <select
+          aria-label="Predicate type"
+          value={predicate.type}
+          onChange={(e) =>
+            onChange(
+              defaultPredicate(e.target.value as AutomationPredicate["type"]),
+            )
+          }
+          className="flex-1 rounded border border-border bg-background px-2 py-1 text-xs"
+        >
+          {PREDICATE_TYPES.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.label}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          aria-label="Delete predicate"
+          onClick={onDelete}
+          className="rounded border border-destructive/30 px-2 py-1 text-destructive text-xs"
+        >
+          Delete
+        </button>
+      </div>
+      <PredicateInputs predicate={predicate} onChange={onChange} />
+    </div>
+  );
+}
+
+function PredicateInputs({
+  predicate,
+  onChange,
+}: {
+  predicate: AutomationPredicate;
+  onChange: (p: AutomationPredicate) => void;
+}) {
+  if (predicate.type === "provider") {
+    return (
+      <input
+        type="text"
+        aria-label="Provider value"
+        value={predicate.provider}
+        onChange={(e) => onChange({ ...predicate, provider: e.target.value })}
+        placeholder="github / slack / google"
+        className="w-full rounded border border-border bg-background px-2 py-1 text-xs"
+      />
+    );
+  }
+  if (predicate.type === "kind") {
+    return (
+      <input
+        type="text"
+        aria-label="Kind value"
+        value={predicate.kind}
+        onChange={(e) => onChange({ ...predicate, kind: e.target.value })}
+        placeholder="mention / pr_review_requested / …"
+        className="w-full rounded border border-border bg-background px-2 py-1 text-xs"
+      />
+    );
+  }
+  if (predicate.type === "source_match") {
+    return (
+      <div className="grid grid-cols-2 gap-2">
+        <input
+          type="text"
+          aria-label="Payload field"
+          value={predicate.field}
+          onChange={(e) => onChange({ ...predicate, field: e.target.value })}
+          placeholder="field"
+          className="rounded border border-border bg-background px-2 py-1 text-xs"
+        />
+        <input
+          type="text"
+          aria-label="Payload equals"
+          value={predicate.equals}
+          onChange={(e) => onChange({ ...predicate, equals: e.target.value })}
+          placeholder="equals"
+          className="rounded border border-border bg-background px-2 py-1 text-xs"
+        />
+      </div>
+    );
+  }
+  return (
+    <input
+      type="text"
+      aria-label="Title regex"
+      value={predicate.pattern}
+      onChange={(e) => onChange({ ...predicate, pattern: e.target.value })}
+      placeholder="^chore"
+      className="w-full rounded border border-border bg-background px-2 py-1 font-mono text-xs"
+    />
+  );
+}
+
+function ActionEditor({
+  action,
+  onChange,
+  onDelete,
+}: {
+  action: AutomationAction;
+  onChange: (next: AutomationAction) => void;
+  onDelete: () => void;
+}) {
+  return (
+    <div className="space-y-2 rounded border border-border bg-muted/40 p-2">
+      <div className="flex items-center gap-2">
+        <select
+          aria-label="Action type"
+          value={action.type}
+          onChange={(e) =>
+            onChange(defaultAction(e.target.value as AutomationAction["type"]))
+          }
+          className="flex-1 rounded border border-border bg-background px-2 py-1 text-xs"
+        >
+          {ACTION_LIST.map((a) => (
+            <option key={a.type} value={a.type}>
+              {a.label}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          aria-label="Delete action"
+          onClick={onDelete}
+          className="rounded border border-destructive/30 px-2 py-1 text-destructive text-xs"
+        >
+          Delete
+        </button>
+      </div>
+      <ActionInputs action={action} onChange={onChange} />
+    </div>
+  );
+}
+
+function ActionInputs({
+  action,
+  onChange,
+}: {
+  action: AutomationAction;
+  onChange: (a: AutomationAction) => void;
+}) {
+  if (action.type === "dismiss") {
+    return (
+      <p className="text-muted-foreground text-xs">
+        Marks the Signal dismissed on first ingest.
+      </p>
+    );
+  }
+  if (action.type === "snooze") {
+    return (
+      <input
+        type="number"
+        min={1}
+        aria-label="Snooze minutes"
+        value={action.minutes}
+        onChange={(e) =>
+          onChange({ ...action, minutes: Number(e.target.value) || 0 })
+        }
+        className="w-full rounded border border-border bg-background px-2 py-1 text-xs"
+      />
+    );
+  }
+  if (action.type === "tag") {
+    return (
+      <input
+        type="text"
+        aria-label="Tag value"
+        value={action.tag}
+        onChange={(e) => onChange({ ...action, tag: e.target.value })}
+        placeholder="tag"
+        className="w-full rounded border border-border bg-background px-2 py-1 text-xs"
+      />
+    );
+  }
+  if (action.type === "set_priority") {
+    return (
+      <select
+        aria-label="Priority value"
+        value={action.value}
+        onChange={(e) =>
+          onChange({
+            ...action,
+            value: e.target.value as "low" | "high",
+          })
+        }
+        className="w-full rounded border border-border bg-background px-2 py-1 text-xs"
+      >
+        <option value="high">High</option>
+        <option value="low">Low</option>
+      </select>
+    );
+  }
+  return (
+    <fieldset
+      aria-label="Channels value"
+      className="flex flex-wrap gap-3 text-xs"
+    >
+      {ALERT_CHANNEL_OPTIONS.map((c) => {
+        const checked = action.channels.includes(c.id);
+        return (
+          <label key={c.id} className="flex items-center gap-1">
+            <input
+              type="checkbox"
+              checked={checked}
+              onChange={() => {
+                const next = checked
+                  ? action.channels.filter((x) => x !== c.id)
+                  : [...action.channels, c.id];
+                onChange({ ...action, channels: next });
+              }}
+            />
+            {c.label}
+          </label>
+        );
+      })}
+    </fieldset>
+  );
+}
