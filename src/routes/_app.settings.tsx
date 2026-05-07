@@ -1301,74 +1301,38 @@ export function NotificationMatrixPanel({
   loader?: () => Promise<PreferencesView>;
   saver?: (patch: PreferencesPatch) => Promise<PreferencesView>;
 } = {}) {
-  const [matrix, setMatrix] = useState<Record<string, string[]> | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-
   const load = useMemo(() => loader ?? defaultPrefsLoader, [loader]);
   const save = useMemo(() => saver ?? defaultPrefsSaver, [saver]);
 
-  useEffect(() => {
-    let cancelled = false;
-    load()
-      .then((view) => {
-        if (cancelled) return;
-        setMatrix(view.notification_matrix ?? {});
-      })
-      .catch((e) => {
-        if (cancelled) return;
-        setError(e instanceof Error ? e.message : "failed to load");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [load]);
+  const { data, error, busy, persist } = useAsyncPanel<{
+    matrix: Record<string, string[]>;
+  }>({
+    load: async () => ({ matrix: (await load()).notification_matrix ?? {} }),
+    save: async (next) => {
+      await save({ notification_matrix: next.matrix });
+    },
+  });
+  const matrix = data?.matrix ?? null;
 
   const toggle = useCallback(
-    async (kind: string, channel: string) => {
+    (kind: string, channel: string) => {
       if (!matrix) return;
       const cur = matrix[kind] ?? [];
       const next = cur.includes(channel)
         ? cur.filter((c) => c !== channel)
         : [...cur, channel];
-      const nextMatrix = { ...matrix, [kind]: next };
-      setMatrix(nextMatrix);
-      setBusy(true);
-      try {
-        const view = await save({ notification_matrix: nextMatrix });
-        setMatrix(view.notification_matrix ?? nextMatrix);
-        setError(null);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "save failed");
-      } finally {
-        setBusy(false);
-      }
+      persist({ matrix: { ...matrix, [kind]: next } });
     },
-    [matrix, save],
+    [matrix, persist],
   );
 
   return (
-    <section
-      aria-label="Per-event channel matrix"
-      className="mt-8 rounded border border-zinc-200 bg-white p-5"
+    <SettingsPanel
+      title="Per-event channels"
+      desc="Pick which channels fire for each kind of Signal."
+      error={error}
+      busy={busy && !matrix}
     >
-      <h2 className="text-base font-semibold text-zinc-900">
-        Per-event channels
-      </h2>
-      <p className="mt-1 text-sm text-zinc-500">
-        Pick which channels fire for each kind of Signal.
-      </p>
-
-      {error && (
-        <p className="mt-3 rounded border border-red-200 bg-red-50 p-2 text-sm text-red-700">
-          {error}
-        </p>
-      )}
-
-      {matrix == null && !error && (
-        <p className="mt-3 text-sm text-zinc-500">Loading…</p>
-      )}
-
       {matrix && (
         <table className="mt-4 w-full text-sm">
           <thead>
@@ -1405,7 +1369,7 @@ export function NotificationMatrixPanel({
           </tbody>
         </table>
       )}
-    </section>
+    </SettingsPanel>
   );
 }
 
@@ -1456,75 +1420,44 @@ export function QuietHoursPanel({
   loader?: () => Promise<PreferencesView>;
   saver?: (patch: PreferencesPatch) => Promise<PreferencesView>;
 } = {}) {
-  const [state, setState] = useState<QuietHoursState | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-
   const load = useMemo(() => loader ?? defaultPrefsLoader, [loader]);
   const save = useMemo(() => saver ?? defaultPrefsSaver, [saver]);
 
-  useEffect(() => {
-    let cancelled = false;
-    load()
-      .then((view) => {
-        if (cancelled) return;
-        setState(defaultQuietHoursState(view.quiet_hours_v2 ?? {}));
-      })
-      .catch((e) => {
-        if (cancelled) return;
-        setError(e instanceof Error ? e.message : "failed to load");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [load]);
-
-  const persist = useCallback(
-    async (next: QuietHoursState) => {
-      setState(next);
-      setBusy(true);
-      try {
-        await save({
-          quiet_hours_v2: next as unknown as Record<string, unknown>,
-        });
-        setError(null);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "save failed");
-      } finally {
-        setBusy(false);
-      }
+  const { data, error, busy, persist } = useAsyncPanel<QuietHoursState>({
+    load: async () => defaultQuietHoursState((await load()).quiet_hours_v2 ?? {}),
+    save: async (next) => {
+      await save({ quiet_hours_v2: next as unknown as Record<string, unknown> });
     },
-    [save],
-  );
+  });
+
+  // Local drafts for the time inputs so typing isn't gated on save (pessimistic
+  // useAsyncPanel only updates `data` once the save resolves). Synced from the
+  // last persisted snapshot when a fresh one lands.
+  const [draftStart, setDraftStart] = useState("");
+  const [draftEnd, setDraftEnd] = useState("");
+  const lastSnapshotRef = useRef<QuietHoursState | null>(null);
+  useEffect(() => {
+    if (data && data !== lastSnapshotRef.current) {
+      setDraftStart(data.start);
+      setDraftEnd(data.end);
+      lastSnapshotRef.current = data;
+    }
+  }, [data]);
 
   return (
-    <section
-      aria-label="Quiet hours"
-      className="mt-8 rounded border border-zinc-200 bg-white p-5"
+    <SettingsPanel
+      title="Quiet hours"
+      desc="Hold non-urgent alerts until the window ends. Allow-through kinds deliver immediately."
+      error={error}
+      busy={busy && !data}
     >
-      <h2 className="text-base font-semibold text-zinc-900">Quiet hours</h2>
-      <p className="mt-1 text-sm text-zinc-500">
-        Hold non-urgent alerts until the window ends. Allow-through kinds
-        deliver immediately.
-      </p>
-
-      {error && (
-        <p className="mt-3 rounded border border-red-200 bg-red-50 p-2 text-sm text-red-700">
-          {error}
-        </p>
-      )}
-
-      {state == null && !error && (
-        <p className="mt-3 text-sm text-zinc-500">Loading…</p>
-      )}
-
-      {state && (
+      {data && (
         <div className="mt-4 space-y-4 text-sm">
           <label className="flex items-center gap-3">
             <input
               type="checkbox"
-              checked={state.enabled}
-              onChange={() => persist({ ...state, enabled: !state.enabled })}
+              checked={data.enabled}
+              onChange={() => persist({ enabled: !data.enabled })}
               disabled={busy}
             />
             <span>Enable quiet hours</span>
@@ -1536,10 +1469,10 @@ export function QuietHoursPanel({
               <input
                 type="time"
                 aria-label="Quiet hours start"
-                value={state.start}
-                onChange={(e) => setState({ ...state, start: e.target.value })}
-                onBlur={() => persist(state)}
-                disabled={busy || !state.enabled}
+                value={draftStart}
+                onChange={(e) => setDraftStart(e.target.value)}
+                onBlur={() => persist({ start: draftStart })}
+                disabled={busy || !data.enabled}
                 className="rounded border border-zinc-200 px-2 py-1"
               />
             </label>
@@ -1548,10 +1481,10 @@ export function QuietHoursPanel({
               <input
                 type="time"
                 aria-label="Quiet hours end"
-                value={state.end}
-                onChange={(e) => setState({ ...state, end: e.target.value })}
-                onBlur={() => persist(state)}
-                disabled={busy || !state.enabled}
+                value={draftEnd}
+                onChange={(e) => setDraftEnd(e.target.value)}
+                onBlur={() => persist({ end: draftEnd })}
+                disabled={busy || !data.enabled}
                 className="rounded border border-zinc-200 px-2 py-1"
               />
             </label>
@@ -1561,7 +1494,7 @@ export function QuietHoursPanel({
             <p className="mb-2 text-zinc-500">Days</p>
             <div className="flex flex-wrap gap-2">
               {DAYS_OF_WEEK.map((d) => {
-                const on = state.days.includes(d.id);
+                const on = data.days.includes(d.id);
                 return (
                   <button
                     key={d.id}
@@ -1570,11 +1503,11 @@ export function QuietHoursPanel({
                     aria-label={`Quiet on ${d.label}`}
                     onClick={() => {
                       const days = on
-                        ? state.days.filter((x) => x !== d.id)
-                        : [...state.days, d.id].sort();
-                      persist({ ...state, days });
+                        ? data.days.filter((x) => x !== d.id)
+                        : [...data.days, d.id].sort();
+                      persist({ days });
                     }}
-                    disabled={busy || !state.enabled}
+                    disabled={busy || !data.enabled}
                     className={`rounded border px-2 py-1 ${
                       on
                         ? "border-zinc-900 bg-zinc-900 text-white"
@@ -1589,7 +1522,7 @@ export function QuietHoursPanel({
           </div>
         </div>
       )}
-    </section>
+    </SettingsPanel>
   );
 }
 
@@ -1618,75 +1551,41 @@ export function FocusBlockPanel({
   loader?: () => Promise<PreferencesView>;
   saver?: (patch: PreferencesPatch) => Promise<PreferencesView>;
 } = {}) {
-  const [state, setState] = useState<FocusBlockState | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-
   const load = useMemo(() => loader ?? defaultPrefsLoader, [loader]);
   const save = useMemo(() => saver ?? defaultPrefsSaver, [saver]);
 
-  useEffect(() => {
-    let cancelled = false;
-    load()
-      .then((view) => {
-        if (cancelled) return;
-        setState(defaultFocusState(view.focus_block ?? {}));
-      })
-      .catch((e) => {
-        if (cancelled) return;
-        setError(e instanceof Error ? e.message : "failed to load");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [load]);
-
-  const persist = useCallback(
-    async (next: FocusBlockState) => {
-      setState(next);
-      setBusy(true);
-      try {
-        await save({ focus_block: next as unknown as Record<string, unknown> });
-        setError(null);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "save failed");
-      } finally {
-        setBusy(false);
-      }
+  const { data, error, busy, persist } = useAsyncPanel<FocusBlockState>({
+    load: async () => defaultFocusState((await load()).focus_block ?? {}),
+    save: async (next) => {
+      await save({ focus_block: next as unknown as Record<string, unknown> });
     },
-    [save],
-  );
+  });
+
+  // Local draft for the imminent-meeting number input — pessimistic save
+  // shouldn't gate keystrokes. Synced from the last persisted snapshot.
+  const [draftMinutes, setDraftMinutes] = useState(0);
+  const lastSnapshotRef = useRef<FocusBlockState | null>(null);
+  useEffect(() => {
+    if (data && data !== lastSnapshotRef.current) {
+      setDraftMinutes(data.allow_imminent_meeting_minutes);
+      lastSnapshotRef.current = data;
+    }
+  }, [data]);
 
   return (
-    <section
-      aria-label="Focus block auto-suppression"
-      className="mt-8 rounded border border-zinc-200 bg-white p-5"
+    <SettingsPanel
+      title="Auto focus-block"
+      desc="While a calendar Focus event is active, silence everything except what you allow."
+      error={error}
+      busy={busy && !data}
     >
-      <h2 className="text-base font-semibold text-zinc-900">
-        Auto focus-block
-      </h2>
-      <p className="mt-1 text-sm text-zinc-500">
-        While a calendar Focus event is active, silence everything except what
-        you allow.
-      </p>
-
-      {error && (
-        <p className="mt-3 rounded border border-red-200 bg-red-50 p-2 text-sm text-red-700">
-          {error}
-        </p>
-      )}
-
-      {state == null && !error && (
-        <p className="mt-3 text-sm text-zinc-500">Loading…</p>
-      )}
-
-      {state && (
+      {data && (
         <div className="mt-4 space-y-3 text-sm">
           <label className="flex items-center gap-3">
             <input
               type="checkbox"
-              checked={state.enabled}
-              onChange={() => persist({ ...state, enabled: !state.enabled })}
+              checked={data.enabled}
+              onChange={() => persist({ enabled: !data.enabled })}
               disabled={busy}
             />
             <span>Auto-suppress alerts during focus blocks</span>
@@ -1694,11 +1593,9 @@ export function FocusBlockPanel({
           <label className="flex items-center gap-3">
             <input
               type="checkbox"
-              checked={state.allow_mentions}
-              onChange={() =>
-                persist({ ...state, allow_mentions: !state.allow_mentions })
-              }
-              disabled={busy || !state.enabled}
+              checked={data.allow_mentions}
+              onChange={() => persist({ allow_mentions: !data.allow_mentions })}
+              disabled={busy || !data.enabled}
             />
             <span>Let mentions and DMs through</span>
           </label>
@@ -1709,22 +1606,21 @@ export function FocusBlockPanel({
               min={0}
               max={60}
               aria-label="Imminent meeting minutes"
-              value={state.allow_imminent_meeting_minutes}
+              value={draftMinutes}
               onChange={(e) =>
-                setState({
-                  ...state,
-                  allow_imminent_meeting_minutes: Number(e.target.value) || 0,
-                })
+                setDraftMinutes(Number(e.target.value) || 0)
               }
-              onBlur={() => persist(state)}
-              disabled={busy || !state.enabled}
+              onBlur={() =>
+                persist({ allow_imminent_meeting_minutes: draftMinutes })
+              }
+              disabled={busy || !data.enabled}
               className="w-20 rounded border border-zinc-200 px-2 py-1"
             />
             <span className="text-zinc-500">min</span>
           </label>
         </div>
       )}
-    </section>
+    </SettingsPanel>
   );
 }
 
@@ -1749,82 +1645,57 @@ export function FocusDefaultsPanel({
   loader?: () => Promise<PreferencesView>;
   saver?: (patch: PreferencesPatch) => Promise<PreferencesView>;
 } = {}) {
-  const [emoji, setEmoji] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-
   const load = useMemo(() => loader ?? defaultPrefsLoader, [loader]);
   const save = useMemo(() => saver ?? defaultPrefsSaver, [saver]);
 
-  useEffect(() => {
-    let cancelled = false;
-    load()
-      .then((view) => {
-        if (cancelled) return;
-        setEmoji(readFocusEmoji(view.focus_defaults ?? {}));
-      })
-      .catch((e) => {
-        if (cancelled) return;
-        setError(e instanceof Error ? e.message : "failed to load");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [load]);
+  const { data, error, busy, persist } = useAsyncPanel<{ emoji: string }>({
+    load: async () => ({
+      emoji: readFocusEmoji((await load()).focus_defaults ?? {}),
+    }),
+    save: async (next) => {
+      await save({ focus_defaults: { status_emoji: next.emoji } });
+    },
+  });
 
-  const persist = useCallback(async () => {
-    if (emoji == null) return;
-    const trimmed = emoji.trim() || DEFAULT_FOCUS_STATUS_EMOJI;
-    setBusy(true);
-    try {
-      await save({ focus_defaults: { status_emoji: trimmed } });
-      setEmoji(trimmed);
-      setError(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "save failed");
-    } finally {
-      setBusy(false);
+  // Local draft for the text input — synced from the last persisted snapshot.
+  const [draftEmoji, setDraftEmoji] = useState("");
+  const lastSnapshotRef = useRef<{ emoji: string } | null>(null);
+  useEffect(() => {
+    if (data && data !== lastSnapshotRef.current) {
+      setDraftEmoji(data.emoji);
+      lastSnapshotRef.current = data;
     }
-  }, [emoji, save]);
+  }, [data]);
+
+  const commit = useCallback(() => {
+    const trimmed = draftEmoji.trim() || DEFAULT_FOCUS_STATUS_EMOJI;
+    setDraftEmoji(trimmed);
+    persist({ emoji: trimmed });
+  }, [draftEmoji, persist]);
 
   return (
-    <section
-      aria-label="Focus session defaults"
-      className="mt-8 rounded border border-zinc-200 bg-white p-5"
+    <SettingsPanel
+      title="Focus defaults"
+      desc="Slack status emoji applied while a focus session is active. Use any Slack-supported shortcode (e.g. :no_bell:, :headphones:)."
+      error={error}
+      busy={busy && !data}
     >
-      <h2 className="text-base font-semibold text-zinc-900">Focus defaults</h2>
-      <p className="mt-1 text-sm text-zinc-500">
-        Slack status emoji applied while a focus session is active. Use any
-        Slack-supported shortcode (e.g. <code>:no_bell:</code>,{" "}
-        <code>:headphones:</code>).
-      </p>
-
-      {error && (
-        <p className="mt-3 rounded border border-red-200 bg-red-50 p-2 text-sm text-red-700">
-          {error}
-        </p>
-      )}
-
-      {emoji == null && !error && (
-        <p className="mt-3 text-sm text-zinc-500">Loading…</p>
-      )}
-
-      {emoji != null && (
+      {data && (
         <label className="mt-4 flex items-center gap-3 text-sm">
           <span className="text-zinc-500">Slack status emoji</span>
           <input
             type="text"
             aria-label="Slack status emoji"
-            value={emoji}
+            value={draftEmoji}
             placeholder={DEFAULT_FOCUS_STATUS_EMOJI}
-            onChange={(e) => setEmoji(e.target.value)}
-            onBlur={() => persist()}
+            onChange={(e) => setDraftEmoji(e.target.value)}
+            onBlur={commit}
             disabled={busy}
             className="w-40 rounded border border-zinc-200 px-2 py-1 font-mono"
           />
         </label>
       )}
-    </section>
+    </SettingsPanel>
   );
 }
 
