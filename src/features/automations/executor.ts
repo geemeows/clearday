@@ -83,6 +83,14 @@ export type ExecuteCtx = {
    * back into doing the column writes itself.
    */
   internalActionsAppliedByUpsert: boolean;
+  /**
+   * Active Focus session id at the time of dispatch, when one is active.
+   * Threaded through so the executor can enforce a soft idempotency key
+   * `(focus_session_id, slack_thread_ts)` on auto-reply post_message actions
+   * — distinct from the hard `(automation_id, trigger_event_id)` index since
+   * a Focus session spans many trigger events (issue #94).
+   */
+  activeFocusSessionId: string | null;
 };
 
 export const DEFAULT_INTERNAL_HANDLER: ActionHandler = async (action, ctx) => {
@@ -147,6 +155,23 @@ export function inMemoryRateLimiter(opts: {
   };
 }
 
+/**
+ * Soft idempotency for the Focus auto-reply flow (issue #94). Reserves a
+ * `(focus_session_id, slack_thread_ts)` pair so a Focus-active automation that
+ * fires on `signal_ingested` for repeated `slack_dm`/`slack_mention` events in
+ * the same thread posts at most once per thread per session.
+ *
+ * `reserve` returns true when the pair is newly recorded, false when it was
+ * already present (the executor short-circuits to `skipped_idempotent` on a
+ * false return).
+ */
+export type FocusReplyDedupe = {
+  reserve: (
+    focusSessionId: string,
+    slackThreadTs: string,
+  ) => Promise<boolean>;
+};
+
 export type ExecuteOptions = {
   dryRun?: boolean;
   /**
@@ -158,6 +183,7 @@ export type ExecuteOptions = {
   handler?: ActionHandler;
   now?: () => Date;
   rateLimiter?: RateLimiter;
+  focusReplyDedupe?: FocusReplyDedupe;
 };
 
 export type ExecuteInput = {
@@ -170,6 +196,12 @@ export type ExecuteInput = {
    * the Signal payload (templating, default repo/number derivation).
    */
   signal?: Signal | null;
+  /**
+   * Active Focus session id when one is open at dispatch time. Threaded into
+   * ExecuteCtx so the executor can apply the auto-reply soft idempotency
+   * check (issue #94).
+   */
+  activeFocusSessionId?: string | null;
 };
 
 export type ExecuteResult = {
@@ -194,6 +226,7 @@ export async function executeAutomation(
     triggerEventId: input.triggerEventId,
     signal: input.signal ?? null,
     internalActionsAppliedByUpsert: internalApplied,
+    activeFocusSessionId: input.activeFocusSessionId ?? null,
   };
 
   // Plans whose every action is `deferred` (e.g. `transition_ticket` ahead of
@@ -245,6 +278,48 @@ export async function executeAutomation(
       executed: [],
       error: null,
     };
+  }
+
+  // Soft idempotency for the Focus auto-reply flow (issue #94). When a Focus
+  // session is open and the plan posts a Slack thread reply, reserve the
+  // (focus_session_id, slack_thread_ts) pair before any side effects fire. A
+  // duplicate reservation short-circuits to skipped_idempotent — distinct from
+  // the hard (automation_id, trigger_event_id) index because a Focus session
+  // spans many trigger events (one per inbound DM/mention in the thread).
+  if (
+    options.focusReplyDedupe &&
+    ctx.activeFocusSessionId &&
+    ctx.signal &&
+    input.plan.actions.some(isThreadReplyAutoReply)
+  ) {
+    const threadTs = slackThreadTs(ctx.signal);
+    if (threadTs) {
+      const reserved = await options.focusReplyDedupe.reserve(
+        ctx.activeFocusSessionId,
+        threadTs,
+      );
+      if (!reserved) {
+        const finishedAt = now().toISOString();
+        const inserted = await store.insertIfNew({
+          automation_id: input.plan.automation_id,
+          trigger_event_id: input.triggerEventId,
+          signal_id: input.signalId,
+          status: "skipped_idempotent",
+          actions_planned: input.plan.actions,
+          actions_executed: [],
+          error: null,
+          started_at: startedAt,
+          finished_at: finishedAt,
+        });
+        if (!inserted) return idempotent(input.plan.automation_id);
+        return {
+          automation_id: input.plan.automation_id,
+          status: "skipped_idempotent",
+          executed: [],
+          error: null,
+        };
+      }
+    }
   }
 
   if (options.rateLimiter && input.plan.actions.length > 0) {
@@ -315,6 +390,20 @@ export async function executeAutomation(
     executed,
     error: firstError,
   };
+}
+
+function isThreadReplyAutoReply(action: AutomationAction): boolean {
+  return action.type === "post_message" && action.target === "thread_reply";
+}
+
+function slackThreadTs(signal: Signal): string | null {
+  const payload = signal.payload as Record<string, unknown> | null;
+  if (!payload) return null;
+  const threadTs = payload.thread_ts;
+  if (typeof threadTs === "string" && threadTs.length > 0) return threadTs;
+  const ts = payload.ts;
+  if (typeof ts === "string" && ts.length > 0) return ts;
+  return null;
 }
 
 function idempotent(automationId: string): ExecuteResult {

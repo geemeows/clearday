@@ -62,6 +62,7 @@ function makeCtx(signal: Signal | null): ExecuteCtx {
     triggerEventId: "sig-1:t",
     signal,
     internalActionsAppliedByUpsert: false,
+    activeFocusSessionId: null,
   };
 }
 

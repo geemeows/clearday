@@ -2,10 +2,12 @@ import { describe, expect, it, vi } from "vitest";
 import {
   type AutomationRunInsert,
   type AutomationRunsStore,
+  type FocusReplyDedupe,
   executeAutomation,
   inMemoryRateLimiter,
   type RateLimiter,
 } from "#/features/automations/executor";
+import type { StoredSignal } from "#/shared/signal";
 
 function memoryRunsStore(): AutomationRunsStore & {
   rows: AutomationRunInsert[];
@@ -261,5 +263,216 @@ describe("executeAutomation", () => {
     );
     expect(handler).toHaveBeenCalledTimes(1);
     expect(store.rows[0].status).toBe("succeeded");
+  });
+});
+
+describe("executeAutomation — focus auto-reply soft idempotency (issue #94)", () => {
+  function makeSlackSignal(threadTs: string): StoredSignal {
+    return {
+      id: "sig-slack-1",
+      provider: "slack",
+      kind: "dm",
+      source_id: `C-1:${threadTs}`,
+      title: "hey are you around?",
+      url: null,
+      payload: {
+        channel: "C-1",
+        ts: threadTs,
+        thread_ts: threadTs,
+        author: "U2",
+        text: "hey are you around?",
+      },
+      requires_action: true,
+      source_created_at: "2026-05-04T10:00:00.000Z",
+      unread_count: 0,
+      created_at: "2026-05-04T10:00:00.000Z",
+      updated_at: "2026-05-04T10:00:00.000Z",
+      dismissed_at: null,
+      priority: null,
+      snoozed_until: null,
+      alert_channels_override: null,
+      tags: null,
+    };
+  }
+
+  function memoryDedupe(): FocusReplyDedupe & {
+    reservations: Set<string>;
+  } {
+    const reservations = new Set<string>();
+    return {
+      reservations,
+      reserve: async (focusSessionId, slackThreadTs) => {
+        const key = `${focusSessionId}:${slackThreadTs}`;
+        if (reservations.has(key)) return false;
+        reservations.add(key);
+        return true;
+      },
+    };
+  }
+
+  it("first auto-reply within a Focus session reserves the (session, thread) pair and dispatches", async () => {
+    const store = memoryRunsStore();
+    const dedupe = memoryDedupe();
+    const handler = vi.fn(async () => ({
+      type: "post_message" as const,
+      ok: true,
+      ref: { channel: "C-1", ts: "1700.111" },
+    }));
+    const result = await executeAutomation(
+      {
+        plan: {
+          automation_id: "a-focus-reply",
+          actions: [
+            {
+              type: "post_message",
+              target: "thread_reply",
+              body: "heads-down — react 🚨 if urgent",
+            },
+          ],
+        },
+        triggerEventId: "sig-slack-1:t1",
+        signalId: "sig-slack-1",
+        signal: makeSlackSignal("1700.000"),
+        activeFocusSessionId: "focus-1",
+      },
+      store,
+      {
+        handler,
+        internalActionsAppliedByUpsert: false,
+        focusReplyDedupe: dedupe,
+      },
+    );
+    expect(result.status).toBe("succeeded");
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(dedupe.reservations.has("focus-1:1700.000")).toBe(true);
+    expect(store.rows).toHaveLength(1);
+    expect(store.rows[0].status).toBe("succeeded");
+  });
+
+  it("second auto-reply on the same thread within the same Focus session short-circuits to skipped_idempotent without invoking the handler", async () => {
+    const store = memoryRunsStore();
+    const dedupe = memoryDedupe();
+    const handler = vi.fn(async () => ({
+      type: "post_message" as const,
+      ok: true,
+    }));
+    const baseInput = {
+      plan: {
+        automation_id: "a-focus-reply",
+        actions: [
+          {
+            type: "post_message" as const,
+            target: "thread_reply" as const,
+            body: "heads-down",
+          },
+        ],
+      },
+      signal: makeSlackSignal("1700.000"),
+      activeFocusSessionId: "focus-1",
+    };
+    const first = await executeAutomation(
+      {
+        ...baseInput,
+        triggerEventId: "sig-slack-1:t1",
+        signalId: "sig-slack-1",
+      },
+      store,
+      { handler, internalActionsAppliedByUpsert: false, focusReplyDedupe: dedupe },
+    );
+    expect(first.status).toBe("succeeded");
+    expect(handler).toHaveBeenCalledTimes(1);
+
+    // A second Slack DM lands in the same thread → distinct trigger_event_id,
+    // so the hard idempotency index doesn't catch it. The soft dedupe must.
+    const second = await executeAutomation(
+      {
+        ...baseInput,
+        triggerEventId: "sig-slack-1:t2",
+        signalId: "sig-slack-1",
+      },
+      store,
+      { handler, internalActionsAppliedByUpsert: false, focusReplyDedupe: dedupe },
+    );
+    expect(second.status).toBe("skipped_idempotent");
+    expect(second.executed).toEqual([]);
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(store.rows).toHaveLength(2);
+    expect(store.rows[1].status).toBe("skipped_idempotent");
+    expect(store.rows[1].actions_executed).toEqual([]);
+  });
+
+  it("a different Focus session re-uses the same thread without short-circuiting", async () => {
+    const store = memoryRunsStore();
+    const dedupe = memoryDedupe();
+    const handler = vi.fn(async () => ({
+      type: "post_message" as const,
+      ok: true,
+    }));
+    const signal = makeSlackSignal("1700.000");
+    await executeAutomation(
+      {
+        plan: {
+          automation_id: "a-focus-reply",
+          actions: [
+            { type: "post_message", target: "thread_reply", body: "x" },
+          ],
+        },
+        triggerEventId: "sig-slack-1:t1",
+        signalId: "sig-slack-1",
+        signal,
+        activeFocusSessionId: "focus-1",
+      },
+      store,
+      { handler, internalActionsAppliedByUpsert: false, focusReplyDedupe: dedupe },
+    );
+    const second = await executeAutomation(
+      {
+        plan: {
+          automation_id: "a-focus-reply",
+          actions: [
+            { type: "post_message", target: "thread_reply", body: "x" },
+          ],
+        },
+        triggerEventId: "sig-slack-1:t2",
+        signalId: "sig-slack-1",
+        signal,
+        activeFocusSessionId: "focus-2",
+      },
+      store,
+      { handler, internalActionsAppliedByUpsert: false, focusReplyDedupe: dedupe },
+    );
+    expect(second.status).toBe("succeeded");
+    expect(handler).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not consult the dedupe store when no Focus session is active", async () => {
+    const store = memoryRunsStore();
+    const reserve = vi.fn(async () => true);
+    const handler = vi.fn(async () => ({
+      type: "post_message" as const,
+      ok: true,
+    }));
+    await executeAutomation(
+      {
+        plan: {
+          automation_id: "a-focus-reply",
+          actions: [
+            { type: "post_message", target: "thread_reply", body: "x" },
+          ],
+        },
+        triggerEventId: "sig-slack-1:t1",
+        signalId: "sig-slack-1",
+        signal: makeSlackSignal("1700.000"),
+        activeFocusSessionId: null,
+      },
+      store,
+      {
+        handler,
+        internalActionsAppliedByUpsert: false,
+        focusReplyDedupe: { reserve },
+      },
+    );
+    expect(reserve).not.toHaveBeenCalled();
+    expect(handler).toHaveBeenCalledTimes(1);
   });
 });
