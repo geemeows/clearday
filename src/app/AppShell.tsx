@@ -6,6 +6,7 @@ import {
   Moon,
   Settings as SettingsIcon,
   Sun,
+  Zap,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { CommandPalette, type PaletteCommand } from "#/app/CommandPalette";
@@ -18,6 +19,7 @@ import {
   type NavSource,
   OPEN_CMDK_EVENT,
 } from "#/app/NavigationSidebar";
+import { pickActiveFocus, toMeetingEvents } from "#/features/calendar/events";
 import { FocusModal } from "#/features/focus/components/FocusModal";
 import type { ProviderAccountStatus } from "#/features/integrations/provider-account-status";
 import {
@@ -31,10 +33,6 @@ import {
   type ThemeView,
 } from "#/features/settings/theme/api";
 import type { SourceKind } from "#/features/signals/components/SourceGlyph";
-import {
-  pickActiveFocus,
-  toMeetingEvents,
-} from "#/features/calendar/events";
 import { apiFetch } from "#/lib/api-client";
 import type { Signal, SignalKind, StoredSignal } from "#/shared/signal";
 
@@ -43,6 +41,7 @@ const PAGES: NavPage[] = [
   { to: "/inbox", label: "Inbox", icon: Inbox },
   { to: "/tasks", label: "Tasks", icon: CheckSquare },
   { to: "/calendar", label: "Calendar", icon: Calendar },
+  { to: "/automations", label: "Automations", icon: Zap },
 ];
 
 type SourceDef = { id: string; label: string; kind: SourceKind };

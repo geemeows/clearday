@@ -3,7 +3,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Checkbox } from "#/components/coss/checkbox";
 import { SettingsPanel } from "#/components/ui/SettingsPanel";
 import type { IntegrationView } from "#/features/integrations/api/integrations-api";
-import { useAsyncPanel } from "#/hooks/useAsyncPanel";
 import {
   DEFAULT_RETENTION_DAYS,
   type ExportPayload,
@@ -23,6 +22,7 @@ import {
   type Theme,
   type ThemeView,
 } from "#/features/settings/theme/api";
+import { useAsyncPanel } from "#/hooks/useAsyncPanel";
 import { apiFetch } from "#/lib/api-client";
 
 export const Route = createFileRoute("/_app/settings")({
@@ -32,7 +32,6 @@ export const Route = createFileRoute("/_app/settings")({
 export const SETTINGS_TABS: ReadonlyArray<{ to: string; label: string }> = [
   { to: "/settings/integrations", label: "Integrations" },
   { to: "/settings/notifications", label: "Notifications" },
-  { to: "/settings/rules", label: "Inbox rules" },
   { to: "/settings/ai", label: "AI provider" },
   { to: "/settings/selfhost", label: "Self-host" },
   { to: "/settings/profile", label: "Profile" },
@@ -202,7 +201,7 @@ export function NotificationsPanel({
     >
       {channels && (
         <div className="mt-4 space-y-3">
-          <label className="flex items-center gap-3 text-sm">
+          <div className="flex items-center gap-3 text-sm">
             <Checkbox
               aria-label="Slack self-DM"
               checked={channels.includes("slack_dm")}
@@ -215,9 +214,9 @@ export function NotificationsPanel({
                 Posts to your Slackbot DM via your connected Slack account.
               </span>
             </span>
-          </label>
+          </div>
 
-          <label className="flex items-center gap-3 text-sm">
+          <div className="flex items-center gap-3 text-sm">
             <Checkbox
               aria-label="Web Push"
               checked={channels.includes("web_push")}
@@ -230,7 +229,7 @@ export function NotificationsPanel({
                 Native browser notifications on devices you've registered below.
               </span>
             </span>
-          </label>
+          </div>
 
           <button
             type="button"
@@ -339,8 +338,7 @@ export function WebPushDevicesPanel({
     save: async () => {},
   });
   const devices = data?.devices ?? null;
-  const error =
-    actionError ?? (loadError ? loadError.message : null);
+  const error = actionError ?? (loadError ? loadError.message : null);
 
   useEffect(() => {
     let cancelled = false;
@@ -595,10 +593,7 @@ export function InstallPwaPanel() {
   // migrates to <SettingsPanel>.
   if (installed) {
     return (
-      <SettingsPanel
-        title="Install Clearday"
-        desc="Clearday is installed."
-      />
+      <SettingsPanel title="Install Clearday" desc="Clearday is installed." />
     );
   }
 
@@ -791,8 +786,7 @@ export function AiProviderPanel({
     load,
     save: async () => {},
   });
-  const error =
-    actionError ?? (loadError ? loadError.message : null);
+  const error = actionError ?? (loadError ? loadError.message : null);
 
   // Sync drafts from the persisted snapshot when a fresh one lands.
   const lastViewRef = useRef<AiSettingsView | null>(null);
@@ -1424,9 +1418,12 @@ export function QuietHoursPanel({
   const save = useMemo(() => saver ?? defaultPrefsSaver, [saver]);
 
   const { data, error, busy, persist } = useAsyncPanel<QuietHoursState>({
-    load: async () => defaultQuietHoursState((await load()).quiet_hours_v2 ?? {}),
+    load: async () =>
+      defaultQuietHoursState((await load()).quiet_hours_v2 ?? {}),
     save: async (next) => {
-      await save({ quiet_hours_v2: next as unknown as Record<string, unknown> });
+      await save({
+        quiet_hours_v2: next as unknown as Record<string, unknown>,
+      });
     },
   });
 
@@ -1607,9 +1604,7 @@ export function FocusBlockPanel({
               max={60}
               aria-label="Imminent meeting minutes"
               value={draftMinutes}
-              onChange={(e) =>
-                setDraftMinutes(Number(e.target.value) || 0)
-              }
+              onChange={(e) => setDraftMinutes(Number(e.target.value) || 0)}
               onBlur={() =>
                 persist({ allow_imminent_meeting_minutes: draftMinutes })
               }
@@ -1810,8 +1805,7 @@ export function EmailDigestPanel({
     }
   }, [view]);
 
-  const error =
-    actionError ?? (loadError ? loadError.message : null);
+  const error = actionError ?? (loadError ? loadError.message : null);
 
   const onSave = useCallback(async () => {
     setActionBusy(true);

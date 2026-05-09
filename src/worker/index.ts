@@ -30,6 +30,23 @@ import { runAlertQueueDrain } from "#/features/alerts/server/queue-drain";
 import { type AskAiDeps, handleAskAi } from "#/features/ask-ai/api";
 import { isAllowedEmail } from "#/features/auth/gate";
 import {
+  type AutomationRunRow,
+  type AutomationRunsReader,
+  type AutomationsStore,
+  dryRunAutomation,
+  getAutomations,
+  listAutomationRuns,
+  listLatestFailures,
+  putAutomations,
+} from "#/features/automations/api";
+import type { Automation } from "#/features/automations/engine";
+import type {
+  AutomationRunInsert,
+  AutomationRunsStore,
+  AutomationRunStatus,
+  ExecutedAction,
+} from "#/features/automations/executor";
+import {
   type BriefingDeps,
   handleBriefingGenerate,
   runBriefingTick,
@@ -50,18 +67,13 @@ import {
 } from "#/features/email-digest/api";
 import { startFocusSession } from "#/features/focus/session";
 import {
-  getInboxRules,
-  type InboxRulesStore,
-  putInboxRules,
-} from "#/features/inbox-rules/api";
-import type { InboxRule } from "#/features/inbox-rules/engine";
-import {
   disconnectIntegration,
   getIntegrations,
   type IntegrationsStore,
   type ProviderAccountRow,
 } from "#/features/integrations/api/integrations-api";
 import { runScheduledPoll } from "#/features/integrations/orchestrator";
+import { runScheduleAutomations } from "#/features/automations/orchestrator";
 import { PROVIDERS } from "#/features/integrations/providers";
 import type { PrReviewEvent } from "#/features/integrations/providers/github";
 import { handleOAuthExchange } from "#/features/integrations/server/oauth-exchange-handler";
@@ -293,10 +305,10 @@ export default {
       return json(out, out.ok ? 200 : out.reason === "error" ? 400 : 200);
     }
 
-    if (url.pathname === "/api/inbox-rules") {
-      const store = inboxRulesStore(service);
+    if (url.pathname === "/api/automations") {
+      const store = automationsStore(service);
       if (request.method === "GET") {
-        return json(await getInboxRules(store));
+        return json(await getAutomations(store));
       }
       if (request.method === "PUT") {
         let body: unknown;
@@ -305,9 +317,69 @@ export default {
         } catch {
           return json({ ok: false, error: "invalid json" }, 400);
         }
-        const out = await putInboxRules(body, store);
+        const out = await putAutomations(body, store);
         if (!out.ok) return json({ ok: false, error: out.error }, 400);
-        return json({ ok: true, rules: out.rules });
+        return json({ ok: true, automations: out.automations });
+      }
+    }
+
+    {
+      const dryRunMatch = url.pathname.match(
+        /^\/api\/automations\/([^/]+)\/dry-run$/,
+      );
+      if (dryRunMatch && request.method === "POST") {
+        const automationId = decodeURIComponent(dryRunMatch[1] ?? "");
+        const out = await dryRunAutomation(
+          automationId,
+          automationsStore(service),
+          automationRunsStore(service),
+        );
+        if (!out.ok) {
+          const status = out.error === "automation not found" ? 404 : 400;
+          return json({ ok: false, error: out.error }, status);
+        }
+        return json({
+          ok: true,
+          automation_id: out.automation_id,
+          status: out.status,
+          actions_planned: out.actions_planned,
+          trigger_event_id: out.trigger_event_id,
+          started_at: out.started_at,
+        });
+      }
+    }
+
+    if (
+      url.pathname === "/api/automations/runs/latest-failures" &&
+      request.method === "GET"
+    ) {
+      const out = await listLatestFailures(automationRunsReader(service));
+      if (!out.ok) return json({ ok: false, error: out.error }, 400);
+      return json({ ok: true, failures: out.failures });
+    }
+
+    {
+      const runsMatch = url.pathname.match(
+        /^\/api\/automations\/([^/]+)\/runs$/,
+      );
+      if (runsMatch && request.method === "GET") {
+        const automationId = decodeURIComponent(runsMatch[1] ?? "");
+        const limitRaw = url.searchParams.get("limit");
+        const before = url.searchParams.get("before") ?? undefined;
+        const out = await listAutomationRuns(
+          automationId,
+          automationRunsReader(service),
+          {
+            limit: limitRaw === null ? undefined : Number(limitRaw),
+            before,
+          },
+        );
+        if (!out.ok) return json({ ok: false, error: out.error }, 400);
+        return json({
+          ok: true,
+          runs: out.runs,
+          next_cursor: out.next_cursor,
+        });
       }
     }
 
@@ -596,7 +668,7 @@ export default {
       fetch(input, init);
     ctx.waitUntil(
       runScheduledPoll({
-        loadInboxRules: () => loadInboxRulesFromService(service),
+        loadAutomations: () => loadAutomationsFromService(service),
         loadAccounts: async () => {
           const { data, error } = await service
             .from("provider_accounts")
@@ -777,6 +849,32 @@ export default {
         })
         .catch((err) => {
           console.error("[cron] web-push prune failed", err);
+        }),
+    );
+
+    ctx.waitUntil(
+      (async () => {
+        const automations = await loadAutomationsFromService(service);
+        const scheduleAutomations = automations.filter(
+          (a) => a.enabled && a.trigger_kind === "schedule",
+        );
+        if (scheduleAutomations.length === 0) return;
+        return runScheduleAutomations(
+          new Date(),
+          scheduleAutomations,
+          automationRunsStore(service),
+        );
+      })()
+        .then((report) => {
+          if (!report) return;
+          for (const r of report.results) {
+            console.log(
+              `[cron] automation-schedule ${report.minuteIso} ${r.automation_id}: ${r.status}`,
+            );
+          }
+        })
+        .catch((err) => {
+          console.error("[cron] automation-schedule failed", err);
         }),
     );
 
@@ -1570,7 +1668,7 @@ function dataPrivacyDeps(service: SupabaseService): ExportDeps {
   return {
     loadSignals: () => loadAllRows(service, "signals"),
     loadRollups: () => loadAllRows(service, "signal_rollups"),
-    loadInboxRules: () => loadAllRows(service, "inbox_rules"),
+    loadAutomations: () => loadAllRows(service, "automations"),
     loadSlackAllowlist: () => loadAllRows(service, "slack_channel_allowlist"),
     loadUserPreferences: () => loadSingleton(service, "user_preferences"),
     loadAiSettings: () => loadSingleton(service, "ai_settings"),
@@ -1891,12 +1989,14 @@ function rollupDeps(service: SupabaseService) {
   };
 }
 
-async function loadInboxRulesFromService(
+async function loadAutomationsFromService(
   service: SupabaseService,
-): Promise<InboxRule[]> {
+): Promise<Automation[]> {
   const { data, error } = await service
-    .from("inbox_rules")
-    .select("id, name, enabled, priority, match, action")
+    .from("automations")
+    .select(
+      "id, name, enabled, priority, trigger_kind, trigger_config, predicates, actions",
+    )
     .order("priority", { ascending: true });
   if (error) throw new Error(error.message);
   const rows = (data ?? []) as Array<{
@@ -1904,43 +2004,152 @@ async function loadInboxRulesFromService(
     name: string;
     enabled: boolean;
     priority: number;
-    match: { predicates?: InboxRule["predicates"] } | null;
-    action: { effects?: InboxRule["effects"] } | null;
+    trigger_kind: Automation["trigger_kind"];
+    trigger_config: Automation["trigger_config"] | null;
+    predicates: Automation["predicates"] | null;
+    actions: Automation["actions"] | null;
   }>;
   return rows.map((r) => ({
     id: r.id,
     name: r.name,
     enabled: r.enabled,
     priority: r.priority,
-    predicates: r.match?.predicates ?? [],
-    effects: r.action?.effects ?? [],
+    trigger_kind: r.trigger_kind,
+    trigger_config: r.trigger_config ?? undefined,
+    predicates: r.predicates ?? [],
+    actions: r.actions ?? [],
   }));
 }
 
-function inboxRulesStore(service: SupabaseService): InboxRulesStore {
+function automationsStore(service: SupabaseService): AutomationsStore {
   return {
-    load: () => loadInboxRulesFromService(service),
-    save: async (rules) => {
+    load: () => loadAutomationsFromService(service),
+    save: async (automations) => {
       // Delete then insert: simplest correct semantics for "replace whole list".
       const { error: delError } = await service
-        .from("inbox_rules")
+        .from("automations")
         .delete()
         .neq("id", "00000000-0000-0000-0000-000000000000");
       if (delError) throw new Error(delError.message);
-      if (rules.length === 0) return [];
-      const rows = rules.map((r) => ({
-        id: r.id,
-        name: r.name,
-        enabled: r.enabled,
-        priority: r.priority,
-        match: { predicates: r.predicates },
-        action: { effects: r.effects },
+      if (automations.length === 0) return [];
+      const rows = automations.map((a) => ({
+        id: a.id,
+        name: a.name,
+        enabled: a.enabled,
+        priority: a.priority,
+        trigger_kind: a.trigger_kind,
+        trigger_config: a.trigger_config ?? {},
+        predicates: a.predicates,
+        actions: a.actions,
       }));
       const { error: insError } = await service
-        .from("inbox_rules")
+        .from("automations")
         .insert(rows);
       if (insError) throw new Error(insError.message);
-      return loadInboxRulesFromService(service);
+      return loadAutomationsFromService(service);
+    },
+  };
+}
+
+function automationRunsStore(service: SupabaseService): AutomationRunsStore {
+  return {
+    insertIfNew: async (row: AutomationRunInsert) => {
+      const { error } = await service.from("automation_runs").insert({
+        automation_id: row.automation_id,
+        trigger_event_id: row.trigger_event_id,
+        signal_id: row.signal_id,
+        status: row.status,
+        actions_planned: row.actions_planned,
+        actions_executed: row.actions_executed,
+        error: row.error,
+        started_at: row.started_at,
+        finished_at: row.finished_at,
+      });
+      if (!error) return true;
+      // Postgres unique-violation → duplicate dispatch; the executor
+      // short-circuits to skipped_idempotent on a `false` return.
+      const code = (error as { code?: string }).code;
+      if (code === "23505") return false;
+      throw new Error(error.message);
+    },
+  };
+}
+
+function automationRunsReader(
+  service: SupabaseService,
+): AutomationRunsReader {
+  return {
+    listForAutomation: async (automationId, opts) => {
+      let q = service
+        .from("automation_runs")
+        .select(
+          "id, automation_id, trigger_event_id, signal_id, status, actions_planned, actions_executed, error, started_at, finished_at",
+        )
+        .eq("automation_id", automationId)
+        .order("started_at", { ascending: false })
+        .limit(opts.limit);
+      if (opts.before !== undefined) q = q.lt("started_at", opts.before);
+      const { data, error } = await q;
+      if (error) throw new Error(error.message);
+      const rows = (data ?? []) as Array<{
+        id: string;
+        automation_id: string;
+        trigger_event_id: string;
+        signal_id: string | null;
+        status: AutomationRunStatus;
+        actions_planned: AutomationRunRow["actions_planned"] | null;
+        actions_executed: ExecutedAction[] | null;
+        error: string | null;
+        started_at: string;
+        finished_at: string | null;
+      }>;
+      return rows.map((r) => ({
+        id: r.id,
+        automation_id: r.automation_id,
+        trigger_event_id: r.trigger_event_id,
+        signal_id: r.signal_id,
+        status: r.status,
+        actions_planned: r.actions_planned ?? [],
+        actions_executed: r.actions_executed ?? [],
+        error: r.error,
+        started_at: r.started_at,
+        finished_at: r.finished_at,
+      }));
+    },
+    listFailures: async (limit) => {
+      const { data, error } = await service
+        .from("automation_runs")
+        .select(
+          "id, automation_id, trigger_event_id, signal_id, status, actions_planned, actions_executed, error, started_at, finished_at",
+        )
+        .eq("status", "failed")
+        .order("started_at", { ascending: false })
+        .limit(limit);
+      if (error) throw new Error(error.message);
+      const rows = (data ?? []) as Array<{
+        id: string;
+        automation_id: string;
+        trigger_event_id: string;
+        signal_id: string | null;
+        status: AutomationRunStatus;
+        actions_planned: AutomationRunRow["actions_planned"] | null;
+        actions_executed: ExecutedAction[] | null;
+        error: string | null;
+        started_at: string;
+        finished_at: string | null;
+      }>;
+      return rows.map((r) => ({
+        id: r.id,
+        automation_id: r.automation_id,
+        trigger_event_id: r.trigger_event_id,
+        signal_id: r.signal_id,
+        status: r.status,
+        actions_planned: r.actions_planned ?? [],
+        actions_executed: r.actions_executed ?? [],
+        error: r.error,
+        started_at: r.started_at,
+        finished_at: r.finished_at,
+      }));
     },
   };
 }

@@ -19,9 +19,9 @@ import { Route as AppTasksRouteImport } from './routes/_app.tasks'
 import { Route as AppSettingsRouteImport } from './routes/_app.settings'
 import { Route as AppInboxRouteImport } from './routes/_app.inbox'
 import { Route as AppCalendarRouteImport } from './routes/_app.calendar'
+import { Route as AppAutomationsRouteImport } from './routes/_app.automations'
 import { Route as AppSettingsIndexRouteImport } from './routes/_app.settings.index'
 import { Route as AppSettingsSelfhostRouteImport } from './routes/_app.settings.selfhost'
-import { Route as AppSettingsRulesRouteImport } from './routes/_app.settings.rules'
 import { Route as AppSettingsProfileRouteImport } from './routes/_app.settings.profile'
 import { Route as AppSettingsNotificationsRouteImport } from './routes/_app.settings.notifications'
 import { Route as AppSettingsIntegrationsRouteImport } from './routes/_app.settings.integrations'
@@ -76,6 +76,11 @@ const AppCalendarRoute = AppCalendarRouteImport.update({
   path: '/calendar',
   getParentRoute: () => AppRoute,
 } as any)
+const AppAutomationsRoute = AppAutomationsRouteImport.update({
+  id: '/automations',
+  path: '/automations',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppSettingsIndexRoute = AppSettingsIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -84,11 +89,6 @@ const AppSettingsIndexRoute = AppSettingsIndexRouteImport.update({
 const AppSettingsSelfhostRoute = AppSettingsSelfhostRouteImport.update({
   id: '/selfhost',
   path: '/selfhost',
-  getParentRoute: () => AppSettingsRoute,
-} as any)
-const AppSettingsRulesRoute = AppSettingsRulesRouteImport.update({
-  id: '/rules',
-  path: '/rules',
   getParentRoute: () => AppSettingsRoute,
 } as any)
 const AppSettingsProfileRoute = AppSettingsProfileRouteImport.update({
@@ -117,6 +117,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/onboarding': typeof OnboardingRoute
+  '/automations': typeof AppAutomationsRoute
   '/calendar': typeof AppCalendarRoute
   '/inbox': typeof AppInboxRoute
   '/settings': typeof AppSettingsRouteWithChildren
@@ -127,7 +128,6 @@ export interface FileRoutesByFullPath {
   '/settings/integrations': typeof AppSettingsIntegrationsRoute
   '/settings/notifications': typeof AppSettingsNotificationsRoute
   '/settings/profile': typeof AppSettingsProfileRoute
-  '/settings/rules': typeof AppSettingsRulesRoute
   '/settings/selfhost': typeof AppSettingsSelfhostRoute
   '/settings/': typeof AppSettingsIndexRoute
 }
@@ -135,6 +135,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/onboarding': typeof OnboardingRoute
+  '/automations': typeof AppAutomationsRoute
   '/calendar': typeof AppCalendarRoute
   '/inbox': typeof AppInboxRoute
   '/tasks': typeof AppTasksRoute
@@ -144,7 +145,6 @@ export interface FileRoutesByTo {
   '/settings/integrations': typeof AppSettingsIntegrationsRoute
   '/settings/notifications': typeof AppSettingsNotificationsRoute
   '/settings/profile': typeof AppSettingsProfileRoute
-  '/settings/rules': typeof AppSettingsRulesRoute
   '/settings/selfhost': typeof AppSettingsSelfhostRoute
   '/settings': typeof AppSettingsIndexRoute
 }
@@ -154,6 +154,7 @@ export interface FileRoutesById {
   '/_app': typeof AppRouteWithChildren
   '/login': typeof LoginRoute
   '/onboarding': typeof OnboardingRoute
+  '/_app/automations': typeof AppAutomationsRoute
   '/_app/calendar': typeof AppCalendarRoute
   '/_app/inbox': typeof AppInboxRoute
   '/_app/settings': typeof AppSettingsRouteWithChildren
@@ -164,7 +165,6 @@ export interface FileRoutesById {
   '/_app/settings/integrations': typeof AppSettingsIntegrationsRoute
   '/_app/settings/notifications': typeof AppSettingsNotificationsRoute
   '/_app/settings/profile': typeof AppSettingsProfileRoute
-  '/_app/settings/rules': typeof AppSettingsRulesRoute
   '/_app/settings/selfhost': typeof AppSettingsSelfhostRoute
   '/_app/settings/': typeof AppSettingsIndexRoute
 }
@@ -174,6 +174,7 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/onboarding'
+    | '/automations'
     | '/calendar'
     | '/inbox'
     | '/settings'
@@ -184,7 +185,6 @@ export interface FileRouteTypes {
     | '/settings/integrations'
     | '/settings/notifications'
     | '/settings/profile'
-    | '/settings/rules'
     | '/settings/selfhost'
     | '/settings/'
   fileRoutesByTo: FileRoutesByTo
@@ -192,6 +192,7 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/onboarding'
+    | '/automations'
     | '/calendar'
     | '/inbox'
     | '/tasks'
@@ -201,7 +202,6 @@ export interface FileRouteTypes {
     | '/settings/integrations'
     | '/settings/notifications'
     | '/settings/profile'
-    | '/settings/rules'
     | '/settings/selfhost'
     | '/settings'
   id:
@@ -210,6 +210,7 @@ export interface FileRouteTypes {
     | '/_app'
     | '/login'
     | '/onboarding'
+    | '/_app/automations'
     | '/_app/calendar'
     | '/_app/inbox'
     | '/_app/settings'
@@ -220,7 +221,6 @@ export interface FileRouteTypes {
     | '/_app/settings/integrations'
     | '/_app/settings/notifications'
     | '/_app/settings/profile'
-    | '/_app/settings/rules'
     | '/_app/settings/selfhost'
     | '/_app/settings/'
   fileRoutesById: FileRoutesById
@@ -305,6 +305,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppCalendarRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/automations': {
+      id: '/_app/automations'
+      path: '/automations'
+      fullPath: '/automations'
+      preLoaderRoute: typeof AppAutomationsRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/settings/': {
       id: '/_app/settings/'
       path: '/'
@@ -317,13 +324,6 @@ declare module '@tanstack/react-router' {
       path: '/selfhost'
       fullPath: '/settings/selfhost'
       preLoaderRoute: typeof AppSettingsSelfhostRouteImport
-      parentRoute: typeof AppSettingsRoute
-    }
-    '/_app/settings/rules': {
-      id: '/_app/settings/rules'
-      path: '/rules'
-      fullPath: '/settings/rules'
-      preLoaderRoute: typeof AppSettingsRulesRouteImport
       parentRoute: typeof AppSettingsRoute
     }
     '/_app/settings/profile': {
@@ -362,7 +362,6 @@ interface AppSettingsRouteChildren {
   AppSettingsIntegrationsRoute: typeof AppSettingsIntegrationsRoute
   AppSettingsNotificationsRoute: typeof AppSettingsNotificationsRoute
   AppSettingsProfileRoute: typeof AppSettingsProfileRoute
-  AppSettingsRulesRoute: typeof AppSettingsRulesRoute
   AppSettingsSelfhostRoute: typeof AppSettingsSelfhostRoute
   AppSettingsIndexRoute: typeof AppSettingsIndexRoute
 }
@@ -372,7 +371,6 @@ const AppSettingsRouteChildren: AppSettingsRouteChildren = {
   AppSettingsIntegrationsRoute: AppSettingsIntegrationsRoute,
   AppSettingsNotificationsRoute: AppSettingsNotificationsRoute,
   AppSettingsProfileRoute: AppSettingsProfileRoute,
-  AppSettingsRulesRoute: AppSettingsRulesRoute,
   AppSettingsSelfhostRoute: AppSettingsSelfhostRoute,
   AppSettingsIndexRoute: AppSettingsIndexRoute,
 }
@@ -382,6 +380,7 @@ const AppSettingsRouteWithChildren = AppSettingsRoute._addFileChildren(
 )
 
 interface AppRouteChildren {
+  AppAutomationsRoute: typeof AppAutomationsRoute
   AppCalendarRoute: typeof AppCalendarRoute
   AppInboxRoute: typeof AppInboxRoute
   AppSettingsRoute: typeof AppSettingsRouteWithChildren
@@ -390,6 +389,7 @@ interface AppRouteChildren {
 }
 
 const AppRouteChildren: AppRouteChildren = {
+  AppAutomationsRoute: AppAutomationsRoute,
   AppCalendarRoute: AppCalendarRoute,
   AppInboxRoute: AppInboxRoute,
   AppSettingsRoute: AppSettingsRouteWithChildren,

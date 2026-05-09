@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { startFocusSession } from "#/features/focus/session";
+import {
+  emitFocusEnded,
+  emitFocusStarted,
+  startFocusSession,
+} from "#/features/focus/session";
 
 type Call = { url: string; init: RequestInit };
 
@@ -182,5 +186,23 @@ describe("startFocusSession", () => {
         },
       ),
     ).rejects.toThrow(/positive/);
+  });
+});
+
+describe("emitFocusStarted / emitFocusEnded", () => {
+  it("dispatches the start boundary with session id and duration", async () => {
+    const calls: Array<{ b: string; id: string; d: number }> = [];
+    await emitFocusStarted("sess-1", 25, async (b, id, d) => {
+      calls.push({ b, id, d });
+    });
+    expect(calls).toEqual([{ b: "focus_started", id: "sess-1", d: 25 }]);
+  });
+
+  it("dispatches the end boundary with session id and duration", async () => {
+    const calls: Array<{ b: string; id: string; d: number }> = [];
+    await emitFocusEnded("sess-1", 25, async (b, id, d) => {
+      calls.push({ b, id, d });
+    });
+    expect(calls).toEqual([{ b: "focus_ended", id: "sess-1", d: 25 }]);
   });
 });

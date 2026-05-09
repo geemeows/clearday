@@ -10,7 +10,7 @@
 // The orchestrator is provider-agnostic: adding a new provider is one folder
 // under features/integrations/providers/<id>/ + one entry in the registry.
 
-import type { InboxRule } from "#/features/inbox-rules/engine";
+import type { Automation } from "#/features/automations/engine";
 import {
   defaultClassifyError,
   type ExchangeEnv,
@@ -68,10 +68,11 @@ export type OrchestratorDeps = {
   /** Now, injected for deterministic expiry checks in tests. */
   now?: () => Date;
   /**
-   * Loaded once per tick; passed to every upsertSignal so the inbox-rules
-   * engine can apply overrides at the write seam.
+   * Loaded once per tick; passed to every upsertSignal so the automations
+   * engine can apply `signal_ingested` internal-action overrides at the
+   * write seam.
    */
-  loadInboxRules?: () => Promise<InboxRule[]>;
+  loadAutomations?: () => Promise<Automation[]>;
 };
 
 export type OrchestratorReport = {
@@ -87,13 +88,13 @@ export async function runScheduledPoll(
   deps: OrchestratorDeps,
 ): Promise<OrchestratorReport[]> {
   const accounts = await deps.loadAccounts();
-  const rules = deps.loadInboxRules ? await deps.loadInboxRules() : [];
+  const automations = deps.loadAutomations ? await deps.loadAutomations() : [];
   const reports: OrchestratorReport[] = [];
   for (const account of accounts) {
     if (!isProviderId(account.provider)) continue;
     const provider = PROVIDERS[account.provider];
     try {
-      const upserted = await pollOne(provider, account, deps, rules);
+      const upserted = await pollOne(provider, account, deps, automations);
       const persisted = await persistStatus(deps, account.provider, "ok");
       await persistLastPolledAt(deps, account.provider);
       reports.push({
@@ -149,7 +150,7 @@ async function pollOne(
   provider: Provider<any, any, any>,
   account: ProviderAccountRow,
   deps: OrchestratorDeps,
-  rules: InboxRule[],
+  automations: Automation[],
 ): Promise<number> {
   if (!account.access_token) throw new Error("no access_token");
 
@@ -167,7 +168,7 @@ async function pollOne(
   };
 
   const { signals, delta } = await provider.poll(accessToken, ctx, state);
-  await upsertSignals(deps.store, signals, { rules });
+  await upsertSignals(deps.store, signals, { automations });
   if (provider.saveState) {
     try {
       await provider.saveState(stateDeps, delta);
