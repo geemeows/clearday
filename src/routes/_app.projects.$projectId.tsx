@@ -1,7 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Calendar, Plus } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useEffect, useState } from "react";
 import { CardDetailPane } from "#/features/projects/CardDetailPane";
+import {
+  moveBetweenColumns,
+  reorderWithinColumn,
+  type OrderableCard,
+} from "#/features/projects/order";
 import {
   type CardPatch,
   createCard,
@@ -55,7 +60,7 @@ function ProjectBoardPage() {
     return () => {
       cancelled = true;
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
 
   const handleAddCard = async (columnId: string, title: string) => {
@@ -91,8 +96,8 @@ function ProjectBoardPage() {
 
   const handleUpdateCard = async (cardId: string, patch: CardPatch) => {
     let nextPatch = patch;
-    // When moving columns, place the card at the bottom of the destination
-    // and write the new dense order alongside the column change.
+    // When moving columns via the detail pane, place the card at the bottom of
+    // the destination and write the new dense order alongside the column change.
     if (patch.column_id != null) {
       const destCount = cards.filter(
         (c) => c.column_id === patch.column_id && c.id !== cardId,
@@ -122,6 +127,55 @@ function ProjectBoardPage() {
     }
   };
 
+  const handleMoveCard = async (
+    cardId: string,
+    toColumnId: string,
+    afterId: string | null,
+  ) => {
+    const movedCard = cards.find((c) => c.id === cardId);
+    if (!movedCard) return;
+    const fromColumnId = movedCard.column_id;
+
+    const orderable: OrderableCard[] = cards.map((c) => ({
+      id: c.id,
+      order: c.order,
+      column_id: c.column_id,
+    }));
+
+    let affected: OrderableCard[];
+    if (fromColumnId === toColumnId) {
+      affected = reorderWithinColumn(
+        orderable.filter((c) => c.column_id === fromColumnId),
+        cardId,
+        afterId,
+      );
+    } else {
+      const result = moveBetweenColumns(orderable, cardId, toColumnId, afterId);
+      affected = result.filter(
+        (c) => c.column_id === fromColumnId || c.column_id === toColumnId,
+      );
+    }
+
+    const prev = cards;
+    setCards((cs) =>
+      cs.map((c) => {
+        const a = affected.find((r) => r.id === c.id);
+        return a ? { ...c, column_id: a.column_id, order: a.order } : c;
+      }),
+    );
+
+    try {
+      await Promise.all(
+        affected.map((a) =>
+          updateCard(client, a.id, { column_id: a.column_id, order: a.order }),
+        ),
+      );
+    } catch (e) {
+      setCards(prev);
+      setError(e instanceof Error ? e.message : "failed to move card");
+    }
+  };
+
   return (
     <ProjectBoardView
       project={project}
@@ -132,6 +186,7 @@ function ProjectBoardPage() {
       onAddCard={handleAddCard}
       onUpdateCard={handleUpdateCard}
       onDeleteCard={handleDeleteCard}
+      onMoveCard={handleMoveCard}
     />
   );
 }
@@ -145,6 +200,7 @@ export function ProjectBoardView({
   onAddCard,
   onUpdateCard,
   onDeleteCard,
+  onMoveCard,
 }: {
   project: StoredProject | null;
   columns: StoredColumn[];
@@ -154,11 +210,21 @@ export function ProjectBoardView({
   onAddCard: (columnId: string, title: string) => void;
   onUpdateCard?: (cardId: string, patch: CardPatch) => void;
   onDeleteCard?: (cardId: string) => void;
+  onMoveCard?: (
+    cardId: string,
+    toColumnId: string,
+    afterId: string | null,
+  ) => void;
 }) {
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   const selectedCard = selectedCardId
     ? (cards.find((c) => c.id === selectedCardId) ?? null)
     : null;
+
+  // Shared ref for tracking the card currently being dragged (avoids
+  // dataTransfer serialization in tests and removes a round-trip through the
+  // browser clipboard security boundary).
+  const dragCardIdRef = useRef<string | null>(null);
 
   return (
     <section className="flex h-full flex-col overflow-hidden">
@@ -198,8 +264,12 @@ export function ProjectBoardView({
               key={col.id}
               column={col}
               cards={cards.filter((c) => c.column_id === col.id)}
+              allColumns={columns}
+              allCards={cards}
               onAddCard={(title) => onAddCard(col.id, title)}
               onSelectCard={setSelectedCardId}
+              onMoveCard={onMoveCard}
+              dragCardIdRef={dragCardIdRef}
             />
           ))}
         </div>
@@ -224,17 +294,34 @@ export function ProjectBoardView({
 function KanbanColumn({
   column,
   cards,
+  allColumns,
+  allCards,
   onAddCard,
   onSelectCard,
+  onMoveCard,
+  dragCardIdRef,
 }: {
   column: StoredColumn;
   cards: StoredCard[];
+  allColumns: StoredColumn[];
+  allCards: StoredCard[];
   onAddCard: (title: string) => void;
   onSelectCard: (cardId: string) => void;
+  onMoveCard?: (
+    cardId: string,
+    toColumnId: string,
+    afterId: string | null,
+  ) => void;
+  dragCardIdRef: { current: string | null };
 }) {
   const [composing, setComposing] = useState(false);
   const [draft, setDraft] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+  // Tracks which card the drag cursor last entered; used as afterId on drop.
+  // undefined = no card entered yet this drag session.
+  const [dropTargetId, setDropTargetId] = useState<string | undefined>(
+    undefined,
+  );
 
   const sorted = [...cards].sort((a, b) => a.order - b.order);
 
@@ -259,10 +346,51 @@ function KanbanColumn({
   const wipOver =
     column.wip_limit != null && cards.length > column.wip_limit;
 
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    const draggedId = dragCardIdRef.current;
+    if (!draggedId) return;
+    dragCardIdRef.current = null;
+
+    // Use the last hovered card as afterId; fall back to placing at the bottom
+    // of the column (last sorted card), or null for an empty column.
+    const afterId =
+      dropTargetId !== undefined
+        ? dropTargetId
+        : sorted.length > 0
+          ? sorted[sorted.length - 1].id
+          : null;
+
+    onMoveCard?.(draggedId, column.id, afterId);
+    setDropTargetId(undefined);
+  };
+
+  const handleKeyboardMove = (cardId: string, direction: "left" | "right") => {
+    const sortedCols = [...allColumns].sort((a, b) => a.order - b.order);
+    const myIdx = sortedCols.findIndex((c) => c.id === column.id);
+    const targetIdx = direction === "left" ? myIdx - 1 : myIdx + 1;
+    // Clamp: do nothing at the boundary columns.
+    if (targetIdx < 0 || targetIdx >= sortedCols.length) return;
+    const targetCol = sortedCols[targetIdx];
+    const targetCards = allCards
+      .filter((c) => c.column_id === targetCol.id)
+      .sort((a, b) => a.order - b.order);
+    // Place at the bottom of the target column.
+    const afterId =
+      targetCards.length > 0
+        ? targetCards[targetCards.length - 1].id
+        : null;
+    onMoveCard?.(cardId, targetCol.id, afterId);
+  };
+
   return (
     <article
       aria-label={column.name}
       className="flex w-64 shrink-0 flex-col rounded-lg border border-border bg-card"
+      onDragOver={(e) => {
+        e.preventDefault();
+      }}
+      onDrop={handleDrop}
     >
       <header className="flex items-center justify-between px-3 py-2.5">
         <div className="flex items-center gap-2">
@@ -295,8 +423,24 @@ function KanbanColumn({
         className="flex flex-1 flex-col gap-1.5 overflow-y-auto px-2 pb-2"
       >
         {sorted.map((card) => (
-          <li key={card.id}>
-            <CardChip card={card} onClick={() => onSelectCard(card.id)} />
+          <li
+            key={card.id}
+            onDragEnter={() => {
+              // Don't count entering the dragged card's own li as a drop target.
+              if (dragCardIdRef.current !== card.id) {
+                setDropTargetId(card.id);
+              }
+            }}
+          >
+            <CardChip
+              card={card}
+              onClick={() => onSelectCard(card.id)}
+              onDragStart={() => {
+                dragCardIdRef.current = card.id;
+                setDropTargetId(undefined);
+              }}
+              onKeyboardMove={(dir) => handleKeyboardMove(card.id, dir)}
+            />
           </li>
         ))}
 
@@ -345,13 +489,34 @@ function KanbanColumn({
   );
 }
 
-function CardChip({ card, onClick }: { card: StoredCard; onClick: () => void }) {
+function CardChip({
+  card,
+  onClick,
+  onDragStart,
+  onKeyboardMove,
+}: {
+  card: StoredCard;
+  onClick: () => void;
+  onDragStart?: () => void;
+  onKeyboardMove?: (direction: "left" | "right") => void;
+}) {
   return (
     <button
       type="button"
       aria-label={card.title}
+      draggable
       onClick={onClick}
-      className="w-full rounded-md border border-border bg-background px-3 py-2 text-left text-sm shadow-sm hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+      onDragStart={onDragStart}
+      onKeyDown={(e) => {
+        if (e.key === "ArrowLeft") {
+          e.preventDefault();
+          onKeyboardMove?.("left");
+        } else if (e.key === "ArrowRight") {
+          e.preventDefault();
+          onKeyboardMove?.("right");
+        }
+      }}
+      className="w-full cursor-grab rounded-md border border-border bg-background px-3 py-2 text-left text-sm shadow-sm hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary active:cursor-grabbing"
     >
       <span className="line-clamp-2 text-foreground">{card.title}</span>
       <div className="mt-1 flex flex-wrap items-center gap-1">

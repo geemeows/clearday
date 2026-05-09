@@ -305,3 +305,239 @@ describe("ProjectBoardView", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 });
+
+// ─── Drag-and-drop + keyboard moves ─────────────────────────────────────────
+
+describe("ProjectBoardView — drag-and-drop", () => {
+  const noop = () => {};
+
+  it("drag within a column calls onMoveCard with the hovered card as afterId", () => {
+    const onMoveCard = vi.fn();
+    const cols = [column({ id: "c1", name: "Backlog", order: 0 })];
+    const cards = [
+      card({ id: "k1", column_id: "c1", title: "Card A", order: 0 }),
+      card({ id: "k2", column_id: "c1", title: "Card B", order: 1 }),
+    ];
+    render(
+      <ProjectBoardView
+        project={project()}
+        columns={cols}
+        cards={cards}
+        loading={false}
+        error={null}
+        onAddCard={noop}
+        onMoveCard={onMoveCard}
+      />,
+    );
+
+    const cardAButton = screen.getByRole("button", { name: "Card A" });
+    // dragStart sets the dragged card id in the shared ref
+    fireEvent.dragStart(cardAButton);
+    // dragEnter on Card B's li marks it as the drop target
+    const cardBLi = screen.getByRole("button", { name: "Card B" }).closest("li")!;
+    fireEvent.dragEnter(cardBLi);
+    // drop on the column article triggers the move
+    fireEvent.drop(screen.getByRole("article", { name: "Backlog" }));
+
+    expect(onMoveCard).toHaveBeenCalledWith("k1", "c1", "k2");
+  });
+
+  it("drag across columns calls onMoveCard with the destination column and hovered card", () => {
+    const onMoveCard = vi.fn();
+    const cols = [
+      column({ id: "c1", name: "Backlog", order: 0 }),
+      column({ id: "c2", name: "Done", order: 1 }),
+    ];
+    const cards = [
+      card({ id: "k1", column_id: "c1", title: "Card A", order: 0 }),
+      card({ id: "k2", column_id: "c2", title: "Card B", order: 0 }),
+    ];
+    render(
+      <ProjectBoardView
+        project={project()}
+        columns={cols}
+        cards={cards}
+        loading={false}
+        error={null}
+        onAddCard={noop}
+        onMoveCard={onMoveCard}
+      />,
+    );
+
+    const cardAButton = screen.getByRole("button", { name: "Card A" });
+    fireEvent.dragStart(cardAButton);
+    const cardBLi = screen.getByRole("button", { name: "Card B" }).closest("li")!;
+    fireEvent.dragEnter(cardBLi);
+    fireEvent.drop(screen.getByRole("article", { name: "Done" }));
+
+    expect(onMoveCard).toHaveBeenCalledWith("k1", "c2", "k2");
+  });
+
+  it("drag to an empty column calls onMoveCard with afterId=null", () => {
+    const onMoveCard = vi.fn();
+    const cols = [
+      column({ id: "c1", name: "Backlog", order: 0 }),
+      column({ id: "c2", name: "Done", order: 1 }),
+    ];
+    const cards = [
+      card({ id: "k1", column_id: "c1", title: "Card A", order: 0 }),
+    ];
+    render(
+      <ProjectBoardView
+        project={project()}
+        columns={cols}
+        cards={cards}
+        loading={false}
+        error={null}
+        onAddCard={noop}
+        onMoveCard={onMoveCard}
+      />,
+    );
+
+    fireEvent.dragStart(screen.getByRole("button", { name: "Card A" }));
+    // Drop directly on Done column without entering any card li
+    fireEvent.drop(screen.getByRole("article", { name: "Done" }));
+
+    expect(onMoveCard).toHaveBeenCalledWith("k1", "c2", null);
+  });
+
+  it("dragging a card over itself does not update the drop target", () => {
+    const onMoveCard = vi.fn();
+    const cols = [column({ id: "c1", name: "Backlog", order: 0 })];
+    const cards = [
+      card({ id: "k1", column_id: "c1", title: "Card A", order: 0 }),
+      card({ id: "k2", column_id: "c1", title: "Card B", order: 1 }),
+    ];
+    render(
+      <ProjectBoardView
+        project={project()}
+        columns={cols}
+        cards={cards}
+        loading={false}
+        error={null}
+        onAddCard={noop}
+        onMoveCard={onMoveCard}
+      />,
+    );
+
+    const cardAButton = screen.getByRole("button", { name: "Card A" });
+    fireEvent.dragStart(cardAButton);
+    // Hover over own li — should be ignored
+    const cardALi = cardAButton.closest("li")!;
+    fireEvent.dragEnter(cardALi);
+    // Drop without hovering over any other card → afterId falls back to last card (k2)
+    fireEvent.drop(screen.getByRole("article", { name: "Backlog" }));
+
+    // afterId must NOT be k1 (self); falls back to sorted last card k2
+    expect(onMoveCard).toHaveBeenCalledWith("k1", "c1", "k2");
+  });
+});
+
+describe("ProjectBoardView — keyboard ←/→ moves", () => {
+  const noop = () => {};
+
+  it("ArrowRight moves a card to the next column (placed at the bottom)", () => {
+    const onMoveCard = vi.fn();
+    const cols = [
+      column({ id: "c1", name: "Backlog", order: 0 }),
+      column({ id: "c2", name: "Done", order: 1 }),
+    ];
+    const cards = [
+      card({ id: "k1", column_id: "c1", title: "Card A", order: 0 }),
+      card({ id: "k2", column_id: "c2", title: "Card B", order: 0 }),
+    ];
+    render(
+      <ProjectBoardView
+        project={project()}
+        columns={cols}
+        cards={cards}
+        loading={false}
+        error={null}
+        onAddCard={noop}
+        onMoveCard={onMoveCard}
+      />,
+    );
+
+    fireEvent.keyDown(screen.getByRole("button", { name: "Card A" }), {
+      key: "ArrowRight",
+    });
+
+    // c2 has k2 as last card → afterId = k2
+    expect(onMoveCard).toHaveBeenCalledWith("k1", "c2", "k2");
+  });
+
+  it("ArrowLeft moves a card to the previous column (placed at the bottom)", () => {
+    const onMoveCard = vi.fn();
+    const cols = [
+      column({ id: "c1", name: "Backlog", order: 0 }),
+      column({ id: "c2", name: "Done", order: 1 }),
+    ];
+    const cards = [
+      card({ id: "k2", column_id: "c2", title: "Card B", order: 0 }),
+    ];
+    render(
+      <ProjectBoardView
+        project={project()}
+        columns={cols}
+        cards={cards}
+        loading={false}
+        error={null}
+        onAddCard={noop}
+        onMoveCard={onMoveCard}
+      />,
+    );
+
+    fireEvent.keyDown(screen.getByRole("button", { name: "Card B" }), {
+      key: "ArrowLeft",
+    });
+
+    // c1 is empty → afterId = null
+    expect(onMoveCard).toHaveBeenCalledWith("k2", "c1", null);
+  });
+
+  it("ArrowLeft on the first column is a no-op (clamps)", () => {
+    const onMoveCard = vi.fn();
+    const cols = [column({ id: "c1", name: "Backlog", order: 0 })];
+    const cards = [card({ id: "k1", column_id: "c1", title: "Card A", order: 0 })];
+    render(
+      <ProjectBoardView
+        project={project()}
+        columns={cols}
+        cards={cards}
+        loading={false}
+        error={null}
+        onAddCard={noop}
+        onMoveCard={onMoveCard}
+      />,
+    );
+
+    fireEvent.keyDown(screen.getByRole("button", { name: "Card A" }), {
+      key: "ArrowLeft",
+    });
+
+    expect(onMoveCard).not.toHaveBeenCalled();
+  });
+
+  it("ArrowRight on the last column is a no-op (clamps)", () => {
+    const onMoveCard = vi.fn();
+    const cols = [column({ id: "c1", name: "Backlog", order: 0 })];
+    const cards = [card({ id: "k1", column_id: "c1", title: "Card A", order: 0 })];
+    render(
+      <ProjectBoardView
+        project={project()}
+        columns={cols}
+        cards={cards}
+        loading={false}
+        error={null}
+        onAddCard={noop}
+        onMoveCard={onMoveCard}
+      />,
+    );
+
+    fireEvent.keyDown(screen.getByRole("button", { name: "Card A" }), {
+      key: "ArrowRight",
+    });
+
+    expect(onMoveCard).not.toHaveBeenCalled();
+  });
+});
