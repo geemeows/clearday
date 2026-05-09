@@ -638,6 +638,106 @@ function compareTs(a: string, b: string): number {
   return na - nb;
 }
 
+// --- reaction_added poll hook (issue #94) -----------------------------
+//
+// The Focus auto-reply flow posts a CTA into a Slack thread asking the
+// sender to react with 🚨 if their message is genuinely urgent. This hook
+// scans for reactions on a known set of (channel, ts) auto-reply messages
+// posted by Clearday and surfaces any 🚨 (rotating_light / siren) reaction
+// as an UrgentReactionEvent the orchestrator turns into a priority=high
+// signal_state_change re-emitted through features/alerts/dispatcher.
+//
+// Pure against the injected fetchImpl; the existing participated_threads
+// shape is unchanged — this hook reads from the dedicated `reactions.get`
+// endpoint per posted message rather than piggy-backing on
+// conversations.replies.
+
+export type SlackPostRef = {
+  channel: string;
+  /** Timestamp of the message Clearday posted (the auto-reply). */
+  ts: string;
+  /** Originating Slack signal id, threaded back through urgent-override. */
+  signal_id: string;
+};
+
+export type UrgentReactionEvent = {
+  channel: string;
+  message_ts: string;
+  reaction: string;
+  reactor: string;
+  signal_id: string;
+};
+
+const URGENT_REACTIONS: ReadonlySet<string> = new Set([
+  "rotating_light",
+  "siren",
+]);
+
+export type SlackReactionsGetResponse = {
+  ok?: boolean;
+  error?: string;
+  message?: {
+    reactions?: Array<{ name?: string; users?: string[] }>;
+  };
+};
+
+/**
+ * For each (channel, ts) post Clearday previously sent, fetch its current
+ * reactions and emit one event per 🚨 (rotating_light / siren) reactor. Stable
+ * across re-polls — the orchestrator must apply its own dedupe (e.g. by
+ * `(signal_id, reactor, reaction)`) when persisting urgent overrides.
+ */
+export async function pollSlackReactionsForPosts(
+  accessToken: string,
+  fetchImpl: SlackFetch,
+  posts: ReadonlyArray<SlackPostRef>,
+): Promise<UrgentReactionEvent[]> {
+  if (posts.length === 0) return [];
+  const out: UrgentReactionEvent[] = [];
+  const responses = await Promise.all(
+    posts.map((p) => runReactionsGet(accessToken, p.channel, p.ts, fetchImpl)),
+  );
+  for (let i = 0; i < posts.length; i++) {
+    const post = posts[i];
+    if (!post) continue;
+    const body = responses[i];
+    if (!body || !body.ok) continue;
+    for (const r of body.message?.reactions ?? []) {
+      if (!r.name || !URGENT_REACTIONS.has(r.name)) continue;
+      for (const reactor of r.users ?? []) {
+        out.push({
+          channel: post.channel,
+          message_ts: post.ts,
+          reaction: r.name,
+          reactor,
+          signal_id: post.signal_id,
+        });
+      }
+    }
+  }
+  return out;
+}
+
+async function runReactionsGet(
+  accessToken: string,
+  channel: string,
+  ts: string,
+  fetchImpl: SlackFetch,
+): Promise<SlackReactionsGetResponse | null> {
+  const url = `https://slack.com/api/reactions.get?channel=${encodeURIComponent(
+    channel,
+  )}&timestamp=${encodeURIComponent(ts)}`;
+  const res = await fetchImpl(url, {
+    method: "GET",
+    headers: {
+      authorization: `Bearer ${accessToken}`,
+      accept: "application/json",
+    },
+  });
+  if (!res.ok) return null;
+  return (await res.json()) as SlackReactionsGetResponse;
+}
+
 async function safeText(res: { text: () => Promise<string> }): Promise<string> {
   try {
     return await res.text();

@@ -6,7 +6,10 @@
 // the service-role client; in SPA context the user's session-scoped anon
 // client is used (RLS gates writes/reads to the allowed user).
 
-import { applyInboxRules, type InboxRule } from "#/features/inbox-rules/engine";
+import {
+  type Automation,
+  applyAutomationsToSignal,
+} from "#/features/automations/engine";
 import type { SupabaseLike } from "#/shared/db";
 import type {
   Signal,
@@ -17,12 +20,14 @@ import type {
 
 export type UpsertSignalOptions = {
   /**
-   * Inbox rules evaluated against the Signal before write. Effects are mapped
-   * to columns: auto_dismiss → dismissed_at, snooze → snoozed_until, tag →
-   * tags. Columns are only included in the upsert when their effect fires,
-   * so re-upserts that match no rules don't clobber existing overrides.
+   * Automations evaluated against the Signal before write. v1's internal
+   * actions are mapped to columns: dismiss → dismissed_at, snooze →
+   * snoozed_until, tag → tags, set_priority → priority, set_channels →
+   * alert_channels_override. Columns are only included in the upsert when
+   * their action fires, so re-upserts that match no automations don't
+   * clobber existing overrides.
    */
-  rules?: InboxRule[];
+  automations?: Automation[];
   now?: Date;
 };
 
@@ -44,8 +49,8 @@ export async function upsertSignals(
   const nowIso = now.toISOString();
 
   const rows = signals.map((signal) => {
-    const application = options.rules
-      ? applyInboxRules(signal, options.rules, now)
+    const application = options.automations
+      ? applyAutomationsToSignal(signal, options.automations, now)
       : null;
     const values: Record<string, unknown> = {
       provider: signal.provider,

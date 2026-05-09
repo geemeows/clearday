@@ -8,6 +8,7 @@ import {
   Settings as SettingsIcon,
   SquareKanban,
   Sun,
+  Zap,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CommandPalette, type PaletteCommand } from "#/app/CommandPalette";
@@ -21,6 +22,9 @@ import {
   type NavSource,
   OPEN_CMDK_EVENT,
 } from "#/app/NavigationSidebar";
+import { pickActiveFocus, toMeetingEvents } from "#/features/calendar/events";
+import { FocusModal } from "#/features/focus/components/FocusModal";
+import type { ProviderAccountStatus } from "#/features/integrations/provider-account-status";
 import {
   type CardWithProject,
   createCard,
@@ -29,10 +33,6 @@ import {
   listColumns,
   listProjects,
 } from "#/features/projects/store";
-import { supabase } from "#/lib/supabase";
-import type { SupabaseLike } from "#/shared/db";
-import { FocusModal } from "#/features/focus/components/FocusModal";
-import type { ProviderAccountStatus } from "#/features/integrations/provider-account-status";
 import {
   PROFILE_UPDATED_EVENT,
   type ProfileView,
@@ -44,17 +44,16 @@ import {
   type ThemeView,
 } from "#/features/settings/theme/api";
 import type { SourceKind } from "#/features/signals/components/SourceGlyph";
-import {
-  pickActiveFocus,
-  toMeetingEvents,
-} from "#/features/calendar/events";
 import { apiFetch } from "#/lib/api-client";
+import { supabase } from "#/lib/supabase";
+import type { SupabaseLike } from "#/shared/db";
 import type { Signal, StoredSignal } from "#/shared/signal";
 
 const PAGES: NavPage[] = [
   { to: "/today", label: "Today", icon: Sun },
   { to: "/inbox", label: "Inbox", icon: Inbox },
   { to: "/calendar", label: "Calendar", icon: Calendar },
+  { to: "/automations", label: "Automations", icon: Zap },
 ];
 
 type SourceDef = { id: string; label: string; kind: SourceKind };

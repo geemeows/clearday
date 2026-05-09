@@ -187,6 +187,34 @@ async function slackOutcome(
   return { ok: true };
 }
 
+// Boundary emitters. The Focus session module is the canonical seam for
+// emitting `focus_started` / `focus_ended` events into the Automations
+// orchestrator. Callers (worker focus route on session start; future
+// session-end watcher on the end boundary) call these instead of reaching
+// into features/automations directly so the boundary semantics live in one
+// place.
+export type FocusBoundaryDispatch = (
+  boundary: "focus_started" | "focus_ended",
+  sessionId: string,
+  durationMinutes: number,
+) => Promise<void>;
+
+export async function emitFocusStarted(
+  sessionId: string,
+  durationMinutes: number,
+  dispatch: FocusBoundaryDispatch,
+): Promise<void> {
+  await dispatch("focus_started", sessionId, durationMinutes);
+}
+
+export async function emitFocusEnded(
+  sessionId: string,
+  durationMinutes: number,
+  dispatch: FocusBoundaryDispatch,
+): Promise<void> {
+  await dispatch("focus_ended", sessionId, durationMinutes);
+}
+
 async function safeText(res: { text: () => Promise<string> }): Promise<string> {
   try {
     return await res.text();

@@ -42,7 +42,17 @@ function makeClient(overrides: {
   const gte = vi.fn(() => chain);
   const lt = vi.fn(() => chain);
   const selectEq = vi.fn(() => chain);
-  const chain = { is, in: inFn, ilike, or, gte, lt, eq: selectEq, order, limit };
+  const chain = {
+    is,
+    in: inFn,
+    ilike,
+    or,
+    gte,
+    lt,
+    eq: selectEq,
+    order,
+    limit,
+  };
   const select = vi.fn(() => chain);
   const upsert = vi.fn(async () => overrides.upsertResult ?? { error: null });
   const updateEq = vi.fn(async () => overrides.updateResult ?? { error: null });
@@ -175,20 +185,21 @@ describe("listSignals", () => {
   });
 });
 
-describe("upsertSignal — inbox rules", () => {
-  it("auto_dismiss rule sets dismissed_at on the upsert", async () => {
+describe("upsertSignal — automations (signal_ingested)", () => {
+  it("dismiss action sets dismissed_at on the upsert", async () => {
     const { client, spies } = makeClient({});
     const now = new Date("2026-05-04T12:00:00.000Z");
     await upsertSignal(client, sample, {
       now,
-      rules: [
+      automations: [
         {
-          id: "r-dismiss",
+          id: "a-dismiss",
           name: "x",
           enabled: true,
           priority: 1,
+          trigger_kind: "signal_ingested",
           predicates: [{ type: "kind", kind: "pr_review_requested" }],
-          effects: [{ type: "auto_dismiss" }],
+          actions: [{ type: "dismiss" }],
         },
       ],
     });
@@ -196,19 +207,20 @@ describe("upsertSignal — inbox rules", () => {
     expect(values.dismissed_at).toBe("2026-05-04T12:00:00.000Z");
   });
 
-  it("snooze rule sets snoozed_until column", async () => {
+  it("snooze action sets snoozed_until column", async () => {
     const { client, spies } = makeClient({});
     const now = new Date("2026-05-04T12:00:00.000Z");
     await upsertSignal(client, sample, {
       now,
-      rules: [
+      automations: [
         {
-          id: "r-snooze",
+          id: "a-snooze",
           name: "x",
           enabled: true,
           priority: 1,
+          trigger_kind: "signal_ingested",
           predicates: [{ type: "kind", kind: "pr_review_requested" }],
-          effects: [{ type: "snooze", minutes: 60 }],
+          actions: [{ type: "snooze", minutes: 60 }],
         },
       ],
     });
@@ -216,17 +228,18 @@ describe("upsertSignal — inbox rules", () => {
     expect(values.snoozed_until).toBe("2026-05-04T13:00:00.000Z");
   });
 
-  it("does not set override columns when no rule matches", async () => {
+  it("does not set override columns when no automation matches", async () => {
     const { client, spies } = makeClient({});
     await upsertSignal(client, sample, {
-      rules: [
+      automations: [
         {
-          id: "r-other",
+          id: "a-other",
           name: "x",
           enabled: true,
           priority: 1,
+          trigger_kind: "signal_ingested",
           predicates: [{ type: "kind", kind: "mention" }],
-          effects: [{ type: "auto_dismiss" }],
+          actions: [{ type: "dismiss" }],
         },
       ],
     });
@@ -238,17 +251,18 @@ describe("upsertSignal — inbox rules", () => {
     expect(values).not.toHaveProperty("alert_channels_override");
   });
 
-  it("channels rule sets alert_channels_override column", async () => {
+  it("set_channels action sets alert_channels_override column", async () => {
     const { client, spies } = makeClient({});
     await upsertSignal(client, sample, {
-      rules: [
+      automations: [
         {
-          id: "r-channels",
+          id: "a-channels",
           name: "x",
           enabled: true,
           priority: 1,
+          trigger_kind: "signal_ingested",
           predicates: [{ type: "kind", kind: "pr_review_requested" }],
-          effects: [{ type: "channels", channels: ["email", "web_push"] }],
+          actions: [{ type: "set_channels", channels: ["email", "web_push"] }],
         },
       ],
     });
@@ -256,17 +270,18 @@ describe("upsertSignal — inbox rules", () => {
     expect(values.alert_channels_override).toEqual(["email", "web_push"]);
   });
 
-  it("priority rule sets priority column", async () => {
+  it("set_priority action sets priority column", async () => {
     const { client, spies } = makeClient({});
     await upsertSignal(client, sample, {
-      rules: [
+      automations: [
         {
-          id: "r-prio",
+          id: "a-prio",
           name: "x",
           enabled: true,
           priority: 1,
+          trigger_kind: "signal_ingested",
           predicates: [{ type: "kind", kind: "pr_review_requested" }],
-          effects: [{ type: "priority", value: "high" }],
+          actions: [{ type: "set_priority", value: "high" }],
         },
       ],
     });
