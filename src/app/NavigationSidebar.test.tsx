@@ -14,13 +14,12 @@ function renderSidebar(overrides: Partial<NavigationSidebarProps> = {}) {
     pages: [
       { to: "/today", label: "Today", icon: Icon },
       { to: "/inbox", label: "Inbox", icon: Icon },
-      { to: "/tasks", label: "Tasks", icon: Icon },
+      { to: "/projects", label: "Projects", icon: Icon },
       { to: "/calendar", label: "Calendar", icon: Icon },
     ],
     page: "/today",
     onPage: vi.fn(),
     inboxBadge: 0,
-    tasksBadge: 0,
     sources: [],
     focus: { active: false },
     onStartFocus: vi.fn(),
@@ -34,22 +33,15 @@ function renderSidebar(overrides: Partial<NavigationSidebarProps> = {}) {
 }
 
 describe("NavigationSidebar", () => {
-  it("hides Inbox and Tasks badges when their counts are zero", () => {
+  it("hides the Inbox badge when count is zero", () => {
     renderSidebar();
     expect(screen.queryByTestId("inbox-badge")).toBeNull();
-    expect(screen.queryByTestId("tasks-badge")).toBeNull();
   });
 
   it("shows the Inbox badge when inboxBadge > 0", () => {
     renderSidebar({ inboxBadge: 4 });
     const badge = screen.getByTestId("inbox-badge");
     expect(badge.textContent).toBe("4");
-  });
-
-  it("shows the Tasks badge when tasksBadge > 0", () => {
-    renderSidebar({ tasksBadge: 7 });
-    const badge = screen.getByTestId("tasks-badge");
-    expect(badge.textContent).toBe("7");
   });
 
   it("marks the current page with aria-current=page", () => {
@@ -62,10 +54,10 @@ describe("NavigationSidebar", () => {
   });
 
   it("marks a page active for nested route paths", () => {
-    renderSidebar({ page: "/tasks/123" });
+    renderSidebar({ page: "/projects/some-id" });
     const nav = screen.getByRole("navigation", { name: /workspace/i });
-    const tasks = within(nav).getByRole("button", { name: /tasks/i });
-    expect(tasks.getAttribute("aria-current")).toBe("page");
+    const projects = within(nav).getByRole("button", { name: /projects/i });
+    expect(projects.getAttribute("aria-current")).toBe("page");
   });
 
   it("dispatches onPage when a nav item is clicked", () => {

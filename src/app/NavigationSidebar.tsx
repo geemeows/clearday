@@ -46,7 +46,6 @@ export type NavigationSidebarProps = {
   page: string;
   onPage: (to: string) => void;
   inboxBadge: number;
-  tasksBadge: number;
   sources: NavSource[];
   focus: FocusState;
   onStartFocus: () => void;
@@ -60,7 +59,6 @@ export function NavigationSidebar({
   page,
   onPage,
   inboxBadge,
-  tasksBadge,
   sources,
   focus,
   onStartFocus,
@@ -94,18 +92,8 @@ export function NavigationSidebar({
         <ul className="mt-1 space-y-0.5">
           {pages.map((p) => {
             const active = page === p.to || page.startsWith(`${p.to}/`);
-            const badge =
-              p.to === "/inbox"
-                ? inboxBadge
-                : p.to === "/tasks"
-                  ? tasksBadge
-                  : 0;
-            const badgeId =
-              p.to === "/inbox"
-                ? "inbox-badge"
-                : p.to === "/tasks"
-                  ? "tasks-badge"
-                  : undefined;
+            const badge = p.to === "/inbox" ? inboxBadge : 0;
+            const badgeId = p.to === "/inbox" ? "inbox-badge" : undefined;
             return (
               <li key={p.to}>
                 <Button

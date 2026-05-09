@@ -23,10 +23,11 @@ function makeClient(overrides: {
     ilike: ReturnType<typeof vi.fn>;
     or: ReturnType<typeof vi.fn>;
     gte: ReturnType<typeof vi.fn>;
+    selectEq: ReturnType<typeof vi.fn>;
     order: ReturnType<typeof vi.fn>;
     limit: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
-    eq: ReturnType<typeof vi.fn>;
+    updateEq: ReturnType<typeof vi.fn>;
   };
 } {
   const limit = vi.fn(async () => ({
@@ -39,11 +40,12 @@ function makeClient(overrides: {
   const ilike = vi.fn(() => chain);
   const or = vi.fn(() => chain);
   const gte = vi.fn(() => chain);
-  const chain = { is, in: inFn, ilike, or, gte, order, limit };
+  const selectEq = vi.fn(() => chain);
+  const chain = { is, in: inFn, ilike, or, gte, eq: selectEq, order, limit };
   const select = vi.fn(() => chain);
   const upsert = vi.fn(async () => overrides.upsertResult ?? { error: null });
-  const eq = vi.fn(async () => overrides.updateResult ?? { error: null });
-  const update = vi.fn(() => ({ eq }));
+  const updateEq = vi.fn(async () => overrides.updateResult ?? { error: null });
+  const update = vi.fn(() => ({ eq: updateEq }));
   const client: SupabaseLike = {
     from: () => ({ upsert, select, update }),
   };
@@ -57,10 +59,11 @@ function makeClient(overrides: {
       ilike,
       or,
       gte,
+      selectEq,
       order,
       limit,
       update,
-      eq,
+      updateEq,
     },
   };
 }
@@ -294,7 +297,7 @@ describe("dismissSignal", () => {
     await dismissSignal(client, "abc-123");
     expect(spies.update).toHaveBeenCalledTimes(1);
     expect(spies.update.mock.calls[0][0]).toHaveProperty("dismissed_at");
-    expect(spies.eq).toHaveBeenCalledWith("id", "abc-123");
+    expect(spies.updateEq).toHaveBeenCalledWith("id", "abc-123");
   });
 });
 
@@ -306,7 +309,7 @@ describe("markSignalReplied", () => {
     const patch = spies.update.mock.calls[0][0];
     expect(patch).toMatchObject({ requires_action: false });
     expect(patch).toHaveProperty("updated_at");
-    expect(spies.eq).toHaveBeenCalledWith("id", "sig-1");
+    expect(spies.updateEq).toHaveBeenCalledWith("id", "sig-1");
   });
 
   it("throws when the update reports an error", async () => {

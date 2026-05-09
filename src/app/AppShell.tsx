@@ -1,8 +1,8 @@
 import { Outlet, useRouter, useRouterState } from "@tanstack/react-router";
 import {
   Calendar,
-  CheckSquare,
   Inbox,
+  Kanban,
   Moon,
   Settings as SettingsIcon,
   Sun,
@@ -36,12 +36,12 @@ import {
   toMeetingEvents,
 } from "#/features/calendar/events";
 import { apiFetch } from "#/lib/api-client";
-import type { Signal, SignalKind, StoredSignal } from "#/shared/signal";
+import type { Signal, StoredSignal } from "#/shared/signal";
 
 const PAGES: NavPage[] = [
   { to: "/today", label: "Today", icon: Sun },
   { to: "/inbox", label: "Inbox", icon: Inbox },
-  { to: "/tasks", label: "Tasks", icon: CheckSquare },
+  { to: "/projects", label: "Projects", icon: Kanban },
   { to: "/calendar", label: "Calendar", icon: Calendar },
 ];
 
@@ -80,7 +80,7 @@ export function AppShell() {
   const router = useRouter();
   const path = useRouterState({ select: (s) => s.location.pathname });
   const sourceMeta = useSourceStatuses();
-  const { inboxBadge, tasksBadge } = useNavBadges();
+  const { inboxBadge } = useNavBadges();
   const profile = useProfile();
   const theme = useEffectiveTheme();
 
@@ -106,7 +106,6 @@ export function AppShell() {
     page: path,
     onPage: (to) => router.navigate({ to }),
     inboxBadge,
-    tasksBadge,
     sources,
     focus,
     onStartFocus: () => setFocusModalOpen(true),
@@ -331,16 +330,8 @@ function useProfile(): NavProfile {
   };
 }
 
-// Pull both nav badges from the same signals payload so the sidebar fires a
-// single request: inbox = unread + requires_action; tasks = open work
-// (in-progress tickets + authored PRs).
-const TASK_KINDS: ReadonlySet<SignalKind> = new Set([
-  "ticket_in_progress",
-  "pr_authored",
-]);
-
-function useNavBadges(): { inboxBadge: number; tasksBadge: number } {
-  const [badges, setBadges] = useState({ inboxBadge: 0, tasksBadge: 0 });
+function useNavBadges(): { inboxBadge: number } {
+  const [badges, setBadges] = useState({ inboxBadge: 0 });
   useEffect(() => {
     let cancelled = false;
     apiFetch("/api/signals?filter=all")
@@ -348,8 +339,7 @@ function useNavBadges(): { inboxBadge: number; tasksBadge: number } {
         if (cancelled) return;
         const signals = (body as { signals?: Signal[] }).signals ?? [];
         const inboxBadge = signals.filter((s) => s.requires_action).length;
-        const tasksBadge = signals.filter((s) => TASK_KINDS.has(s.kind)).length;
-        setBadges({ inboxBadge, tasksBadge });
+        setBadges({ inboxBadge });
       })
       .catch(() => {
         // Leave at 0 on auth/network failure.

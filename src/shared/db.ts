@@ -4,8 +4,6 @@
 // tests pass an in-memory fake. Lives in `shared/` because both FE and
 // Worker code depends on it.
 
-import type { StoredSignal } from "#/shared/signal";
-
 export type SupabaseLike = {
   from: (table: string) => {
     upsert: (
@@ -17,15 +15,16 @@ export type SupabaseLike = {
   };
 };
 
-type SelectChain = {
+export type SelectChain = {
   is: (col: string, val: null) => SelectChain;
   in: (col: string, vals: string[]) => SelectChain;
   ilike: (col: string, pattern: string) => SelectChain;
   or: (filter: string) => SelectChain;
   gte: (col: string, val: string) => SelectChain;
+  eq: (col: string, val: string) => SelectChain;
   order: (col: string, opts: { ascending: boolean }) => SelectChain;
   limit: (n: number) => Promise<{
-    data: StoredSignal[] | null;
+    data: Record<string, unknown>[] | null;
     error: { message: string } | null;
   }>;
 };

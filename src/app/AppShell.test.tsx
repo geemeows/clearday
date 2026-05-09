@@ -15,7 +15,7 @@ async function renderShell(initial = "/today") {
   const childRoutes = [
     "/today",
     "/inbox",
-    "/tasks",
+    "/projects",
     "/calendar",
     "/settings",
   ].map((path) =>
@@ -46,7 +46,7 @@ describe("AppShell sidebar", () => {
   it("renders Workspace nav buttons", async () => {
     await renderShell();
     const nav = await screen.findByRole("navigation", { name: /workspace/i });
-    for (const label of ["Today", "Inbox", "Tasks", "Calendar"]) {
+    for (const label of ["Today", "Inbox", "Projects", "Calendar"]) {
       expect(within(nav).getByRole("button", { name: label })).toBeTruthy();
     }
   });

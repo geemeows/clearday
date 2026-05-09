@@ -13,7 +13,8 @@ function listClient() {
   const ilike = vi.fn(() => chain);
   const or = vi.fn(() => chain);
   const gte = vi.fn(() => chain);
-  const chain = { is, in: inFn, ilike, or, gte, order, limit };
+  const eq = vi.fn(() => chain);
+  const chain = { is, in: inFn, ilike, or, gte, eq, order, limit };
   const select = vi.fn(() => chain);
   return {
     spies: { is, in: inFn, ilike, or, gte, order, limit, select },

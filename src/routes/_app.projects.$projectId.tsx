@@ -1,0 +1,301 @@
+import { createFileRoute } from "@tanstack/react-router";
+import { Plus } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import {
+  createCard,
+  listCards,
+  listColumns,
+  listProjects,
+  type StoredCard,
+  type StoredColumn,
+  type StoredProject,
+} from "#/features/projects/store";
+import { supabase } from "#/lib/supabase";
+import type { SupabaseLike } from "#/shared/db";
+
+export const Route = createFileRoute("/_app/projects/$projectId")({
+  component: ProjectBoardPage,
+});
+
+function ProjectBoardPage() {
+  const { projectId } = Route.useParams();
+  const client = supabase as unknown as SupabaseLike;
+
+  const [project, setProject] = useState<StoredProject | null>(null);
+  const [columns, setColumns] = useState<StoredColumn[]>([]);
+  const [cards, setCards] = useState<StoredCard[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    Promise.all([
+      listProjects(client),
+      listColumns(client, projectId),
+      listCards(client, projectId),
+    ])
+      .then(([projects, cols, cds]) => {
+        if (cancelled) return;
+        const found = projects.find((p) => p.id === projectId) ?? null;
+        setProject(found);
+        setColumns(cols);
+        setCards(cds);
+        setLoading(false);
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        setError(e instanceof Error ? e.message : "failed to load");
+        setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId]);
+
+  const handleAddCard = async (columnId: string, title: string) => {
+    const cardsInColumn = cards.filter((c) => c.column_id === columnId);
+    const nextOrder = cardsInColumn.length;
+    const id = crypto.randomUUID();
+    const newCard: StoredCard = {
+      id,
+      project_id: projectId,
+      column_id: columnId,
+      order: nextOrder,
+      title,
+      body: null,
+      priority: null,
+      tags: [],
+      due_at: null,
+      created_at: new Date().toISOString(),
+    };
+    setCards((prev) => [...prev, newCard]);
+    try {
+      await createCard(client, {
+        id,
+        project_id: projectId,
+        column_id: columnId,
+        order: nextOrder,
+        title,
+      });
+    } catch (e) {
+      setCards((prev) => prev.filter((c) => c.id !== id));
+      setError(e instanceof Error ? e.message : "failed to create card");
+    }
+  };
+
+  return (
+    <ProjectBoardView
+      project={project}
+      columns={columns}
+      cards={cards}
+      loading={loading}
+      error={error}
+      onAddCard={handleAddCard}
+    />
+  );
+}
+
+export function ProjectBoardView({
+  project,
+  columns,
+  cards,
+  loading,
+  error,
+  onAddCard,
+}: {
+  project: StoredProject | null;
+  columns: StoredColumn[];
+  cards: StoredCard[];
+  loading: boolean;
+  error: string | null;
+  onAddCard: (columnId: string, title: string) => void;
+}) {
+  return (
+    <section className="flex h-full flex-col overflow-hidden">
+      <header className="flex shrink-0 items-baseline gap-x-3 border-b border-border px-6 py-4">
+        <h1 className="font-semibold text-xl text-foreground tracking-tight">
+          {project?.name ?? "Project"}
+        </h1>
+        <span className="font-mono text-muted-foreground text-xs">
+          {cards.length} cards
+        </span>
+      </header>
+
+      {error && (
+        <div className="px-6 pt-4">
+          <p
+            role="alert"
+            className="rounded-sm border border-destructive/30 bg-destructive/10 p-3 text-destructive text-sm"
+          >
+            {error}
+          </p>
+        </div>
+      )}
+
+      {loading && !error && (
+        <p
+          aria-busy="true"
+          className="px-6 pt-4 text-muted-foreground text-sm"
+        >
+          Loading…
+        </p>
+      )}
+
+      {!loading && (
+        <div className="flex flex-1 gap-4 overflow-x-auto px-6 py-4">
+          {columns.map((col) => (
+            <KanbanColumn
+              key={col.id}
+              column={col}
+              cards={cards.filter((c) => c.column_id === col.id)}
+              onAddCard={(title) => onAddCard(col.id, title)}
+            />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function KanbanColumn({
+  column,
+  cards,
+  onAddCard,
+}: {
+  column: StoredColumn;
+  cards: StoredCard[];
+  onAddCard: (title: string) => void;
+}) {
+  const [composing, setComposing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const sorted = [...cards].sort((a, b) => a.order - b.order);
+
+  const startCompose = () => {
+    setComposing(true);
+    setDraft("");
+    requestAnimationFrame(() => inputRef.current?.focus());
+  };
+
+  const commit = () => {
+    const trimmed = draft.trim();
+    if (trimmed) onAddCard(trimmed);
+    setDraft("");
+    setComposing(false);
+  };
+
+  const cancel = () => {
+    setDraft("");
+    setComposing(false);
+  };
+
+  const wipOver =
+    column.wip_limit != null && cards.length > column.wip_limit;
+
+  return (
+    <article
+      aria-label={column.name}
+      className="flex w-64 shrink-0 flex-col rounded-lg border border-border bg-card"
+    >
+      <header className="flex items-center justify-between px-3 py-2.5">
+        <div className="flex items-center gap-2">
+          <span className="font-medium text-foreground text-sm">
+            {column.name}
+          </span>
+          <span
+            className={
+              wipOver
+                ? "rounded-full bg-destructive/15 px-1.5 py-0.5 font-mono text-[10px] text-destructive"
+                : "rounded-full bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground"
+            }
+          >
+            {cards.length}
+            {column.wip_limit != null ? `/${column.wip_limit}` : ""}
+          </span>
+        </div>
+        <button
+          type="button"
+          onClick={startCompose}
+          aria-label={`Add card to ${column.name}`}
+          className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
+        >
+          <Plus className="h-3.5 w-3.5" />
+        </button>
+      </header>
+
+      <ul
+        aria-label={`${column.name} cards`}
+        className="flex flex-1 flex-col gap-1.5 overflow-y-auto px-2 pb-2"
+      >
+        {sorted.map((card) => (
+          <li key={card.id}>
+            <CardChip card={card} />
+          </li>
+        ))}
+
+        {composing && (
+          <li>
+            <div className="rounded-md border border-primary/50 bg-background p-2 shadow-sm">
+              <input
+                ref={inputRef}
+                type="text"
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    commit();
+                  } else if (e.key === "Escape") {
+                    cancel();
+                  }
+                }}
+                placeholder="Card title…"
+                className="w-full bg-transparent text-foreground text-sm outline-none placeholder:text-muted-foreground"
+                aria-label="New card title"
+              />
+              <div className="mt-1.5 flex gap-1.5">
+                <button
+                  type="button"
+                  onClick={commit}
+                  disabled={!draft.trim()}
+                  className="rounded bg-primary px-2 py-0.5 text-[11px] text-primary-foreground disabled:opacity-50"
+                >
+                  Add
+                </button>
+                <button
+                  type="button"
+                  onClick={cancel}
+                  className="rounded px-2 py-0.5 text-[11px] text-muted-foreground hover:bg-accent"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </li>
+        )}
+      </ul>
+    </article>
+  );
+}
+
+function CardChip({ card }: { card: StoredCard }) {
+  return (
+    <article
+      aria-label={card.title}
+      className="rounded-md border border-border bg-background px-3 py-2 text-sm shadow-sm"
+    >
+      <span className="line-clamp-2 text-foreground">{card.title}</span>
+      {card.priority && (
+        <span
+          data-priority={card.priority}
+          className="mt-1 inline-block rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] uppercase text-muted-foreground"
+        >
+          {card.priority}
+        </span>
+      )}
+    </article>
+  );
+}
