@@ -4,6 +4,7 @@ import {
   createColumn,
   createProject,
   deleteCard,
+  deleteColumn,
   listCards,
   listColumns,
   listProjects,
@@ -11,6 +12,7 @@ import {
   type StoredColumn,
   type StoredProject,
   updateCard,
+  updateColumn,
 } from "#/features/projects/store";
 import type { SupabaseLike } from "#/shared/db";
 
@@ -247,6 +249,40 @@ describe("deleteCard", () => {
   it("throws when delete fails", async () => {
     const { client } = makeClient({ deleteResult: { error: { message: "boom" } } });
     await expect(deleteCard(client, "c1")).rejects.toThrow("boom");
+  });
+});
+
+describe("updateColumn", () => {
+  it("updates the row by id with patch fields", async () => {
+    const { client, spies } = makeClient();
+    await updateColumn(client, "col1", { name: "Renamed", wip_limit: 5 });
+    expect(spies.update).toHaveBeenCalledWith({ name: "Renamed", wip_limit: 5 });
+    expect(spies.updateEq).toHaveBeenCalledWith("id", "col1");
+  });
+
+  it("supports clearing wip_limit with null", async () => {
+    const { client, spies } = makeClient();
+    await updateColumn(client, "col1", { wip_limit: null });
+    expect(spies.update).toHaveBeenCalledWith({ wip_limit: null });
+  });
+
+  it("throws when update fails", async () => {
+    const { client } = makeClient({ updateResult: { error: { message: "col err" } } });
+    await expect(updateColumn(client, "col1", { name: "x" })).rejects.toThrow("col err");
+  });
+});
+
+describe("deleteColumn", () => {
+  it("deletes the row by id", async () => {
+    const { client, spies } = makeClient();
+    await deleteColumn(client, "col1");
+    expect(spies.delete).toHaveBeenCalled();
+    expect(spies.deleteEq).toHaveBeenCalledWith("id", "col1");
+  });
+
+  it("throws when delete fails", async () => {
+    const { client } = makeClient({ deleteResult: { error: { message: "del err" } } });
+    await expect(deleteColumn(client, "col1")).rejects.toThrow("del err");
   });
 });
 

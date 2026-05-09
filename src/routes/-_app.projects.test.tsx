@@ -581,6 +581,150 @@ describe("ProjectBoardView — keyboard ←/→ moves", () => {
   });
 });
 
+// ─── ProjectBoardView — column settings panel ────────────────────────────────
+
+describe("ProjectBoardView — column settings", () => {
+  const noop = () => {};
+
+  function renderWithCols(
+    cols: StoredColumn[],
+    cards: StoredCard[],
+    handlers: {
+      onUpdateColumn?: (id: string, patch: { name?: string; wip_limit?: number | null; order?: number }) => void;
+      onDeleteColumn?: (id: string) => void;
+      onAddColumn?: (name: string) => void;
+      onReorderColumns?: (movedId: string, afterId: string | null) => void;
+    } = {},
+  ) {
+    render(
+      <ProjectBoardView
+        project={project()}
+        columns={cols}
+        cards={cards}
+        loading={false}
+        error={null}
+        onAddCard={noop}
+        {...handlers}
+      />,
+    );
+  }
+
+  it("opens the column settings panel when the settings button is clicked", () => {
+    renderWithCols([column()], []);
+    fireEvent.click(screen.getByRole("button", { name: /column settings/i }));
+    expect(screen.getByRole("dialog", { name: "Column settings" })).toBeTruthy();
+  });
+
+  it("closes the settings panel when Close is clicked", () => {
+    renderWithCols([column()], []);
+    fireEvent.click(screen.getByRole("button", { name: /column settings/i }));
+    fireEvent.click(screen.getByRole("button", { name: /close column settings/i }));
+    expect(screen.queryByRole("dialog", { name: "Column settings" })).toBeNull();
+  });
+
+  it("shows rename input for each column", () => {
+    const cols = [
+      column({ id: "c1", name: "Backlog", order: 0 }),
+      column({ id: "c2", name: "Done", order: 1 }),
+    ];
+    renderWithCols(cols, []);
+    fireEvent.click(screen.getByRole("button", { name: /column settings/i }));
+    expect(screen.getByRole("textbox", { name: /rename column backlog/i })).toBeTruthy();
+    expect(screen.getByRole("textbox", { name: /rename column done/i })).toBeTruthy();
+  });
+
+  it("calls onUpdateColumn with new name on blur", async () => {
+    const onUpdateColumn = vi.fn();
+    renderWithCols([column({ id: "c1", name: "Backlog" })], [], { onUpdateColumn });
+    fireEvent.click(screen.getByRole("button", { name: /column settings/i }));
+    const input = screen.getByRole("textbox", { name: /rename column backlog/i });
+    fireEvent.change(input, { target: { value: "Sprint" } });
+    fireEvent.blur(input);
+    await waitFor(() =>
+      expect(onUpdateColumn).toHaveBeenCalledWith("c1", { name: "Sprint" }),
+    );
+  });
+
+  it("calls onReorderColumns when move up is clicked", () => {
+    const onReorderColumns = vi.fn();
+    const cols = [
+      column({ id: "c1", name: "Backlog", order: 0 }),
+      column({ id: "c2", name: "Done", order: 1 }),
+    ];
+    renderWithCols(cols, [], { onReorderColumns });
+    fireEvent.click(screen.getByRole("button", { name: /column settings/i }));
+    fireEvent.click(screen.getByRole("button", { name: /move done up/i }));
+    expect(onReorderColumns).toHaveBeenCalledWith("c2", null);
+  });
+
+  it("calls onReorderColumns when move down is clicked", () => {
+    const onReorderColumns = vi.fn();
+    const cols = [
+      column({ id: "c1", name: "Backlog", order: 0 }),
+      column({ id: "c2", name: "Done", order: 1 }),
+    ];
+    renderWithCols(cols, [], { onReorderColumns });
+    fireEvent.click(screen.getByRole("button", { name: /column settings/i }));
+    fireEvent.click(screen.getByRole("button", { name: /move backlog down/i }));
+    expect(onReorderColumns).toHaveBeenCalledWith("c1", "c2");
+  });
+
+  it("delete button is disabled when there is only one column", () => {
+    renderWithCols([column({ id: "c1", name: "Backlog" })], []);
+    fireEvent.click(screen.getByRole("button", { name: /column settings/i }));
+    const deleteBtn = screen.getByRole("button", { name: /cannot delete/i });
+    expect((deleteBtn as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("shows confirm step when delete is clicked on a non-empty column", () => {
+    const cols = [
+      column({ id: "c1", name: "Backlog", order: 0 }),
+      column({ id: "c2", name: "Done", order: 1 }),
+    ];
+    const cards = [card({ id: "k1", column_id: "c1" })];
+    renderWithCols(cols, cards);
+    fireEvent.click(screen.getByRole("button", { name: /column settings/i }));
+    fireEvent.click(screen.getByRole("button", { name: /delete column backlog/i }));
+    expect(screen.getByRole("button", { name: /confirm delete backlog/i })).toBeTruthy();
+  });
+
+  it("calls onDeleteColumn after confirming delete", async () => {
+    const onDeleteColumn = vi.fn();
+    const cols = [
+      column({ id: "c1", name: "Backlog", order: 0 }),
+      column({ id: "c2", name: "Done", order: 1 }),
+    ];
+    renderWithCols(cols, [], { onDeleteColumn });
+    fireEvent.click(screen.getByRole("button", { name: /column settings/i }));
+    fireEvent.click(screen.getByRole("button", { name: /delete column backlog/i }));
+    fireEvent.click(screen.getByRole("button", { name: /confirm delete backlog/i }));
+    await waitFor(() => expect(onDeleteColumn).toHaveBeenCalledWith("c1"));
+  });
+
+  it("calls onAddColumn when a new column name is submitted", async () => {
+    const onAddColumn = vi.fn();
+    renderWithCols([column()], [], { onAddColumn });
+    fireEvent.click(screen.getByRole("button", { name: /column settings/i }));
+    fireEvent.change(screen.getByRole("textbox", { name: /new column name/i }), {
+      target: { value: "Review" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^add column$/i }));
+    await waitFor(() => expect(onAddColumn).toHaveBeenCalledWith("Review"));
+  });
+
+  it("calls onUpdateColumn with wip_limit when the WIP input changes", async () => {
+    const onUpdateColumn = vi.fn();
+    renderWithCols([column({ id: "c1", name: "Backlog" })], [], { onUpdateColumn });
+    fireEvent.click(screen.getByRole("button", { name: /column settings/i }));
+    fireEvent.change(screen.getByRole("spinbutton", { name: /wip limit/i }), {
+      target: { value: "3" },
+    });
+    await waitFor(() =>
+      expect(onUpdateColumn).toHaveBeenCalledWith("c1", { wip_limit: 3 }),
+    );
+  });
+});
+
 // ─── ProjectBoardView — project switcher ─────────────────────────────────────
 
 describe("ProjectBoardView — project switcher", () => {

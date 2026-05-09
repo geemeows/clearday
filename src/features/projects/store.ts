@@ -109,6 +109,34 @@ export async function createCard(
   if (error) throw new Error(`card create failed: ${error.message}`);
 }
 
+export type ColumnPatch = {
+  name?: string;
+  wip_limit?: number | null;
+  order?: number;
+};
+
+export async function updateColumn(
+  client: SupabaseLike,
+  id: string,
+  patch: ColumnPatch,
+): Promise<void> {
+  const { error } = await client
+    .from("project_columns")
+    .update(patch as Record<string, unknown>)
+    .eq("id", id);
+  if (error) throw new Error(`column update failed: ${error.message}`);
+}
+
+export async function deleteColumn(
+  client: SupabaseLike,
+  id: string,
+): Promise<void> {
+  const del = client.from("project_columns").delete;
+  if (!del) throw new Error("column delete failed: client missing delete()");
+  const { error } = await del().eq("id", id);
+  if (error) throw new Error(`column delete failed: ${error.message}`);
+}
+
 export type CardPatch = {
   title?: string;
   body?: string | null;

@@ -1,16 +1,20 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router";
-import { Calendar, ChevronDown, Plus } from "lucide-react";
+import { Calendar, ChevronDown, Plus, Settings, X, ChevronUp, Trash2 } from "lucide-react";
 import { useRef, useEffect, useState } from "react";
 import { CardDetailPane } from "#/features/projects/CardDetailPane";
 import {
   moveBetweenColumns,
+  reorderColumns,
   reorderWithinColumn,
   type OrderableCard,
 } from "#/features/projects/order";
 import {
   type CardPatch,
+  type ColumnPatch,
   createCard,
+  createColumn,
   deleteCard,
+  deleteColumn,
   listCards,
   listColumns,
   listProjects,
@@ -18,6 +22,7 @@ import {
   type StoredColumn,
   type StoredProject,
   updateCard,
+  updateColumn,
 } from "#/features/projects/store";
 import { supabase } from "#/lib/supabase";
 import type { SupabaseLike } from "#/shared/db";
@@ -179,6 +184,78 @@ function ProjectBoardPage() {
     }
   };
 
+  const handleUpdateColumn = async (colId: string, patch: ColumnPatch) => {
+    const prev = columns;
+    setColumns((cs) =>
+      cs.map((c) => (c.id === colId ? { ...c, ...patch } : c)),
+    );
+    try {
+      await updateColumn(client, colId, patch);
+    } catch (e) {
+      setColumns(prev);
+      setError(e instanceof Error ? e.message : "failed to update column");
+    }
+  };
+
+  const handleDeleteColumn = async (colId: string) => {
+    const prev = columns;
+    const prevCards = cards;
+    setColumns((cs) => cs.filter((c) => c.id !== colId));
+    setCards((cs) => cs.filter((c) => c.column_id !== colId));
+    try {
+      await deleteColumn(client, colId);
+    } catch (e) {
+      setColumns(prev);
+      setCards(prevCards);
+      setError(e instanceof Error ? e.message : "failed to delete column");
+    }
+  };
+
+  const handleAddColumn = async (name: string) => {
+    const sorted = [...columns].sort((a, b) => a.order - b.order);
+    const nextOrder = sorted.length;
+    const id = crypto.randomUUID();
+    const newCol: StoredColumn = {
+      id,
+      project_id: projectId,
+      name,
+      order: nextOrder,
+      wip_limit: null,
+    };
+    setColumns((prev) => [...prev, newCol]);
+    try {
+      await createColumn(client, {
+        id,
+        project_id: projectId,
+        name,
+        order: nextOrder,
+      });
+    } catch (e) {
+      setColumns((prev) => prev.filter((c) => c.id !== id));
+      setError(e instanceof Error ? e.message : "failed to add column");
+    }
+  };
+
+  const handleReorderColumns = async (movedId: string, afterId: string | null) => {
+    const orderable = columns.map((c) => ({ id: c.id, order: c.order }));
+    const reordered = reorderColumns(orderable, movedId, afterId);
+    const prev = columns;
+    setColumns((cs) =>
+      cs.map((c) => {
+        const r = reordered.find((x) => x.id === c.id);
+        return r ? { ...c, order: r.order } : c;
+      }),
+    );
+    try {
+      await Promise.all(
+        reordered.map((r) => updateColumn(client, r.id, { order: r.order })),
+      );
+    } catch (e) {
+      setColumns(prev);
+      setError(e instanceof Error ? e.message : "failed to reorder columns");
+    }
+  };
+
   return (
     <ProjectBoardView
       project={project}
@@ -191,6 +268,10 @@ function ProjectBoardPage() {
       onUpdateCard={handleUpdateCard}
       onDeleteCard={handleDeleteCard}
       onMoveCard={handleMoveCard}
+      onUpdateColumn={handleUpdateColumn}
+      onDeleteColumn={handleDeleteColumn}
+      onAddColumn={handleAddColumn}
+      onReorderColumns={handleReorderColumns}
       onNavigateToProject={(id) =>
         router.navigate({
           to: "/projects/$projectId",
@@ -215,6 +296,10 @@ export function ProjectBoardView({
   onUpdateCard,
   onDeleteCard,
   onMoveCard,
+  onUpdateColumn,
+  onDeleteColumn,
+  onAddColumn,
+  onReorderColumns,
   onNavigateToProject,
   onNewProject,
 }: {
@@ -232,11 +317,16 @@ export function ProjectBoardView({
     toColumnId: string,
     afterId: string | null,
   ) => void;
+  onUpdateColumn?: (colId: string, patch: ColumnPatch) => void;
+  onDeleteColumn?: (colId: string) => void;
+  onAddColumn?: (name: string) => void;
+  onReorderColumns?: (movedId: string, afterId: string | null) => void;
   onNavigateToProject?: (id: string) => void;
   onNewProject?: () => void;
 }) {
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   const [switcherOpen, setSwitcherOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const selectedCard = selectedCardId
     ? (cards.find((c) => c.id === selectedCardId) ?? null)
     : null;
@@ -305,6 +395,16 @@ export function ProjectBoardView({
         <span className="font-mono text-muted-foreground text-xs">
           {cards.length} cards
         </span>
+        <div className="ml-auto">
+          <button
+            type="button"
+            aria-label="Column settings"
+            onClick={() => setSettingsOpen(true)}
+            className="flex h-7 w-7 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
+          >
+            <Settings className="h-4 w-4" />
+          </button>
+        </div>
       </header>
 
       {error && (
@@ -329,19 +429,21 @@ export function ProjectBoardView({
 
       {!loading && (
         <div className="flex flex-1 gap-4 overflow-x-auto px-6 py-4">
-          {columns.map((col) => (
-            <KanbanColumn
-              key={col.id}
-              column={col}
-              cards={cards.filter((c) => c.column_id === col.id)}
-              allColumns={columns}
-              allCards={cards}
-              onAddCard={(title) => onAddCard(col.id, title)}
-              onSelectCard={setSelectedCardId}
-              onMoveCard={onMoveCard}
-              dragCardIdRef={dragCardIdRef}
-            />
-          ))}
+          {[...columns]
+            .sort((a, b) => a.order - b.order)
+            .map((col) => (
+              <KanbanColumn
+                key={col.id}
+                column={col}
+                cards={cards.filter((c) => c.column_id === col.id)}
+                allColumns={columns}
+                allCards={cards}
+                onAddCard={(title) => onAddCard(col.id, title)}
+                onSelectCard={setSelectedCardId}
+                onMoveCard={onMoveCard}
+                dragCardIdRef={dragCardIdRef}
+              />
+            ))}
         </div>
       )}
 
@@ -357,7 +459,271 @@ export function ProjectBoardView({
           onClose={() => setSelectedCardId(null)}
         />
       )}
+
+      {settingsOpen && (
+        <ColumnSettingsPanel
+          columns={columns}
+          cards={cards}
+          onRename={(id, name) => onUpdateColumn?.(id, { name })}
+          onSetWipLimit={(id, wip_limit) => onUpdateColumn?.(id, { wip_limit })}
+          onDelete={(id) => onDeleteColumn?.(id)}
+          onAdd={(name) => onAddColumn?.(name)}
+          onReorder={(movedId, afterId) => onReorderColumns?.(movedId, afterId)}
+          onClose={() => setSettingsOpen(false)}
+        />
+      )}
     </section>
+  );
+}
+
+function ColumnSettingsPanel({
+  columns,
+  cards,
+  onRename,
+  onSetWipLimit,
+  onDelete,
+  onAdd,
+  onReorder,
+  onClose,
+}: {
+  columns: StoredColumn[];
+  cards: StoredCard[];
+  onRename: (id: string, name: string) => void;
+  onSetWipLimit: (id: string, wip_limit: number | null) => void;
+  onDelete: (id: string) => void;
+  onAdd: (name: string) => void;
+  onReorder: (movedId: string, afterId: string | null) => void;
+  onClose: () => void;
+}) {
+  const sorted = [...columns].sort((a, b) => a.order - b.order);
+  const [draftNames, setDraftNames] = useState<Record<string, string>>(
+    () => Object.fromEntries(columns.map((c) => [c.id, c.name])),
+  );
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [newColName, setNewColName] = useState("");
+
+  // Keep draft names in sync when columns change (e.g. after add).
+  useEffect(() => {
+    setDraftNames((prev) => {
+      const next = { ...prev };
+      for (const col of columns) {
+        if (!(col.id in next)) next[col.id] = col.name;
+      }
+      return next;
+    });
+  }, [columns]);
+
+  const moveUp = (colId: string) => {
+    const idx = sorted.findIndex((c) => c.id === colId);
+    if (idx <= 0) return;
+    const afterId = idx >= 2 ? sorted[idx - 2].id : null;
+    onReorder(colId, afterId);
+  };
+
+  const moveDown = (colId: string) => {
+    const idx = sorted.findIndex((c) => c.id === colId);
+    if (idx < 0 || idx >= sorted.length - 1) return;
+    const afterId = sorted[idx + 1].id;
+    onReorder(colId, afterId);
+  };
+
+  const handleAddColumn = () => {
+    const name = newColName.trim();
+    if (!name) return;
+    onAdd(name);
+    setNewColName("");
+  };
+
+  return (
+    <>
+      {/* Backdrop */}
+      <div
+        aria-hidden="true"
+        className="fixed inset-0 z-40 bg-black/20"
+        onClick={onClose}
+      />
+      {/* Panel */}
+      <aside
+        role="dialog"
+        aria-label="Column settings"
+        aria-modal="true"
+        className="fixed right-0 top-0 z-50 flex h-full w-80 flex-col border-l border-border bg-background shadow-xl"
+      >
+        <header className="flex shrink-0 items-center justify-between border-b border-border px-4 py-3">
+          <span className="font-semibold text-foreground text-sm">
+            Column settings
+          </span>
+          <button
+            type="button"
+            aria-label="Close column settings"
+            onClick={onClose}
+            className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </header>
+
+        <div className="flex flex-1 flex-col gap-2 overflow-y-auto px-4 py-3">
+          {sorted.map((col, idx) => {
+            const cardCount = cards.filter((c) => c.column_id === col.id).length;
+            const isLast = sorted.length === 1;
+            const isDeleting = deleteConfirmId === col.id;
+
+            return (
+              <div
+                key={col.id}
+                className="rounded-md border border-border bg-card p-3"
+              >
+                {/* Name row */}
+                <div className="flex items-center gap-2">
+                  <div className="flex flex-col gap-0.5">
+                    <button
+                      type="button"
+                      aria-label={`Move ${col.name} up`}
+                      disabled={idx === 0}
+                      onClick={() => moveUp(col.id)}
+                      className="flex h-4 w-4 items-center justify-center rounded text-muted-foreground hover:bg-accent disabled:opacity-30"
+                    >
+                      <ChevronUp className="h-3 w-3" />
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`Move ${col.name} down`}
+                      disabled={idx === sorted.length - 1}
+                      onClick={() => moveDown(col.id)}
+                      className="flex h-4 w-4 items-center justify-center rounded text-muted-foreground hover:bg-accent disabled:opacity-30"
+                    >
+                      <ChevronDown className="h-3 w-3" />
+                    </button>
+                  </div>
+                  <input
+                    type="text"
+                    aria-label={`Rename column ${col.name}`}
+                    value={draftNames[col.id] ?? col.name}
+                    onChange={(e) =>
+                      setDraftNames((prev) => ({
+                        ...prev,
+                        [col.id]: e.target.value,
+                      }))
+                    }
+                    onBlur={() => {
+                      const trimmed = (draftNames[col.id] ?? "").trim();
+                      if (trimmed && trimmed !== col.name) {
+                        onRename(col.id, trimmed);
+                      } else if (!trimmed) {
+                        setDraftNames((prev) => ({ ...prev, [col.id]: col.name }));
+                      }
+                    }}
+                    className="min-w-0 flex-1 rounded border border-transparent bg-transparent px-1.5 py-0.5 text-foreground text-sm outline-none focus:border-border focus:bg-muted"
+                  />
+                  <button
+                    type="button"
+                    aria-label={
+                      isLast
+                        ? "Cannot delete the only column"
+                        : `Delete column ${col.name}`
+                    }
+                    title={isLast ? "Projects must have at least one column" : undefined}
+                    disabled={isLast}
+                    onClick={() =>
+                      setDeleteConfirmId(isDeleting ? null : col.id)
+                    }
+                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-destructive/10 hover:text-destructive disabled:cursor-not-allowed disabled:opacity-30"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+
+                {/* WIP limit row */}
+                <div className="mt-2 flex items-center gap-2 pl-8">
+                  <label
+                    htmlFor={`wip-${col.id}`}
+                    className="shrink-0 text-muted-foreground text-xs"
+                  >
+                    WIP limit
+                  </label>
+                  <input
+                    id={`wip-${col.id}`}
+                    type="number"
+                    min={1}
+                    placeholder="none"
+                    value={col.wip_limit ?? ""}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      onSetWipLimit(
+                        col.id,
+                        val === "" ? null : Math.max(1, Number.parseInt(val, 10)),
+                      );
+                    }}
+                    className="w-20 rounded border border-border bg-muted px-2 py-0.5 text-right text-foreground text-xs outline-none focus:border-primary"
+                  />
+                </div>
+
+                {/* Delete confirm */}
+                {isDeleting && (
+                  <div className="mt-2 rounded bg-destructive/10 p-2 pl-8">
+                    <p className="text-destructive text-xs">
+                      {cardCount > 0
+                        ? `Delete "${col.name}" and its ${cardCount} card${cardCount === 1 ? "" : "s"}?`
+                        : `Delete "${col.name}"?`}
+                    </p>
+                    <div className="mt-1.5 flex gap-1.5">
+                      <button
+                        type="button"
+                        aria-label={`Confirm delete ${col.name}`}
+                        onClick={() => {
+                          onDelete(col.id);
+                          setDeleteConfirmId(null);
+                        }}
+                        className="rounded bg-destructive px-2 py-0.5 text-[11px] text-destructive-foreground"
+                      >
+                        Delete
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDeleteConfirmId(null)}
+                        className="rounded px-2 py-0.5 text-[11px] text-muted-foreground hover:bg-accent"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Add column */}
+        <div className="shrink-0 border-t border-border px-4 py-3">
+          <div className="flex gap-2">
+            <input
+              type="text"
+              aria-label="New column name"
+              placeholder="Column name…"
+              value={newColName}
+              onChange={(e) => setNewColName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  handleAddColumn();
+                }
+              }}
+              className="min-w-0 flex-1 rounded border border-border bg-muted px-2 py-1 text-foreground text-sm outline-none focus:border-primary placeholder:text-muted-foreground"
+            />
+            <button
+              type="button"
+              aria-label="Add column"
+              disabled={!newColName.trim()}
+              onClick={handleAddColumn}
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded bg-primary text-primary-foreground disabled:opacity-50"
+            >
+              <Plus className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      </aside>
+    </>
   );
 }
 
