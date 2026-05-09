@@ -28,6 +28,13 @@ export type UpsertSignalOptions = {
    * clobber existing overrides.
    */
   automations?: Automation[];
+  /**
+   * `provider_accounts.id` of the Account the Signal arrived on. Stamped on
+   * every row so multi-account provenance survives joins. The orchestrator
+   * passes this for every poll; ad-hoc callers (tests, internal helpers)
+   * may omit it and the write still upserts on the relaxed unique.
+   */
+  accountId?: string | null;
   now?: Date;
 };
 
@@ -63,6 +70,7 @@ export async function upsertSignals(
       source_created_at: signal.source_created_at,
       updated_at: nowIso,
     };
+    if (options.accountId !== undefined) values.account_id = options.accountId;
     if (application) {
       if (application.dismissed) values.dismissed_at = nowIso;
       if (application.snoozed_until)
@@ -77,7 +85,7 @@ export async function upsertSignals(
 
   const { error } = await client
     .from("signals")
-    .upsert(rows, { onConflict: "provider,kind,source_id" });
+    .upsert(rows, { onConflict: "provider,account_id,kind,source_id" });
   if (error) throw new Error(`signal upsert failed: ${error.message}`);
 }
 

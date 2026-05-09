@@ -27,7 +27,7 @@ export function persistProviderAccount(env: PersistEnv) {
         metadata: record.metadata,
         updated_at: new Date().toISOString(),
       },
-      { onConflict: "provider" },
+      { onConflict: "provider,account_id" },
     );
     if (error)
       throw new Error(`provider_accounts upsert failed: ${error.message}`);

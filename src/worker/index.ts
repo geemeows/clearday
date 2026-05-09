@@ -68,6 +68,10 @@ import {
 } from "#/features/email-digest/api";
 import { startFocusSession } from "#/features/focus/session";
 import {
+  listAccounts,
+  promotePrimary,
+} from "#/features/integrations/accounts/store";
+import {
   disconnectIntegration,
   getIntegrations,
   type IntegrationsStore,
@@ -618,6 +622,35 @@ export default {
       return json(await getIntegrations(integrationsStore(service)));
     }
 
+    {
+      const accountsMatch = url.pathname.match(
+        /^\/api\/providers\/([^/]+)\/accounts$/,
+      );
+      if (accountsMatch && request.method === "GET") {
+        const providerId = decodeURIComponent(accountsMatch[1] ?? "");
+        const accounts = await listAccounts(service, { providerId });
+        return json({ accounts });
+      }
+    }
+
+    {
+      const promoteMatch = url.pathname.match(
+        /^\/api\/accounts\/([^/]+)\/primary$/,
+      );
+      if (promoteMatch && request.method === "POST") {
+        const accountId = decodeURIComponent(promoteMatch[1] ?? "");
+        try {
+          await promotePrimary(service, accountId);
+        } catch (err) {
+          return json(
+            { ok: false, error: err instanceof Error ? err.message : String(err) },
+            400,
+          );
+        }
+        return json({ ok: true });
+      }
+    }
+
     const disconnectMatch = url.pathname.match(
       /^\/api\/integrations\/([^/]+)$/,
     );
@@ -681,10 +714,11 @@ export default {
           const { data, error } = await service
             .from("provider_accounts")
             .select(
-              "provider, access_token, refresh_token, expires_at, account_id",
+              "id, provider, access_token, refresh_token, expires_at, account_id",
             );
           if (error) throw new Error(error.message);
           return (data ?? []) as Array<{
+            id: string;
             provider: string;
             access_token: string | null;
             refresh_token: string | null;
@@ -1833,7 +1867,7 @@ function integrationsStore(service: SupabaseService): IntegrationsStore {
       const { data, error } = await service
         .from("provider_accounts")
         .select(
-          "provider, account_id, scopes, expires_at, created_at, updated_at",
+          'provider, account_id, scopes, expires_at, created_at, updated_at, "primary"',
         );
       if (error) throw new Error(error.message);
       return (data ?? []) as ProviderAccountRow[];

@@ -45,6 +45,10 @@ export type CapabilityCtx = {
  * shape into every consumer.
  */
 export type ProviderAccountRow = {
+  /** Synthetic `provider_accounts.id` (uuid). Stamped on inbound Signals
+   *  for multi-account provenance. Optional only because pre-migration
+   *  test fixtures may omit it. */
+  id?: string;
   provider: string;
   access_token: string | null;
   refresh_token: string | null;

@@ -95,22 +95,40 @@ export async function handleSources(
   now: number = Date.now(),
 ): Promise<Response> {
   const rows = await loadAccounts();
-  const byProvider = new Map(rows.map((r) => [r.provider, r]));
-  const sources: SourceStatus[] = PROVIDERS.map((provider) => {
-    const row = byProvider.get(provider);
-    return {
-      provider,
-      status: deriveProviderAccountStatus({
-        providerId: provider,
-        rowPresent: row !== undefined,
-        rowStatus: row?.status ?? null,
-        lastPolledAt: row?.last_polled_at ?? null,
-        now,
-      }),
-      account_id: row?.account_id ?? null,
-      updated_at: row?.updated_at ?? null,
-      last_polled_at: row?.last_polled_at ?? null,
-    };
-  });
+  const sources: SourceStatus[] = [];
+  for (const provider of PROVIDERS) {
+    const matches = rows.filter((r) => r.provider === provider);
+    if (matches.length === 0) {
+      sources.push({
+        provider,
+        status: deriveProviderAccountStatus({
+          providerId: provider,
+          rowPresent: false,
+          rowStatus: null,
+          lastPolledAt: null,
+          now,
+        }),
+        account_id: null,
+        updated_at: null,
+        last_polled_at: null,
+      });
+      continue;
+    }
+    for (const row of matches) {
+      sources.push({
+        provider,
+        status: deriveProviderAccountStatus({
+          providerId: provider,
+          rowPresent: true,
+          rowStatus: row.status ?? null,
+          lastPolledAt: row.last_polled_at ?? null,
+          now,
+        }),
+        account_id: row.account_id ?? null,
+        updated_at: row.updated_at ?? null,
+        last_polled_at: row.last_polled_at ?? null,
+      });
+    }
+  }
   return json({ sources });
 }

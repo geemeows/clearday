@@ -308,4 +308,33 @@ describe("handleSources", () => {
     const slack = body.sources.find((s) => s.provider === "slack");
     expect(slack?.status).toBe("stale");
   });
+
+  it("returns one source row per (provider, account_id)", async () => {
+    const res = await handleSources(async () => [
+      {
+        provider: "github",
+        account_id: "personal",
+        updated_at: "2026-05-01T00:00:00Z",
+        status: "ok",
+      },
+      {
+        provider: "github",
+        account_id: "work",
+        updated_at: "2026-05-02T00:00:00Z",
+        status: "auth_failed",
+      },
+    ]);
+    const body = (await res.json()) as {
+      sources: Array<{
+        provider: string;
+        account_id: string | null;
+        status: string;
+      }>;
+    };
+    const github = body.sources.filter((s) => s.provider === "github");
+    expect(github).toHaveLength(2);
+    const map = Object.fromEntries(github.map((s) => [s.account_id, s.status]));
+    expect(map.personal).toBe("ok");
+    expect(map.work).toBe("auth_failed");
+  });
 });

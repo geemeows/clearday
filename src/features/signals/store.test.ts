@@ -96,7 +96,9 @@ describe("upsertSignal", () => {
     await upsertSignal(client, sample);
     expect(spies.upsert).toHaveBeenCalledTimes(1);
     const [rows, opts] = spies.upsert.mock.calls[0];
-    expect(opts).toEqual({ onConflict: "provider,kind,source_id" });
+    expect(opts).toEqual({
+      onConflict: "provider,account_id,kind,source_id",
+    });
     const values = rows[0];
     expect(values).toMatchObject({
       provider: "github",
