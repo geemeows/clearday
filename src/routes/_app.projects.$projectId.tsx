@@ -1,4 +1,5 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router";
+import { z } from "zod";
 import { Calendar, ChevronDown, Plus, Settings, X, ChevronUp, Trash2 } from "lucide-react";
 import { useRef, useEffect, useState } from "react";
 import { CardDetailPane } from "#/features/projects/CardDetailPane";
@@ -27,12 +28,18 @@ import {
 import { supabase } from "#/lib/supabase";
 import type { SupabaseLike } from "#/shared/db";
 
+const searchSchema = z.object({
+  card: z.string().optional(),
+});
+
 export const Route = createFileRoute("/_app/projects/$projectId")({
+  validateSearch: searchSchema,
   component: ProjectBoardPage,
 });
 
 function ProjectBoardPage() {
   const { projectId } = Route.useParams();
+  const { card: initialCardId } = Route.useSearch();
   const router = useRouter();
   const client = supabase as unknown as SupabaseLike;
 
@@ -264,6 +271,7 @@ function ProjectBoardPage() {
       cards={cards}
       loading={loading}
       error={error}
+      initialCardId={initialCardId}
       onAddCard={handleAddCard}
       onUpdateCard={handleUpdateCard}
       onDeleteCard={handleDeleteCard}
@@ -292,6 +300,7 @@ export function ProjectBoardView({
   cards,
   loading,
   error,
+  initialCardId,
   onAddCard,
   onUpdateCard,
   onDeleteCard,
@@ -309,6 +318,7 @@ export function ProjectBoardView({
   cards: StoredCard[];
   loading: boolean;
   error: string | null;
+  initialCardId?: string;
   onAddCard: (columnId: string, title: string) => void;
   onUpdateCard?: (cardId: string, patch: CardPatch) => void;
   onDeleteCard?: (cardId: string) => void;
@@ -324,7 +334,9 @@ export function ProjectBoardView({
   onNavigateToProject?: (id: string) => void;
   onNewProject?: () => void;
 }) {
-  const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
+  const [selectedCardId, setSelectedCardId] = useState<string | null>(
+    initialCardId ?? null,
+  );
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const selectedCard = selectedCardId

@@ -28,6 +28,12 @@ import { useAutoRefresh } from "#/hooks/use-auto-refresh";
 import { useDismissedAlerts } from "#/hooks/useDismissedAlerts";
 import { apiFetch } from "#/lib/api-client";
 import type { StoredSignal } from "#/shared/signal";
+import {
+  listCardsDueOn,
+  type DueCard,
+} from "#/features/projects/store";
+import { supabase } from "#/lib/supabase";
+import type { SupabaseLike } from "#/shared/db";
 
 export const Route = createFileRoute("/_app/today")({
   component: TodayPage,
@@ -122,6 +128,7 @@ function TodayPage() {
       schedule={
         meetings != null && <TodaySchedule events={todaysMeetings} now={now} />
       }
+      dueToday={<DueTodayCard now={now} />}
       inboxPreview={<InboxPreviewCard />}
       inProgress={<InProgressCard />}
       weekStats={<PulseCard now={now} />}
@@ -138,6 +145,7 @@ export function TodayView({
   summary,
   nextUp,
   briefing,
+  dueToday,
   schedule,
   inboxPreview,
   inProgress,
@@ -151,6 +159,7 @@ export function TodayView({
   summary?: ReactNode;
   nextUp?: ReactNode;
   briefing?: ReactNode;
+  dueToday?: ReactNode;
   schedule?: ReactNode;
   inboxPreview?: ReactNode;
   inProgress?: ReactNode;
@@ -180,6 +189,8 @@ export function TodayView({
       {nextUp}
 
       {briefing}
+
+      {dueToday}
 
       <div className="grid gap-6 md:grid-cols-2">
         {inboxPreview}
@@ -808,6 +819,106 @@ export function useInProgressTickets(
     };
   }, [loader]);
   return { tickets, error };
+}
+
+type DueTodayLoader = (date: Date) => Promise<DueCard[]>;
+
+const defaultDueTodayLoader: DueTodayLoader = (date: Date) => {
+  const client = supabase as unknown as SupabaseLike;
+  return listCardsDueOn(client, date);
+};
+
+const PRIORITY_LABEL: Record<string, string> = {
+  p0: "P0",
+  p1: "P1",
+  p2: "P2",
+  p3: "P3",
+};
+
+export function DueTodayCard({
+  now,
+  loader = defaultDueTodayLoader,
+}: {
+  now: Date;
+  loader?: DueTodayLoader;
+}) {
+  const [cards, setCards] = useState<DueCard[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    loader(now)
+      .then((list) => {
+        if (cancelled) return;
+        setCards(list);
+        setError(null);
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        setError(e instanceof Error ? e.message : "failed to load");
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loader]);
+
+  if (!error && cards != null && cards.length === 0) return null;
+
+  return (
+    <article
+      aria-label="Due today"
+      className="rounded-lg border border-border bg-card p-5"
+    >
+      <header className="flex items-baseline gap-2">
+        <span className="font-semibold text-base text-foreground">
+          Due today
+        </span>
+        {cards != null && cards.length > 0 && (
+          <span className="text-muted-foreground text-xs">
+            {cards.length} {plural(cards.length, "card")}
+          </span>
+        )}
+      </header>
+      {error && <p className="mt-3 text-destructive text-sm">{error}</p>}
+      {!error && cards == null && (
+        <p className="mt-3 text-muted-foreground text-sm">Loading…</p>
+      )}
+      {!error && cards != null && cards.length > 0 && (
+        <ul className="mt-2 flex flex-col">
+          {cards.map((c) => (
+            <li
+              key={c.id}
+              className="flex items-center gap-3 border-border border-b py-3 last:border-0"
+            >
+              {c.priority && (
+                <span className="rounded-md bg-secondary px-2 py-0.5 font-mono font-semibold text-[11px] text-foreground">
+                  {PRIORITY_LABEL[c.priority] ?? c.priority}
+                </span>
+              )}
+              <span className="min-w-0 flex-1">
+                <span className="block truncate font-medium text-foreground text-sm">
+                  {c.title}
+                </span>
+                <span className="block truncate font-mono text-[11px] text-muted-foreground">
+                  {c.project_name}
+                </span>
+              </span>
+              <Link
+                to="/projects/$projectId"
+                params={{ projectId: c.project_id }}
+                search={{ card: c.id }}
+                aria-label={`Open card ${c.title}`}
+                className="inline-flex items-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-foreground text-xs hover:bg-accent"
+              >
+                Open
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </article>
+  );
 }
 
 export function InProgressCard({

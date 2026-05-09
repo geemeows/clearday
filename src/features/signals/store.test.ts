@@ -40,8 +40,9 @@ function makeClient(overrides: {
   const ilike = vi.fn(() => chain);
   const or = vi.fn(() => chain);
   const gte = vi.fn(() => chain);
+  const lt = vi.fn(() => chain);
   const selectEq = vi.fn(() => chain);
-  const chain = { is, in: inFn, ilike, or, gte, eq: selectEq, order, limit };
+  const chain = { is, in: inFn, ilike, or, gte, lt, eq: selectEq, order, limit };
   const select = vi.fn(() => chain);
   const upsert = vi.fn(async () => overrides.upsertResult ?? { error: null });
   const updateEq = vi.fn(async () => overrides.updateResult ?? { error: null });

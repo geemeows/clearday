@@ -22,6 +22,7 @@ export type SelectChain = {
   ilike: (col: string, pattern: string) => SelectChain;
   or: (filter: string) => SelectChain;
   gte: (col: string, val: string) => SelectChain;
+  lt: (col: string, val: string) => SelectChain;
   eq: (col: string, val: string) => SelectChain;
   order: (col: string, opts: { ascending: boolean }) => SelectChain;
   limit: (n: number) => Promise<{

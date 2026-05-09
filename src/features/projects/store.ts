@@ -182,3 +182,34 @@ export async function listCards(
   if (error) throw new Error(`card list failed: ${error.message}`);
   return (data ?? []) as StoredCard[];
 }
+
+export type DueCard = StoredCard & { project_name: string };
+
+export async function listCardsDueOn(
+  client: SupabaseLike,
+  date: Date,
+): Promise<DueCard[]> {
+  const projects = await listProjects(client);
+  if (projects.length === 0) return [];
+
+  const projectIds = projects.map((p) => p.id);
+  const y = date.getFullYear();
+  const mo = date.getMonth();
+  const d = date.getDate();
+  const dayStart = new Date(y, mo, d, 0, 0, 0, 0).toISOString();
+  const dayEnd = new Date(y, mo, d + 1, 0, 0, 0, 0).toISOString();
+
+  const { data, error } = await client
+    .from("project_cards")
+    .select("*")
+    .in("project_id", projectIds)
+    .gte("due_at", dayStart)
+    .lt("due_at", dayEnd)
+    .order("due_at", { ascending: true })
+    .limit(200);
+
+  if (error) throw new Error(`card list failed: ${error.message}`);
+  const cards = (data ?? []) as StoredCard[];
+  const nameMap = new Map(projects.map((p) => [p.id, p.name]));
+  return cards.map((c) => ({ ...c, project_name: nameMap.get(c.project_id) ?? "" }));
+}

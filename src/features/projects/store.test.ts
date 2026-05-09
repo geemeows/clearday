@@ -6,8 +6,10 @@ import {
   deleteCard,
   deleteColumn,
   listCards,
+  listCardsDueOn,
   listColumns,
   listProjects,
+  type DueCard,
   type StoredCard,
   type StoredColumn,
   type StoredProject,
@@ -48,6 +50,7 @@ function makeClient(overrides: {
     ilike: vi.fn(() => chain),
     or: vi.fn(() => chain),
     gte: vi.fn(() => chain),
+    lt: vi.fn(() => chain),
     eq,
     order,
     limit,
@@ -310,5 +313,125 @@ describe("listCards", () => {
   it("throws when list fails", async () => {
     const { client } = makeClient({ listError: { message: "oops" } });
     await expect(listCards(client, "p1")).rejects.toThrow("oops");
+  });
+});
+
+// ── listCardsDueOn ─────────────────────────────────────────────────────────
+
+function makeDueTodayClient({
+  projects = [] as StoredProject[],
+  cards = [] as StoredCard[],
+  cardError = null as { message: string } | null,
+} = {}) {
+  const makeChain = (limitData: Record<string, unknown>[], limitError: { message: string } | null) => {
+    const chain: {
+      is: ReturnType<typeof vi.fn>;
+      in: ReturnType<typeof vi.fn>;
+      ilike: ReturnType<typeof vi.fn>;
+      or: ReturnType<typeof vi.fn>;
+      gte: ReturnType<typeof vi.fn>;
+      lt: ReturnType<typeof vi.fn>;
+      eq: ReturnType<typeof vi.fn>;
+      order: ReturnType<typeof vi.fn>;
+      limit: ReturnType<typeof vi.fn>;
+    } = {
+      is: vi.fn(() => chain),
+      in: vi.fn(() => chain),
+      ilike: vi.fn(() => chain),
+      or: vi.fn(() => chain),
+      gte: vi.fn(() => chain),
+      lt: vi.fn(() => chain),
+      eq: vi.fn(() => chain),
+      order: vi.fn(() => chain),
+      limit: vi.fn(async () => ({ data: limitData, error: limitError })),
+    };
+    return chain;
+  };
+
+  const projectChain = makeChain(projects as Record<string, unknown>[], null);
+  const cardChain = makeChain(cards as Record<string, unknown>[], cardError);
+
+  const client = {
+    from: (table: string) => {
+      const chain = table === "projects" ? projectChain : cardChain;
+      return {
+        upsert: vi.fn(async () => ({ error: null })),
+        select: vi.fn(() => chain),
+        update: vi.fn(() => ({ eq: vi.fn(async () => ({ error: null })) })),
+      };
+    },
+  } as unknown as SupabaseLike;
+
+  return { client, projectChain, cardChain };
+}
+
+const baseProject: StoredProject = {
+  id: "p1",
+  name: "My Project",
+  archived: false,
+  created_at: "2026-01-01T00:00:00Z",
+};
+
+const baseCard = (dueAt: string): StoredCard => ({
+  id: "card1",
+  project_id: "p1",
+  column_id: "col1",
+  order: 0,
+  title: "My card",
+  body: null,
+  priority: null,
+  tags: [],
+  due_at: dueAt,
+  created_at: "2026-01-01T00:00:00Z",
+});
+
+describe("listCardsDueOn", () => {
+  it("returns empty array when no non-archived projects exist", async () => {
+    const { client } = makeDueTodayClient({ projects: [] });
+    const result = await listCardsDueOn(client, new Date(2026, 4, 9));
+    expect(result).toEqual([]);
+  });
+
+  it("attaches project_name to each returned card", async () => {
+    const card = baseCard("2026-05-09T00:00:00.000Z");
+    const { client } = makeDueTodayClient({
+      projects: [baseProject],
+      cards: [card],
+    });
+    const result = await listCardsDueOn(client, new Date(2026, 4, 9));
+    expect(result).toHaveLength(1);
+    expect((result[0] as DueCard).project_name).toBe("My Project");
+    expect(result[0].id).toBe("card1");
+  });
+
+  it("queries with gte(dayStart) and lt(dayEnd) for the given date", async () => {
+    // 2026-05-09 local — bounds are midnight local → midnight local next day
+    const date = new Date(2026, 4, 9); // May 9 local
+    const { client, cardChain } = makeDueTodayClient({ projects: [baseProject] });
+    await listCardsDueOn(client, date);
+    const expectedStart = new Date(2026, 4, 9, 0, 0, 0, 0).toISOString();
+    const expectedEnd = new Date(2026, 4, 10, 0, 0, 0, 0).toISOString();
+    expect(cardChain.gte).toHaveBeenCalledWith("due_at", expectedStart);
+    expect(cardChain.lt).toHaveBeenCalledWith("due_at", expectedEnd);
+  });
+
+  it("filters by non-archived project IDs", async () => {
+    const { client, cardChain } = makeDueTodayClient({ projects: [baseProject] });
+    await listCardsDueOn(client, new Date(2026, 4, 9));
+    expect(cardChain.in).toHaveBeenCalledWith("project_id", ["p1"]);
+  });
+
+  it("throws when card query fails", async () => {
+    const { client } = makeDueTodayClient({
+      projects: [baseProject],
+      cardError: { message: "db error" },
+    });
+    await expect(listCardsDueOn(client, new Date(2026, 4, 9))).rejects.toThrow("db error");
+  });
+
+  it("returns empty array when no cards match the date", async () => {
+    const { client } = makeDueTodayClient({ projects: [baseProject], cards: [] });
+    const result = await listCardsDueOn(client, new Date(2026, 4, 9));
+    expect(result).toEqual([]);
   });
 });
