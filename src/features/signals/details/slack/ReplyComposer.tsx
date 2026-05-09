@@ -23,11 +23,17 @@ const defaultSlackReplySubmit: SlackReplySubmit = async (params) =>
     body: params,
   })) as { ok: boolean; error?: string; needs_reauth?: boolean };
 
+export type SlackReplyAccount = {
+  handle: string | null;
+  workspace?: string | null;
+};
+
 export function SlackReplyComposer({
   channel,
   channelName,
   thread_ts,
   signalId,
+  account,
   submit = defaultSlackReplySubmit,
   requestDraft = defaultDraftRequest,
   requestConnectUrl = defaultRequestConnectUrl,
@@ -39,6 +45,10 @@ export function SlackReplyComposer({
   channelName?: string;
   thread_ts?: string;
   signalId?: string;
+  // Resolver-chosen account for the outbound reply. When present the
+  // composer prepends a "From: @handle · workspace" indicator so the user
+  // is never surprised about which Slack identity is about to send.
+  account?: SlackReplyAccount;
   submit?: SlackReplySubmit;
   requestDraft?: DraftRequest;
   requestConnectUrl?: RequestConnectUrl;
@@ -146,6 +156,15 @@ export function SlackReplyComposer({
       aria-label="Slack reply composer"
       className="space-y-2 rounded-md border border-border bg-muted/40 p-3"
     >
+      {account?.handle ? (
+        <p
+          aria-label="Sending account"
+          className="text-[11px] text-muted-foreground"
+        >
+          From: {account.handle}
+          {account.workspace ? ` · ${account.workspace}` : ""}
+        </p>
+      ) : null}
       <textarea
         value={text}
         onChange={(e) => setText(e.target.value)}
