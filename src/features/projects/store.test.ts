@@ -5,10 +5,12 @@ import {
   createProject,
   deleteCard,
   deleteColumn,
+  listAllCards,
   listCards,
   listCardsDueOn,
   listColumns,
   listProjects,
+  type CardWithProject,
   type DueCard,
   type StoredCard,
   type StoredColumn,
@@ -432,6 +434,46 @@ describe("listCardsDueOn", () => {
   it("returns empty array when no cards match the date", async () => {
     const { client } = makeDueTodayClient({ projects: [baseProject], cards: [] });
     const result = await listCardsDueOn(client, new Date(2026, 4, 9));
+    expect(result).toEqual([]);
+  });
+});
+
+// ── listAllCards ──────────────────────────────────────────────────────────────
+
+const baseCardSimple: StoredCard = {
+  id: "card1",
+  project_id: "p1",
+  column_id: "col1",
+  order: 0,
+  title: "My card",
+  body: null,
+  priority: null,
+  tags: [],
+  due_at: null,
+  created_at: "2026-01-01T00:00:00Z",
+};
+
+describe("listAllCards", () => {
+  it("returns empty array when no projects exist", async () => {
+    const { client } = makeDueTodayClient({ projects: [] });
+    const result = await listAllCards(client);
+    expect(result).toEqual([]);
+  });
+
+  it("attaches project_name to each returned card", async () => {
+    const { client } = makeDueTodayClient({
+      projects: [baseProject],
+      cards: [baseCardSimple],
+    });
+    const result = await listAllCards(client);
+    expect(result).toHaveLength(1);
+    expect((result[0] as CardWithProject).project_name).toBe("My Project");
+    expect(result[0].id).toBe("card1");
+  });
+
+  it("returns empty array when project has no cards", async () => {
+    const { client } = makeDueTodayClient({ projects: [baseProject], cards: [] });
+    const result = await listAllCards(client);
     expect(result).toEqual([]);
   });
 });

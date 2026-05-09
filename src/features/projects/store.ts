@@ -185,6 +185,23 @@ export async function listCards(
 
 export type DueCard = StoredCard & { project_name: string };
 
+export type CardWithProject = StoredCard & { project_name: string };
+
+export async function listAllCards(
+  client: SupabaseLike,
+): Promise<CardWithProject[]> {
+  const projects = await listProjects(client);
+  if (projects.length === 0) return [];
+  const byProject = await Promise.all(
+    projects.map((p) =>
+      listCards(client, p.id).then((cards) =>
+        cards.map((c) => ({ ...c, project_name: p.name })),
+      ),
+    ),
+  );
+  return byProject.flat();
+}
+
 export async function listCardsDueOn(
   client: SupabaseLike,
   date: Date,

@@ -1,12 +1,15 @@
 import { Outlet, useRouter, useRouterState } from "@tanstack/react-router";
 import {
   Calendar,
+  FolderKanban,
   Inbox,
   Moon,
+  Plus,
   Settings as SettingsIcon,
+  SquareKanban,
   Sun,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { CommandPalette, type PaletteCommand } from "#/app/CommandPalette";
 import {
   type FocusState,
@@ -18,7 +21,14 @@ import {
   type NavSource,
   OPEN_CMDK_EVENT,
 } from "#/app/NavigationSidebar";
-import { listProjects } from "#/features/projects/store";
+import {
+  type CardWithProject,
+  createCard,
+  listAllCards,
+  listCards,
+  listColumns,
+  listProjects,
+} from "#/features/projects/store";
 import { supabase } from "#/lib/supabase";
 import type { SupabaseLike } from "#/shared/db";
 import { FocusModal } from "#/features/focus/components/FocusModal";
@@ -86,6 +96,7 @@ export function AppShell() {
   const profile = useProfile();
   const theme = useEffectiveTheme();
   const projects = useProjects();
+  const allCards = useAllCards();
   const [projectsOpen, setProjectsOpen] = useState(() =>
     path.startsWith("/projects"),
   );
@@ -156,6 +167,35 @@ export function AppShell() {
     }
   };
 
+  const handleNewCard = useCallback(
+    async (projectId: string) => {
+      const client = supabase as unknown as SupabaseLike;
+      const [columns, existingCards] = await Promise.all([
+        listColumns(client, projectId),
+        listCards(client, projectId),
+      ]);
+      if (columns.length === 0) return;
+      const firstColumn = columns[0];
+      const colCards = existingCards.filter(
+        (c) => c.column_id === firstColumn.id,
+      );
+      const id = crypto.randomUUID();
+      await createCard(client, {
+        id,
+        project_id: projectId,
+        column_id: firstColumn.id,
+        order: colCards.length,
+        title: "New card",
+      });
+      router.navigate({
+        to: "/projects/$projectId",
+        params: { projectId },
+        search: { card: id },
+      });
+    },
+    [router],
+  );
+
   const commands: PaletteCommand[] = useMemo(() => {
     const navItems: PaletteCommand[] = PAGES.map((p) => ({
       id: `nav:${p.to}`,
@@ -173,6 +213,31 @@ export function AppShell() {
       icon: SettingsIcon,
       onSelect: () => router.navigate({ to: "/settings" }),
     });
+    const projectNavItems: PaletteCommand[] = projects.map((p) => ({
+      id: `nav:project:${p.id}`,
+      group: "Navigation",
+      label: `Open ${p.name}`,
+      keywords: `project ${p.name} board`,
+      icon: FolderKanban,
+      onSelect: () =>
+        router.navigate({
+          to: "/projects/$projectId",
+          params: { projectId: p.id },
+        }),
+    }));
+    const cardNavItems: PaletteCommand[] = allCards.map((c) => ({
+      id: `nav:card:${c.id}`,
+      group: "Navigation",
+      label: `${c.title} · ${c.project_name}`,
+      keywords: `card ${c.title} ${c.project_name}`,
+      icon: SquareKanban,
+      onSelect: () =>
+        router.navigate({
+          to: "/projects/$projectId",
+          params: { projectId: c.project_id },
+          search: { card: c.id },
+        }),
+    }));
     const actionItems: PaletteCommand[] = [
       {
         id: "action:theme-toggle",
@@ -186,8 +251,22 @@ export function AppShell() {
         onSelect: () => void theme.toggle(),
       },
     ];
-    return [...navItems, ...actionItems];
-  }, [router, theme]);
+    const newCardItems: PaletteCommand[] = projects.map((p) => ({
+      id: `action:new-card:${p.id}`,
+      group: "Actions",
+      label: `New card in ${p.name}`,
+      keywords: `new card create ${p.name}`,
+      icon: Plus,
+      onSelect: () => void handleNewCard(p.id),
+    }));
+    return [
+      ...navItems,
+      ...projectNavItems,
+      ...cardNavItems,
+      ...actionItems,
+      ...newCardItems,
+    ];
+  }, [router, theme, projects, allCards, handleNewCard]);
 
   return (
     <div className="flex h-screen overflow-hidden bg-background text-foreground">
@@ -387,6 +466,23 @@ function useProjects(): NavProject[] {
     };
   }, []);
   return projects;
+}
+
+function useAllCards(): CardWithProject[] {
+  const [cards, setCards] = useState<CardWithProject[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    const client = supabase as unknown as SupabaseLike;
+    listAllCards(client)
+      .then((list) => {
+        if (!cancelled) setCards(list);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  return cards;
 }
 
 function useSourceStatuses(): Record<string, SourceMeta> {
