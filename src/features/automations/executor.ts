@@ -130,9 +130,9 @@ export const DEFAULT_RATE_LIMIT_PER_MINUTE = 60;
  * untouched (so the next call within the same minute can still consume up
  * to the remainder).
  */
-export function inMemoryRateLimiter(opts: {
-  perMinute?: number;
-} = {}): RateLimiter {
+export function inMemoryRateLimiter(
+  opts: { perMinute?: number } = {},
+): RateLimiter {
   const perMinute = opts.perMinute ?? DEFAULT_RATE_LIMIT_PER_MINUTE;
   let bucketKey = -1;
   let count = 0;
@@ -166,10 +166,7 @@ export function inMemoryRateLimiter(opts: {
  * false return).
  */
 export type FocusReplyDedupe = {
-  reserve: (
-    focusSessionId: string,
-    slackThreadTs: string,
-  ) => Promise<boolean>;
+  reserve: (focusSessionId: string, slackThreadTs: string) => Promise<boolean>;
 };
 
 export type ExecuteOptions = {

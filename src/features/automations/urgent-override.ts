@@ -12,8 +12,8 @@
 
 import {
   type DispatcherDeps,
-  dispatchAlert,
   type DispatchResult,
+  dispatchAlert,
 } from "#/features/alerts/dispatcher";
 import type { UrgentReactionEvent } from "#/features/integrations/providers/slack/poll";
 import type { StoredSignal } from "#/shared/signal";

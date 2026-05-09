@@ -10,10 +10,10 @@ import {
   validateAutomations,
 } from "#/features/automations/engine";
 import {
-  type AutomationRunsStore,
   type AutomationRunStatus,
-  executeAutomation,
+  type AutomationRunsStore,
   type ExecutedAction,
+  executeAutomation,
 } from "#/features/automations/executor";
 
 export type AutomationsStore = {

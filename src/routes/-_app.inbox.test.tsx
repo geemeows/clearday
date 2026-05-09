@@ -21,7 +21,51 @@ import {
   SlackReplyComposer,
   SlackThreadContext,
 } from "#/routes/_app.inbox";
+import {
+  createCard,
+  getLinkForSignal,
+  linkSignalToCard,
+  listCards,
+  listColumns,
+  listProjects,
+  type StoredCardSignal,
+  type StoredColumn,
+  type StoredProject,
+} from "#/features/projects/store";
 import type { Signal } from "#/shared/signal";
+
+// Supabase client is not exercised in component tests — store functions are
+// mocked at the module level instead. We keep auth.getSession so PR detail
+// components that call it don't throw.
+vi.mock("#/lib/supabase", () => ({
+  supabase: {
+    auth: {
+      getSession: async () => ({ data: { session: null } }),
+      onAuthStateChange: () => ({
+        data: { subscription: { unsubscribe: () => {} } },
+      }),
+    },
+    from: () => ({
+      select: () => ({
+        eq: () => ({ limit: async () => ({ data: [], error: null }) }),
+      }),
+    }),
+  },
+}));
+
+vi.mock("#/features/projects/store", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("#/features/projects/store")>();
+  return {
+    ...actual,
+    getLinkForSignal: vi.fn(async (): Promise<StoredCardSignal | null> => null),
+    linkSignalToCard: vi.fn(async () => {}),
+    createCard: vi.fn(async () => {}),
+    listProjects: vi.fn(async (): Promise<StoredProject[]> => []),
+    listColumns: vi.fn(async (): Promise<StoredColumn[]> => []),
+    listCards: vi.fn(async () => []),
+  };
+});
 
 const sample = (
   overrides: Partial<Signal & { id: string }> = {},
@@ -1857,6 +1901,141 @@ describe("PrComments", () => {
       }),
     ).toBeTruthy();
     expect(within(articles[1]).getByText("nit").tagName).toBe("STRONG");
+  });
+});
+
+// ─── Send to project ─────────────────────────────────────────────────────────
+
+describe("InboxDetailPane — Send to project", () => {
+  const sig = (): Signal & { id: string; dismissed_at: string | null } => ({
+    id: "sig-1",
+    provider: "github" as const,
+    kind: "pr_review_requested" as const,
+    source_id: "o/r#1",
+    title: "Fix the bug",
+    url: "https://github.com/o/r/pull/1",
+    payload: { repo: "o/r", number: 1, author: "alice" },
+    requires_action: true,
+    source_created_at: "2026-05-01T10:00:00Z",
+    dismissed_at: null,
+  });
+
+  const project: StoredProject = {
+    id: "proj-1",
+    name: "Backend",
+    archived: false,
+    created_at: "2026-01-01T00:00:00Z",
+  };
+
+  const col: StoredColumn = {
+    id: "col-1",
+    project_id: "proj-1",
+    name: "Backlog",
+    order: 0,
+    wip_limit: null,
+  };
+
+  it("shows Send to project button when signal is not linked", async () => {
+    vi.mocked(getLinkForSignal).mockResolvedValue(null);
+    render(
+      <InboxDetailPane signal={sig()} onClose={() => {}} onDismiss={() => {}} />,
+    );
+    const btn = await screen.findByRole("button", {
+      name: /send to project/i,
+    });
+    expect(btn).toBeTruthy();
+  });
+
+  it("shows Open card button when signal is already linked", async () => {
+    vi.mocked(getLinkForSignal).mockResolvedValue({
+      id: "link-1",
+      card_id: "card-1",
+      project_id: "proj-1",
+      signal_id: "sig-1",
+      deleted_at: null,
+      created_at: "2026-01-01T00:00:00Z",
+    });
+    vi.mocked(listProjects).mockResolvedValue([project]);
+    render(
+      <InboxDetailPane signal={sig()} onClose={() => {}} onDismiss={() => {}} />,
+    );
+    const btn = await screen.findByRole("button", { name: /open card/i });
+    expect(btn.textContent).toContain("Backend");
+  });
+
+  it("calls onOpenCard with projectId and cardId when Open card is clicked", async () => {
+    const onOpenCard = vi.fn();
+    vi.mocked(getLinkForSignal).mockResolvedValue({
+      id: "link-1",
+      card_id: "card-42",
+      project_id: "proj-1",
+      signal_id: "sig-1",
+      deleted_at: null,
+      created_at: "2026-01-01T00:00:00Z",
+    });
+    vi.mocked(listProjects).mockResolvedValue([project]);
+    render(
+      <InboxDetailPane
+        signal={sig()}
+        onClose={() => {}}
+        onDismiss={() => {}}
+        onOpenCard={onOpenCard}
+      />,
+    );
+    const btn = await screen.findByRole("button", { name: /open card/i });
+    fireEvent.click(btn);
+    expect(onOpenCard).toHaveBeenCalledWith("proj-1", "card-42");
+  });
+
+  it("clicking Send to project opens the project picker with project names", async () => {
+    vi.mocked(getLinkForSignal).mockResolvedValue(null);
+    vi.mocked(listProjects).mockResolvedValue([project]);
+    render(
+      <InboxDetailPane signal={sig()} onClose={() => {}} onDismiss={() => {}} />,
+    );
+    const btn = await screen.findByRole("button", { name: /send to project/i });
+    fireEvent.click(btn);
+    await waitFor(() => expect(screen.getByText("Backend")).toBeTruthy());
+  });
+
+  it("selecting a project creates a card and links the signal", async () => {
+    vi.mocked(getLinkForSignal).mockResolvedValue(null);
+    vi.mocked(listProjects).mockResolvedValue([project]);
+    vi.mocked(listColumns).mockResolvedValue([col]);
+    vi.mocked(listCards).mockResolvedValue([]);
+    vi.mocked(createCard).mockResolvedValue(undefined);
+    vi.mocked(linkSignalToCard).mockResolvedValue(undefined);
+    render(
+      <InboxDetailPane signal={sig()} onClose={() => {}} onDismiss={() => {}} />,
+    );
+    const sendBtn = await screen.findByRole("button", {
+      name: /send to project/i,
+    });
+    fireEvent.click(sendBtn);
+    const projectBtn = await screen.findByRole("button", { name: "Backend" });
+    fireEvent.click(projectBtn);
+    await waitFor(() => expect(createCard).toHaveBeenCalled());
+    expect(createCard).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        project_id: "proj-1",
+        column_id: "col-1",
+        title: "Fix the bug",
+      }),
+    );
+    await waitFor(() => expect(linkSignalToCard).toHaveBeenCalled());
+    expect(linkSignalToCard).toHaveBeenCalledWith(
+      expect.anything(),
+      "sig-1",
+      expect.any(String),
+      "proj-1",
+    );
+    // After linking, "Open card" button should appear.
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("button", { name: /send to project/i }),
+      ).toBeNull(),
+    );
   });
 });
 

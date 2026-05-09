@@ -2,8 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import {
   type AutomationRunInsert,
   type AutomationRunsStore,
-  type FocusReplyDedupe,
   executeAutomation,
+  type FocusReplyDedupe,
   inMemoryRateLimiter,
   type RateLimiter,
 } from "#/features/automations/executor";
@@ -168,7 +168,12 @@ describe("executeAutomation", () => {
         signalId: "sig-1",
       },
       store,
-      { handler, internalActionsAppliedByUpsert: false, rateLimiter: limiter, now },
+      {
+        handler,
+        internalActionsAppliedByUpsert: false,
+        rateLimiter: limiter,
+        now,
+      },
     );
     expect(first.status).toBe("succeeded");
     const second = await executeAutomation(
@@ -181,7 +186,12 @@ describe("executeAutomation", () => {
         signalId: "sig-2",
       },
       store,
-      { handler, internalActionsAppliedByUpsert: false, rateLimiter: limiter, now },
+      {
+        handler,
+        internalActionsAppliedByUpsert: false,
+        rateLimiter: limiter,
+        now,
+      },
     );
     expect(second.status).toBe("failed");
     expect(second.error).toMatch(/rate_limit_exceeded/);
@@ -227,7 +237,12 @@ describe("executeAutomation", () => {
         signalId: "sig-1",
       },
       store,
-      { handler, internalActionsAppliedByUpsert: false, rateLimiter: limiter, now },
+      {
+        handler,
+        internalActionsAppliedByUpsert: false,
+        rateLimiter: limiter,
+        now,
+      },
     );
     expect(first.status).toBe("succeeded");
     clock = new Date("2026-05-04T10:01:30.000Z");
@@ -238,7 +253,12 @@ describe("executeAutomation", () => {
         signalId: "sig-2",
       },
       store,
-      { handler, internalActionsAppliedByUpsert: false, rateLimiter: limiter, now },
+      {
+        handler,
+        internalActionsAppliedByUpsert: false,
+        rateLimiter: limiter,
+        now,
+      },
     );
     expect(second.status).toBe("succeeded");
   });
@@ -377,7 +397,11 @@ describe("executeAutomation — focus auto-reply soft idempotency (issue #94)", 
         signalId: "sig-slack-1",
       },
       store,
-      { handler, internalActionsAppliedByUpsert: false, focusReplyDedupe: dedupe },
+      {
+        handler,
+        internalActionsAppliedByUpsert: false,
+        focusReplyDedupe: dedupe,
+      },
     );
     expect(first.status).toBe("succeeded");
     expect(handler).toHaveBeenCalledTimes(1);
@@ -391,7 +415,11 @@ describe("executeAutomation — focus auto-reply soft idempotency (issue #94)", 
         signalId: "sig-slack-1",
       },
       store,
-      { handler, internalActionsAppliedByUpsert: false, focusReplyDedupe: dedupe },
+      {
+        handler,
+        internalActionsAppliedByUpsert: false,
+        focusReplyDedupe: dedupe,
+      },
     );
     expect(second.status).toBe("skipped_idempotent");
     expect(second.executed).toEqual([]);
@@ -423,7 +451,11 @@ describe("executeAutomation — focus auto-reply soft idempotency (issue #94)", 
         activeFocusSessionId: "focus-1",
       },
       store,
-      { handler, internalActionsAppliedByUpsert: false, focusReplyDedupe: dedupe },
+      {
+        handler,
+        internalActionsAppliedByUpsert: false,
+        focusReplyDedupe: dedupe,
+      },
     );
     const second = await executeAutomation(
       {
@@ -439,7 +471,11 @@ describe("executeAutomation — focus auto-reply soft idempotency (issue #94)", 
         activeFocusSessionId: "focus-2",
       },
       store,
-      { handler, internalActionsAppliedByUpsert: false, focusReplyDedupe: dedupe },
+      {
+        handler,
+        internalActionsAppliedByUpsert: false,
+        focusReplyDedupe: dedupe,
+      },
     );
     expect(second.status).toBe("succeeded");
     expect(handler).toHaveBeenCalledTimes(2);

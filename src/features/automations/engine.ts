@@ -135,7 +135,9 @@ export type AutomationBuckets = {
   dryRun: number;
 };
 
-export function bucketAutomations(automations: Automation[]): AutomationBuckets {
+export function bucketAutomations(
+  automations: Automation[],
+): AutomationBuckets {
   const buckets: AutomationBuckets = { active: 0, paused: 0, dryRun: 0 };
   for (const a of automations) {
     if (!a.enabled) buckets.paused += 1;
@@ -616,9 +618,7 @@ export function validateAutomations(automations: Automation[]): string[] {
           );
         }
         if (typeof act.body !== "string") {
-          errors.push(
-            `automation ${a.id}: post_message.body must be a string`,
-          );
+          errors.push(`automation ${a.id}: post_message.body must be a string`);
         }
         if (act.target === "channel") {
           if (typeof act.channel !== "string" || act.channel.length === 0) {
@@ -743,11 +743,7 @@ function parseCron(expr: string): ParsedCron | null {
   };
 }
 
-function parseCronField(
-  raw: string,
-  lo: number,
-  hi: number,
-): CronField | null {
+function parseCronField(raw: string, lo: number, hi: number): CronField | null {
   const out = new Set<number>();
   for (const piece of raw.split(",")) {
     const result = expandCronPiece(piece, lo, hi);

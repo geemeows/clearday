@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
-import {
-  type Automation,
-  type AutomationAction,
+import type {
+  Automation,
+  AutomationAction,
 } from "#/features/automations/engine";
-import {
-  type AutomationRunInsert,
-  type AutomationRunsStore,
-  type ExecuteCtx,
+import type {
+  AutomationRunInsert,
+  AutomationRunsStore,
+  ExecuteCtx,
 } from "#/features/automations/executor";
 import { createAutomationHandler } from "#/features/automations/handlers";
 import { runAutomationsForInsertedSignals } from "#/features/automations/orchestrator";

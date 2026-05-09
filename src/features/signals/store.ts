@@ -115,7 +115,7 @@ export async function listSignals(
   q = q.order("source_created_at", { ascending: false });
   const { data, error } = await q.limit(args.limit ?? 200);
   if (error) throw new Error(`signal list failed: ${error.message}`);
-  return data ?? [];
+  return (data ?? []) as StoredSignal[];
 }
 
 function escapeLikePattern(s: string): string {

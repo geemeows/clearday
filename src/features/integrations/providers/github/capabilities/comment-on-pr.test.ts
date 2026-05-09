@@ -21,9 +21,7 @@ function jsonResponse(status: number, body: unknown): Response {
 
 describe("commentOnPr", () => {
   it("posts to the GitHub Issue Comments endpoint with the right URL/body", async () => {
-    const { fn, calls } = recordingFetch(() =>
-      jsonResponse(201, { id: 9999 }),
-    );
+    const { fn, calls } = recordingFetch(() => jsonResponse(201, { id: 9999 }));
     const out = await commentOnPr(
       { repo: "owner/repo", number: 42, body: "looks good" },
       { token: "gh-tok", fetch: fn },

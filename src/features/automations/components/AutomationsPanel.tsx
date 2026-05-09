@@ -9,6 +9,7 @@ import {
 } from "#/components/coss/dialog";
 import type { AlertChannel } from "#/features/alerts/dispatcher";
 import { ACTION_LIST, ACTIONS } from "#/features/automations/actions";
+import type { AutomationRunRow } from "#/features/automations/api";
 import {
   type Automation,
   type AutomationAction,
@@ -25,7 +26,6 @@ import {
   type AutomationTemplate,
 } from "#/features/automations/templates";
 import { TRIGGER_LIST, TRIGGERS } from "#/features/automations/triggers";
-import type { AutomationRunRow } from "#/features/automations/api";
 import { apiFetch } from "#/lib/api-client";
 import type { StoredSignal } from "#/shared/signal";
 
@@ -40,7 +40,9 @@ const defaultRunsLoader: RunsLoader = async (automationId) => {
   return { runs: body.runs ?? [] };
 };
 
-type DryRunInvoker = (automationId: string) => Promise<
+type DryRunInvoker = (
+  automationId: string,
+) => Promise<
   | { ok: true; status: string; trigger_event_id: string }
   | { ok: false; error: string }
 >;
@@ -300,7 +302,7 @@ export function AutomationsPanel({
     setTemplatesOpen(false);
   }, []);
 
-  const useTemplate = useCallback((tpl: AutomationTemplate) => {
+  const applyTemplate = useCallback((tpl: AutomationTemplate) => {
     setEditing({ ...tpl.automation, id: newId() });
     setBuilderOpen(true);
     setTemplatesOpen(false);
@@ -515,7 +517,6 @@ export function AutomationsPanel({
             />
             <input
               type="search"
-              role="searchbox"
               aria-label="Search automations"
               placeholder="Search automations…"
               value={q}
@@ -526,6 +527,7 @@ export function AutomationsPanel({
           {buckets && automations.length > 0 && (
             <p
               aria-label="Automations summary"
+              role="note"
               className="font-mono text-[11px] text-muted-foreground"
             >
               {buckets.active} active · {buckets.paused} paused ·{" "}
@@ -646,15 +648,14 @@ export function AutomationsPanel({
       >
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
-            <DialogTitle>
-              Runs · {runsAutomation?.name ?? ""}
-            </DialogTitle>
+            <DialogTitle>Runs · {runsAutomation?.name ?? ""}</DialogTitle>
           </DialogHeader>
           {runs && runs.length > 0 && <RunsHistogram runs={runs} />}
           <RunsList runs={runs} error={runsError} />
           {dryRunMessage && (
             <p
               aria-label="Dry-run result"
+              role="note"
               className="rounded border border-border bg-muted/40 px-3 py-2 font-mono text-[11px] text-muted-foreground"
             >
               {dryRunMessage}
@@ -695,7 +696,7 @@ export function AutomationsPanel({
               <TemplateCard
                 key={tpl.id}
                 template={tpl}
-                onUse={() => useTemplate(tpl)}
+                onUse={() => applyTemplate(tpl)}
               />
             ))}
           </ul>
@@ -832,6 +833,7 @@ function AutomationRow({
         {latestFailure && (
           <p
             aria-label={`Last failure for ${automation.name}`}
+            role="note"
             className="mt-1 truncate font-mono text-[10px] text-destructive"
           >
             Last failure: {latestFailure.error ?? "unknown error"}
@@ -895,6 +897,7 @@ function RunsHistogram({ runs }: { runs: AutomationRunRow[] }) {
   return (
     <div
       aria-label="Runs histogram (14-day)"
+      role="img"
       className="rounded border border-border bg-muted/40 p-2"
     >
       <div className="flex h-16 items-end gap-1">
@@ -906,6 +909,7 @@ function RunsHistogram({ runs }: { runs: AutomationRunRow[] }) {
             <div
               key={d.date}
               aria-label={tooltip}
+              role="img"
               title={tooltip}
               className="relative flex h-full flex-1 items-end"
             >
@@ -1001,6 +1005,7 @@ function RunsList({
             </span>
             <span
               aria-label="Run status"
+              role="note"
               className="rounded-sm border border-border bg-background px-1.5 py-0.5 font-mono text-[10px]"
             >
               {r.status}
@@ -1010,9 +1015,7 @@ function RunsList({
             Signal: {r.signal_id ?? "—"} · planned {r.actions_planned.length} ·
             executed {r.actions_executed.length}
           </div>
-          {r.error && (
-            <p className="mt-1 text-destructive">{r.error}</p>
-          )}
+          {r.error && <p className="mt-1 text-destructive">{r.error}</p>}
         </li>
       ))}
     </ul>
@@ -1665,10 +1668,7 @@ function ActionInputs({
           onChange={(e) =>
             onChange({
               ...action,
-              target: e.target.value as
-                | "channel"
-                | "self_dm"
-                | "thread_reply",
+              target: e.target.value as "channel" | "self_dm" | "thread_reply",
             })
           }
           className="w-full rounded border border-border bg-background px-2 py-1 text-xs"
@@ -1696,8 +1696,9 @@ function ActionInputs({
           className="w-full rounded border border-border bg-background px-2 py-1 font-mono text-xs"
         />
         <p className="text-muted-foreground text-[10px]">
-          Templating: {"{{signal.title}}, {{signal.url}}, {{signal.payload.repo}}"}.
-          Missing fields render as empty.
+          Templating:{" "}
+          {"{{signal.title}}, {{signal.url}}, {{signal.payload.repo}}"}. Missing
+          fields render as empty.
         </p>
       </div>
     );

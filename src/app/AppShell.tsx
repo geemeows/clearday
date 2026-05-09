@@ -1,14 +1,16 @@
 import { Outlet, useRouter, useRouterState } from "@tanstack/react-router";
 import {
   Calendar,
-  CheckSquare,
+  FolderKanban,
   Inbox,
   Moon,
+  Plus,
   Settings as SettingsIcon,
+  SquareKanban,
   Sun,
   Zap,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { CommandPalette, type PaletteCommand } from "#/app/CommandPalette";
 import {
   type FocusState,
@@ -16,12 +18,21 @@ import {
   type NavigationSidebarProps,
   type NavPage,
   type NavProfile,
+  type NavProject,
   type NavSource,
   OPEN_CMDK_EVENT,
 } from "#/app/NavigationSidebar";
 import { pickActiveFocus, toMeetingEvents } from "#/features/calendar/events";
 import { FocusModal } from "#/features/focus/components/FocusModal";
 import type { ProviderAccountStatus } from "#/features/integrations/provider-account-status";
+import {
+  type CardWithProject,
+  createCard,
+  listAllCards,
+  listCards,
+  listColumns,
+  listProjects,
+} from "#/features/projects/store";
 import {
   PROFILE_UPDATED_EVENT,
   type ProfileView,
@@ -34,12 +45,13 @@ import {
 } from "#/features/settings/theme/api";
 import type { SourceKind } from "#/features/signals/components/SourceGlyph";
 import { apiFetch } from "#/lib/api-client";
-import type { Signal, SignalKind, StoredSignal } from "#/shared/signal";
+import { supabase } from "#/lib/supabase";
+import type { SupabaseLike } from "#/shared/db";
+import type { Signal, StoredSignal } from "#/shared/signal";
 
 const PAGES: NavPage[] = [
   { to: "/today", label: "Today", icon: Sun },
   { to: "/inbox", label: "Inbox", icon: Inbox },
-  { to: "/tasks", label: "Tasks", icon: CheckSquare },
   { to: "/calendar", label: "Calendar", icon: Calendar },
   { to: "/automations", label: "Automations", icon: Zap },
 ];
@@ -79,9 +91,14 @@ export function AppShell() {
   const router = useRouter();
   const path = useRouterState({ select: (s) => s.location.pathname });
   const sourceMeta = useSourceStatuses();
-  const { inboxBadge, tasksBadge } = useNavBadges();
+  const { inboxBadge } = useNavBadges();
   const profile = useProfile();
   const theme = useEffectiveTheme();
+  const projects = useProjects();
+  const allCards = useAllCards();
+  const [projectsOpen, setProjectsOpen] = useState(() =>
+    path.startsWith("/projects"),
+  );
 
   const sources = useMemo<NavSource[]>(
     () =>
@@ -105,13 +122,26 @@ export function AppShell() {
     page: path,
     onPage: (to) => router.navigate({ to }),
     inboxBadge,
-    tasksBadge,
     sources,
     focus,
     onStartFocus: () => setFocusModalOpen(true),
     onOpenSettings: () => router.navigate({ to: "/settings" }),
     onOpenCmdk: () => window.dispatchEvent(new CustomEvent(OPEN_CMDK_EVENT)),
     profile,
+    projects,
+    projectsOpen,
+    onToggleProjects: () => setProjectsOpen((o) => !o),
+    onNavigateToProject: (id) => {
+      setProjectsOpen(true);
+      router.navigate({
+        to: "/projects/$projectId",
+        params: { projectId: id },
+      });
+    },
+    onNewProject: () => {
+      setProjectsOpen(true);
+      router.navigate({ to: "/projects", search: { mode: "new" } });
+    },
   };
 
   const startFocusSession = async ({
@@ -136,6 +166,35 @@ export function AppShell() {
     }
   };
 
+  const handleNewCard = useCallback(
+    async (projectId: string) => {
+      const client = supabase as unknown as SupabaseLike;
+      const [columns, existingCards] = await Promise.all([
+        listColumns(client, projectId),
+        listCards(client, projectId),
+      ]);
+      if (columns.length === 0) return;
+      const firstColumn = columns[0];
+      const colCards = existingCards.filter(
+        (c) => c.column_id === firstColumn.id,
+      );
+      const id = crypto.randomUUID();
+      await createCard(client, {
+        id,
+        project_id: projectId,
+        column_id: firstColumn.id,
+        order: colCards.length,
+        title: "New card",
+      });
+      router.navigate({
+        to: "/projects/$projectId",
+        params: { projectId },
+        search: { card: id },
+      });
+    },
+    [router],
+  );
+
   const commands: PaletteCommand[] = useMemo(() => {
     const navItems: PaletteCommand[] = PAGES.map((p) => ({
       id: `nav:${p.to}`,
@@ -153,6 +212,31 @@ export function AppShell() {
       icon: SettingsIcon,
       onSelect: () => router.navigate({ to: "/settings" }),
     });
+    const projectNavItems: PaletteCommand[] = projects.map((p) => ({
+      id: `nav:project:${p.id}`,
+      group: "Navigation",
+      label: `Open ${p.name}`,
+      keywords: `project ${p.name} board`,
+      icon: FolderKanban,
+      onSelect: () =>
+        router.navigate({
+          to: "/projects/$projectId",
+          params: { projectId: p.id },
+        }),
+    }));
+    const cardNavItems: PaletteCommand[] = allCards.map((c) => ({
+      id: `nav:card:${c.id}`,
+      group: "Navigation",
+      label: `${c.title} · ${c.project_name}`,
+      keywords: `card ${c.title} ${c.project_name}`,
+      icon: SquareKanban,
+      onSelect: () =>
+        router.navigate({
+          to: "/projects/$projectId",
+          params: { projectId: c.project_id },
+          search: { card: c.id },
+        }),
+    }));
     const actionItems: PaletteCommand[] = [
       {
         id: "action:theme-toggle",
@@ -166,8 +250,22 @@ export function AppShell() {
         onSelect: () => void theme.toggle(),
       },
     ];
-    return [...navItems, ...actionItems];
-  }, [router, theme]);
+    const newCardItems: PaletteCommand[] = projects.map((p) => ({
+      id: `action:new-card:${p.id}`,
+      group: "Actions",
+      label: `New card in ${p.name}`,
+      keywords: `new card create ${p.name}`,
+      icon: Plus,
+      onSelect: () => void handleNewCard(p.id),
+    }));
+    return [
+      ...navItems,
+      ...projectNavItems,
+      ...cardNavItems,
+      ...actionItems,
+      ...newCardItems,
+    ];
+  }, [router, theme, projects, allCards, handleNewCard]);
 
   return (
     <div className="flex h-screen overflow-hidden bg-background text-foreground">
@@ -330,16 +428,8 @@ function useProfile(): NavProfile {
   };
 }
 
-// Pull both nav badges from the same signals payload so the sidebar fires a
-// single request: inbox = unread + requires_action; tasks = open work
-// (in-progress tickets + authored PRs).
-const TASK_KINDS: ReadonlySet<SignalKind> = new Set([
-  "ticket_in_progress",
-  "pr_authored",
-]);
-
-function useNavBadges(): { inboxBadge: number; tasksBadge: number } {
-  const [badges, setBadges] = useState({ inboxBadge: 0, tasksBadge: 0 });
+function useNavBadges(): { inboxBadge: number } {
+  const [badges, setBadges] = useState({ inboxBadge: 0 });
   useEffect(() => {
     let cancelled = false;
     apiFetch("/api/signals?filter=all")
@@ -347,8 +437,7 @@ function useNavBadges(): { inboxBadge: number; tasksBadge: number } {
         if (cancelled) return;
         const signals = (body as { signals?: Signal[] }).signals ?? [];
         const inboxBadge = signals.filter((s) => s.requires_action).length;
-        const tasksBadge = signals.filter((s) => TASK_KINDS.has(s.kind)).length;
-        setBadges({ inboxBadge, tasksBadge });
+        setBadges({ inboxBadge });
       })
       .catch(() => {
         // Leave at 0 on auth/network failure.
@@ -358,6 +447,41 @@ function useNavBadges(): { inboxBadge: number; tasksBadge: number } {
     };
   }, []);
   return badges;
+}
+
+function useProjects(): NavProject[] {
+  const [projects, setProjects] = useState<NavProject[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    const client = supabase as unknown as SupabaseLike;
+    listProjects(client)
+      .then((list) => {
+        if (!cancelled)
+          setProjects(list.map((p) => ({ id: p.id, name: p.name })));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  return projects;
+}
+
+function useAllCards(): CardWithProject[] {
+  const [cards, setCards] = useState<CardWithProject[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    const client = supabase as unknown as SupabaseLike;
+    listAllCards(client)
+      .then((list) => {
+        if (!cancelled) setCards(list);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  return cards;
 }
 
 function useSourceStatuses(): Record<string, SourceMeta> {

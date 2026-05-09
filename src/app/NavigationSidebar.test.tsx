@@ -14,19 +14,22 @@ function renderSidebar(overrides: Partial<NavigationSidebarProps> = {}) {
     pages: [
       { to: "/today", label: "Today", icon: Icon },
       { to: "/inbox", label: "Inbox", icon: Icon },
-      { to: "/tasks", label: "Tasks", icon: Icon },
       { to: "/calendar", label: "Calendar", icon: Icon },
     ],
     page: "/today",
     onPage: vi.fn(),
     inboxBadge: 0,
-    tasksBadge: 0,
     sources: [],
     focus: { active: false },
     onStartFocus: vi.fn(),
     onOpenSettings: vi.fn(),
     onOpenCmdk: vi.fn(),
     profile: { displayName: null, email: null, avatarUrl: null },
+    projects: [],
+    projectsOpen: false,
+    onToggleProjects: vi.fn(),
+    onNavigateToProject: vi.fn(),
+    onNewProject: vi.fn(),
     ...overrides,
   };
   render(<NavigationSidebar {...props} />);
@@ -34,22 +37,15 @@ function renderSidebar(overrides: Partial<NavigationSidebarProps> = {}) {
 }
 
 describe("NavigationSidebar", () => {
-  it("hides Inbox and Tasks badges when their counts are zero", () => {
+  it("hides the Inbox badge when count is zero", () => {
     renderSidebar();
     expect(screen.queryByTestId("inbox-badge")).toBeNull();
-    expect(screen.queryByTestId("tasks-badge")).toBeNull();
   });
 
   it("shows the Inbox badge when inboxBadge > 0", () => {
     renderSidebar({ inboxBadge: 4 });
     const badge = screen.getByTestId("inbox-badge");
     expect(badge.textContent).toBe("4");
-  });
-
-  it("shows the Tasks badge when tasksBadge > 0", () => {
-    renderSidebar({ tasksBadge: 7 });
-    const badge = screen.getByTestId("tasks-badge");
-    expect(badge.textContent).toBe("7");
   });
 
   it("marks the current page with aria-current=page", () => {
@@ -59,13 +55,6 @@ describe("NavigationSidebar", () => {
     expect(inbox.getAttribute("aria-current")).toBe("page");
     const today = within(nav).getByRole("button", { name: /today/i });
     expect(today.getAttribute("aria-current")).toBeNull();
-  });
-
-  it("marks a page active for nested route paths", () => {
-    renderSidebar({ page: "/tasks/123" });
-    const nav = screen.getByRole("navigation", { name: /workspace/i });
-    const tasks = within(nav).getByRole("button", { name: /tasks/i });
-    expect(tasks.getAttribute("aria-current")).toBe("page");
   });
 
   it("dispatches onPage when a nav item is clicked", () => {
@@ -116,5 +105,83 @@ describe("NavigationSidebar", () => {
     expect(
       screen.queryByRole("button", { name: /start focus session/i }),
     ).toBeNull();
+  });
+});
+
+describe("NavigationSidebar — Projects section", () => {
+  it("renders the Projects toggle button", () => {
+    renderSidebar();
+    const nav = screen.getByRole("navigation", { name: /projects/i });
+    expect(
+      within(nav).getByRole("button", { name: /projects/i }),
+    ).toBeTruthy();
+  });
+
+  it("hides the project list when projectsOpen is false", () => {
+    renderSidebar({
+      projects: [{ id: "p1", name: "My Project" }],
+      projectsOpen: false,
+    });
+    expect(screen.queryByText("My Project")).toBeNull();
+  });
+
+  it("shows the project list when projectsOpen is true", () => {
+    renderSidebar({
+      projects: [
+        { id: "p1", name: "My Project" },
+        { id: "p2", name: "Sprint 7" },
+      ],
+      projectsOpen: true,
+    });
+    expect(screen.getByText("My Project")).toBeTruthy();
+    expect(screen.getByText("Sprint 7")).toBeTruthy();
+  });
+
+  it("marks the active project with aria-current=page", () => {
+    renderSidebar({
+      projects: [
+        { id: "p1", name: "My Project" },
+        { id: "p2", name: "Sprint 7" },
+      ],
+      projectsOpen: true,
+      page: "/projects/p1",
+    });
+    const projectBtn = screen.getByRole("button", { name: "My Project" });
+    expect(projectBtn.getAttribute("aria-current")).toBe("page");
+    const otherBtn = screen.getByRole("button", { name: "Sprint 7" });
+    expect(otherBtn.getAttribute("aria-current")).toBeNull();
+  });
+
+  it("calls onToggleProjects when the Projects toggle is clicked", () => {
+    const onToggleProjects = vi.fn();
+    renderSidebar({ onToggleProjects });
+    const nav = screen.getByRole("navigation", { name: /projects/i });
+    fireEvent.click(within(nav).getByRole("button", { name: /projects/i }));
+    expect(onToggleProjects).toHaveBeenCalledTimes(1);
+  });
+
+  it("calls onNavigateToProject when a project is clicked", () => {
+    const onNavigateToProject = vi.fn();
+    renderSidebar({
+      projects: [{ id: "p1", name: "My Project" }],
+      projectsOpen: true,
+      onNavigateToProject,
+    });
+    fireEvent.click(screen.getByRole("button", { name: "My Project" }));
+    expect(onNavigateToProject).toHaveBeenCalledWith("p1");
+  });
+
+  it("calls onNewProject when New project is clicked", () => {
+    const onNewProject = vi.fn();
+    renderSidebar({ projectsOpen: true, onNewProject });
+    fireEvent.click(screen.getByRole("button", { name: /new project/i }));
+    expect(onNewProject).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows the New project button when projects list is expanded", () => {
+    renderSidebar({ projectsOpen: true });
+    expect(
+      screen.getByRole("button", { name: /new project/i }),
+    ).toBeTruthy();
   });
 });

@@ -24,7 +24,9 @@ const list: Automation[] = [
   automation({ id: "a-3", name: "Tag dependabot PRs" }),
 ];
 
-function renderPanel(props: Partial<Parameters<typeof AutomationsPanel>[0]> = {}) {
+function renderPanel(
+  props: Partial<Parameters<typeof AutomationsPanel>[0]> = {},
+) {
   const loader = props.loader ?? vi.fn(async () => ({ automations: list }));
   const saver = props.saver ?? vi.fn(async () => ({ ok: true }));
   const signalsLoader = props.signalsLoader ?? vi.fn(async () => []);
@@ -117,9 +119,7 @@ describe("AutomationsPanel delete-with-history-purge", () => {
     const deleteButton = await screen.findByLabelText("Delete Snooze deps");
     fireEvent.click(deleteButton);
     expect(await screen.findByText("Delete automation")).toBeTruthy();
-    expect(
-      screen.getByText(/also purges its run history/i),
-    ).toBeTruthy();
+    expect(screen.getByText(/also purges its run history/i)).toBeTruthy();
     expect(saver).not.toHaveBeenCalled();
     expect(screen.getAllByText("Snooze deps").length).toBeGreaterThan(0);
   });
@@ -143,9 +143,7 @@ describe("AutomationsPanel delete-with-history-purge", () => {
     );
     renderPanel({ saver });
     fireEvent.click(await screen.findByLabelText("Delete Snooze deps"));
-    fireEvent.click(
-      await screen.findByLabelText("Confirm delete automation"),
-    );
+    fireEvent.click(await screen.findByLabelText("Confirm delete automation"));
     await waitFor(() => {
       expect(saver).toHaveBeenCalledTimes(1);
     });
@@ -183,7 +181,9 @@ describe("AutomationsPanel empty-state Browse templates", () => {
     expect(
       screen.getByRole("button", { name: /\+ New automation/ }),
     ).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Browse templates" })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Browse templates" }),
+    ).toBeTruthy();
   });
 
   it("opens the templates modal listing the fixture templates", async () => {
@@ -256,7 +256,10 @@ describe("AutomationsPanel count strip", () => {
       automation({ id: "a-1", name: "A1", enabled: true }),
       automation({ id: "a-2", name: "A2", enabled: true }),
       automation({ id: "a-3", name: "A3", enabled: false }),
-      { ...automation({ id: "a-4", name: "A4", enabled: true }), dry_run: true },
+      {
+        ...automation({ id: "a-4", name: "A4", enabled: true }),
+        dry_run: true,
+      },
     ];
     renderPanel({ loader: vi.fn(async () => ({ automations: mixed })) });
     const strip = await screen.findByLabelText("Automations summary");
@@ -275,9 +278,9 @@ describe("AutomationsPanel count strip", () => {
     expect(strip.textContent).toBe("3 active · 0 paused · 0 dry-run");
     fireEvent.click(screen.getByLabelText("Snooze deps enabled"));
     await waitFor(() => {
-      expect(
-        screen.getByLabelText("Automations summary").textContent,
-      ).toBe("2 active · 1 paused · 0 dry-run");
+      expect(screen.getByLabelText("Automations summary").textContent).toBe(
+        "2 active · 1 paused · 0 dry-run",
+      );
     });
   });
 });
@@ -299,8 +302,13 @@ describe("AutomationsPanel dry-run toggle", () => {
     const saver = vi.fn<(next: Automation[]) => Promise<{ ok: true }>>(
       async () => ({ ok: true }),
     );
-    const single: Automation[] = [automation({ id: "a-1", name: "Snooze deps" })];
-    renderPanel({ loader: vi.fn(async () => ({ automations: single })), saver });
+    const single: Automation[] = [
+      automation({ id: "a-1", name: "Snooze deps" }),
+    ];
+    renderPanel({
+      loader: vi.fn(async () => ({ automations: single })),
+      saver,
+    });
     fireEvent.click(await screen.findByText("Edit"));
     const checkbox = (await screen.findByLabelText(
       "Dry-run mode",
@@ -324,7 +332,9 @@ describe("AutomationsPanel ?demo=1 empty-state toggle", () => {
 
   it("renders the toggle when demo is true", async () => {
     renderPanel({ demo: true });
-    expect(await screen.findByLabelText("Toggle empty state preview")).toBeTruthy();
+    expect(
+      await screen.findByLabelText("Toggle empty state preview"),
+    ).toBeTruthy();
     // Populated list still rendered initially.
     expect(screen.getByText("Snooze deps")).toBeTruthy();
   });
@@ -407,9 +417,7 @@ describe("AutomationsPanel runs view", () => {
   it("renders the empty-state copy when the automation has no runs", async () => {
     const runsLoader = vi.fn(async () => ({ runs: [] }));
     renderPanel({ runsLoader });
-    fireEvent.click(
-      await screen.findByLabelText("View runs for Snooze deps"),
-    );
+    fireEvent.click(await screen.findByLabelText("View runs for Snooze deps"));
     await waitFor(() => {
       expect(screen.getByText(/No runs yet/)).toBeTruthy();
     });
@@ -420,9 +428,7 @@ describe("AutomationsPanel runs view", () => {
       throw new Error("network down");
     });
     renderPanel({ runsLoader });
-    fireEvent.click(
-      await screen.findByLabelText("View runs for Snooze deps"),
-    );
+    fireEvent.click(await screen.findByLabelText("View runs for Snooze deps"));
     await waitFor(() => {
       expect(screen.getByText("network down")).toBeTruthy();
     });
@@ -453,15 +459,11 @@ describe("AutomationsPanel dry-run button", () => {
       trigger_event_id: dryRunRow.trigger_event_id,
     }));
     renderPanel({ runsLoader, dryRunInvoker });
-    fireEvent.click(
-      await screen.findByLabelText("View runs for Snooze deps"),
-    );
+    fireEvent.click(await screen.findByLabelText("View runs for Snooze deps"));
     await waitFor(() => {
       expect(screen.getByText(/No runs yet/)).toBeTruthy();
     });
-    fireEvent.click(
-      screen.getByLabelText("Test automation in dry-run mode"),
-    );
+    fireEvent.click(screen.getByLabelText("Test automation in dry-run mode"));
     await waitFor(() => {
       expect(dryRunInvoker).toHaveBeenCalledWith("a-1");
     });
@@ -485,13 +487,9 @@ describe("AutomationsPanel dry-run button", () => {
       error: "automation not found",
     }));
     renderPanel({ runsLoader, dryRunInvoker });
-    fireEvent.click(
-      await screen.findByLabelText("View runs for Snooze deps"),
-    );
+    fireEvent.click(await screen.findByLabelText("View runs for Snooze deps"));
     await screen.findByText(/No runs yet/);
-    fireEvent.click(
-      screen.getByLabelText("Test automation in dry-run mode"),
-    );
+    fireEvent.click(screen.getByLabelText("Test automation in dry-run mode"));
     await waitFor(() => {
       expect(screen.getByLabelText("Dry-run result").textContent).toBe(
         "Dry-run failed: automation not found",
@@ -511,12 +509,16 @@ describe("AutomationsPanel runs histogram", () => {
   });
 
   function run(
-    overrides: Partial<AutomationRunRow> & { status: AutomationRunRow["status"]; started_at: string },
+    overrides: Partial<AutomationRunRow> & {
+      status: AutomationRunRow["status"];
+      started_at: string;
+    },
   ): AutomationRunRow {
     return {
       id: overrides.id ?? `r-${overrides.started_at}`,
       automation_id: overrides.automation_id ?? "a-1",
-      trigger_event_id: overrides.trigger_event_id ?? `evt-${overrides.started_at}`,
+      trigger_event_id:
+        overrides.trigger_event_id ?? `evt-${overrides.started_at}`,
       signal_id: overrides.signal_id ?? null,
       status: overrides.status,
       actions_planned: overrides.actions_planned ?? [],
@@ -532,13 +534,14 @@ describe("AutomationsPanel runs histogram", () => {
       run({ status: "succeeded", started_at: "2026-05-07T01:00:00.000Z" }),
       run({ status: "succeeded", started_at: "2026-05-07T02:00:00.000Z" }),
       run({ status: "failed", started_at: "2026-05-07T03:00:00.000Z" }),
-      run({ status: "skipped_dry_run", started_at: "2026-05-06T05:00:00.000Z" }),
+      run({
+        status: "skipped_dry_run",
+        started_at: "2026-05-06T05:00:00.000Z",
+      }),
     ];
     const runsLoader = vi.fn(async () => ({ runs }));
     renderPanel({ runsLoader });
-    fireEvent.click(
-      await screen.findByLabelText("View runs for Snooze deps"),
-    );
+    fireEvent.click(await screen.findByLabelText("View runs for Snooze deps"));
     const histogram = await screen.findByLabelText("Runs histogram (14-day)");
     const slots = histogram.querySelectorAll("[aria-label*='·']");
     expect(slots.length).toBe(14);
@@ -569,9 +572,7 @@ describe("AutomationsPanel runs histogram", () => {
     ];
     const runsLoader = vi.fn(async () => ({ runs }));
     renderPanel({ runsLoader });
-    fireEvent.click(
-      await screen.findByLabelText("View runs for Snooze deps"),
-    );
+    fireEvent.click(await screen.findByLabelText("View runs for Snooze deps"));
     const histogram = await screen.findByLabelText("Runs histogram (14-day)");
     const empty = histogram.querySelector(
       "[aria-label^='Apr 30']",
@@ -586,9 +587,7 @@ describe("AutomationsPanel runs histogram", () => {
   it("does not render the histogram when there are no runs", async () => {
     const runsLoader = vi.fn(async () => ({ runs: [] }));
     renderPanel({ runsLoader });
-    fireEvent.click(
-      await screen.findByLabelText("View runs for Snooze deps"),
-    );
+    fireEvent.click(await screen.findByLabelText("View runs for Snooze deps"));
     await screen.findByText(/No runs yet/);
     expect(screen.queryByLabelText("Runs histogram (14-day)")).toBeNull();
   });
@@ -696,7 +695,9 @@ describe("AutomationsPanel builder live preview", () => {
   });
 });
 
-function failureRow(overrides: Partial<AutomationRunRow> = {}): AutomationRunRow {
+function failureRow(
+  overrides: Partial<AutomationRunRow> = {},
+): AutomationRunRow {
   return {
     id: overrides.id ?? "r-fail-1",
     automation_id: overrides.automation_id ?? "a-1",

@@ -43,6 +43,7 @@ function withPlanDryRun(
   if (!plan.dry_run) return options;
   return { ...options, dryRun: true };
 }
+
 import { triggerEventId } from "#/features/automations/triggers";
 import type { Signal, StoredSignal } from "#/shared/signal";
 
@@ -198,12 +199,19 @@ export async function runScheduleAutomations(
   options: ExecuteOptions = {},
 ): Promise<ScheduleTickResult> {
   const minuteIso =
-    typeof now === "string" ? minuteIsoFromDate(new Date(now)) : minuteIsoFromDate(now);
+    typeof now === "string"
+      ? minuteIsoFromDate(new Date(now))
+      : minuteIsoFromDate(now);
   const event: ScheduleEvent = { kind: "schedule", minute_iso: minuteIso };
   const planned = planAutomations(event, automations);
   const results: ExecuteResult[] = [];
   for (const plan of planned) {
-    const eventId = triggerEventId(event, undefined, undefined, plan.automation_id);
+    const eventId = triggerEventId(
+      event,
+      undefined,
+      undefined,
+      plan.automation_id,
+    );
     const result = await executeAutomation(
       { plan, triggerEventId: eventId, signalId: null },
       store,

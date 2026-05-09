@@ -323,7 +323,7 @@ const focusEndAutomation: Automation = {
 };
 
 describe("runFocusBoundaryAutomation", () => {
-  it("focus_started: writes one succeeded run keyed on ${session_id}:start", async () => {
+  it("focus_started: writes one succeeded run keyed on <session_id>:start", async () => {
     const store = memoryRunsStore();
     const out = await runFocusBoundaryAutomation(
       "focus_started",

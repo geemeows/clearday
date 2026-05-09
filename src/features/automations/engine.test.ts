@@ -449,9 +449,7 @@ describe("planAutomations — signal_state_change", () => {
 
   it("predicate with neither from nor to never matches", () => {
     const a = makeStateChangeAutomation({
-      predicates: [
-        { type: "state_from_to", field: "merged" } as never,
-      ],
+      predicates: [{ type: "state_from_to", field: "merged" } as never],
     });
     const out = planAutomations(
       {
@@ -832,9 +830,7 @@ describe("validateAutomations", () => {
           trigger_kind: "schedule",
           trigger_config: { cron: "0 9 * * 1-5" },
           predicates: [],
-          actions: [
-            { type: "post_message", target: "self_dm", body: "hello" },
-          ],
+          actions: [{ type: "post_message", target: "self_dm", body: "hello" }],
         },
       ]),
     ).toEqual([]);
@@ -853,7 +849,7 @@ describe("validateAutomations", () => {
       },
     ]);
     expect(
-      errs.some((e) => e.includes("post_message with target \"channel\"")),
+      errs.some((e) => e.includes('post_message with target "channel"')),
     ).toBe(true);
   });
 
@@ -1099,7 +1095,9 @@ describe("validateAutomations — schedule trigger", () => {
       },
     ]);
     expect(
-      errs.some((e) => e.includes("schedule trigger requires trigger_config.cron")),
+      errs.some((e) =>
+        e.includes("schedule trigger requires trigger_config.cron"),
+      ),
     ).toBe(true);
   });
 
@@ -1282,8 +1280,14 @@ describe("bucketRunsByDay", () => {
   it("ignores statuses outside the stacked set (idempotent / no_capability / pending)", () => {
     const days = bucketRunsByDay(
       [
-        { status: "skipped_idempotent", started_at: "2026-05-07T01:00:00.000Z" },
-        { status: "skipped_no_capability", started_at: "2026-05-07T02:00:00.000Z" },
+        {
+          status: "skipped_idempotent",
+          started_at: "2026-05-07T01:00:00.000Z",
+        },
+        {
+          status: "skipped_no_capability",
+          started_at: "2026-05-07T02:00:00.000Z",
+        },
         { status: "pending", started_at: "2026-05-07T03:00:00.000Z" },
       ],
       NOW,

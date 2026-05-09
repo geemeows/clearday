@@ -24,9 +24,9 @@ describe("renderTemplate", () => {
   });
 
   it("substitutes signal.payload.field", () => {
-    expect(
-      renderTemplate("by {{signal.payload.author}}", makeSignal()),
-    ).toBe("by alice");
+    expect(renderTemplate("by {{signal.payload.author}}", makeSignal())).toBe(
+      "by alice",
+    );
   });
 
   it("substitutes multiple tokens in one body", () => {
@@ -35,9 +35,7 @@ describe("renderTemplate", () => {
         "{{signal.title}} ({{signal.payload.repo}}): {{signal.url}}",
         makeSignal(),
       ),
-    ).toBe(
-      "feat: add knobs (x/y): https://github.com/x/y/pull/1",
-    );
+    ).toBe("feat: add knobs (x/y): https://github.com/x/y/pull/1");
   });
 
   it("renders missing signal.payload.* fields as empty strings", () => {
@@ -54,9 +52,9 @@ describe("renderTemplate", () => {
   });
 
   it("renders null url as empty string", () => {
-    expect(
-      renderTemplate("{{signal.url}}", makeSignal({ url: null })),
-    ).toBe("");
+    expect(renderTemplate("{{signal.url}}", makeSignal({ url: null }))).toBe(
+      "",
+    );
   });
 
   it("coerces non-string payload values via String()", () => {
@@ -99,8 +97,8 @@ describe("renderTemplate", () => {
   });
 
   it("tolerates whitespace around the path", () => {
-    expect(
-      renderTemplate("{{ signal.title }}", makeSignal()),
-    ).toBe("feat: add knobs");
+    expect(renderTemplate("{{ signal.title }}", makeSignal())).toBe(
+      "feat: add knobs",
+    );
   });
 });

@@ -11,8 +11,8 @@
 import type { AutomationAction } from "#/features/automations/engine";
 import type {
   ActionHandler,
-  ExecutedAction,
   ExecuteCtx,
+  ExecutedAction,
 } from "#/features/automations/executor";
 import { renderTemplate } from "#/features/automations/templating";
 import type {
@@ -158,7 +158,8 @@ function resolveSlackTarget(
   }
   const payload = ctx.signal.payload as Record<string, unknown> | null;
   const channel = stringField(payload, "channel");
-  const threadTs = stringField(payload, "thread_ts") ?? stringField(payload, "ts");
+  const threadTs =
+    stringField(payload, "thread_ts") ?? stringField(payload, "ts");
   if (!channel || !threadTs) {
     return {
       ok: false,
@@ -246,9 +247,7 @@ function resolvePrTarget(
   repoOverride: string | undefined,
   numberOverride: number | undefined,
   signal: Signal | null,
-):
-  | { ok: true; repo: string; number: number }
-  | { ok: false; error: string } {
+): { ok: true; repo: string; number: number } | { ok: false; error: string } {
   const payload = signal?.payload as Record<string, unknown> | null | undefined;
   const repo = repoOverride ?? stringField(payload, "repo");
   const number =

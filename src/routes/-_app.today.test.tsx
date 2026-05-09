@@ -20,6 +20,7 @@ import { toMeetingEvents } from "#/features/calendar/events";
 import { PulseCard } from "#/features/today/PulseCard";
 import {
   BriefingCard,
+  DueTodayCard,
   formatGreeting,
   InboxPreviewCard,
   InProgressCard,
@@ -27,6 +28,7 @@ import {
   TodaySchedule,
   TodayView,
 } from "#/routes/_app.today";
+import type { DueCard } from "#/features/projects/store";
 import type { StoredSignal } from "#/shared/signal";
 
 const meetingSignal = (id = "m1"): StoredSignal => ({
@@ -507,5 +509,83 @@ describe("PulseCard", () => {
     });
     render(<PulseCard now={now} loader={loader} />);
     await waitFor(() => screen.getByText(/boom/i));
+  });
+});
+
+async function renderWithProjectRouter(node: ReactElement) {
+  const rootRoute = createRootRoute({ component: () => node });
+  const projectRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/projects/$projectId",
+    component: () => null,
+  });
+  const router = createRouter({
+    routeTree: rootRoute.addChildren([projectRoute]),
+    history: createMemoryHistory({ initialEntries: ["/today"] }),
+  });
+  await router.load();
+  // biome-ignore lint/suspicious/noExplicitAny: test-only router cast
+  render(<RouterProvider router={router as any} />);
+}
+
+function makeDueCard(overrides: Partial<DueCard> = {}): DueCard {
+  return {
+    id: "card1",
+    project_id: "p1",
+    column_id: "col1",
+    order: 0,
+    title: "Ship the feature",
+    body: null,
+    priority: "p1",
+    tags: [],
+    due_at: "2026-05-09T00:00:00.000Z",
+    created_at: "2026-01-01T00:00:00Z",
+    project_name: "My Project",
+    ...overrides,
+  };
+}
+
+describe("DueTodayCard", () => {
+  const now = new Date("2026-05-09T10:00:00.000Z");
+
+  it("renders nothing when there are no due cards (null UI, not an article)", async () => {
+    const loader = vi.fn(async () => [] as DueCard[]);
+    await renderWithProjectRouter(<DueTodayCard now={now} loader={loader} />);
+    await waitFor(() => expect(loader).toHaveBeenCalled());
+    expect(screen.queryByRole("article", { name: /due today/i })).toBeNull();
+  });
+
+  it("renders due cards with title, project name, and priority badge", async () => {
+    const loader = vi.fn(async () => [makeDueCard()]);
+    await renderWithProjectRouter(<DueTodayCard now={now} loader={loader} />);
+    await waitFor(() => screen.getByText("Ship the feature"));
+    expect(screen.getByText("My Project")).toBeTruthy();
+    expect(screen.getByText("P1")).toBeTruthy();
+    expect(screen.getByRole("article", { name: /due today/i })).toBeTruthy();
+  });
+
+  it("omits the priority badge when priority is null", async () => {
+    const loader = vi.fn(async () => [makeDueCard({ priority: null })]);
+    await renderWithProjectRouter(<DueTodayCard now={now} loader={loader} />);
+    await waitFor(() => screen.getByText("Ship the feature"));
+    expect(screen.queryByText(/^P[0-3]$/)).toBeNull();
+  });
+
+  it("renders an Open link pointing to the project board with the card param", async () => {
+    const loader = vi.fn(async () => [makeDueCard()]);
+    await renderWithProjectRouter(<DueTodayCard now={now} loader={loader} />);
+    await waitFor(() => screen.getByRole("link", { name: /open card Ship the feature/i }));
+    const link = screen.getByRole("link", { name: /open card Ship the feature/i });
+    const href = link.getAttribute("href") ?? "";
+    expect(href).toContain("/projects/p1");
+    expect(href).toContain("card=card1");
+  });
+
+  it("surfaces a load error", async () => {
+    const loader = vi.fn(async () => {
+      throw new Error("network down");
+    });
+    await renderWithProjectRouter(<DueTodayCard now={now} loader={loader} />);
+    await waitFor(() => screen.getByText(/network down/i));
   });
 });

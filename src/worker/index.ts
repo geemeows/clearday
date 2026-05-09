@@ -42,10 +42,11 @@ import {
 import type { Automation } from "#/features/automations/engine";
 import type {
   AutomationRunInsert,
-  AutomationRunsStore,
   AutomationRunStatus,
+  AutomationRunsStore,
   ExecutedAction,
 } from "#/features/automations/executor";
+import { runScheduleAutomations } from "#/features/automations/orchestrator";
 import {
   type BriefingDeps,
   handleBriefingGenerate,
@@ -73,7 +74,6 @@ import {
   type ProviderAccountRow,
 } from "#/features/integrations/api/integrations-api";
 import { runScheduledPoll } from "#/features/integrations/orchestrator";
-import { runScheduleAutomations } from "#/features/automations/orchestrator";
 import { PROVIDERS } from "#/features/integrations/providers";
 import type { PrReviewEvent } from "#/features/integrations/providers/github";
 import { handleOAuthExchange } from "#/features/integrations/server/oauth-exchange-handler";
@@ -82,6 +82,7 @@ import {
   completeOnboarding,
   getOnboardingStatus,
 } from "#/features/onboarding/api";
+import { fetchGithubTicketMeta } from "#/features/projects/links/github";
 import {
   type ExportDeps,
   exportData,
@@ -235,6 +236,13 @@ export default {
 
     if (url.pathname === "/api/pr/overview" && request.method === "GET") {
       return handleGetPrOverview(url, service);
+    }
+
+    if (
+      url.pathname === "/api/projects/links/github/refresh" &&
+      request.method === "POST"
+    ) {
+      return handleRefreshProjectLinkGithub(request, service);
     }
 
     if (url.pathname === "/api/slack/reply" && request.method === "POST") {
@@ -1236,6 +1244,80 @@ async function handleGetPrOverview(
   return json(out, out.ok ? 200 : 400);
 }
 
+type RefreshGithubLinkBody = {
+  ticket_id?: string;
+  owner?: string;
+  repo?: string;
+  number?: number;
+};
+
+// Refreshes the cached metadata on a project_card_tickets row by fetching
+// the upstream GitHub PR/issue with the user's stored token. Read-only —
+// this handler never issues a write to GitHub.
+async function handleRefreshProjectLinkGithub(
+  request: Request,
+  service: SupabaseService,
+): Promise<Response> {
+  let body: RefreshGithubLinkBody;
+  try {
+    body = (await request.json()) as RefreshGithubLinkBody;
+  } catch {
+    return json({ ok: false, error: "invalid json" }, 400);
+  }
+  const ticketId = typeof body.ticket_id === "string" ? body.ticket_id : "";
+  const owner = typeof body.owner === "string" ? body.owner : "";
+  const repo = typeof body.repo === "string" ? body.repo : "";
+  const number = Number(body.number);
+  if (
+    !ticketId ||
+    !owner ||
+    !repo ||
+    !Number.isInteger(number) ||
+    number <= 0
+  ) {
+    return json(
+      {
+        ok: false,
+        error: "ticket_id, owner, repo, number required",
+        reason: "invalid_input",
+      },
+      400,
+    );
+  }
+
+  const { data: tokenRow, error: tokenError } = await service
+    .from("provider_accounts")
+    .select("access_token")
+    .eq("provider", "github")
+    .maybeSingle();
+  if (tokenError) throw new Error(tokenError.message);
+  const token =
+    (tokenRow as { access_token: string | null } | null)?.access_token ?? null;
+
+  const out = await fetchGithubTicketMeta(
+    { owner, repo, number },
+    { token, fetch: (i, init) => fetch(i, init) },
+  );
+  if (!out.ok) {
+    return json(out, out.reason === "no_token" ? 200 : 400);
+  }
+  const lastSeenAt = new Date().toISOString();
+  const { error: updateError } = await service
+    .from("project_card_tickets")
+    .update({
+      status: out.meta.status,
+      assignee: out.meta.assignee,
+      last_seen_at: lastSeenAt,
+    })
+    .eq("id", ticketId);
+  if (updateError) throw new Error(updateError.message);
+
+  return json({
+    ok: true,
+    meta: { ...out.meta, last_seen_at: lastSeenAt },
+  });
+}
+
 // Proxies images embedded in PR descriptions / comments. GitHub's
 // user-attachments URLs require auth + carry CORP: same-origin, so the
 // browser cannot load them cross-origin. We fetch with the user's token
@@ -2075,9 +2157,7 @@ function automationRunsStore(service: SupabaseService): AutomationRunsStore {
   };
 }
 
-function automationRunsReader(
-  service: SupabaseService,
-): AutomationRunsReader {
+function automationRunsReader(service: SupabaseService): AutomationRunsReader {
   return {
     listForAutomation: async (automationId, opts) => {
       let q = service

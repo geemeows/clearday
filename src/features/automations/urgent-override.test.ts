@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import type { DispatcherDeps } from "#/features/alerts/dispatcher";
+import { processUrgentReactions } from "#/features/automations/urgent-override";
 import type {
   SlackFetch,
   UrgentReactionEvent,
 } from "#/features/integrations/providers/slack/poll";
 import { pollSlackReactionsForPosts } from "#/features/integrations/providers/slack/poll";
-import { processUrgentReactions } from "#/features/automations/urgent-override";
 import type { StoredSignal } from "#/shared/signal";
 
 function makeStoredSignal(overrides: Partial<StoredSignal> = {}): StoredSignal {
@@ -87,11 +87,9 @@ describe("pollSlackReactionsForPosts (issue #94)", () => {
       }),
       text: async () => "",
     })) as unknown as SlackFetch;
-    const events = await pollSlackReactionsForPosts(
-      "tok",
-      fetchImpl,
-      [{ channel: "C-1", ts: "1700.500", signal_id: "sig-slack-1" }],
-    );
+    const events = await pollSlackReactionsForPosts("tok", fetchImpl, [
+      { channel: "C-1", ts: "1700.500", signal_id: "sig-slack-1" },
+    ]);
     expect(events).toEqual([
       {
         channel: "C-1",
@@ -120,11 +118,9 @@ describe("pollSlackReactionsForPosts (issue #94)", () => {
       }),
       text: async () => "",
     })) as unknown as SlackFetch;
-    const events = await pollSlackReactionsForPosts(
-      "tok",
-      fetchImpl,
-      [{ channel: "C-1", ts: "1700.500", signal_id: "sig-slack-1" }],
-    );
+    const events = await pollSlackReactionsForPosts("tok", fetchImpl, [
+      { channel: "C-1", ts: "1700.500", signal_id: "sig-slack-1" },
+    ]);
     expect(events).toEqual([]);
   });
 
@@ -227,11 +223,9 @@ describe("processUrgentReactions — end-to-end reaction → alert dispatch", ()
       }),
       text: async () => "",
     })) as unknown as SlackFetch;
-    const events = await pollSlackReactionsForPosts(
-      "tok",
-      fetchImpl,
-      [{ channel: "C-1", ts: "1700.500", signal_id: stored.id }],
-    );
+    const events = await pollSlackReactionsForPosts("tok", fetchImpl, [
+      { channel: "C-1", ts: "1700.500", signal_id: stored.id },
+    ]);
     const deps = alertDeps();
     const out = await processUrgentReactions(events, {
       loadSignal: async () => stored,
