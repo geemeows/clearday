@@ -193,11 +193,18 @@ export default {
       return handleSources(async () => {
         const { data, error } = await service
           .from("provider_accounts")
-          .select("provider, account_id, updated_at, status, last_polled_at");
+          .select(
+            "id, provider, account_id, handle, display_name, context, primary, updated_at, status, last_polled_at",
+          );
         if (error) throw new Error(error.message);
         return (data ?? []) as Array<{
+          id: string | null;
           provider: string;
           account_id: string | null;
+          handle: string | null;
+          display_name: string | null;
+          context: string | null;
+          primary: boolean | null;
           updated_at: string | null;
           status: string | null;
           last_polled_at: string | null;

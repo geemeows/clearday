@@ -80,6 +80,13 @@ export type SourceStatusRow = {
   updated_at: string | null;
   status: string | null;
   last_polled_at?: string | null;
+  /** Synthetic provider_accounts.id (uuid). Needed by the FE for
+   * `DELETE /api/accounts/:id` and `POST /api/accounts/:id/primary`. */
+  id?: string | null;
+  handle?: string | null;
+  display_name?: string | null;
+  context?: string | null;
+  primary?: boolean | null;
 };
 
 export type SourceStatus = {
@@ -88,6 +95,12 @@ export type SourceStatus = {
   account_id: string | null;
   updated_at: string | null;
   last_polled_at: string | null;
+  /** Synthetic provider_accounts.id (uuid), null for unconnected providers. */
+  id: string | null;
+  handle: string | null;
+  display_name: string | null;
+  context: string | null;
+  primary: boolean;
 };
 
 export async function handleSources(
@@ -111,6 +124,11 @@ export async function handleSources(
         account_id: null,
         updated_at: null,
         last_polled_at: null,
+        id: null,
+        handle: null,
+        display_name: null,
+        context: null,
+        primary: false,
       });
       continue;
     }
@@ -127,6 +145,11 @@ export async function handleSources(
         account_id: row.account_id ?? null,
         updated_at: row.updated_at ?? null,
         last_polled_at: row.last_polled_at ?? null,
+        id: row.id ?? null,
+        handle: row.handle ?? null,
+        display_name: row.display_name ?? null,
+        context: row.context ?? null,
+        primary: row.primary === true,
       });
     }
   }
