@@ -16,17 +16,30 @@ import {
   createColumn,
   deleteCard,
   deleteColumn,
+  linkTicket,
   listCards,
   listColumns,
   listProjects,
+  listTicketsForCards,
   type StoredCard,
+  type StoredCardTicket,
   type StoredColumn,
   type StoredProject,
+  unlinkTicket,
   updateCard,
   updateColumn,
+  updateTicketMeta,
 } from "#/features/projects/store";
+import {
+  formatGithubKey,
+  githubKeyUrl,
+  parseGithubLink,
+} from "#/features/projects/links/github";
+import { apiFetch } from "#/lib/api-client";
 import { supabase } from "#/lib/supabase";
 import type { SupabaseLike } from "#/shared/db";
+
+const STALE_MS = 15 * 60 * 1000;
 
 const searchSchema = z.object({
   card: z.string().optional(),
@@ -47,6 +60,7 @@ function ProjectBoardPage() {
   const [project, setProject] = useState<StoredProject | null>(null);
   const [columns, setColumns] = useState<StoredColumn[]>([]);
   const [cards, setCards] = useState<StoredCard[]>([]);
+  const [tickets, setTickets] = useState<StoredCardTicket[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -58,7 +72,7 @@ function ProjectBoardPage() {
       listColumns(client, projectId),
       listCards(client, projectId),
     ])
-      .then(([projects, cols, cds]) => {
+      .then(async ([projects, cols, cds]) => {
         if (cancelled) return;
         const found = projects.find((p) => p.id === projectId) ?? null;
         setAllProjects(projects);
@@ -66,6 +80,11 @@ function ProjectBoardPage() {
         setColumns(cols);
         setCards(cds);
         setLoading(false);
+        const tks = await listTicketsForCards(
+          client,
+          cds.map((c) => c.id),
+        );
+        if (!cancelled) setTickets(tks);
       })
       .catch((e) => {
         if (cancelled) return;
@@ -263,12 +282,123 @@ function ProjectBoardPage() {
     }
   };
 
+  const handleLinkGithub = async (
+    cardId: string,
+    input: string,
+  ): Promise<{ error?: string } | void> => {
+    const key = parseGithubLink(input);
+    if (!key) return { error: "not a GitHub URL or owner/repo#N" };
+    const extId = formatGithubKey(key);
+    if (
+      tickets.some(
+        (t) => t.card_id === cardId && t.source === "github" && t.ext_id === extId,
+      )
+    ) {
+      return { error: "already linked" };
+    }
+    const id = crypto.randomUUID();
+    const url = githubKeyUrl(key);
+    const optimistic: StoredCardTicket = {
+      id,
+      card_id: cardId,
+      source: "github",
+      ext_id: extId,
+      url,
+      status: null,
+      assignee: null,
+      last_seen_at: null,
+      created_at: new Date().toISOString(),
+    };
+    setTickets((prev) => [...prev, optimistic]);
+    try {
+      await linkTicket(client, {
+        id,
+        card_id: cardId,
+        source: "github",
+        ext_id: extId,
+        url,
+      });
+    } catch (e) {
+      setTickets((prev) => prev.filter((t) => t.id !== id));
+      return { error: e instanceof Error ? e.message : "link failed" };
+    }
+    // Fire-and-forget metadata refresh.
+    void refreshTicket(id, key);
+  };
+
+  const refreshTicket = async (
+    ticketId: string,
+    keyOverride?: { owner: string; repo: string; number: number },
+  ) => {
+    const ticket = keyOverride
+      ? null
+      : tickets.find((t) => t.id === ticketId) ?? null;
+    let key = keyOverride;
+    if (!key && ticket) {
+      const parsed = parseGithubLink(`${ticket.ext_id}`);
+      if (!parsed) return;
+      key = parsed;
+    }
+    if (!key) return;
+    try {
+      const out = (await apiFetch("/api/projects/links/github/refresh", {
+        method: "POST",
+        body: {
+          ticket_id: ticketId,
+          owner: key.owner,
+          repo: key.repo,
+          number: key.number,
+        },
+      })) as
+        | {
+            ok: true;
+            meta: { status: string; assignee: string | null; last_seen_at: string };
+          }
+        | { ok: false; reason: string; error: string };
+      if (out.ok) {
+        setTickets((prev) =>
+          prev.map((t) =>
+            t.id === ticketId
+              ? {
+                  ...t,
+                  status: out.meta.status,
+                  assignee: out.meta.assignee,
+                  last_seen_at: out.meta.last_seen_at,
+                }
+              : t,
+          ),
+        );
+        try {
+          await updateTicketMeta(client, ticketId, {
+            status: out.meta.status,
+            assignee: out.meta.assignee,
+            last_seen_at: out.meta.last_seen_at,
+          });
+        } catch {}
+      }
+    } catch {
+      // Network/Worker errors are non-fatal: chip stays in degraded state.
+    }
+  };
+
+  const handleUnlinkTicket = async (ticketId: string) => {
+    const prev = tickets;
+    setTickets((ts) => ts.filter((t) => t.id !== ticketId));
+    try {
+      await unlinkTicket(client, ticketId);
+    } catch (e) {
+      setTickets(prev);
+      setError(e instanceof Error ? e.message : "failed to unlink");
+    }
+  };
+
   return (
     <ProjectBoardView
       project={project}
       allProjects={allProjects}
       columns={columns}
       cards={cards}
+      tickets={tickets}
       loading={loading}
       error={error}
       initialCardId={initialCardId}
@@ -280,6 +410,9 @@ function ProjectBoardPage() {
       onDeleteColumn={handleDeleteColumn}
       onAddColumn={handleAddColumn}
       onReorderColumns={handleReorderColumns}
+      onLinkGithub={handleLinkGithub}
+      onUnlinkTicket={handleUnlinkTicket}
+      onRefreshTicket={(id) => refreshTicket(id)}
       onNavigateToProject={(id) =>
         router.navigate({
           to: "/projects/$projectId",
@@ -298,6 +431,7 @@ export function ProjectBoardView({
   allProjects,
   columns,
   cards,
+  tickets,
   loading,
   error,
   initialCardId,
@@ -309,6 +443,9 @@ export function ProjectBoardView({
   onDeleteColumn,
   onAddColumn,
   onReorderColumns,
+  onLinkGithub,
+  onUnlinkTicket,
+  onRefreshTicket,
   onNavigateToProject,
   onNewProject,
 }: {
@@ -316,6 +453,7 @@ export function ProjectBoardView({
   allProjects?: StoredProject[];
   columns: StoredColumn[];
   cards: StoredCard[];
+  tickets?: StoredCardTicket[];
   loading: boolean;
   error: string | null;
   initialCardId?: string;
@@ -331,6 +469,12 @@ export function ProjectBoardView({
   onDeleteColumn?: (colId: string) => void;
   onAddColumn?: (name: string) => void;
   onReorderColumns?: (movedId: string, afterId: string | null) => void;
+  onLinkGithub?: (
+    cardId: string,
+    input: string,
+  ) => Promise<{ error?: string } | void>;
+  onUnlinkTicket?: (ticketId: string) => void;
+  onRefreshTicket?: (ticketId: string) => void;
   onNavigateToProject?: (id: string) => void;
   onNewProject?: () => void;
 }) {
@@ -342,6 +486,27 @@ export function ProjectBoardView({
   const selectedCard = selectedCardId
     ? (cards.find((c) => c.id === selectedCardId) ?? null)
     : null;
+
+  const selectedTickets = selectedCardId
+    ? (tickets ?? []).filter((t) => t.card_id === selectedCardId)
+    : [];
+
+  // On-open stale refresh: when the detail pane opens, fire a background
+  // refresh for any linked ticket whose last_seen_at is older than ~15
+  // minutes (or has never been seen yet).
+  const lastRefreshedRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!selectedCardId || !onRefreshTicket) return;
+    const now = Date.now();
+    for (const t of selectedTickets) {
+      if (lastRefreshedRef.current.has(t.id)) continue;
+      const seen = t.last_seen_at ? Date.parse(t.last_seen_at) : 0;
+      if (!t.last_seen_at || now - seen > STALE_MS) {
+        lastRefreshedRef.current.add(t.id);
+        onRefreshTicket(t.id);
+      }
+    }
+  }, [selectedCardId, selectedTickets, onRefreshTicket]);
 
   // Shared ref for tracking the card currently being dragged (avoids
   // dataTransfer serialization in tests and removes a round-trip through the
@@ -450,6 +615,7 @@ export function ProjectBoardView({
                 cards={cards.filter((c) => c.column_id === col.id)}
                 allColumns={columns}
                 allCards={cards}
+                tickets={tickets ?? []}
                 onAddCard={(title) => onAddCard(col.id, title)}
                 onSelectCard={setSelectedCardId}
                 onMoveCard={onMoveCard}
@@ -463,6 +629,14 @@ export function ProjectBoardView({
         <CardDetailPane
           card={selectedCard}
           columns={columns}
+          tickets={selectedTickets}
+          onLinkGithub={
+            onLinkGithub
+              ? (input) => onLinkGithub(selectedCard.id, input)
+              : undefined
+          }
+          onUnlinkTicket={onUnlinkTicket}
+          onRefreshTicket={onRefreshTicket}
           onChange={(patch) => onUpdateCard?.(selectedCard.id, patch)}
           onDelete={() => {
             onDeleteCard?.(selectedCard.id);
@@ -744,6 +918,7 @@ function KanbanColumn({
   cards,
   allColumns,
   allCards,
+  tickets,
   onAddCard,
   onSelectCard,
   onMoveCard,
@@ -753,6 +928,7 @@ function KanbanColumn({
   cards: StoredCard[];
   allColumns: StoredColumn[];
   allCards: StoredCard[];
+  tickets?: StoredCardTicket[];
   onAddCard: (title: string) => void;
   onSelectCard: (cardId: string) => void;
   onMoveCard?: (
@@ -882,6 +1058,7 @@ function KanbanColumn({
           >
             <CardChip
               card={card}
+              tickets={(tickets ?? []).filter((t) => t.card_id === card.id)}
               onClick={() => onSelectCard(card.id)}
               onDragStart={() => {
                 dragCardIdRef.current = card.id;
@@ -939,11 +1116,13 @@ function KanbanColumn({
 
 function CardChip({
   card,
+  tickets,
   onClick,
   onDragStart,
   onKeyboardMove,
 }: {
   card: StoredCard;
+  tickets?: StoredCardTicket[];
   onClick: () => void;
   onDragStart?: () => void;
   onKeyboardMove?: (direction: "left" | "right") => void;
@@ -982,6 +1161,16 @@ function CardChip({
             {card.due_at.slice(0, 10)}
           </span>
         )}
+        {(tickets ?? []).map((t) => (
+          <span
+            key={t.id}
+            data-testid={`card-chip-ticket-${t.id}`}
+            className="inline-flex items-center gap-0.5 rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground"
+          >
+            {t.source} · {t.ext_id}
+            {t.status ? ` · ${t.status}` : " · reconnect to refresh"}
+          </span>
+        ))}
       </div>
     </button>
   );

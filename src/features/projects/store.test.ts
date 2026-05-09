@@ -7,17 +7,24 @@ import {
   deleteColumn,
   getLinkForSignal,
   linkSignalToCard,
+  linkTicket,
   listAllCards,
   listCards,
   listCardsDueOn,
   listColumns,
   listProjects,
   listSignalsForCard,
+  listTicketsForCard,
+  listTicketsForCards,
+  markTicketStale,
   unlinkSignal,
+  unlinkTicket,
+  updateTicketMeta,
   type CardWithProject,
   type DueCard,
   type StoredCard,
   type StoredCardSignal,
+  type StoredCardTicket,
   type StoredColumn,
   type StoredProject,
   updateCard,
@@ -592,5 +599,121 @@ describe("listSignalsForCard", () => {
   it("throws when query fails", async () => {
     const { client } = makeClient({ listError: { message: "list fail" } });
     await expect(listSignalsForCard(client, "card1")).rejects.toThrow("list fail");
+  });
+});
+
+const baseTicket: StoredCardTicket = {
+  id: "tk1",
+  card_id: "card1",
+  source: "github",
+  ext_id: "octo/repo#1",
+  url: "https://github.com/octo/repo/issues/1",
+  status: "open",
+  assignee: null,
+  last_seen_at: null,
+  created_at: "2026-05-01T00:00:00Z",
+};
+
+describe("linkTicket", () => {
+  it("upserts on (card_id, source, ext_id)", async () => {
+    const { client, spies } = makeClient();
+    await linkTicket(client, {
+      id: "tk1",
+      card_id: "card1",
+      source: "github",
+      ext_id: "octo/repo#1",
+      url: "https://github.com/octo/repo/issues/1",
+    });
+    expect(spies.upsert).toHaveBeenCalledWith(
+      {
+        id: "tk1",
+        card_id: "card1",
+        source: "github",
+        ext_id: "octo/repo#1",
+        url: "https://github.com/octo/repo/issues/1",
+      },
+      { onConflict: "card_id,source,ext_id" },
+    );
+  });
+
+  it("throws on upsert error", async () => {
+    const { client } = makeClient({
+      upsertResult: { error: { message: "boom" } },
+    });
+    await expect(
+      linkTicket(client, {
+        id: "x",
+        card_id: "c",
+        source: "github",
+        ext_id: "o/r#1",
+        url: "u",
+      }),
+    ).rejects.toThrow("boom");
+  });
+});
+
+describe("unlinkTicket", () => {
+  it("deletes by id", async () => {
+    const { client, spies } = makeClient();
+    await unlinkTicket(client, "tk1");
+    expect(spies.deleteEq).toHaveBeenCalledWith("id", "tk1");
+  });
+
+  it("throws on delete error", async () => {
+    const { client } = makeClient({
+      deleteResult: { error: { message: "no" } },
+    });
+    await expect(unlinkTicket(client, "tk1")).rejects.toThrow("no");
+  });
+});
+
+describe("listTicketsForCard", () => {
+  it("filters by card_id and orders by created_at asc", async () => {
+    const { client, spies } = makeClient({ listData: [baseTicket] });
+    const result = await listTicketsForCard(client, "card1");
+    expect(spies.eq).toHaveBeenCalledWith("card_id", "card1");
+    expect(spies.order).toHaveBeenCalledWith("created_at", { ascending: true });
+    expect(result).toEqual([baseTicket]);
+  });
+
+  it("returns empty when none", async () => {
+    const { client } = makeClient({ listData: [] });
+    expect(await listTicketsForCard(client, "card1")).toEqual([]);
+  });
+});
+
+describe("listTicketsForCards", () => {
+  it("returns empty when no card ids", async () => {
+    const { client, spies } = makeClient({ listData: [baseTicket] });
+    expect(await listTicketsForCards(client, [])).toEqual([]);
+    expect(spies.select).not.toHaveBeenCalled();
+  });
+
+  it("filters by .in(card_id, ids)", async () => {
+    const { client, spies } = makeClient({ listData: [baseTicket] });
+    const result = await listTicketsForCards(client, ["card1", "card2"]);
+    expect(result).toEqual([baseTicket]);
+    expect(spies.select).toHaveBeenCalled();
+  });
+});
+
+describe("updateTicketMeta / markTicketStale", () => {
+  it("updateTicketMeta writes patch and filters by id", async () => {
+    const { client, spies } = makeClient();
+    await updateTicketMeta(client, "tk1", {
+      status: "merged",
+      last_seen_at: "2026-05-02T00:00:00Z",
+    });
+    expect(spies.update).toHaveBeenCalledWith({
+      status: "merged",
+      last_seen_at: "2026-05-02T00:00:00Z",
+    });
+    expect(spies.updateEq).toHaveBeenCalledWith("id", "tk1");
+  });
+
+  it("markTicketStale clears last_seen_at", async () => {
+    const { client, spies } = makeClient();
+    await markTicketStale(client, "tk1");
+    expect(spies.update).toHaveBeenCalledWith({ last_seen_at: null });
   });
 });

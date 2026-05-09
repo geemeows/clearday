@@ -272,6 +272,112 @@ export async function listSignalsForCard(
   return (data ?? []) as StoredCardSignal[];
 }
 
+// ─── Ticket links ─────────────────────────────────────────────────────────────
+
+export type StoredCardTicket = {
+  id: string;
+  card_id: string;
+  source: "github" | "linear" | "jira";
+  ext_id: string;
+  url: string;
+  status: string | null;
+  assignee: string | null;
+  last_seen_at: string | null;
+  created_at: string;
+};
+
+export type CardTicketMetaPatch = {
+  status?: string | null;
+  assignee?: string | null;
+  last_seen_at?: string | null;
+};
+
+// Insert a new ticket link. Idempotent on (card_id, source, ext_id) — re-linking
+// the same upstream ticket to the same card is a no-op, returning the existing
+// row's id via the upsert.
+export async function linkTicket(
+  client: SupabaseLike,
+  ticket: {
+    id: string;
+    card_id: string;
+    source: "github" | "linear" | "jira";
+    ext_id: string;
+    url: string;
+  },
+): Promise<void> {
+  const { error } = await client.from("project_card_tickets").upsert(
+    {
+      id: ticket.id,
+      card_id: ticket.card_id,
+      source: ticket.source,
+      ext_id: ticket.ext_id,
+      url: ticket.url,
+    },
+    { onConflict: "card_id,source,ext_id" },
+  );
+  if (error) throw new Error(`link ticket failed: ${error.message}`);
+}
+
+export async function unlinkTicket(
+  client: SupabaseLike,
+  id: string,
+): Promise<void> {
+  const del = client.from("project_card_tickets").delete;
+  if (!del) throw new Error("unlink ticket failed: client missing delete()");
+  const { error } = await del().eq("id", id);
+  if (error) throw new Error(`unlink ticket failed: ${error.message}`);
+}
+
+export async function listTicketsForCard(
+  client: SupabaseLike,
+  cardId: string,
+): Promise<StoredCardTicket[]> {
+  const { data, error } = await client
+    .from("project_card_tickets")
+    .select("*")
+    .eq("card_id", cardId)
+    .order("created_at", { ascending: true })
+    .limit(50);
+  if (error) throw new Error(`list tickets failed: ${error.message}`);
+  return (data ?? []) as StoredCardTicket[];
+}
+
+export async function listTicketsForCards(
+  client: SupabaseLike,
+  cardIds: string[],
+): Promise<StoredCardTicket[]> {
+  if (cardIds.length === 0) return [];
+  const { data, error } = await client
+    .from("project_card_tickets")
+    .select("*")
+    .in("card_id", cardIds)
+    .order("created_at", { ascending: true })
+    .limit(500);
+  if (error) throw new Error(`list tickets failed: ${error.message}`);
+  return (data ?? []) as StoredCardTicket[];
+}
+
+export async function updateTicketMeta(
+  client: SupabaseLike,
+  id: string,
+  patch: CardTicketMetaPatch,
+): Promise<void> {
+  const { error } = await client
+    .from("project_card_tickets")
+    .update(patch as Record<string, unknown>)
+    .eq("id", id);
+  if (error) throw new Error(`update ticket failed: ${error.message}`);
+}
+
+// Mark a ticket as stale by clearing its last_seen_at; the next on-open
+// refresh will repopulate it.
+export async function markTicketStale(
+  client: SupabaseLike,
+  id: string,
+): Promise<void> {
+  await updateTicketMeta(client, id, { last_seen_at: null });
+}
+
 // ─── Due cards ────────────────────────────────────────────────────────────────
 
 export async function listCardsDueOn(

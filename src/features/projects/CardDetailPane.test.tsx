@@ -455,3 +455,163 @@ describe("CardDetailPane close", () => {
     expect(onClose).toHaveBeenCalled();
   });
 });
+
+import type { StoredCardTicket } from "#/features/projects/store";
+
+function makeTicket(overrides: Partial<StoredCardTicket> = {}): StoredCardTicket {
+  return {
+    id: "tk1",
+    card_id: "card1",
+    source: "github",
+    ext_id: "octo/repo#1",
+    url: "https://github.com/octo/repo/issues/1",
+    status: "open",
+    assignee: null,
+    last_seen_at: "2026-05-01T00:00:00Z",
+    created_at: "2026-05-01T00:00:00Z",
+    ...overrides,
+  };
+}
+
+describe("CardDetailPane linked tickets", () => {
+  it("renders the Link GitHub input only when onLinkGithub is provided", () => {
+    const { rerender } = render(
+      <CardDetailPane
+        card={makeCard()}
+        columns={columns}
+        onChange={vi.fn()}
+        onDelete={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+    expect(screen.queryByRole("textbox", { name: "Link GitHub" })).toBeNull();
+    rerender(
+      <CardDetailPane
+        card={makeCard()}
+        columns={columns}
+        onChange={vi.fn()}
+        onDelete={vi.fn()}
+        onClose={vi.fn()}
+        onLinkGithub={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole("textbox", { name: "Link GitHub" })).toBeTruthy();
+  });
+
+  it("calls onLinkGithub when Link button is clicked with a value", async () => {
+    const onLinkGithub = vi.fn(async () => undefined);
+    render(
+      <CardDetailPane
+        card={makeCard()}
+        columns={columns}
+        onChange={vi.fn()}
+        onDelete={vi.fn()}
+        onClose={vi.fn()}
+        onLinkGithub={onLinkGithub}
+      />,
+    );
+    const input = screen.getByRole("textbox", { name: "Link GitHub" });
+    fireEvent.change(input, {
+      target: { value: "https://github.com/o/r/pull/3" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Link" }));
+    await waitFor(() =>
+      expect(onLinkGithub).toHaveBeenCalledWith("https://github.com/o/r/pull/3"),
+    );
+  });
+
+  it("surfaces the resolver error message", async () => {
+    const onLinkGithub = vi.fn(async () => ({ error: "not a GitHub URL" }));
+    render(
+      <CardDetailPane
+        card={makeCard()}
+        columns={columns}
+        onChange={vi.fn()}
+        onDelete={vi.fn()}
+        onClose={vi.fn()}
+        onLinkGithub={onLinkGithub}
+      />,
+    );
+    fireEvent.change(screen.getByRole("textbox", { name: "Link GitHub" }), {
+      target: { value: "garbage" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Link" }));
+    await waitFor(() =>
+      expect(screen.getByRole("alert").textContent).toContain("not a GitHub URL"),
+    );
+  });
+
+  it("renders existing tickets with status and assignee", () => {
+    render(
+      <CardDetailPane
+        card={makeCard()}
+        columns={columns}
+        tickets={[makeTicket({ status: "merged", assignee: "alice" })]}
+        onChange={vi.fn()}
+        onDelete={vi.fn()}
+        onClose={vi.fn()}
+        onLinkGithub={vi.fn()}
+      />,
+    );
+    const chip = screen.getByTestId("ticket-chip-tk1");
+    expect(chip.textContent).toContain("octo/repo#1");
+    expect(chip.textContent).toContain("merged");
+    expect(chip.textContent).toContain("alice");
+  });
+
+  it("renders the degraded chip when last_seen_at is null", () => {
+    render(
+      <CardDetailPane
+        card={makeCard()}
+        columns={columns}
+        tickets={[
+          makeTicket({ status: null, last_seen_at: null }),
+        ]}
+        onChange={vi.fn()}
+        onDelete={vi.fn()}
+        onClose={vi.fn()}
+        onLinkGithub={vi.fn()}
+      />,
+    );
+    const chip = screen.getByTestId("ticket-chip-tk1");
+    expect(chip.textContent).toContain("reconnect to refresh");
+    const link = chip.querySelector("a");
+    expect(link?.getAttribute("href")).toBe("/settings/integrations");
+  });
+
+  it("calls onRefreshTicket when the refresh button is clicked", () => {
+    const onRefreshTicket = vi.fn();
+    render(
+      <CardDetailPane
+        card={makeCard()}
+        columns={columns}
+        tickets={[makeTicket()]}
+        onChange={vi.fn()}
+        onDelete={vi.fn()}
+        onClose={vi.fn()}
+        onLinkGithub={vi.fn()}
+        onRefreshTicket={onRefreshTicket}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Refresh octo/repo#1" }));
+    expect(onRefreshTicket).toHaveBeenCalledWith("tk1");
+  });
+
+  it("calls onUnlinkTicket when the unlink button is clicked", () => {
+    const onUnlinkTicket = vi.fn();
+    render(
+      <CardDetailPane
+        card={makeCard()}
+        columns={columns}
+        tickets={[makeTicket()]}
+        onChange={vi.fn()}
+        onDelete={vi.fn()}
+        onClose={vi.fn()}
+        onLinkGithub={vi.fn()}
+        onUnlinkTicket={onUnlinkTicket}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Unlink octo/repo#1" }));
+    expect(onUnlinkTicket).toHaveBeenCalledWith("tk1");
+  });
+});

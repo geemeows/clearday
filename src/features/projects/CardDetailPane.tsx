@@ -3,9 +3,14 @@
 // onChange synchronously; the parent owns persistence (debounced via the
 // store). Title saves on blur to avoid spamming writes per keystroke.
 
-import { X } from "lucide-react";
+import { RefreshCw, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { CardPatch, StoredCard, StoredColumn } from "#/features/projects/store";
+import type {
+  CardPatch,
+  StoredCard,
+  StoredCardTicket,
+  StoredColumn,
+} from "#/features/projects/store";
 
 export type CardDetailPaneProps = {
   card: StoredCard;
@@ -13,6 +18,10 @@ export type CardDetailPaneProps = {
   onChange: (patch: CardPatch) => void;
   onDelete: () => void;
   onClose: () => void;
+  tickets?: StoredCardTicket[];
+  onLinkGithub?: (input: string) => Promise<{ error?: string } | void>;
+  onUnlinkTicket?: (ticketId: string) => void;
+  onRefreshTicket?: (ticketId: string) => void;
 };
 
 const PRIORITIES: Array<{ value: string; label: string }> = [
@@ -29,6 +38,10 @@ export function CardDetailPane({
   onChange,
   onDelete,
   onClose,
+  tickets,
+  onLinkGithub,
+  onUnlinkTicket,
+  onRefreshTicket,
 }: CardDetailPaneProps) {
   const [title, setTitle] = useState(card.title);
   const [body, setBody] = useState(card.body ?? "");
@@ -101,6 +114,29 @@ export function CardDetailPane({
 
   const removeTag = (t: string) => {
     onChange({ tags: card.tags.filter((x) => x !== t) });
+  };
+
+  const [linkDraft, setLinkDraft] = useState("");
+  const [linkError, setLinkError] = useState<string | null>(null);
+  const [linkSubmitting, setLinkSubmitting] = useState(false);
+
+  useEffect(() => {
+    setLinkDraft("");
+    setLinkError(null);
+  }, [card.id]);
+
+  const submitLink = async () => {
+    const v = linkDraft.trim();
+    if (!v || !onLinkGithub) return;
+    setLinkSubmitting(true);
+    const out = await onLinkGithub(v);
+    setLinkSubmitting(false);
+    if (out && out.error) {
+      setLinkError(out.error);
+      return;
+    }
+    setLinkError(null);
+    setLinkDraft("");
   };
 
   return (
@@ -199,6 +235,49 @@ export function CardDetailPane({
             />
           </Field>
 
+          {onLinkGithub && (
+            <Field label="Linked tickets">
+              <div className="flex flex-col gap-1.5">
+                {(tickets ?? []).map((t) => (
+                  <TicketChip
+                    key={t.id}
+                    ticket={t}
+                    onRefresh={onRefreshTicket}
+                    onUnlink={onUnlinkTicket}
+                  />
+                ))}
+                <div className="flex gap-1.5">
+                  <input
+                    aria-label="Link GitHub"
+                    value={linkDraft}
+                    onChange={(e) => setLinkDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        submitLink();
+                      }
+                    }}
+                    placeholder="GitHub URL or owner/repo#N"
+                    className="flex-1 rounded-md border border-border bg-background px-2.5 py-1.5 text-foreground text-sm outline-none focus:border-primary"
+                  />
+                  <button
+                    type="button"
+                    onClick={submitLink}
+                    disabled={linkSubmitting || !linkDraft.trim()}
+                    className="rounded-md bg-primary px-2.5 py-1.5 text-primary-foreground text-xs disabled:opacity-50"
+                  >
+                    Link
+                  </button>
+                </div>
+                {linkError && (
+                  <p role="alert" className="text-destructive text-xs">
+                    {linkError}
+                  </p>
+                )}
+              </div>
+            </Field>
+          )}
+
           <Field label="Tags">
             <div className="flex flex-wrap items-center gap-1.5">
               {card.tags.map((t) => (
@@ -271,6 +350,66 @@ export function CardDetailPane({
           )}
         </footer>
       </aside>
+    </div>
+  );
+}
+
+function TicketChip({
+  ticket,
+  onRefresh,
+  onUnlink,
+}: {
+  ticket: StoredCardTicket;
+  onRefresh?: (id: string) => void;
+  onUnlink?: (id: string) => void;
+}) {
+  const isDegraded = ticket.last_seen_at == null;
+  const statusLabel = ticket.status ?? (isDegraded ? "reconnect to refresh" : "");
+  return (
+    <div
+      data-testid={`ticket-chip-${ticket.id}`}
+      className="flex flex-wrap items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2 py-1 text-xs"
+    >
+      <a
+        href={
+          isDegraded
+            ? "/settings/integrations"
+            : ticket.url
+        }
+        target={isDegraded ? "_self" : "_blank"}
+        rel="noreferrer"
+        className="font-medium text-foreground hover:underline"
+      >
+        {ticket.source} · {ticket.ext_id}
+      </a>
+      {statusLabel && (
+        <span className="text-muted-foreground">· {statusLabel}</span>
+      )}
+      {ticket.assignee && (
+        <span className="text-muted-foreground">· @{ticket.assignee}</span>
+      )}
+      <div className="ml-auto flex items-center gap-1">
+        {onRefresh && (
+          <button
+            type="button"
+            aria-label={`Refresh ${ticket.ext_id}`}
+            onClick={() => onRefresh(ticket.id)}
+            className="flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
+          >
+            <RefreshCw className="h-3 w-3" />
+          </button>
+        )}
+        {onUnlink && (
+          <button
+            type="button"
+            aria-label={`Unlink ${ticket.ext_id}`}
+            onClick={() => onUnlink(ticket.id)}
+            className="flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
+          >
+            <X className="h-3 w-3" />
+          </button>
+        )}
+      </div>
     </div>
   );
 }
