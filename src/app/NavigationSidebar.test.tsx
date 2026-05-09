@@ -14,7 +14,6 @@ function renderSidebar(overrides: Partial<NavigationSidebarProps> = {}) {
     pages: [
       { to: "/today", label: "Today", icon: Icon },
       { to: "/inbox", label: "Inbox", icon: Icon },
-      { to: "/projects", label: "Projects", icon: Icon },
       { to: "/calendar", label: "Calendar", icon: Icon },
     ],
     page: "/today",
@@ -26,6 +25,11 @@ function renderSidebar(overrides: Partial<NavigationSidebarProps> = {}) {
     onOpenSettings: vi.fn(),
     onOpenCmdk: vi.fn(),
     profile: { displayName: null, email: null, avatarUrl: null },
+    projects: [],
+    projectsOpen: false,
+    onToggleProjects: vi.fn(),
+    onNavigateToProject: vi.fn(),
+    onNewProject: vi.fn(),
     ...overrides,
   };
   render(<NavigationSidebar {...props} />);
@@ -51,13 +55,6 @@ describe("NavigationSidebar", () => {
     expect(inbox.getAttribute("aria-current")).toBe("page");
     const today = within(nav).getByRole("button", { name: /today/i });
     expect(today.getAttribute("aria-current")).toBeNull();
-  });
-
-  it("marks a page active for nested route paths", () => {
-    renderSidebar({ page: "/projects/some-id" });
-    const nav = screen.getByRole("navigation", { name: /workspace/i });
-    const projects = within(nav).getByRole("button", { name: /projects/i });
-    expect(projects.getAttribute("aria-current")).toBe("page");
   });
 
   it("dispatches onPage when a nav item is clicked", () => {
@@ -108,5 +105,83 @@ describe("NavigationSidebar", () => {
     expect(
       screen.queryByRole("button", { name: /start focus session/i }),
     ).toBeNull();
+  });
+});
+
+describe("NavigationSidebar — Projects section", () => {
+  it("renders the Projects toggle button", () => {
+    renderSidebar();
+    const nav = screen.getByRole("navigation", { name: /projects/i });
+    expect(
+      within(nav).getByRole("button", { name: /projects/i }),
+    ).toBeTruthy();
+  });
+
+  it("hides the project list when projectsOpen is false", () => {
+    renderSidebar({
+      projects: [{ id: "p1", name: "My Project" }],
+      projectsOpen: false,
+    });
+    expect(screen.queryByText("My Project")).toBeNull();
+  });
+
+  it("shows the project list when projectsOpen is true", () => {
+    renderSidebar({
+      projects: [
+        { id: "p1", name: "My Project" },
+        { id: "p2", name: "Sprint 7" },
+      ],
+      projectsOpen: true,
+    });
+    expect(screen.getByText("My Project")).toBeTruthy();
+    expect(screen.getByText("Sprint 7")).toBeTruthy();
+  });
+
+  it("marks the active project with aria-current=page", () => {
+    renderSidebar({
+      projects: [
+        { id: "p1", name: "My Project" },
+        { id: "p2", name: "Sprint 7" },
+      ],
+      projectsOpen: true,
+      page: "/projects/p1",
+    });
+    const projectBtn = screen.getByRole("button", { name: "My Project" });
+    expect(projectBtn.getAttribute("aria-current")).toBe("page");
+    const otherBtn = screen.getByRole("button", { name: "Sprint 7" });
+    expect(otherBtn.getAttribute("aria-current")).toBeNull();
+  });
+
+  it("calls onToggleProjects when the Projects toggle is clicked", () => {
+    const onToggleProjects = vi.fn();
+    renderSidebar({ onToggleProjects });
+    const nav = screen.getByRole("navigation", { name: /projects/i });
+    fireEvent.click(within(nav).getByRole("button", { name: /projects/i }));
+    expect(onToggleProjects).toHaveBeenCalledTimes(1);
+  });
+
+  it("calls onNavigateToProject when a project is clicked", () => {
+    const onNavigateToProject = vi.fn();
+    renderSidebar({
+      projects: [{ id: "p1", name: "My Project" }],
+      projectsOpen: true,
+      onNavigateToProject,
+    });
+    fireEvent.click(screen.getByRole("button", { name: "My Project" }));
+    expect(onNavigateToProject).toHaveBeenCalledWith("p1");
+  });
+
+  it("calls onNewProject when New project is clicked", () => {
+    const onNewProject = vi.fn();
+    renderSidebar({ projectsOpen: true, onNewProject });
+    fireEvent.click(screen.getByRole("button", { name: /new project/i }));
+    expect(onNewProject).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows the New project button when projects list is expanded", () => {
+    renderSidebar({ projectsOpen: true });
+    expect(
+      screen.getByRole("button", { name: /new project/i }),
+    ).toBeTruthy();
   });
 });

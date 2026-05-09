@@ -1,6 +1,7 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router";
-import { Kanban } from "lucide-react";
+import { Kanban, X } from "lucide-react";
 import { useEffect, useState } from "react";
+import { z } from "zod";
 import { Button } from "#/components/coss/button";
 import {
   createColumn,
@@ -11,7 +12,12 @@ import {
 import { supabase } from "#/lib/supabase";
 import type { SupabaseLike } from "#/shared/db";
 
+const searchSchema = z.object({
+  mode: z.string().optional(),
+});
+
 export const Route = createFileRoute("/_app/projects/")({
+  validateSearch: searchSchema,
   component: ProjectsIndexPage,
 });
 
@@ -24,6 +30,7 @@ const DEFAULT_TEMPLATE_COLUMNS = [
 
 function ProjectsIndexPage() {
   const router = useRouter();
+  const { mode } = Route.useSearch();
   const [projects, setProjects] = useState<StoredProject[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const client = supabase as unknown as SupabaseLike;
@@ -33,33 +40,34 @@ function ProjectsIndexPage() {
     listProjects(client)
       .then((list) => {
         if (cancelled) return;
-        if (list.length > 0) {
+        if (list.length > 0 && mode !== "new") {
           router.navigate({
             to: "/projects/$projectId",
             params: { projectId: list[0].id },
           });
         } else {
-          setProjects([]);
+          setProjects(list);
         }
       })
       .catch((e) => {
-        if (!cancelled) setError(e instanceof Error ? e.message : "failed to load");
+        if (!cancelled)
+          setError(e instanceof Error ? e.message : "failed to load");
       });
     return () => {
       cancelled = true;
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode]);
 
-  const handleCreate = async (name: string) => {
+  const handleCreate = async (name: string, columns: string[]) => {
     const projectId = crypto.randomUUID();
     try {
       await createProject(client, { id: projectId, name });
-      for (let i = 0; i < DEFAULT_TEMPLATE_COLUMNS.length; i++) {
+      for (let i = 0; i < columns.length; i++) {
         await createColumn(client, {
           id: crypto.randomUUID(),
           project_id: projectId,
-          name: DEFAULT_TEMPLATE_COLUMNS[i],
+          name: columns[i],
           order: i,
         });
       }
@@ -99,20 +107,38 @@ function ProjectsIndexPage() {
   return <OnboardingView onCreateProject={handleCreate} />;
 }
 
+type ColumnMode = "template" | "custom";
+
 export function OnboardingView({
   onCreateProject,
 }: {
-  onCreateProject: (name: string) => void;
+  onCreateProject: (name: string, columns: string[]) => void;
 }) {
   const [name, setName] = useState("My first project");
+  const [columnMode, setColumnMode] = useState<ColumnMode>("template");
+  const [customColumns, setCustomColumns] = useState<string[]>([
+    "To do",
+    "In progress",
+    "Done",
+  ]);
   const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!name.trim() || submitting) return;
     setSubmitting(true);
-    onCreateProject(name.trim());
+    const cols =
+      columnMode === "template"
+        ? [...DEFAULT_TEMPLATE_COLUMNS]
+        : customColumns.map((c) => c.trim()).filter(Boolean);
+    onCreateProject(name.trim(), cols);
   };
+
+  const addCustomColumn = () => setCustomColumns((cs) => [...cs, ""]);
+  const removeCustomColumn = (i: number) =>
+    setCustomColumns((cs) => cs.filter((_, idx) => idx !== i));
+  const updateCustomColumn = (i: number, val: string) =>
+    setCustomColumns((cs) => cs.map((c, idx) => (idx === i ? val : c)));
 
   return (
     <section className="mx-auto max-w-2xl p-8">
@@ -132,15 +158,14 @@ export function OnboardingView({
 
       <div
         role="region"
-        aria-label="Create your first project"
+        aria-label="Create project"
         className="rounded-xl border border-border bg-card p-6 shadow-sm"
       >
         <h2 className="mb-1 font-semibold text-lg text-foreground">
-          Create your first project
+          Create a project
         </h2>
         <p className="mb-6 text-muted-foreground text-sm">
-          Starts with Backlog · In progress · In review · Done columns. You
-          can rename, reorder, and add more later.
+          Choose a name and pick a column layout to get started.
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -163,16 +188,91 @@ export function OnboardingView({
             />
           </div>
 
-          <div className="flex items-center gap-3 rounded-md bg-muted/50 px-3 py-2.5 text-muted-foreground text-xs">
-            <span className="font-medium text-foreground">Template:</span>
-            {DEFAULT_TEMPLATE_COLUMNS.map((col, i) => (
-              <span key={col}>
-                {col}
-                {i < DEFAULT_TEMPLATE_COLUMNS.length - 1 && (
-                  <span className="ml-3 opacity-40">→</span>
-                )}
-              </span>
-            ))}
+          <div className="space-y-3">
+            <div
+              role="group"
+              aria-label="Column layout"
+              className="flex gap-2"
+            >
+              <button
+                type="button"
+                aria-pressed={columnMode === "template"}
+                onClick={() => setColumnMode("template")}
+                className={
+                  columnMode === "template"
+                    ? "rounded-md border border-primary bg-primary/10 px-3 py-1.5 text-primary text-sm font-medium"
+                    : "rounded-md border border-border px-3 py-1.5 text-muted-foreground text-sm hover:bg-accent"
+                }
+              >
+                Template
+              </button>
+              <button
+                type="button"
+                aria-pressed={columnMode === "custom"}
+                onClick={() => setColumnMode("custom")}
+                className={
+                  columnMode === "custom"
+                    ? "rounded-md border border-primary bg-primary/10 px-3 py-1.5 text-primary text-sm font-medium"
+                    : "rounded-md border border-border px-3 py-1.5 text-muted-foreground text-sm hover:bg-accent"
+                }
+              >
+                Custom columns
+              </button>
+            </div>
+
+            {columnMode === "template" ? (
+              <div className="flex items-center gap-3 rounded-md bg-muted/50 px-3 py-2.5 text-muted-foreground text-xs">
+                <span className="font-medium text-foreground">Template:</span>
+                {DEFAULT_TEMPLATE_COLUMNS.map((col, i) => (
+                  <span key={col}>
+                    {col}
+                    {i < DEFAULT_TEMPLATE_COLUMNS.length - 1 && (
+                      <span className="ml-3 opacity-40">→</span>
+                    )}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <div
+                role="list"
+                aria-label="Custom columns"
+                className="space-y-1.5"
+              >
+                {customColumns.map((col, i) => (
+                  <div
+                    key={i}
+                    role="listitem"
+                    className="flex items-center gap-2"
+                  >
+                    <input
+                      type="text"
+                      value={col}
+                      onChange={(e) => updateCustomColumn(i, e.target.value)}
+                      placeholder={`Column ${i + 1}`}
+                      aria-label={`Column ${i + 1} name`}
+                      className="flex-1 rounded-md border border-border bg-background px-3 py-1.5 text-foreground text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+                      disabled={submitting}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeCustomColumn(i)}
+                      aria-label={`Remove column ${i + 1}`}
+                      disabled={customColumns.length <= 1}
+                      className="flex h-7 w-7 items-center justify-center rounded text-muted-foreground hover:bg-accent disabled:opacity-40"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={addCustomColumn}
+                  className="mt-1 text-muted-foreground text-xs hover:text-foreground"
+                >
+                  + Add column
+                </button>
+              </div>
+            )}
           </div>
 
           <Button

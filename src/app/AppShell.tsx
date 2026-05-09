@@ -2,7 +2,6 @@ import { Outlet, useRouter, useRouterState } from "@tanstack/react-router";
 import {
   Calendar,
   Inbox,
-  Kanban,
   Moon,
   Settings as SettingsIcon,
   Sun,
@@ -15,9 +14,13 @@ import {
   type NavigationSidebarProps,
   type NavPage,
   type NavProfile,
+  type NavProject,
   type NavSource,
   OPEN_CMDK_EVENT,
 } from "#/app/NavigationSidebar";
+import { listProjects } from "#/features/projects/store";
+import { supabase } from "#/lib/supabase";
+import type { SupabaseLike } from "#/shared/db";
 import { FocusModal } from "#/features/focus/components/FocusModal";
 import type { ProviderAccountStatus } from "#/features/integrations/provider-account-status";
 import {
@@ -41,7 +44,6 @@ import type { Signal, StoredSignal } from "#/shared/signal";
 const PAGES: NavPage[] = [
   { to: "/today", label: "Today", icon: Sun },
   { to: "/inbox", label: "Inbox", icon: Inbox },
-  { to: "/projects", label: "Projects", icon: Kanban },
   { to: "/calendar", label: "Calendar", icon: Calendar },
 ];
 
@@ -83,6 +85,10 @@ export function AppShell() {
   const { inboxBadge } = useNavBadges();
   const profile = useProfile();
   const theme = useEffectiveTheme();
+  const projects = useProjects();
+  const [projectsOpen, setProjectsOpen] = useState(() =>
+    path.startsWith("/projects"),
+  );
 
   const sources = useMemo<NavSource[]>(
     () =>
@@ -112,6 +118,20 @@ export function AppShell() {
     onOpenSettings: () => router.navigate({ to: "/settings" }),
     onOpenCmdk: () => window.dispatchEvent(new CustomEvent(OPEN_CMDK_EVENT)),
     profile,
+    projects,
+    projectsOpen,
+    onToggleProjects: () => setProjectsOpen((o) => !o),
+    onNavigateToProject: (id) => {
+      setProjectsOpen(true);
+      router.navigate({
+        to: "/projects/$projectId",
+        params: { projectId: id },
+      });
+    },
+    onNewProject: () => {
+      setProjectsOpen(true);
+      router.navigate({ to: "/projects", search: { mode: "new" } });
+    },
   };
 
   const startFocusSession = async ({
@@ -349,6 +369,24 @@ function useNavBadges(): { inboxBadge: number } {
     };
   }, []);
   return badges;
+}
+
+function useProjects(): NavProject[] {
+  const [projects, setProjects] = useState<NavProject[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    const client = supabase as unknown as SupabaseLike;
+    listProjects(client)
+      .then((list) => {
+        if (!cancelled)
+          setProjects(list.map((p) => ({ id: p.id, name: p.name })));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  return projects;
 }
 
 function useSourceStatuses(): Record<string, SourceMeta> {

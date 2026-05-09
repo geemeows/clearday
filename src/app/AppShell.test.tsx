@@ -46,9 +46,19 @@ describe("AppShell sidebar", () => {
   it("renders Workspace nav buttons", async () => {
     await renderShell();
     const nav = await screen.findByRole("navigation", { name: /workspace/i });
-    for (const label of ["Today", "Inbox", "Projects", "Calendar"]) {
+    for (const label of ["Today", "Inbox", "Calendar"]) {
       expect(within(nav).getByRole("button", { name: label })).toBeTruthy();
     }
+  });
+
+  it("renders the Projects section with a toggle button", async () => {
+    await renderShell();
+    const projectsNav = await screen.findByRole("navigation", {
+      name: /projects/i,
+    });
+    expect(
+      within(projectsNav).getByRole("button", { name: /projects/i }),
+    ).toBeTruthy();
   });
 
   it("renders Sources rail with neutral dots for every provider", async () => {

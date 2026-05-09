@@ -1,5 +1,5 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { Calendar, Plus } from "lucide-react";
+import { createFileRoute, useRouter } from "@tanstack/react-router";
+import { Calendar, ChevronDown, Plus } from "lucide-react";
 import { useRef, useEffect, useState } from "react";
 import { CardDetailPane } from "#/features/projects/CardDetailPane";
 import {
@@ -28,8 +28,10 @@ export const Route = createFileRoute("/_app/projects/$projectId")({
 
 function ProjectBoardPage() {
   const { projectId } = Route.useParams();
+  const router = useRouter();
   const client = supabase as unknown as SupabaseLike;
 
+  const [allProjects, setAllProjects] = useState<StoredProject[]>([]);
   const [project, setProject] = useState<StoredProject | null>(null);
   const [columns, setColumns] = useState<StoredColumn[]>([]);
   const [cards, setCards] = useState<StoredCard[]>([]);
@@ -47,6 +49,7 @@ function ProjectBoardPage() {
       .then(([projects, cols, cds]) => {
         if (cancelled) return;
         const found = projects.find((p) => p.id === projectId) ?? null;
+        setAllProjects(projects);
         setProject(found);
         setColumns(cols);
         setCards(cds);
@@ -179,6 +182,7 @@ function ProjectBoardPage() {
   return (
     <ProjectBoardView
       project={project}
+      allProjects={allProjects}
       columns={columns}
       cards={cards}
       loading={loading}
@@ -187,12 +191,22 @@ function ProjectBoardPage() {
       onUpdateCard={handleUpdateCard}
       onDeleteCard={handleDeleteCard}
       onMoveCard={handleMoveCard}
+      onNavigateToProject={(id) =>
+        router.navigate({
+          to: "/projects/$projectId",
+          params: { projectId: id },
+        })
+      }
+      onNewProject={() =>
+        router.navigate({ to: "/projects", search: { mode: "new" } })
+      }
     />
   );
 }
 
 export function ProjectBoardView({
   project,
+  allProjects,
   columns,
   cards,
   loading,
@@ -201,8 +215,11 @@ export function ProjectBoardView({
   onUpdateCard,
   onDeleteCard,
   onMoveCard,
+  onNavigateToProject,
+  onNewProject,
 }: {
   project: StoredProject | null;
+  allProjects?: StoredProject[];
   columns: StoredColumn[];
   cards: StoredCard[];
   loading: boolean;
@@ -215,8 +232,11 @@ export function ProjectBoardView({
     toColumnId: string,
     afterId: string | null,
   ) => void;
+  onNavigateToProject?: (id: string) => void;
+  onNewProject?: () => void;
 }) {
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
+  const [switcherOpen, setSwitcherOpen] = useState(false);
   const selectedCard = selectedCardId
     ? (cards.find((c) => c.id === selectedCardId) ?? null)
     : null;
@@ -228,10 +248,60 @@ export function ProjectBoardView({
 
   return (
     <section className="flex h-full flex-col overflow-hidden">
-      <header className="flex shrink-0 items-baseline gap-x-3 border-b border-border px-6 py-4">
-        <h1 className="font-semibold text-xl text-foreground tracking-tight">
-          {project?.name ?? "Project"}
-        </h1>
+      <header className="flex shrink-0 items-center gap-x-3 border-b border-border px-6 py-4">
+        {allProjects && allProjects.length > 0 ? (
+          <div className="relative">
+            <button
+              type="button"
+              aria-haspopup="listbox"
+              aria-expanded={switcherOpen}
+              onClick={() => setSwitcherOpen((o) => !o)}
+              className="flex items-center gap-1.5 rounded-md px-1 py-0.5 font-semibold text-foreground text-xl tracking-tight hover:bg-accent"
+            >
+              {project?.name ?? "Project"}
+              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+            </button>
+            {switcherOpen && (
+              <div
+                role="listbox"
+                aria-label="Switch project"
+                className="absolute left-0 top-full z-50 mt-1 min-w-48 max-h-64 overflow-y-auto rounded-lg border border-border bg-popover py-1 shadow-lg"
+              >
+                {allProjects.map((p) => (
+                  <button
+                    key={p.id}
+                    role="option"
+                    aria-selected={p.id === project?.id}
+                    type="button"
+                    onClick={() => {
+                      onNavigateToProject?.(p.id);
+                      setSwitcherOpen(false);
+                    }}
+                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-accent aria-selected:font-medium"
+                  >
+                    {p.name}
+                  </button>
+                ))}
+                <div className="my-1 border-t border-border" />
+                <button
+                  type="button"
+                  onClick={() => {
+                    onNewProject?.();
+                    setSwitcherOpen(false);
+                  }}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-muted-foreground text-sm hover:bg-accent hover:text-foreground"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  New project
+                </button>
+              </div>
+            )}
+          </div>
+        ) : (
+          <h1 className="font-semibold text-xl text-foreground tracking-tight">
+            {project?.name ?? "Project"}
+          </h1>
+        )}
         <span className="font-mono text-muted-foreground text-xs">
           {cards.length} cards
         </span>

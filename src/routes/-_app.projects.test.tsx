@@ -52,22 +52,27 @@ describe("OnboardingView", () => {
     expect(screen.getByRole("button", { name: /create project/i })).toBeTruthy();
   });
 
-  it("shows the four default template columns", () => {
+  it("shows the four default template columns in template mode", () => {
     render(<OnboardingView onCreateProject={vi.fn()} />);
-    const region = screen.getByRole("region", { name: /create your first project/i });
+    const region = screen.getByRole("region", { name: /create project/i });
     expect(region.textContent).toContain("Backlog");
     expect(region.textContent).toContain("In progress");
     expect(region.textContent).toContain("In review");
     expect(region.textContent).toContain("Done");
   });
 
-  it("calls onCreateProject with the trimmed name on submit", async () => {
+  it("calls onCreateProject with the trimmed name and template columns on submit", async () => {
     const onCreateProject = vi.fn();
     render(<OnboardingView onCreateProject={onCreateProject} />);
     const input = screen.getByLabelText("Project name") as HTMLInputElement;
     fireEvent.change(input, { target: { value: "  Backend refactor  " } });
     fireEvent.click(screen.getByRole("button", { name: /create project/i }));
-    await waitFor(() => expect(onCreateProject).toHaveBeenCalledWith("Backend refactor"));
+    await waitFor(() =>
+      expect(onCreateProject).toHaveBeenCalledWith(
+        "Backend refactor",
+        ["Backlog", "In progress", "In review", "Done"],
+      ),
+    );
   });
 
   it("disables the create button when name is empty", () => {
@@ -76,6 +81,40 @@ describe("OnboardingView", () => {
     fireEvent.change(input, { target: { value: "" } });
     const btn = screen.getByRole("button", { name: /create project/i });
     expect((btn as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("switching to Custom columns mode shows column inputs", () => {
+    render(<OnboardingView onCreateProject={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: /custom columns/i }));
+    expect(screen.getByRole("list", { name: /custom columns/i })).toBeTruthy();
+  });
+
+  it("adding a custom column appends an input", () => {
+    render(<OnboardingView onCreateProject={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: /custom columns/i }));
+    const before = screen.getAllByRole("textbox", { name: /column \d+ name/i }).length;
+    fireEvent.click(screen.getByText(/\+ add column/i));
+    const after = screen.getAllByRole("textbox", { name: /column \d+ name/i }).length;
+    expect(after).toBe(before + 1);
+  });
+
+  it("calls onCreateProject with custom column names when submitted in custom mode", async () => {
+    const onCreateProject = vi.fn();
+    render(<OnboardingView onCreateProject={onCreateProject} />);
+    fireEvent.click(screen.getByRole("button", { name: /custom columns/i }));
+
+    const inputs = screen.getAllByRole("textbox", { name: /column \d+ name/i });
+    fireEvent.change(inputs[0], { target: { value: "Idea" } });
+    fireEvent.change(inputs[1], { target: { value: "Building" } });
+    fireEvent.change(inputs[2], { target: { value: "Shipped" } });
+
+    fireEvent.click(screen.getByRole("button", { name: /create project/i }));
+    await waitFor(() =>
+      expect(onCreateProject).toHaveBeenCalledWith(
+        "My first project",
+        ["Idea", "Building", "Shipped"],
+      ),
+    );
   });
 });
 
@@ -539,5 +578,88 @@ describe("ProjectBoardView — keyboard ←/→ moves", () => {
     });
 
     expect(onMoveCard).not.toHaveBeenCalled();
+  });
+});
+
+// ─── ProjectBoardView — project switcher ─────────────────────────────────────
+
+describe("ProjectBoardView — project switcher", () => {
+  const noop = () => {};
+
+  const twoProjects: StoredProject[] = [
+    project({ id: "p1", name: "My Project" }),
+    project({ id: "p2", name: "Sprint 7" }),
+  ];
+
+  it("shows a button with the project name and chevron when allProjects is provided", () => {
+    render(
+      <ProjectBoardView
+        project={project({ id: "p1", name: "My Project" })}
+        allProjects={twoProjects}
+        columns={[]}
+        cards={[]}
+        loading={false}
+        error={null}
+        onAddCard={noop}
+      />,
+    );
+    const switcher = screen.getByRole("button", { name: /my project/i });
+    expect(switcher.getAttribute("aria-haspopup")).toBe("listbox");
+  });
+
+  it("opens the project list on click and shows all projects", () => {
+    render(
+      <ProjectBoardView
+        project={project({ id: "p1", name: "My Project" })}
+        allProjects={twoProjects}
+        columns={[]}
+        cards={[]}
+        loading={false}
+        error={null}
+        onAddCard={noop}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /my project/i }));
+    const listbox = screen.getByRole("listbox", { name: /switch project/i });
+    expect(within(listbox).getByText("My Project")).toBeTruthy();
+    expect(within(listbox).getByText("Sprint 7")).toBeTruthy();
+  });
+
+  it("calls onNavigateToProject when a project is selected", () => {
+    const onNavigateToProject = vi.fn();
+    render(
+      <ProjectBoardView
+        project={project({ id: "p1", name: "My Project" })}
+        allProjects={twoProjects}
+        columns={[]}
+        cards={[]}
+        loading={false}
+        error={null}
+        onAddCard={noop}
+        onNavigateToProject={onNavigateToProject}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /my project/i }));
+    fireEvent.click(screen.getByRole("option", { name: "Sprint 7" }));
+    expect(onNavigateToProject).toHaveBeenCalledWith("p2");
+  });
+
+  it("calls onNewProject when New project is clicked in the switcher", () => {
+    const onNewProject = vi.fn();
+    render(
+      <ProjectBoardView
+        project={project({ id: "p1", name: "My Project" })}
+        allProjects={twoProjects}
+        columns={[]}
+        cards={[]}
+        loading={false}
+        error={null}
+        onAddCard={noop}
+        onNewProject={onNewProject}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /my project/i }));
+    fireEvent.click(screen.getByRole("button", { name: /new project/i }));
+    expect(onNewProject).toHaveBeenCalledTimes(1);
   });
 });

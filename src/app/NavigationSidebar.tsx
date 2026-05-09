@@ -2,7 +2,7 @@
 // props — no fetches, no router lookups inside. The parent (AppShell) wires
 // hooks and route navigation; this module just renders.
 
-import { Settings as SettingsIcon, Target } from "lucide-react";
+import { ChevronRight, Kanban, Plus, Settings as SettingsIcon, Target } from "lucide-react";
 import type { ReactNode } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "#/components/coss/avatar";
 import { Button } from "#/components/coss/button";
@@ -41,6 +41,11 @@ export type NavProfile = {
   avatarUrl: string | null;
 };
 
+export type NavProject = {
+  id: string;
+  name: string;
+};
+
 export type NavigationSidebarProps = {
   pages: NavPage[];
   page: string;
@@ -52,6 +57,11 @@ export type NavigationSidebarProps = {
   onOpenSettings: () => void;
   onOpenCmdk: () => void;
   profile: NavProfile;
+  projects: NavProject[];
+  projectsOpen: boolean;
+  onToggleProjects: () => void;
+  onNavigateToProject: (id: string) => void;
+  onNewProject: () => void;
 };
 
 export function NavigationSidebar({
@@ -65,6 +75,11 @@ export function NavigationSidebar({
   onOpenSettings,
   onOpenCmdk,
   profile,
+  projects,
+  projectsOpen,
+  onToggleProjects,
+  onNavigateToProject,
+  onNewProject,
 }: NavigationSidebarProps) {
   return (
     <aside
@@ -120,7 +135,61 @@ export function NavigationSidebar({
         </ul>
       </nav>
 
-      <nav aria-label="Sources" className="mt-6 px-2">
+      <nav aria-label="Projects" className="mt-4 px-2">
+        <button
+          type="button"
+          onClick={onToggleProjects}
+          aria-expanded={projectsOpen}
+          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent"
+        >
+          <Kanban className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <span className="flex-1 text-left font-normal text-foreground">Projects</span>
+          <ChevronRight
+            className={cn(
+              "h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-150",
+              projectsOpen && "rotate-90",
+            )}
+          />
+        </button>
+
+        {projectsOpen && (
+          <ul className="mt-0.5 max-h-52 space-y-0.5 overflow-y-auto">
+            {projects.map((p) => {
+              const active =
+                page === `/projects/${p.id}` ||
+                page.startsWith(`/projects/${p.id}/`);
+              return (
+                <li key={p.id}>
+                  <Button
+                    type="button"
+                    variant={active ? "secondary" : "ghost"}
+                    onClick={() => onNavigateToProject(p.id)}
+                    aria-current={active ? "page" : undefined}
+                    className="h-8 w-full justify-start gap-2 pl-7 font-normal"
+                  >
+                    <span className="flex-1 truncate text-left text-sm">
+                      {p.name}
+                    </span>
+                  </Button>
+                </li>
+              );
+            })}
+            <li>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={onNewProject}
+                className="h-8 w-full justify-start gap-2 pl-7 font-normal text-muted-foreground"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                <span className="text-sm">New project</span>
+              </Button>
+            </li>
+          </ul>
+        )}
+      </nav>
+
+      <nav aria-label="Sources" className="mt-4 px-2">
         <SectionTitle>Sources</SectionTitle>
         <ul className="mt-1 space-y-0.5">
           {sources.map((s) => (
