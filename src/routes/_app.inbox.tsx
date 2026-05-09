@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { X } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { z } from "zod";
 import { StatusBadge } from "#/components/ui/StatusBadge";
 import { UserAvatar } from "#/components/ui/UserAvatar";
@@ -38,6 +38,18 @@ import { SlackReplyComposer } from "#/features/signals/details/slack/ReplyCompos
 import { SlackThreadContext } from "#/features/signals/details/slack/ThreadContext";
 import { TaskDetail } from "#/features/signals/details/task";
 import { type Filter, kindGroup, relAgo } from "#/features/signals/display";
+import {
+  createCard,
+  getLinkForSignal,
+  linkSignalToCard,
+  listCards,
+  listColumns,
+  listProjects,
+  type StoredCardSignal,
+  type StoredProject,
+} from "#/features/projects/store";
+import { supabase } from "#/lib/supabase";
+import type { SupabaseLike } from "#/shared/db";
 import { filterMeetingsToToday } from "#/features/signals/views/today";
 import { useAutoRefresh } from "#/hooks/use-auto-refresh";
 import { apiFetch } from "#/lib/api-client";
@@ -184,11 +196,23 @@ function InboxPage() {
           onDismiss={dismiss}
           onReplyStart={handleReplyStart}
           onReplyRollback={handleReplyRollback}
+          onOpenCard={(projectId, cardId) => {
+            navigate({
+              to: "/projects/$projectId",
+              params: { projectId },
+              search: { card: cardId },
+            });
+          }}
         />
       )}
     />
   );
 }
+
+type LinkInfo = {
+  cardId: string;
+  projectId: string;
+};
 
 export function InboxDetailPane({
   signal,
@@ -196,14 +220,26 @@ export function InboxDetailPane({
   onDismiss,
   onReplyStart,
   onReplyRollback,
+  onOpenCard,
 }: {
   signal: StoredSignal | null;
   onClose: () => void;
   onDismiss: (id: string) => void;
   onReplyStart?: (id: string) => void;
   onReplyRollback?: (id: string) => void;
+  // Called when the user wants to navigate to the linked card.
+  onOpenCard?: (projectId: string, cardId: string) => void;
 }) {
+  const client = supabase as unknown as SupabaseLike;
   const [liveState, setLiveState] = useState<PrLiveState | null>(null);
+  // null = unchecked/not linked, 'loading' = pending DB check, LinkInfo = linked
+  const [linkState, setLinkState] = useState<null | "loading" | LinkInfo>(null);
+  const [projects, setProjects] = useState<StoredProject[] | null>(null);
+  const [showPicker, setShowPicker] = useState(false);
+  const [sending, setSending] = useState(false);
+  // Prevents stale project loads from racing when signals change quickly.
+  const projectLoadId = useRef(0);
+
   const signalId = signal?.id;
   // Reset whenever a different signal is selected so the chip doesn't
   // briefly show the previous PR's merged state. Biome can't see that
@@ -212,7 +248,81 @@ export function InboxDetailPane({
   // biome-ignore lint/correctness/useExhaustiveDependencies: signalId is the reset trigger
   useEffect(() => {
     setLiveState(null);
+    setShowPicker(false);
+    if (!signalId) {
+      setLinkState(null);
+      return;
+    }
+    setLinkState("loading");
+    let cancelled = false;
+    getLinkForSignal(client, signalId)
+      .then((link: StoredCardSignal | null) => {
+        if (cancelled) return;
+        if (!link) {
+          setLinkState(null);
+          return;
+        }
+        setLinkState({ cardId: link.card_id, projectId: link.project_id });
+        // Load projects for the "Open card · {project}" label.
+        const loadId = ++projectLoadId.current;
+        listProjects(client)
+          .then((ps: StoredProject[]) => {
+            if (!cancelled && loadId === projectLoadId.current) setProjects(ps);
+          })
+          .catch(() => {});
+      })
+      .catch(() => {
+        if (!cancelled) setLinkState(null);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [signalId]);
+
+  const openPicker = async () => {
+    setShowPicker(true);
+    if (projects === null) {
+      const ps = await listProjects(client);
+      setProjects(ps);
+    }
+  };
+
+  const handleSendToProject = async (project: StoredProject) => {
+    if (!signal) return;
+    setSending(true);
+    try {
+      const cols = await listColumns(client, project.id);
+      const firstCol = cols[0];
+      if (!firstCol) throw new Error("no columns");
+      const existingCards = await listCards(client, project.id);
+      const cardsInFirstCol = existingCards.filter(
+        (c) => c.column_id === firstCol.id,
+      );
+      const order = cardsInFirstCol.length;
+      const cardId = crypto.randomUUID();
+      await createCard(client, {
+        id: cardId,
+        project_id: project.id,
+        column_id: firstCol.id,
+        order,
+        title: signal.title,
+      });
+      await linkSignalToCard(client, signal.id, cardId, project.id);
+      setLinkState({ cardId, projectId: project.id });
+      setProjects((prev) => (prev ? prev : [project]));
+      setShowPicker(false);
+    } catch {
+      // Best-effort; leave picker open so user can retry.
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const linkedProject =
+    typeof linkState === "object" && linkState !== null
+      ? (projects ?? []).find((p) => p.id === linkState.projectId)
+      : undefined;
+
   if (!signal) {
     return (
       <aside
@@ -318,6 +428,84 @@ export function InboxDetailPane({
         >
           Dismiss
         </button>
+        {/* Send to project / Open card */}
+        {linkState !== "loading" && (
+          typeof linkState === "object" && linkState !== null ? (
+            <button
+              type="button"
+              data-slot="open-card"
+              onClick={() => onOpenCard?.(linkState.projectId, linkState.cardId)}
+              className="inline-flex items-center gap-1 rounded-md hover:bg-(--surface-soft)"
+              style={{
+                height: 32,
+                padding: "0 12px",
+                fontSize: 13,
+                color: "var(--muted-foreground)",
+              }}
+            >
+              Open card{linkedProject ? ` · ${linkedProject.name}` : ""} →
+            </button>
+          ) : (
+            <div className="relative">
+              <button
+                type="button"
+                data-slot="send-to-project"
+                onClick={openPicker}
+                disabled={sending}
+                className="inline-flex items-center gap-1 rounded-md hover:bg-(--surface-soft)"
+                style={{
+                  height: 32,
+                  padding: "0 12px",
+                  fontSize: 13,
+                  color: "var(--muted-foreground)",
+                }}
+              >
+                {sending ? "Sending…" : "Send to project"}
+              </button>
+              {showPicker && (
+                <div
+                  data-slot="project-picker"
+                  className="absolute bottom-full left-0 z-10 mb-1 min-w-[180px] overflow-hidden rounded-lg shadow-md"
+                  style={{
+                    background: "var(--canvas)",
+                    border: "1px solid var(--hairline-soft)",
+                  }}
+                >
+                  {projects === null ? (
+                    <div
+                      className="px-3 py-2 text-sm"
+                      style={{ color: "var(--muted-foreground)" }}
+                    >
+                      Loading…
+                    </div>
+                  ) : projects.length === 0 ? (
+                    <div
+                      className="px-3 py-2 text-sm"
+                      style={{ color: "var(--muted-foreground)" }}
+                    >
+                      No projects yet
+                    </div>
+                  ) : (
+                    <ul>
+                      {projects.map((p) => (
+                        <li key={p.id}>
+                          <button
+                            type="button"
+                            onClick={() => handleSendToProject(p)}
+                            className="block w-full px-3 py-2 text-left text-sm hover:bg-(--surface-soft)"
+                            style={{ color: "var(--ink)" }}
+                          >
+                            {p.name}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+            </div>
+          )
+        )}
         <span className="flex-1" />
         {/* MeetingDetail carries its own Join meeting / Open invite buttons. */}
         {signal.url && group !== "meeting" && (

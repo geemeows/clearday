@@ -5,14 +5,19 @@ import {
   createProject,
   deleteCard,
   deleteColumn,
+  getLinkForSignal,
+  linkSignalToCard,
   listAllCards,
   listCards,
   listCardsDueOn,
   listColumns,
   listProjects,
+  listSignalsForCard,
+  unlinkSignal,
   type CardWithProject,
   type DueCard,
   type StoredCard,
+  type StoredCardSignal,
   type StoredColumn,
   type StoredProject,
   updateCard,
@@ -475,5 +480,117 @@ describe("listAllCards", () => {
     const { client } = makeDueTodayClient({ projects: [baseProject], cards: [] });
     const result = await listAllCards(client);
     expect(result).toEqual([]);
+  });
+});
+
+// ─── Signal links ─────────────────────────────────────────────────────────────
+
+const baseCardSignal: StoredCardSignal = {
+  id: "link1",
+  card_id: "card1",
+  project_id: "p1",
+  signal_id: "sig1",
+  deleted_at: null,
+  created_at: "2026-01-01T00:00:00Z",
+};
+
+describe("linkSignalToCard", () => {
+  it("upserts on signal_id conflict", async () => {
+    const { client, spies } = makeClient();
+    await linkSignalToCard(client, "sig1", "card1", "p1");
+    expect(spies.upsert).toHaveBeenCalledWith(
+      { signal_id: "sig1", card_id: "card1", project_id: "p1" },
+      { onConflict: "signal_id" },
+    );
+  });
+
+  it("throws when upsert fails", async () => {
+    const { client } = makeClient({ upsertResult: { error: { message: "db error" } } });
+    await expect(linkSignalToCard(client, "sig1", "card1", "p1")).rejects.toThrow("db error");
+  });
+
+  it("re-linking to a different card reuses the same upsert (move semantics)", async () => {
+    const { client, spies } = makeClient();
+    await linkSignalToCard(client, "sig1", "card1", "p1");
+    await linkSignalToCard(client, "sig1", "card2", "p1");
+    expect(spies.upsert).toHaveBeenCalledTimes(2);
+    expect(spies.upsert).toHaveBeenLastCalledWith(
+      { signal_id: "sig1", card_id: "card2", project_id: "p1" },
+      { onConflict: "signal_id" },
+    );
+  });
+
+  it("linking to the same card is a no-op upsert (idempotent)", async () => {
+    const { client, spies } = makeClient();
+    await linkSignalToCard(client, "sig1", "card1", "p1");
+    await linkSignalToCard(client, "sig1", "card1", "p1");
+    expect(spies.upsert).toHaveBeenCalledTimes(2);
+    expect(spies.upsert.mock.calls[0]).toEqual(spies.upsert.mock.calls[1]);
+  });
+});
+
+describe("unlinkSignal", () => {
+  it("deletes the row matching signal_id", async () => {
+    const { client, spies } = makeClient();
+    await unlinkSignal(client, "sig1");
+    expect(spies.delete).toHaveBeenCalled();
+    expect(spies.deleteEq).toHaveBeenCalledWith("signal_id", "sig1");
+  });
+
+  it("throws when delete fails", async () => {
+    const { client } = makeClient({ deleteResult: { error: { message: "del fail" } } });
+    await expect(unlinkSignal(client, "sig1")).rejects.toThrow("del fail");
+  });
+});
+
+describe("getLinkForSignal", () => {
+  it("returns the link row when the signal is linked", async () => {
+    const { client, spies } = makeClient({ listData: [baseCardSignal] });
+    const result = await getLinkForSignal(client, "sig1");
+    expect(spies.eq).toHaveBeenCalledWith("signal_id", "sig1");
+    expect(result).toEqual(baseCardSignal);
+  });
+
+  it("returns null when the signal is not linked", async () => {
+    const { client } = makeClient({ listData: [] });
+    expect(await getLinkForSignal(client, "sig1")).toBeNull();
+  });
+
+  it("throws when query fails", async () => {
+    const { client } = makeClient({ listError: { message: "query fail" } });
+    await expect(getLinkForSignal(client, "sig1")).rejects.toThrow("query fail");
+  });
+});
+
+describe("listSignalsForCard", () => {
+  it("returns all link rows for a card ordered by created_at", async () => {
+    const { client, spies } = makeClient({ listData: [baseCardSignal] });
+    const result = await listSignalsForCard(client, "card1");
+    expect(spies.eq).toHaveBeenCalledWith("card_id", "card1");
+    expect(spies.order).toHaveBeenCalledWith("created_at", { ascending: true });
+    expect(result).toEqual([baseCardSignal]);
+  });
+
+  it("returns empty array when no links exist", async () => {
+    const { client } = makeClient({ listData: [] });
+    expect(await listSignalsForCard(client, "card1")).toEqual([]);
+  });
+
+  it("includes tombstoned rows (deleted_at set, signal_id null)", async () => {
+    const tombstone: StoredCardSignal = {
+      ...baseCardSignal,
+      signal_id: null,
+      deleted_at: "2026-02-01T00:00:00Z",
+    };
+    const { client } = makeClient({ listData: [tombstone] });
+    const result = await listSignalsForCard(client, "card1");
+    expect(result).toHaveLength(1);
+    expect(result[0].deleted_at).not.toBeNull();
+    expect(result[0].signal_id).toBeNull();
+  });
+
+  it("throws when query fails", async () => {
+    const { client } = makeClient({ listError: { message: "list fail" } });
+    await expect(listSignalsForCard(client, "card1")).rejects.toThrow("list fail");
   });
 });

@@ -202,6 +202,78 @@ export async function listAllCards(
   return byProject.flat();
 }
 
+// ─── Signal links ─────────────────────────────────────────────────────────────
+
+export type StoredCardSignal = {
+  id: string;
+  card_id: string;
+  project_id: string;
+  // null when the linked signal was hard-deleted (tombstone state).
+  signal_id: string | null;
+  deleted_at: string | null;
+  created_at: string;
+};
+
+// Link a signal to a card. If the signal is already linked to a different card,
+// the link moves to the new card (move semantics via ON CONFLICT signal_id).
+// Linking to the same card is a no-op.
+export async function linkSignalToCard(
+  client: SupabaseLike,
+  signalId: string,
+  cardId: string,
+  projectId: string,
+): Promise<void> {
+  const { error } = await client.from("project_card_signals").upsert(
+    { signal_id: signalId, card_id: cardId, project_id: projectId },
+    { onConflict: "signal_id" },
+  );
+  if (error) throw new Error(`link signal failed: ${error.message}`);
+}
+
+// Remove the link between a signal and its card.
+export async function unlinkSignal(
+  client: SupabaseLike,
+  signalId: string,
+): Promise<void> {
+  const del = client.from("project_card_signals").delete;
+  if (!del) throw new Error("unlink signal failed: client missing delete()");
+  const { error } = await del().eq("signal_id", signalId);
+  if (error) throw new Error(`unlink signal failed: ${error.message}`);
+}
+
+// Return the link row for a signal, or null if the signal is not linked.
+// Tombstoned rows (signal deleted) have signal_id = null and are not returned
+// by this query; use listSignalsForCard to include tombstones.
+export async function getLinkForSignal(
+  client: SupabaseLike,
+  signalId: string,
+): Promise<StoredCardSignal | null> {
+  const { data, error } = await client
+    .from("project_card_signals")
+    .select("*")
+    .eq("signal_id", signalId)
+    .limit(1);
+  if (error) throw new Error(`get link failed: ${error.message}`);
+  return ((data ?? []) as StoredCardSignal[])[0] ?? null;
+}
+
+// List all signal links for a card, including tombstoned entries.
+export async function listSignalsForCard(
+  client: SupabaseLike,
+  cardId: string,
+): Promise<StoredCardSignal[]> {
+  const { data, error } = await client
+    .from("project_card_signals")
+    .select("*")
+    .eq("card_id", cardId)
+    .order("created_at", { ascending: true })
+    .limit(200);
+  if (error) throw new Error(`list signals for card failed: ${error.message}`);
+  return (data ?? []) as StoredCardSignal[];
+}
+
+// ─── Due cards ────────────────────────────────────────────────────────────────
+
 export async function listCardsDueOn(
   client: SupabaseLike,
   date: Date,
