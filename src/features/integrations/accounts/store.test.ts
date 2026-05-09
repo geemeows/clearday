@@ -5,6 +5,8 @@ import {
   getPrimary,
   listAccounts,
   promotePrimary,
+  reauthorize,
+  removeAccount,
 } from "#/features/integrations/accounts/store";
 import type { SupabaseLike } from "#/shared/db";
 
@@ -105,6 +107,16 @@ function makeClient(): { client: SupabaseLike; rows: Row[] } {
         },
         select: () => buildSelectChain(),
         update: (values: Record<string, unknown>) => buildUpdateChain(values),
+        delete: () => ({
+          eq: async (col: string, val: unknown) => {
+            for (let i = rows.length - 1; i >= 0; i--) {
+              if ((rows[i] as Record<string, unknown>)[col] === val) {
+                rows.splice(i, 1);
+              }
+            }
+            return { error: null };
+          },
+        }),
       };
     },
   };
@@ -194,6 +206,94 @@ describe("promotePrimary", () => {
     expect((await getPrimary(client, "github"))?.id).toBe(gh.id);
     expect((await getPrimary(client, "slack"))?.id).toBe(slackB.id);
     void slack;
+  });
+});
+
+describe("removeAccount", () => {
+  it("deletes the row and returns the removed account", async () => {
+    const { client } = makeClient();
+    const a = await addAccount(client, fields("github", "u1"));
+    const out = await removeAccount(client, a.id);
+    expect(out.removed.id).toBe(a.id);
+    expect(out.promoted).toBeNull();
+    expect(await listAccounts(client, { providerId: "github" })).toEqual([]);
+    expect(await getPrimary(client, "github")).toBeNull();
+  });
+
+  it("auto-promotes the next-oldest account when the primary is removed", async () => {
+    const { client } = makeClient();
+    const a = await addAccount(client, fields("github", "u1"));
+    const b = await addAccount(client, fields("github", "u2"));
+    const c = await addAccount(client, fields("github", "u3"));
+    const out = await removeAccount(client, a.id);
+    expect(out.promoted?.id).toBe(b.id);
+    const primary = await getPrimary(client, "github");
+    expect(primary?.id).toBe(b.id);
+    void c;
+  });
+
+  it("does not promote when a non-primary account is removed", async () => {
+    const { client } = makeClient();
+    const a = await addAccount(client, fields("github", "u1"));
+    const b = await addAccount(client, fields("github", "u2"));
+    const out = await removeAccount(client, b.id);
+    expect(out.promoted).toBeNull();
+    expect((await getPrimary(client, "github"))?.id).toBe(a.id);
+  });
+
+  it("calls the upstream revoke hook with the row before deleting", async () => {
+    const { client } = makeClient();
+    const a = await addAccount(client, fields("github", "u1"));
+    const seen: string[] = [];
+    await removeAccount(client, a.id, {
+      revoke: async (acc) => {
+        seen.push(acc.id);
+      },
+    });
+    expect(seen).toEqual([a.id]);
+    expect(await listAccounts(client, { providerId: "github" })).toEqual([]);
+  });
+
+  it("swallows revoke failures and still removes the local row", async () => {
+    const { client } = makeClient();
+    const a = await addAccount(client, fields("github", "u1"));
+    await removeAccount(client, a.id, {
+      revoke: async () => {
+        throw new Error("upstream 502");
+      },
+    });
+    expect(await listAccounts(client, { providerId: "github" })).toEqual([]);
+  });
+
+  it("leaves a single-account provider with zero rows and no primary", async () => {
+    const { client } = makeClient();
+    const a = await addAccount(client, fields("github", "u1"));
+    expect(a.primary).toBe(true);
+    await removeAccount(client, a.id);
+    expect(await getPrimary(client, "github")).toBeNull();
+  });
+
+  it("throws when the account id is not found", async () => {
+    const { client } = makeClient();
+    await expect(removeAccount(client, "missing")).rejects.toThrow(/not found/);
+  });
+});
+
+describe("reauthorize", () => {
+  it("returns the existing row without mutating it", async () => {
+    const { client } = makeClient();
+    const a = await addAccount(client, fields("github", "u1"));
+    const out = await reauthorize(client, a.id);
+    expect(out.id).toBe(a.id);
+    expect(out.primary).toBe(true);
+    const after = await listAccounts(client, { providerId: "github" });
+    expect(after).toHaveLength(1);
+    expect(after[0].id).toBe(a.id);
+  });
+
+  it("throws when the account id is not found", async () => {
+    const { client } = makeClient();
+    await expect(reauthorize(client, "missing")).rejects.toThrow(/not found/);
   });
 });
 

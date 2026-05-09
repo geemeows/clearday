@@ -47,6 +47,14 @@ export function buildConnectUrl(
   provider: string,
   authProxyUrl: string | null,
   userBackendUrl: string | null = null,
+  /**
+   * When supplied, signals re-auth of the named local account row rather
+   * than a fresh add. Plumbed through to the auth-proxy as a query param so
+   * the proxy can surface a "reconnect this identity" hint. Without it,
+   * `/start/:provider` always begins a fresh OAuth dance and creates a new
+   * account row on callback.
+   */
+  accountId: string | null = null,
 ): { ok: true; url: string } | { ok: false; error: string } {
   if (!ALLOWED_PROVIDERS.includes(provider)) {
     return { ok: false, error: "unknown provider" };
@@ -55,8 +63,9 @@ export function buildConnectUrl(
     return { ok: false, error: "auth-proxy not configured" };
   }
   const base = `${authProxyUrl.replace(/\/$/, "")}/start/${provider}`;
-  if (!userBackendUrl) return { ok: true, url: base };
+  if (!userBackendUrl && !accountId) return { ok: true, url: base };
   const url = new URL(base);
-  url.searchParams.set("backend", userBackendUrl);
+  if (userBackendUrl) url.searchParams.set("backend", userBackendUrl);
+  if (accountId) url.searchParams.set("account_id", accountId);
   return { ok: true, url: url.toString() };
 }

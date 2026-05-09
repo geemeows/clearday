@@ -70,6 +70,7 @@ import { startFocusSession } from "#/features/focus/session";
 import {
   listAccounts,
   promotePrimary,
+  removeAccount,
 } from "#/features/integrations/accounts/store";
 import {
   disconnectIntegration,
@@ -518,10 +519,12 @@ export default {
       const host =
         request.headers.get("x-forwarded-host") ?? request.headers.get("host");
       const userBackendUrl = host ? `https://${host}` : null;
+      const accountIdParam = url.searchParams.get("account_id");
       const out = buildConnectUrl(
         connectMatch[1],
         env.AUTH_PROXY_URL ?? null,
         userBackendUrl,
+        accountIdParam,
       );
       if (!out.ok) return json({ ok: false, error: out.error }, 400);
       return json({ ok: true, url: out.url });
@@ -630,6 +633,26 @@ export default {
         const providerId = decodeURIComponent(accountsMatch[1] ?? "");
         const accounts = await listAccounts(service, { providerId });
         return json({ accounts });
+      }
+    }
+
+    {
+      const removeMatch = url.pathname.match(/^\/api\/accounts\/([^/]+)$/);
+      if (removeMatch && request.method === "DELETE") {
+        const accountId = decodeURIComponent(removeMatch[1] ?? "");
+        try {
+          const { removed, promoted } = await removeAccount(service, accountId);
+          return json({
+            ok: true,
+            removed: { id: removed.id, provider: removed.provider },
+            promoted: promoted ? { id: promoted.id } : null,
+          });
+        } catch (err) {
+          return json(
+            { ok: false, error: err instanceof Error ? err.message : String(err) },
+            400,
+          );
+        }
       }
     }
 

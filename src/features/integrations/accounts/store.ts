@@ -146,6 +146,73 @@ export async function promotePrimary(
   }
 }
 
+export type RemoveAccountDeps = {
+  /**
+   * Optional upstream-token revocation hook. Invoked with the account row
+   * about to be removed; the implementation calls the provider's revoke
+   * endpoint where one exists. Errors are swallowed so a flaky upstream
+   * doesn't block local cleanup — the local row is the source of truth.
+   */
+  revoke?: (account: Account) => Promise<void>;
+};
+
+/**
+ * Tear down an account: best-effort revoke the upstream token, delete the
+ * row, and auto-promote the next-oldest account to primary when the removed
+ * one was primary. `signals.account_id` is FK-set-null on delete (tombstone)
+ * — Signals stay in Inbox history without an owning account.
+ *
+ * Single-account remove leaves the provider with zero rows (and therefore no
+ * primary); that's the documented end state.
+ */
+export async function removeAccount(
+  client: SupabaseLike,
+  accountId: string,
+  deps: RemoveAccountDeps = {},
+): Promise<{ removed: Account; promoted: Account | null }> {
+  const target = await loadById(client, accountId);
+  if (!target) throw new Error(`removeAccount: account not found`);
+  if (deps.revoke) {
+    try {
+      await deps.revoke(target);
+    } catch {
+      // best-effort: a failed upstream revoke must not block local cleanup
+    }
+  }
+  const del = client.from("provider_accounts").delete;
+  if (!del) throw new Error("removeAccount: client missing delete()");
+  const { error } = await del().eq("id", accountId);
+  if (error) throw new Error(`removeAccount delete failed: ${error.message}`);
+  let promoted: Account | null = null;
+  if (target.primary) {
+    const remaining = await listAccounts(client, { providerId: target.provider });
+    const next = remaining[0];
+    if (next) {
+      await promotePrimary(client, next.id);
+      promoted = (await loadById(client, next.id)) ?? null;
+    }
+  }
+  return { removed: target, promoted };
+}
+
+/**
+ * Validate that an account exists ahead of the OAuth re-auth round-trip.
+ * The actual token rewrite happens on the OAuth callback's
+ * `(provider, account_id)` upsert — that path preserves account.id, the
+ * primary flag, and any per-account settings as long as the user re-OAuths
+ * as the same upstream identity. Exposed here so callers don't need to
+ * know the data shape and so a future hook (e.g. clearing a stale flag)
+ * has a single place to land.
+ */
+export async function reauthorize(
+  client: SupabaseLike,
+  accountId: string,
+): Promise<Account> {
+  const target = await loadById(client, accountId);
+  if (!target) throw new Error(`reauthorize: account not found`);
+  return target;
+}
+
 async function loadById(
   client: SupabaseLike,
   id: string,
