@@ -12,6 +12,7 @@ export type SupabaseLike = {
     ) => Promise<{ error: { message: string } | null }>;
     select: (cols: string) => SelectChain;
     update: (values: Record<string, unknown>) => UpdateChain;
+    delete?: () => DeleteChain;
   };
 };
 
@@ -30,6 +31,13 @@ export type SelectChain = {
 };
 
 type UpdateChain = {
+  eq: (
+    col: string,
+    val: string,
+  ) => Promise<{ error: { message: string } | null }>;
+};
+
+type DeleteChain = {
   eq: (
     col: string,
     val: string,

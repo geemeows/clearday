@@ -1,14 +1,18 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Plus } from "lucide-react";
+import { Calendar, Plus } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { CardDetailPane } from "#/features/projects/CardDetailPane";
 import {
+  type CardPatch,
   createCard,
+  deleteCard,
   listCards,
   listColumns,
   listProjects,
   type StoredCard,
   type StoredColumn,
   type StoredProject,
+  updateCard,
 } from "#/features/projects/store";
 import { supabase } from "#/lib/supabase";
 import type { SupabaseLike } from "#/shared/db";
@@ -85,6 +89,39 @@ function ProjectBoardPage() {
     }
   };
 
+  const handleUpdateCard = async (cardId: string, patch: CardPatch) => {
+    let nextPatch = patch;
+    // When moving columns, place the card at the bottom of the destination
+    // and write the new dense order alongside the column change.
+    if (patch.column_id != null) {
+      const destCount = cards.filter(
+        (c) => c.column_id === patch.column_id && c.id !== cardId,
+      ).length;
+      nextPatch = { ...patch, order: destCount };
+    }
+    const prev = cards;
+    setCards((cs) =>
+      cs.map((c) => (c.id === cardId ? { ...c, ...nextPatch } : c)),
+    );
+    try {
+      await updateCard(client, cardId, nextPatch);
+    } catch (e) {
+      setCards(prev);
+      setError(e instanceof Error ? e.message : "failed to update card");
+    }
+  };
+
+  const handleDeleteCard = async (cardId: string) => {
+    const prev = cards;
+    setCards((cs) => cs.filter((c) => c.id !== cardId));
+    try {
+      await deleteCard(client, cardId);
+    } catch (e) {
+      setCards(prev);
+      setError(e instanceof Error ? e.message : "failed to delete card");
+    }
+  };
+
   return (
     <ProjectBoardView
       project={project}
@@ -93,6 +130,8 @@ function ProjectBoardPage() {
       loading={loading}
       error={error}
       onAddCard={handleAddCard}
+      onUpdateCard={handleUpdateCard}
+      onDeleteCard={handleDeleteCard}
     />
   );
 }
@@ -104,6 +143,8 @@ export function ProjectBoardView({
   loading,
   error,
   onAddCard,
+  onUpdateCard,
+  onDeleteCard,
 }: {
   project: StoredProject | null;
   columns: StoredColumn[];
@@ -111,7 +152,14 @@ export function ProjectBoardView({
   loading: boolean;
   error: string | null;
   onAddCard: (columnId: string, title: string) => void;
+  onUpdateCard?: (cardId: string, patch: CardPatch) => void;
+  onDeleteCard?: (cardId: string) => void;
 }) {
+  const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
+  const selectedCard = selectedCardId
+    ? (cards.find((c) => c.id === selectedCardId) ?? null)
+    : null;
+
   return (
     <section className="flex h-full flex-col overflow-hidden">
       <header className="flex shrink-0 items-baseline gap-x-3 border-b border-border px-6 py-4">
@@ -151,9 +199,23 @@ export function ProjectBoardView({
               column={col}
               cards={cards.filter((c) => c.column_id === col.id)}
               onAddCard={(title) => onAddCard(col.id, title)}
+              onSelectCard={setSelectedCardId}
             />
           ))}
         </div>
+      )}
+
+      {selectedCard && (
+        <CardDetailPane
+          card={selectedCard}
+          columns={columns}
+          onChange={(patch) => onUpdateCard?.(selectedCard.id, patch)}
+          onDelete={() => {
+            onDeleteCard?.(selectedCard.id);
+            setSelectedCardId(null);
+          }}
+          onClose={() => setSelectedCardId(null)}
+        />
       )}
     </section>
   );
@@ -163,10 +225,12 @@ function KanbanColumn({
   column,
   cards,
   onAddCard,
+  onSelectCard,
 }: {
   column: StoredColumn;
   cards: StoredCard[];
   onAddCard: (title: string) => void;
+  onSelectCard: (cardId: string) => void;
 }) {
   const [composing, setComposing] = useState(false);
   const [draft, setDraft] = useState("");
@@ -232,7 +296,7 @@ function KanbanColumn({
       >
         {sorted.map((card) => (
           <li key={card.id}>
-            <CardChip card={card} />
+            <CardChip card={card} onClick={() => onSelectCard(card.id)} />
           </li>
         ))}
 
@@ -281,21 +345,31 @@ function KanbanColumn({
   );
 }
 
-function CardChip({ card }: { card: StoredCard }) {
+function CardChip({ card, onClick }: { card: StoredCard; onClick: () => void }) {
   return (
-    <article
+    <button
+      type="button"
       aria-label={card.title}
-      className="rounded-md border border-border bg-background px-3 py-2 text-sm shadow-sm"
+      onClick={onClick}
+      className="w-full rounded-md border border-border bg-background px-3 py-2 text-left text-sm shadow-sm hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
     >
       <span className="line-clamp-2 text-foreground">{card.title}</span>
-      {card.priority && (
-        <span
-          data-priority={card.priority}
-          className="mt-1 inline-block rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] uppercase text-muted-foreground"
-        >
-          {card.priority}
-        </span>
-      )}
-    </article>
+      <div className="mt-1 flex flex-wrap items-center gap-1">
+        {card.priority && (
+          <span
+            data-priority={card.priority}
+            className="inline-block rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] uppercase text-muted-foreground"
+          >
+            {card.priority}
+          </span>
+        )}
+        {card.due_at && (
+          <span className="inline-flex items-center gap-0.5 rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+            <Calendar className="h-2.5 w-2.5" />
+            {card.due_at.slice(0, 10)}
+          </span>
+        )}
+      </div>
+    </button>
   );
 }

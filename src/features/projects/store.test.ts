@@ -3,12 +3,14 @@ import {
   createCard,
   createColumn,
   createProject,
+  deleteCard,
   listCards,
   listColumns,
   listProjects,
   type StoredCard,
   type StoredColumn,
   type StoredProject,
+  updateCard,
 } from "#/features/projects/store";
 import type { SupabaseLike } from "#/shared/db";
 
@@ -16,6 +18,8 @@ function makeClient(overrides: {
   upsertResult?: { error: { message: string } | null };
   listData?: Record<string, unknown>[];
   listError?: { message: string } | null;
+  updateResult?: { error: { message: string } | null };
+  deleteResult?: { error: { message: string } | null };
 } = {}): {
   client: SupabaseLike;
   spies: {
@@ -24,6 +28,10 @@ function makeClient(overrides: {
     eq: ReturnType<typeof vi.fn>;
     order: ReturnType<typeof vi.fn>;
     limit: ReturnType<typeof vi.fn>;
+    update: ReturnType<typeof vi.fn>;
+    updateEq: ReturnType<typeof vi.fn>;
+    delete: ReturnType<typeof vi.fn>;
+    deleteEq: ReturnType<typeof vi.fn>;
   };
 } {
   const limit = vi.fn(async () => ({
@@ -44,12 +52,27 @@ function makeClient(overrides: {
   };
   const select = vi.fn(() => chain);
   const upsert = vi.fn(async () => overrides.upsertResult ?? { error: null });
-  const updateEq = vi.fn(async () => ({ error: null }));
+  const updateEq = vi.fn(async () => overrides.updateResult ?? { error: null });
   const update = vi.fn(() => ({ eq: updateEq }));
+  const deleteEq = vi.fn(async () => overrides.deleteResult ?? { error: null });
+  const deleteFn = vi.fn(() => ({ eq: deleteEq }));
   const client: SupabaseLike = {
-    from: () => ({ upsert, select, update }),
+    from: () => ({ upsert, select, update, delete: deleteFn }),
   };
-  return { client, spies: { upsert, select, eq, order, limit } };
+  return {
+    client,
+    spies: {
+      upsert,
+      select,
+      eq,
+      order,
+      limit,
+      update,
+      updateEq,
+      delete: deleteFn,
+      deleteEq,
+    },
+  };
 }
 
 describe("createProject", () => {
@@ -172,6 +195,58 @@ describe("createCard", () => {
         title: "X",
       }),
     ).rejects.toThrow("bad");
+  });
+});
+
+describe("updateCard", () => {
+  it("updates the row by id with the patch fields", async () => {
+    const { client, spies } = makeClient();
+    await updateCard(client, "card1", {
+      title: "Renamed",
+      column_id: "col2",
+      priority: "p1",
+      tags: ["a", "b"],
+      due_at: "2026-06-01T00:00:00Z",
+      body: "details",
+    });
+    expect(spies.update).toHaveBeenCalledWith({
+      title: "Renamed",
+      column_id: "col2",
+      priority: "p1",
+      tags: ["a", "b"],
+      due_at: "2026-06-01T00:00:00Z",
+      body: "details",
+    });
+    expect(spies.updateEq).toHaveBeenCalledWith("id", "card1");
+  });
+
+  it("supports clearing fields with null", async () => {
+    const { client, spies } = makeClient();
+    await updateCard(client, "card1", { priority: null, due_at: null, body: null });
+    expect(spies.update).toHaveBeenCalledWith({
+      priority: null,
+      due_at: null,
+      body: null,
+    });
+  });
+
+  it("throws when update fails", async () => {
+    const { client } = makeClient({ updateResult: { error: { message: "nope" } } });
+    await expect(updateCard(client, "c1", { title: "x" })).rejects.toThrow("nope");
+  });
+});
+
+describe("deleteCard", () => {
+  it("deletes the row by id", async () => {
+    const { client, spies } = makeClient();
+    await deleteCard(client, "card1");
+    expect(spies.delete).toHaveBeenCalled();
+    expect(spies.deleteEq).toHaveBeenCalledWith("id", "card1");
+  });
+
+  it("throws when delete fails", async () => {
+    const { client } = makeClient({ deleteResult: { error: { message: "boom" } } });
+    await expect(deleteCard(client, "c1")).rejects.toThrow("boom");
   });
 });
 

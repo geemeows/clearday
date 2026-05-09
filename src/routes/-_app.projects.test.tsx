@@ -158,7 +158,7 @@ describe("ProjectBoardView", () => {
       />,
     );
     const col = screen.getByRole("article", { name: "Backlog" });
-    const items = within(col).getAllByRole("article");
+    const items = within(col).getAllByRole("button", { name: /first|second/i });
     expect(items[0].textContent).toContain("First");
     expect(items[1].textContent).toContain("Second");
   });
@@ -227,5 +227,81 @@ describe("ProjectBoardView", () => {
     const input = screen.getByRole("textbox", { name: /new card title/i });
     fireEvent.keyDown(input, { key: "Escape" });
     expect(screen.queryByRole("textbox", { name: /new card title/i })).toBeNull();
+  });
+
+  it("clicking a card opens the detail pane", () => {
+    render(
+      <ProjectBoardView
+        project={project()}
+        columns={[column()]}
+        cards={[card()]}
+        loading={false}
+        error={null}
+        onAddCard={noop}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "My card" }));
+    expect(screen.getByRole("dialog", { name: "Card details" })).toBeTruthy();
+  });
+
+  it("detail pane close button dismisses the pane", () => {
+    render(
+      <ProjectBoardView
+        project={project()}
+        columns={[column()]}
+        cards={[card()]}
+        loading={false}
+        error={null}
+        onAddCard={noop}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "My card" }));
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("onUpdateCard is called when the column changes in the pane", async () => {
+    const onUpdateCard = vi.fn();
+    const cols = [
+      column({ id: "c1", name: "Backlog", order: 0 }),
+      column({ id: "c2", name: "Done", order: 1 }),
+    ];
+    render(
+      <ProjectBoardView
+        project={project()}
+        columns={cols}
+        cards={[card({ column_id: "c1" })]}
+        loading={false}
+        error={null}
+        onAddCard={noop}
+        onUpdateCard={onUpdateCard}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "My card" }));
+    const select = screen.getByRole("combobox", { name: "Column" });
+    fireEvent.change(select, { target: { value: "c2" } });
+    await waitFor(() =>
+      expect(onUpdateCard).toHaveBeenCalledWith("card1", { column_id: "c2" }),
+    );
+  });
+
+  it("onDeleteCard is called after confirming delete in the pane", async () => {
+    const onDeleteCard = vi.fn();
+    render(
+      <ProjectBoardView
+        project={project()}
+        columns={[column()]}
+        cards={[card()]}
+        loading={false}
+        error={null}
+        onAddCard={noop}
+        onDeleteCard={onDeleteCard}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "My card" }));
+    fireEvent.click(screen.getByRole("button", { name: /delete card/i }));
+    fireEvent.click(screen.getByRole("button", { name: /confirm delete/i }));
+    await waitFor(() => expect(onDeleteCard).toHaveBeenCalledWith("card1"));
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 });
