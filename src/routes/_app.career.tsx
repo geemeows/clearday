@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { ArrowDown, ArrowUp, Target, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "#/components/coss/button";
+import { CareerWheel } from "#/features/career/components/CareerWheel";
 import {
   createCompetency,
   createCriterion,
@@ -191,6 +192,7 @@ export function CareerLevelView({
     null,
   );
   const [error, setError] = useState<string | null>(null);
+  const [view, setView] = useState<"tree" | "wheel">("tree");
 
   useEffect(() => {
     let cancelled = false;
@@ -274,6 +276,34 @@ export function CareerLevelView({
       <LevelHeader level={level} client={client} />
 
       <div
+        role="tablist"
+        aria-label="Level view"
+        className="mb-4 inline-flex rounded-md border border-border bg-background p-0.5 text-sm"
+      >
+        <button
+          type="button"
+          role="tab"
+          aria-selected={view === "tree"}
+          onClick={() => setView("tree")}
+          className={`rounded px-3 py-1 text-sm ${view === "tree" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
+        >
+          Tree
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={view === "wheel"}
+          onClick={() => setView("wheel")}
+          className={`rounded px-3 py-1 text-sm ${view === "wheel" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
+        >
+          Wheel
+        </button>
+      </div>
+
+      {view === "wheel" ? (
+        <CareerWheel level={level} client={client} />
+      ) : (
+      <div
         role="region"
         aria-label="Competency tree"
         className="rounded-xl border border-border bg-card p-6 shadow-sm"
@@ -300,6 +330,7 @@ export function CareerLevelView({
 
         <AddCompetencyForm onAdd={handleAdd} />
       </div>
+      )}
     </section>
   );
 }

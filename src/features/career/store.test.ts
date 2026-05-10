@@ -6,6 +6,7 @@ import {
   createIndicator,
   createLevel,
   getActiveLevel,
+  getLevelTree,
   getScaleLegend,
   listCompetencies,
   listCriteria,
@@ -787,6 +788,120 @@ describe("getScaleLegend", () => {
   it("throws when query fails", async () => {
     const { client } = makeClient({ listError: { message: "legend boom" } });
     await expect(getScaleLegend(client)).rejects.toThrow("legend boom");
+  });
+});
+
+describe("getLevelTree", () => {
+  function makeTreeClient(rowsByTable: {
+    career_competencies: StoredCompetency[];
+    career_criteria: StoredCriterion[];
+    career_indicators: StoredIndicator[];
+  }) {
+    const inSpies: Array<{ table: string; col: string; vals: string[] }> = [];
+    const client: SupabaseLike = {
+      from: (table: string) => {
+        let currentTable = table;
+        const chain = {
+          is: () => chain,
+          in: (col: string, vals: string[]) => {
+            inSpies.push({ table: currentTable, col, vals });
+            return chain;
+          },
+          ilike: () => chain,
+          or: () => chain,
+          gte: () => chain,
+          lt: () => chain,
+          eq: () => chain,
+          order: () => chain,
+          limit: async () => ({
+            data:
+              currentTable === "career_competencies"
+                ? rowsByTable.career_competencies
+                : currentTable === "career_criteria"
+                  ? rowsByTable.career_criteria
+                  : rowsByTable.career_indicators,
+            error: null,
+          }),
+        };
+        return {
+          upsert: vi.fn(async () => ({ error: null })),
+          select: vi.fn(() => {
+            currentTable = table;
+            return chain;
+          }),
+          update: vi.fn(() => ({ eq: vi.fn() })),
+          delete: vi.fn(() => ({ eq: vi.fn() })),
+        };
+      },
+    };
+    return { client, inSpies };
+  }
+
+  it("loads competencies, then criteria scoped to comp ids, then indicators scoped to crit ids", async () => {
+    const competencies: StoredCompetency[] = [
+      {
+        id: "c1",
+        level_id: "lvl1",
+        name: "Eng",
+        position: 0,
+        created_at: "2026-01-01T00:00:00Z",
+        deleted_at: null,
+      },
+    ];
+    const criteria: StoredCriterion[] = [
+      {
+        id: "cr1",
+        competency_id: "c1",
+        name: "Quality",
+        target: 3,
+        position: 0,
+        created_at: "2026-01-01T00:00:00Z",
+        deleted_at: null,
+      },
+    ];
+    const indicators: StoredIndicator[] = [
+      {
+        id: "i1",
+        criterion_id: "cr1",
+        code: null,
+        description: "writes tests",
+        notes: null,
+        score: 2,
+        position: 0,
+        created_at: "2026-01-01T00:00:00Z",
+        deleted_at: null,
+      },
+    ];
+    const { client, inSpies } = makeTreeClient({
+      career_competencies: competencies,
+      career_criteria: criteria,
+      career_indicators: indicators,
+    });
+
+    const result = await getLevelTree(client, "lvl1");
+
+    expect(result.competencies).toEqual(competencies);
+    expect(result.criteria).toEqual(criteria);
+    expect(result.indicators).toEqual(indicators);
+    expect(inSpies).toEqual([
+      { table: "career_criteria", col: "competency_id", vals: ["c1"] },
+      { table: "career_indicators", col: "criterion_id", vals: ["cr1"] },
+    ]);
+  });
+
+  it("short-circuits criteria + indicators when there are no competencies", async () => {
+    const { client, inSpies } = makeTreeClient({
+      career_competencies: [],
+      career_criteria: [],
+      career_indicators: [],
+    });
+    const result = await getLevelTree(client, "lvl1");
+    expect(result).toEqual({
+      competencies: [],
+      criteria: [],
+      indicators: [],
+    });
+    expect(inSpies).toEqual([]);
   });
 });
 

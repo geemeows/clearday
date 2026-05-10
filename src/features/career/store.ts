@@ -465,6 +465,51 @@ export async function setScaleLegend(
   if (error) throw new Error(`legend update failed: ${error.message}`);
 }
 
+// Aggregate fetch: loads the full competency → criterion → indicator tree for a
+// level in three queries. Drives the wheel / radar view (CareerWheel) and any
+// future surface that needs the whole tree at once. Evidence is excluded — it
+// doesn't influence per-criterion averages.
+export type LevelTreeRows = {
+  competencies: StoredCompetency[];
+  criteria: StoredCriterion[];
+  indicators: StoredIndicator[];
+};
+
+export async function getLevelTree(
+  client: SupabaseLike,
+  levelId: string,
+): Promise<LevelTreeRows> {
+  const competencies = await listCompetencies(client, levelId);
+  const compIds = competencies.map((c) => c.id);
+  let criteria: StoredCriterion[] = [];
+  if (compIds.length > 0) {
+    const { data, error } = await client
+      .from("career_criteria")
+      .select("*")
+      .in("competency_id", compIds)
+      .is("deleted_at", null)
+      .order("position", { ascending: true })
+      .limit(1000);
+    if (error) throw new Error(`level tree criteria failed: ${error.message}`);
+    criteria = (data ?? []) as StoredCriterion[];
+  }
+  const critIds = criteria.map((c) => c.id);
+  let indicators: StoredIndicator[] = [];
+  if (critIds.length > 0) {
+    const { data, error } = await client
+      .from("career_indicators")
+      .select("*")
+      .in("criterion_id", critIds)
+      .is("deleted_at", null)
+      .order("position", { ascending: true })
+      .limit(2000);
+    if (error)
+      throw new Error(`level tree indicators failed: ${error.message}`);
+    indicators = (data ?? []) as StoredIndicator[];
+  }
+  return { competencies, criteria, indicators };
+}
+
 // Picker support: simple title-prefix search over project_cards. Read-only —
 // the picker never creates cards.
 export async function searchProjectCards(

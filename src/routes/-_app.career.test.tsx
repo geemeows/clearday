@@ -418,6 +418,27 @@ describe("CareerLevelView", () => {
     expect(screen.getByText("Staff Engineer")).toBeTruthy();
   });
 
+  it("toggles between the tree and wheel views", async () => {
+    const { client } = makeFakeClient([
+      competency({ id: "c1", name: "Craft" }),
+    ]);
+    render(<CareerLevelView level={level()} client={client} />);
+    await waitFor(() => {
+      expect(screen.getByDisplayValue("Craft")).toBeTruthy();
+    });
+    expect(screen.queryByRole("img", { name: /career wheel/i })).toBeNull();
+    fireEvent.click(screen.getByRole("tab", { name: /wheel/i }));
+    await waitFor(() => {
+      expect(screen.getByRole("img", { name: /career wheel/i })).toBeTruthy();
+    });
+    // Tree is hidden when wheel is active.
+    expect(screen.queryByDisplayValue("Craft")).toBeNull();
+    fireEvent.click(screen.getByRole("tab", { name: /tree/i }));
+    await waitFor(() => {
+      expect(screen.getByDisplayValue("Craft")).toBeTruthy();
+    });
+  });
+
   it("shows an empty competency tree placeholder", async () => {
     const { client } = makeFakeClient();
     render(<CareerLevelView level={level()} client={client} />);
