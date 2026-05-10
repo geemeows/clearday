@@ -8,6 +8,7 @@ import {
   Settings as SettingsIcon,
   SquareKanban,
   Sun,
+  Target,
   Zap,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -54,6 +55,7 @@ const PAGES: NavPage[] = [
   { to: "/inbox", label: "Inbox", icon: Inbox },
   { to: "/calendar", label: "Calendar", icon: Calendar },
   { to: "/automations", label: "Automations", icon: Zap },
+  { to: "/career", label: "Career", icon: Target },
 ];
 
 type SourceDef = { id: string; label: string; kind: SourceKind };

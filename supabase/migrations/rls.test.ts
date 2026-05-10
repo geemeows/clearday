@@ -64,6 +64,11 @@ const multiAccountSql = readFileSync(
   "utf8",
 );
 
+const careerSql = readFileSync(
+  resolve(__dirname, "0028_career.sql"),
+  "utf8",
+);
+
 describe("0001_init.sql contents", () => {
   it("declares the (provider, kind, source_id) unique constraint on signals", () => {
     expect(migrationSql).toMatch(
@@ -170,6 +175,55 @@ describe("0027_multi_account_foundations.sql contents", () => {
     expect(multiAccountSql).toMatch(
       /create unique index if not exists signals_provider_account_kind_source_idx[\s\S]+\(provider, account_id, kind, source_id\)/i,
     );
+  });
+});
+
+describe("0028_career.sql contents", () => {
+  it("creates the five career tree tables plus scale legend", () => {
+    for (const t of [
+      "career_levels",
+      "career_competencies",
+      "career_criteria",
+      "career_indicators",
+      "career_evidence",
+      "career_scale_legend",
+    ]) {
+      expect(careerSql).toMatch(
+        new RegExp(`create table public\\.${t}`, "i"),
+      );
+    }
+  });
+
+  it("enforces exactly one active level via a partial unique index", () => {
+    expect(careerSql).toMatch(
+      /create unique index career_levels_one_active_idx[\s\S]+where status = 'active'/i,
+    );
+  });
+
+  it("constrains target and score to the 0–4 range", () => {
+    expect(careerSql).toMatch(/target between 0 and 4/i);
+    expect(careerSql).toMatch(/score between 0 and 4/i);
+  });
+
+  it("cascades deletes from level → competency → criterion → indicator → evidence", () => {
+    const cascades = careerSql.match(/on delete cascade/gi) ?? [];
+    expect(cascades.length).toBeGreaterThanOrEqual(4);
+  });
+
+  it("enables RLS with the allowed-user predicate on every career table", () => {
+    for (const t of [
+      "career_levels",
+      "career_competencies",
+      "career_criteria",
+      "career_indicators",
+      "career_evidence",
+      "career_scale_legend",
+    ]) {
+      expect(careerSql).toMatch(
+        new RegExp(`alter table public\\.${t} enable row level security`, "i"),
+      );
+    }
+    expect(careerSql).toMatch(/public\.is_allowed_user\(\)/);
   });
 });
 
