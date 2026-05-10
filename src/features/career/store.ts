@@ -404,6 +404,67 @@ export async function softDeleteEvidence(
   if (error) throw new Error(`evidence delete failed: ${error.message}`);
 }
 
+// ─── Level header (per-level KV jsonb) ──────────────────────────────────────
+
+export type LevelHeaderRow = { key: string; value: string };
+
+export async function setLevelHeader(
+  client: SupabaseLike,
+  id: string,
+  header: LevelHeaderRow[],
+): Promise<void> {
+  const { error } = await client
+    .from("career_levels")
+    .update({ header })
+    .eq("id", id);
+  if (error) throw new Error(`level header update failed: ${error.message}`);
+}
+
+// ─── Scale legend (single-row 1–4 labels) ────────────────────────────────────
+
+export type ScaleLegend = {
+  label_1: string;
+  label_2: string;
+  label_3: string;
+  label_4: string;
+};
+
+const EMPTY_LEGEND: ScaleLegend = {
+  label_1: "",
+  label_2: "",
+  label_3: "",
+  label_4: "",
+};
+
+export async function getScaleLegend(
+  client: SupabaseLike,
+): Promise<ScaleLegend> {
+  const { data, error } = await client
+    .from("career_scale_legend")
+    .select("label_1,label_2,label_3,label_4")
+    .eq("id", "1")
+    .limit(1);
+  if (error) throw new Error(`legend fetch failed: ${error.message}`);
+  const rows = (data ?? []) as ScaleLegend[];
+  return rows[0] ?? EMPTY_LEGEND;
+}
+
+export async function setScaleLegend(
+  client: SupabaseLike,
+  fields: Partial<ScaleLegend>,
+): Promise<void> {
+  const update: Record<string, unknown> = {};
+  if (fields.label_1 !== undefined) update.label_1 = fields.label_1;
+  if (fields.label_2 !== undefined) update.label_2 = fields.label_2;
+  if (fields.label_3 !== undefined) update.label_3 = fields.label_3;
+  if (fields.label_4 !== undefined) update.label_4 = fields.label_4;
+  const { error } = await client
+    .from("career_scale_legend")
+    .update(update)
+    .eq("id", "1");
+  if (error) throw new Error(`legend update failed: ${error.message}`);
+}
+
 // Picker support: simple title-prefix search over project_cards. Read-only —
 // the picker never creates cards.
 export async function searchProjectCards(

@@ -6,6 +6,7 @@ import {
   createIndicator,
   createLevel,
   getActiveLevel,
+  getScaleLegend,
   listCompetencies,
   listCriteria,
   listEvidence,
@@ -17,6 +18,8 @@ import {
   searchProjectCards,
   setCriterionTarget,
   setIndicatorScore,
+  setLevelHeader,
+  setScaleLegend,
   softDeleteCompetency,
   softDeleteCriterion,
   softDeleteEvidence,
@@ -728,5 +731,85 @@ describe("searchProjectCards", () => {
     await expect(searchProjectCards(client, "x")).rejects.toThrow(
       "search boom",
     );
+  });
+});
+
+describe("setLevelHeader", () => {
+  it("writes the header jsonb array to the matching level id, preserving order", async () => {
+    const { client, spies } = makeClient();
+    const header = [
+      { key: "role", value: "Staff" },
+      { key: "employer", value: "Acme" },
+    ];
+    await setLevelHeader(client, "lvl1", header);
+    expect(spies.update).toHaveBeenCalledWith({ header });
+    expect(spies.updateEq).toHaveBeenCalledWith("id", "lvl1");
+    // Order preserved (array identity check on the call arg).
+    const args = spies.update.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(args.header).toEqual(header);
+  });
+
+  it("throws when update fails", async () => {
+    const { client } = makeClient({
+      updateResult: { error: { message: "header boom" } },
+    });
+    await expect(setLevelHeader(client, "lvl1", [])).rejects.toThrow(
+      "header boom",
+    );
+  });
+});
+
+describe("getScaleLegend", () => {
+  it("filters by id=1 and selects the four labels", async () => {
+    const row = {
+      label_1: "Beginner",
+      label_2: "Working",
+      label_3: "Advanced",
+      label_4: "Expert",
+    };
+    const { client, spies } = makeClient({ listData: [row] });
+    const result = await getScaleLegend(client);
+    expect(spies.select).toHaveBeenCalledWith("label_1,label_2,label_3,label_4");
+    expect(spies.eq).toHaveBeenCalledWith("id", "1");
+    expect(result).toEqual(row);
+  });
+
+  it("returns empty-string defaults when no row is present", async () => {
+    const { client } = makeClient({ listData: [] });
+    expect(await getScaleLegend(client)).toEqual({
+      label_1: "",
+      label_2: "",
+      label_3: "",
+      label_4: "",
+    });
+  });
+
+  it("throws when query fails", async () => {
+    const { client } = makeClient({ listError: { message: "legend boom" } });
+    await expect(getScaleLegend(client)).rejects.toThrow("legend boom");
+  });
+});
+
+describe("setScaleLegend", () => {
+  it("updates only the provided label fields on id=1", async () => {
+    const { client, spies } = makeClient();
+    await setScaleLegend(client, { label_2: "Working" });
+    expect(spies.update).toHaveBeenCalledWith({ label_2: "Working" });
+    expect(spies.updateEq).toHaveBeenCalledWith("id", "1");
+  });
+
+  it("supports a multi-field write", async () => {
+    const { client, spies } = makeClient();
+    await setScaleLegend(client, { label_1: "a", label_4: "d" });
+    expect(spies.update).toHaveBeenCalledWith({ label_1: "a", label_4: "d" });
+  });
+
+  it("throws when update fails", async () => {
+    const { client } = makeClient({
+      updateResult: { error: { message: "set boom" } },
+    });
+    await expect(
+      setScaleLegend(client, { label_1: "x" }),
+    ).rejects.toThrow("set boom");
   });
 });

@@ -27,6 +27,7 @@ import { Route as AppSettingsSelfhostRouteImport } from './routes/_app.settings.
 import { Route as AppSettingsProfileRouteImport } from './routes/_app.settings.profile'
 import { Route as AppSettingsNotificationsRouteImport } from './routes/_app.settings.notifications'
 import { Route as AppSettingsIntegrationsRouteImport } from './routes/_app.settings.integrations'
+import { Route as AppSettingsCareerRouteImport } from './routes/_app.settings.career'
 import { Route as AppSettingsAiRouteImport } from './routes/_app.settings.ai'
 import { Route as AppProjectsProjectIdRouteImport } from './routes/_app.projects.$projectId'
 
@@ -120,6 +121,11 @@ const AppSettingsIntegrationsRoute = AppSettingsIntegrationsRouteImport.update({
   path: '/integrations',
   getParentRoute: () => AppSettingsRoute,
 } as any)
+const AppSettingsCareerRoute = AppSettingsCareerRouteImport.update({
+  id: '/career',
+  path: '/career',
+  getParentRoute: () => AppSettingsRoute,
+} as any)
 const AppSettingsAiRoute = AppSettingsAiRouteImport.update({
   id: '/ai',
   path: '/ai',
@@ -145,6 +151,7 @@ export interface FileRoutesByFullPath {
   '/auth/callback': typeof AuthCallbackRoute
   '/projects/$projectId': typeof AppProjectsProjectIdRoute
   '/settings/ai': typeof AppSettingsAiRoute
+  '/settings/career': typeof AppSettingsCareerRoute
   '/settings/integrations': typeof AppSettingsIntegrationsRoute
   '/settings/notifications': typeof AppSettingsNotificationsRoute
   '/settings/profile': typeof AppSettingsProfileRoute
@@ -164,6 +171,7 @@ export interface FileRoutesByTo {
   '/auth/callback': typeof AuthCallbackRoute
   '/projects/$projectId': typeof AppProjectsProjectIdRoute
   '/settings/ai': typeof AppSettingsAiRoute
+  '/settings/career': typeof AppSettingsCareerRoute
   '/settings/integrations': typeof AppSettingsIntegrationsRoute
   '/settings/notifications': typeof AppSettingsNotificationsRoute
   '/settings/profile': typeof AppSettingsProfileRoute
@@ -187,6 +195,7 @@ export interface FileRoutesById {
   '/auth/callback': typeof AuthCallbackRoute
   '/_app/projects/$projectId': typeof AppProjectsProjectIdRoute
   '/_app/settings/ai': typeof AppSettingsAiRoute
+  '/_app/settings/career': typeof AppSettingsCareerRoute
   '/_app/settings/integrations': typeof AppSettingsIntegrationsRoute
   '/_app/settings/notifications': typeof AppSettingsNotificationsRoute
   '/_app/settings/profile': typeof AppSettingsProfileRoute
@@ -210,6 +219,7 @@ export interface FileRouteTypes {
     | '/auth/callback'
     | '/projects/$projectId'
     | '/settings/ai'
+    | '/settings/career'
     | '/settings/integrations'
     | '/settings/notifications'
     | '/settings/profile'
@@ -229,6 +239,7 @@ export interface FileRouteTypes {
     | '/auth/callback'
     | '/projects/$projectId'
     | '/settings/ai'
+    | '/settings/career'
     | '/settings/integrations'
     | '/settings/notifications'
     | '/settings/profile'
@@ -251,6 +262,7 @@ export interface FileRouteTypes {
     | '/auth/callback'
     | '/_app/projects/$projectId'
     | '/_app/settings/ai'
+    | '/_app/settings/career'
     | '/_app/settings/integrations'
     | '/_app/settings/notifications'
     | '/_app/settings/profile'
@@ -395,6 +407,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppSettingsIntegrationsRouteImport
       parentRoute: typeof AppSettingsRoute
     }
+    '/_app/settings/career': {
+      id: '/_app/settings/career'
+      path: '/career'
+      fullPath: '/settings/career'
+      preLoaderRoute: typeof AppSettingsCareerRouteImport
+      parentRoute: typeof AppSettingsRoute
+    }
     '/_app/settings/ai': {
       id: '/_app/settings/ai'
       path: '/ai'
@@ -428,6 +447,7 @@ const AppProjectsRouteWithChildren = AppProjectsRoute._addFileChildren(
 
 interface AppSettingsRouteChildren {
   AppSettingsAiRoute: typeof AppSettingsAiRoute
+  AppSettingsCareerRoute: typeof AppSettingsCareerRoute
   AppSettingsIntegrationsRoute: typeof AppSettingsIntegrationsRoute
   AppSettingsNotificationsRoute: typeof AppSettingsNotificationsRoute
   AppSettingsProfileRoute: typeof AppSettingsProfileRoute
@@ -437,6 +457,7 @@ interface AppSettingsRouteChildren {
 
 const AppSettingsRouteChildren: AppSettingsRouteChildren = {
   AppSettingsAiRoute: AppSettingsAiRoute,
+  AppSettingsCareerRoute: AppSettingsCareerRoute,
   AppSettingsIntegrationsRoute: AppSettingsIntegrationsRoute,
   AppSettingsNotificationsRoute: AppSettingsNotificationsRoute,
   AppSettingsProfileRoute: AppSettingsProfileRoute,

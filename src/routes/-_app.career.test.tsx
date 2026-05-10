@@ -10,6 +10,7 @@ import {
   CriteriaList,
   EvidenceList,
   IndicatorList,
+  LevelHeader,
 } from "#/routes/_app.career";
 import type {
   StoredCompetency,
@@ -1299,5 +1300,158 @@ describe("AddEvidenceForm", () => {
       name: /add evidence/i,
     }) as HTMLButtonElement;
     expect(button.disabled).toBe(true);
+  });
+});
+
+function makeLevelHeaderClient() {
+  const calls: Array<Record<string, unknown>> = [];
+  const updateEq = vi.fn(async () => ({ error: null as null }));
+  const update = vi.fn((values: Record<string, unknown>) => {
+    calls.push(values);
+    return { eq: updateEq };
+  });
+  const client: SupabaseLike = {
+    from: () => ({
+      upsert: vi.fn(async () => ({ error: null })),
+      // biome-ignore lint/suspicious/noExplicitAny: select unused in this test seam
+      select: vi.fn(() => ({}) as any),
+      update,
+      delete: vi.fn(() => ({ eq: vi.fn() })),
+    }),
+  };
+  return { client, calls, update, updateEq };
+}
+
+describe("LevelHeader", () => {
+  it("renders an empty placeholder when the header has no rows", () => {
+    const { client } = makeLevelHeaderClient();
+    render(<LevelHeader level={level()} client={client} />);
+    expect(screen.getByText(/no header rows/i)).toBeTruthy();
+  });
+
+  it("renders existing rows in order", () => {
+    const { client } = makeLevelHeaderClient();
+    render(
+      <LevelHeader
+        level={level({
+          header: [
+            { key: "role", value: "Staff" },
+            { key: "employer", value: "Acme" },
+          ],
+        })}
+        client={client}
+      />,
+    );
+    expect(screen.getByDisplayValue("role")).toBeTruthy();
+    expect(screen.getByDisplayValue("Staff")).toBeTruthy();
+    expect(screen.getByDisplayValue("employer")).toBeTruthy();
+    expect(screen.getByDisplayValue("Acme")).toBeTruthy();
+  });
+
+  it("appends a new empty row on Add", async () => {
+    const { client, update } = makeLevelHeaderClient();
+    render(<LevelHeader level={level()} client={client} />);
+    fireEvent.click(screen.getByRole("button", { name: /add row/i }));
+    await waitFor(() => {
+      expect(update).toHaveBeenCalledWith({
+        header: [{ key: "", value: "" }],
+      });
+    });
+  });
+
+  it("renames a key on blur with a different value", async () => {
+    const { client, update } = makeLevelHeaderClient();
+    render(
+      <LevelHeader
+        level={level({ header: [{ key: "role", value: "Staff" }] })}
+        client={client}
+      />,
+    );
+    const input = screen.getByDisplayValue("role") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "title" } });
+    fireEvent.blur(input);
+    await waitFor(() => {
+      expect(update).toHaveBeenCalledWith({
+        header: [{ key: "title", value: "Staff" }],
+      });
+    });
+  });
+
+  it("does not write when blur leaves the value unchanged", () => {
+    const { client, update } = makeLevelHeaderClient();
+    render(
+      <LevelHeader
+        level={level({ header: [{ key: "role", value: "Staff" }] })}
+        client={client}
+      />,
+    );
+    fireEvent.blur(screen.getByDisplayValue("role"));
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it("edits a value on blur with a different value", async () => {
+    const { client, update } = makeLevelHeaderClient();
+    render(
+      <LevelHeader
+        level={level({ header: [{ key: "role", value: "Staff" }] })}
+        client={client}
+      />,
+    );
+    const input = screen.getByDisplayValue("Staff") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "Senior" } });
+    fireEvent.blur(input);
+    await waitFor(() => {
+      expect(update).toHaveBeenCalledWith({
+        header: [{ key: "role", value: "Senior" }],
+      });
+    });
+  });
+
+  it("deletes a row and persists the new array", async () => {
+    const { client, update } = makeLevelHeaderClient();
+    render(
+      <LevelHeader
+        level={level({
+          header: [
+            { key: "role", value: "Staff" },
+            { key: "employer", value: "Acme" },
+          ],
+        })}
+        client={client}
+      />,
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: /delete header row role/i }),
+    );
+    await waitFor(() => {
+      expect(update).toHaveBeenCalledWith({
+        header: [{ key: "employer", value: "Acme" }],
+      });
+    });
+    expect(screen.queryByDisplayValue("role")).toBeNull();
+  });
+
+  it("reorders a row down and persists the new order", async () => {
+    const { client, update } = makeLevelHeaderClient();
+    render(
+      <LevelHeader
+        level={level({
+          header: [
+            { key: "role", value: "Staff" },
+            { key: "employer", value: "Acme" },
+          ],
+        })}
+        client={client}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /move role down/i }));
+    await waitFor(() => {
+      expect(update).toHaveBeenCalledWith({
+        header: [
+          { key: "employer", value: "Acme" },
+          { key: "role", value: "Staff" },
+        ],
+      });
+    });
   });
 });

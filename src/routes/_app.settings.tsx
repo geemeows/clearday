@@ -35,6 +35,7 @@ export const SETTINGS_TABS: ReadonlyArray<{ to: string; label: string }> = [
   { to: "/settings/ai", label: "AI provider" },
   { to: "/settings/selfhost", label: "Self-host" },
   { to: "/settings/profile", label: "Profile" },
+  { to: "/settings/career", label: "Career" },
 ];
 
 function SettingsLayout() {

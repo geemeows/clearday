@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Target, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Target, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "#/components/coss/button";
 import {
@@ -9,6 +9,7 @@ import {
   createIndicator,
   createLevel,
   getActiveLevel,
+  type LevelHeaderRow,
   listCompetencies,
   listCriteria,
   listEvidence,
@@ -18,6 +19,7 @@ import {
   renameIndicator,
   searchProjectCards,
   setCriterionTarget,
+  setLevelHeader,
   setIndicatorScore,
   softDeleteCompetency,
   softDeleteCriterion,
@@ -269,6 +271,8 @@ export function CareerLevelView({
         </p>
       )}
 
+      <LevelHeader level={level} client={client} />
+
       <div
         role="region"
         aria-label="Competency tree"
@@ -297,6 +301,180 @@ export function CareerLevelView({
         <AddCompetencyForm onAdd={handleAdd} />
       </div>
     </section>
+  );
+}
+
+export function LevelHeader({
+  level,
+  client,
+}: {
+  level: StoredLevel;
+  client: SupabaseLike;
+}) {
+  const [rows, setRows] = useState<LevelHeaderRow[]>(level.header ?? []);
+  const [error, setError] = useState<string | null>(null);
+
+  const persist = async (next: LevelHeaderRow[]) => {
+    setRows(next);
+    try {
+      await setLevelHeader(client, level.id, next);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "failed to save header");
+    }
+  };
+
+  const addRow = () => {
+    persist([...rows, { key: "", value: "" }]);
+  };
+
+  const updateRow = (i: number, field: "key" | "value", v: string) => {
+    const next = rows.map((r, idx) => (idx === i ? { ...r, [field]: v } : r));
+    if (next[i]?.[field] === rows[i]?.[field]) return;
+    persist(next);
+  };
+
+  const deleteRow = (i: number) => {
+    persist(rows.filter((_, idx) => idx !== i));
+  };
+
+  const moveRow = (i: number, delta: -1 | 1) => {
+    const j = i + delta;
+    if (j < 0 || j >= rows.length) return;
+    const next = [...rows];
+    const a = next[i];
+    const b = next[j];
+    if (!a || !b) return;
+    next[i] = b;
+    next[j] = a;
+    persist(next);
+  };
+
+  return (
+    <div
+      role="region"
+      aria-label="Level header"
+      className="mb-4 rounded-xl border border-border bg-card p-4 shadow-sm"
+    >
+      <div className="mb-2 flex items-center justify-between">
+        <h2 className="font-medium text-foreground text-sm">Header</h2>
+        <Button type="button" size="sm" variant="outline" onClick={addRow}>
+          Add row
+        </Button>
+      </div>
+      {error && (
+        <p
+          role="alert"
+          className="mb-2 rounded-sm border border-destructive/30 bg-destructive/10 p-2 text-destructive text-xs"
+        >
+          {error}
+        </p>
+      )}
+      {rows.length === 0 ? (
+        <p className="text-muted-foreground text-xs">
+          No header rows. Add role, employer, date, etc.
+        </p>
+      ) : (
+        <ul className="space-y-1.5">
+          {rows.map((row, i) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: header rows have no stable id; index is fine here
+            <li key={i} className="flex items-center gap-2">
+              <HeaderRow
+                row={row}
+                index={i}
+                onRename={(v) => updateRow(i, "key", v)}
+                onSetValue={(v) => updateRow(i, "value", v)}
+                onDelete={() => deleteRow(i)}
+                onMoveUp={i > 0 ? () => moveRow(i, -1) : undefined}
+                onMoveDown={i < rows.length - 1 ? () => moveRow(i, 1) : undefined}
+              />
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function HeaderRow({
+  row,
+  index,
+  onRename,
+  onSetValue,
+  onDelete,
+  onMoveUp,
+  onMoveDown,
+}: {
+  row: LevelHeaderRow;
+  index: number;
+  onRename: (v: string) => void;
+  onSetValue: (v: string) => void;
+  onDelete: () => void;
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
+}) {
+  const [keyDraft, setKeyDraft] = useState(row.key);
+  const [valueDraft, setValueDraft] = useState(row.value);
+  // Re-sync drafts when the underlying row changes (e.g. after a reorder or
+  // delete repositions sibling rows into this index slot).
+  useEffect(() => {
+    setKeyDraft(row.key);
+  }, [row.key]);
+  useEffect(() => {
+    setValueDraft(row.value);
+  }, [row.value]);
+  const label = row.key || `row ${index + 1}`;
+
+  return (
+    <div className="flex w-full items-center gap-2">
+      <input
+        type="text"
+        aria-label={`Header key for ${label}`}
+        value={keyDraft}
+        onChange={(e) => setKeyDraft(e.target.value)}
+        onBlur={() => {
+          if (keyDraft !== row.key) onRename(keyDraft);
+        }}
+        placeholder="Key"
+        className="w-32 rounded border border-border bg-background px-2 py-1 text-foreground text-xs outline-none focus:ring-2 focus:ring-primary/50"
+      />
+      <input
+        type="text"
+        aria-label={`Header value for ${label}`}
+        value={valueDraft}
+        onChange={(e) => setValueDraft(e.target.value)}
+        onBlur={() => {
+          if (valueDraft !== row.value) onSetValue(valueDraft);
+        }}
+        placeholder="Value"
+        className="min-w-0 flex-1 rounded border border-border bg-background px-2 py-1 text-foreground text-xs outline-none focus:ring-2 focus:ring-primary/50"
+      />
+      <button
+        type="button"
+        aria-label={`Move ${label} up`}
+        onClick={onMoveUp}
+        disabled={!onMoveUp}
+        className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-muted disabled:opacity-30"
+      >
+        <ArrowUp className="h-3 w-3" />
+      </button>
+      <button
+        type="button"
+        aria-label={`Move ${label} down`}
+        onClick={onMoveDown}
+        disabled={!onMoveDown}
+        className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-muted disabled:opacity-30"
+      >
+        <ArrowDown className="h-3 w-3" />
+      </button>
+      <button
+        type="button"
+        aria-label={`Delete header row ${label}`}
+        onClick={onDelete}
+        className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+      >
+        <Trash2 className="h-3 w-3" />
+      </button>
+    </div>
   );
 }
 
