@@ -2,25 +2,31 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createCompetency,
   createCriterion,
+  createEvidence,
   createIndicator,
   createLevel,
   getActiveLevel,
   listCompetencies,
   listCriteria,
+  listEvidence,
   listIndicators,
   listLevels,
   renameCompetency,
   renameCriterion,
   renameIndicator,
+  searchProjectCards,
   setCriterionTarget,
   setIndicatorScore,
   softDeleteCompetency,
   softDeleteCriterion,
+  softDeleteEvidence,
   softDeleteIndicator,
   type StoredCompetency,
   type StoredCriterion,
+  type StoredEvidence,
   type StoredIndicator,
   type StoredLevel,
+  updateEvidence,
 } from "#/features/career/store";
 import type { SupabaseLike } from "#/shared/db";
 
@@ -547,6 +553,180 @@ describe("softDeleteIndicator", () => {
     });
     await expect(softDeleteIndicator(client, "i1")).rejects.toThrow(
       "delete boom",
+    );
+  });
+});
+
+function evidence(
+  overrides: Partial<StoredEvidence> = {},
+): StoredEvidence {
+  return {
+    id: "e1",
+    indicator_id: "i1",
+    title: "Q4 launch postmortem",
+    url: null,
+    note: null,
+    card_id: null,
+    position: 0,
+    created_at: "2026-01-01T00:00:00Z",
+    deleted_at: null,
+    ...overrides,
+  };
+}
+
+describe("createEvidence", () => {
+  it("upserts on id with indicator_id, title, and position; nulls optional fields by default", async () => {
+    const { client, spies } = makeClient();
+    await createEvidence(client, {
+      id: "e1",
+      indicator_id: "i1",
+      title: "Q4 launch postmortem",
+      position: 0,
+    });
+    expect(spies.upsert).toHaveBeenCalledWith(
+      {
+        id: "e1",
+        indicator_id: "i1",
+        title: "Q4 launch postmortem",
+        url: null,
+        note: null,
+        card_id: null,
+        position: 0,
+      },
+      { onConflict: "id" },
+    );
+  });
+
+  it("passes through url, note, and card_id when supplied", async () => {
+    const { client, spies } = makeClient();
+    await createEvidence(client, {
+      id: "e1",
+      indicator_id: "i1",
+      title: "Postmortem",
+      url: "https://example.com",
+      note: "see appendix",
+      card_id: "card-1",
+      position: 1024,
+    });
+    const arg = spies.upsert.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(arg.url).toBe("https://example.com");
+    expect(arg.note).toBe("see appendix");
+    expect(arg.card_id).toBe("card-1");
+    expect(arg.position).toBe(1024);
+  });
+
+  it("throws when upsert fails", async () => {
+    const { client } = makeClient({
+      upsertResult: { error: { message: "boom" } },
+    });
+    await expect(
+      createEvidence(client, {
+        id: "e1",
+        indicator_id: "i1",
+        title: "x",
+        position: 0,
+      }),
+    ).rejects.toThrow("boom");
+  });
+});
+
+describe("listEvidence", () => {
+  it("filters by indicator_id, excludes soft-deleted, orders by position asc", async () => {
+    const row = evidence();
+    const { client, spies } = makeClient({ listData: [row] });
+    const result = await listEvidence(client, "i1");
+    expect(spies.eq).toHaveBeenCalledWith("indicator_id", "i1");
+    expect(spies.is).toHaveBeenCalledWith("deleted_at", null);
+    expect(spies.order).toHaveBeenCalledWith("position", { ascending: true });
+    expect(result).toEqual([row]);
+  });
+
+  it("returns empty array when no rows", async () => {
+    const { client } = makeClient({ listData: [] });
+    expect(await listEvidence(client, "i1")).toEqual([]);
+  });
+
+  it("throws when list fails", async () => {
+    const { client } = makeClient({ listError: { message: "db error" } });
+    await expect(listEvidence(client, "i1")).rejects.toThrow("db error");
+  });
+});
+
+describe("updateEvidence", () => {
+  it("updates only the supplied fields", async () => {
+    const { client, spies } = makeClient();
+    await updateEvidence(client, "e1", { title: "New title" });
+    expect(spies.update).toHaveBeenCalledWith({ title: "New title" });
+    expect(spies.updateEq).toHaveBeenCalledWith("id", "e1");
+  });
+
+  it("supports linking and unlinking a card via card_id", async () => {
+    const { client, spies } = makeClient();
+    await updateEvidence(client, "e1", { card_id: "card-1" });
+    expect(spies.update).toHaveBeenLastCalledWith({ card_id: "card-1" });
+    await updateEvidence(client, "e1", { card_id: null });
+    expect(spies.update).toHaveBeenLastCalledWith({ card_id: null });
+  });
+
+  it("supports clearing url and note to null", async () => {
+    const { client, spies } = makeClient();
+    await updateEvidence(client, "e1", { url: null, note: null });
+    expect(spies.update).toHaveBeenCalledWith({ url: null, note: null });
+  });
+
+  it("throws when update fails", async () => {
+    const { client } = makeClient({
+      updateResult: { error: { message: "update boom" } },
+    });
+    await expect(
+      updateEvidence(client, "e1", { title: "x" }),
+    ).rejects.toThrow("update boom");
+  });
+});
+
+describe("softDeleteEvidence", () => {
+  it("stamps deleted_at on the matching id", async () => {
+    const { client, spies } = makeClient();
+    await softDeleteEvidence(client, "e1");
+    expect(spies.update).toHaveBeenCalledTimes(1);
+    const arg = spies.update.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(typeof arg.deleted_at).toBe("string");
+    expect(spies.updateEq).toHaveBeenCalledWith("id", "e1");
+  });
+
+  it("throws when update fails", async () => {
+    const { client } = makeClient({
+      updateResult: { error: { message: "delete boom" } },
+    });
+    await expect(softDeleteEvidence(client, "e1")).rejects.toThrow(
+      "delete boom",
+    );
+  });
+});
+
+describe("searchProjectCards", () => {
+  it("returns empty array for an empty query without hitting the DB", async () => {
+    const { client, spies } = makeClient();
+    const result = await searchProjectCards(client, "   ");
+    expect(result).toEqual([]);
+    expect(spies.select).not.toHaveBeenCalled();
+  });
+
+  it("ilikes title with %query% and limits results", async () => {
+    const { client, spies } = makeClient({
+      listData: [{ id: "card-1", title: "Postmortem" }],
+    });
+    const result = await searchProjectCards(client, "post");
+    expect(spies.select).toHaveBeenCalledWith("id,title");
+    const ilikeSpy = spies.select.mock.results[0]?.value.ilike;
+    expect(ilikeSpy).toHaveBeenCalledWith("title", "%post%");
+    expect(result).toEqual([{ id: "card-1", title: "Postmortem" }]);
+  });
+
+  it("throws when search fails", async () => {
+    const { client } = makeClient({ listError: { message: "search boom" } });
+    await expect(searchProjectCards(client, "x")).rejects.toThrow(
+      "search boom",
     );
   });
 });

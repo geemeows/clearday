@@ -5,24 +5,30 @@ import { Button } from "#/components/coss/button";
 import {
   createCompetency,
   createCriterion,
+  createEvidence,
   createIndicator,
   createLevel,
   getActiveLevel,
   listCompetencies,
   listCriteria,
+  listEvidence,
   listIndicators,
   renameCompetency,
   renameCriterion,
   renameIndicator,
+  searchProjectCards,
   setCriterionTarget,
   setIndicatorScore,
   softDeleteCompetency,
   softDeleteCriterion,
+  softDeleteEvidence,
   softDeleteIndicator,
   type StoredCompetency,
   type StoredCriterion,
+  type StoredEvidence,
   type StoredIndicator,
   type StoredLevel,
+  updateEvidence,
 } from "#/features/career/store";
 import { supabase } from "#/lib/supabase";
 import type { SupabaseLike } from "#/shared/db";
@@ -618,6 +624,7 @@ export function IndicatorList({
             <IndicatorRow
               key={i.id}
               indicator={i}
+              client={client}
               onRename={handleRename}
               onSetScore={handleSetScore}
               onDelete={handleDelete}
@@ -632,11 +639,13 @@ export function IndicatorList({
 
 function IndicatorRow({
   indicator,
+  client,
   onRename,
   onSetScore,
   onDelete,
 }: {
   indicator: StoredIndicator;
+  client: SupabaseLike;
   onRename: (
     id: string,
     fields: { code?: string | null; description?: string; notes?: string | null },
@@ -730,7 +739,342 @@ function IndicatorRow({
         placeholder="Notes…"
         className="mt-1 w-full rounded border border-transparent bg-transparent px-1.5 py-0.5 text-muted-foreground text-xs outline-none focus:border-border focus:bg-muted"
       />
+      <EvidenceList indicator={indicator} client={client} />
     </li>
+  );
+}
+
+export function EvidenceList({
+  indicator,
+  client,
+}: {
+  indicator: StoredIndicator;
+  client: SupabaseLike;
+}) {
+  const [evidence, setEvidence] = useState<StoredEvidence[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    listEvidence(client, indicator.id)
+      .then((rows) => {
+        if (!cancelled) setEvidence(rows);
+      })
+      .catch((e) => {
+        if (!cancelled) setError(e instanceof Error ? e.message : "failed");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [client, indicator.id]);
+
+  const handleAdd = async (title: string) => {
+    const id = crypto.randomUUID();
+    const position = (evidence?.length ?? 0) * 1024;
+    try {
+      await createEvidence(client, {
+        id,
+        indicator_id: indicator.id,
+        title,
+        position,
+      });
+      const rows = await listEvidence(client, indicator.id);
+      setEvidence(rows);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "failed to add evidence");
+    }
+  };
+
+  const handleUpdate = async (
+    id: string,
+    fields: {
+      title?: string;
+      url?: string | null;
+      note?: string | null;
+      card_id?: string | null;
+    },
+  ) => {
+    setEvidence((prev) =>
+      prev ? prev.map((ev) => (ev.id === id ? { ...ev, ...fields } : ev)) : prev,
+    );
+    try {
+      await updateEvidence(client, id, fields);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "failed to update evidence");
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    const target = evidence?.find((ev) => ev.id === id);
+    if (!target) return;
+    if (!confirm(`Delete "${target.title}"?`)) return;
+    setEvidence((prev) => (prev ? prev.filter((ev) => ev.id !== id) : prev));
+    try {
+      await softDeleteEvidence(client, id);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "failed to delete evidence");
+    }
+  };
+
+  return (
+    <div className="mt-2 ml-3 space-y-1.5 border-border border-l pl-3">
+      {error && (
+        <p
+          role="alert"
+          className="rounded-sm border border-destructive/30 bg-destructive/10 p-2 text-destructive text-xs"
+        >
+          {error}
+        </p>
+      )}
+      {evidence === null ? (
+        <p className="text-muted-foreground text-xs">Loading…</p>
+      ) : evidence.length === 0 ? null : (
+        <ul className="space-y-1">
+          {evidence.map((ev) => (
+            <EvidenceRow
+              key={ev.id}
+              evidence={ev}
+              client={client}
+              onUpdate={handleUpdate}
+              onDelete={handleDelete}
+            />
+          ))}
+        </ul>
+      )}
+      <AddEvidenceForm onAdd={handleAdd} />
+    </div>
+  );
+}
+
+function EvidenceRow({
+  evidence,
+  client,
+  onUpdate,
+  onDelete,
+}: {
+  evidence: StoredEvidence;
+  client: SupabaseLike;
+  onUpdate: (
+    id: string,
+    fields: {
+      title?: string;
+      url?: string | null;
+      note?: string | null;
+      card_id?: string | null;
+    },
+  ) => void;
+  onDelete: (id: string) => void;
+}) {
+  const [titleDraft, setTitleDraft] = useState(evidence.title);
+  const [urlDraft, setUrlDraft] = useState(evidence.url ?? "");
+  const [noteDraft, setNoteDraft] = useState(evidence.note ?? "");
+
+  const isValidUrl = (s: string) => {
+    try {
+      new URL(s);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  return (
+    <li className="rounded-md border border-border bg-card px-2 py-1.5">
+      <div className="flex items-center gap-2">
+        <input
+          type="text"
+          aria-label={`Title for ${evidence.title}`}
+          value={titleDraft}
+          onChange={(e) => setTitleDraft(e.target.value)}
+          onBlur={() => {
+            const trimmed = titleDraft.trim();
+            if (trimmed && trimmed !== evidence.title) {
+              onUpdate(evidence.id, { title: trimmed });
+            } else if (!trimmed) {
+              setTitleDraft(evidence.title);
+            }
+          }}
+          className="min-w-0 flex-1 rounded border border-transparent bg-transparent px-1.5 py-0.5 text-foreground text-xs outline-none focus:border-border focus:bg-muted"
+        />
+        <button
+          type="button"
+          aria-label={`Delete evidence ${evidence.title}`}
+          onClick={() => onDelete(evidence.id)}
+          className="flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+        >
+          <Trash2 className="h-3 w-3" />
+        </button>
+      </div>
+      <div className="mt-1 flex items-center gap-2">
+        <input
+          type="url"
+          aria-label={`URL for ${evidence.title}`}
+          value={urlDraft}
+          onChange={(e) => setUrlDraft(e.target.value)}
+          onBlur={() => {
+            const trimmed = urlDraft.trim();
+            const next = trimmed === "" ? null : trimmed;
+            if (next !== null && !isValidUrl(next)) {
+              setUrlDraft(evidence.url ?? "");
+              return;
+            }
+            if (next !== (evidence.url ?? null)) {
+              onUpdate(evidence.id, { url: next });
+            }
+          }}
+          placeholder="https://…"
+          className="min-w-0 flex-1 rounded border border-transparent bg-transparent px-1.5 py-0.5 text-muted-foreground text-xs outline-none focus:border-border focus:bg-muted"
+        />
+        {evidence.url && (
+          <a
+            href={evidence.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={`Open ${evidence.title} link`}
+            className="text-primary text-xs underline"
+          >
+            open
+          </a>
+        )}
+      </div>
+      <input
+        type="text"
+        aria-label={`Note for ${evidence.title}`}
+        value={noteDraft}
+        onChange={(e) => setNoteDraft(e.target.value)}
+        onBlur={() => {
+          const trimmed = noteDraft.trim();
+          const next = trimmed === "" ? null : trimmed;
+          if (next !== (evidence.note ?? null)) {
+            onUpdate(evidence.id, { note: next });
+          }
+        }}
+        placeholder="Note…"
+        className="mt-1 w-full rounded border border-transparent bg-transparent px-1.5 py-0.5 text-muted-foreground text-xs outline-none focus:border-border focus:bg-muted"
+      />
+      <CardPicker
+        evidence={evidence}
+        client={client}
+        onPick={(card_id) => onUpdate(evidence.id, { card_id })}
+      />
+    </li>
+  );
+}
+
+export function CardPicker({
+  evidence,
+  client,
+  onPick,
+}: {
+  evidence: StoredEvidence;
+  client: SupabaseLike;
+  onPick: (cardId: string | null) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<Array<{ id: string; title: string }>>(
+    [],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!query.trim()) {
+      setResults([]);
+      return;
+    }
+    searchProjectCards(client, query)
+      .then((rows) => {
+        if (!cancelled) setResults(rows);
+      })
+      .catch(() => {
+        if (!cancelled) setResults([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [client, query]);
+
+  return (
+    <div className="mt-1 flex items-center gap-2">
+      {evidence.card_id ? (
+        <span className="flex items-center gap-1 text-muted-foreground text-xs">
+          Linked card
+          <button
+            type="button"
+            aria-label={`Unlink card from ${evidence.title}`}
+            onClick={() => onPick(null)}
+            className="rounded px-1 text-primary underline"
+          >
+            unlink
+          </button>
+        </span>
+      ) : (
+        <div className="relative flex-1">
+          <input
+            type="text"
+            aria-label={`Search project cards for ${evidence.title}`}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Link a project card…"
+            className="w-full rounded border border-transparent bg-transparent px-1.5 py-0.5 text-muted-foreground text-xs outline-none focus:border-border focus:bg-muted"
+          />
+          {results.length > 0 && (
+            <ul
+              role="listbox"
+              aria-label={`Card search results for ${evidence.title}`}
+              className="absolute z-10 mt-1 w-full rounded-md border border-border bg-popover p-1 shadow-md"
+            >
+              {results.map((r) => (
+                <li key={r.id}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onPick(r.id);
+                      setQuery("");
+                      setResults([]);
+                    }}
+                    className="w-full rounded px-2 py-1 text-left text-foreground text-xs hover:bg-muted"
+                  >
+                    {r.title}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function AddEvidenceForm({
+  onAdd,
+}: {
+  onAdd: (title: string) => void;
+}) {
+  const [title, setTitle] = useState("");
+
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const trimmed = title.trim();
+    if (!trimmed) return;
+    onAdd(trimmed);
+    setTitle("");
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="flex items-center gap-2">
+      <input
+        type="text"
+        aria-label="New evidence title"
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        placeholder="Add evidence…"
+        className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1 text-foreground text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+      />
+      <Button type="submit" disabled={!title.trim()} size="sm">
+        Add evidence
+      </Button>
+    </form>
   );
 }
 

@@ -52,6 +52,18 @@ export type StoredIndicator = {
   deleted_at: string | null;
 };
 
+export type StoredEvidence = {
+  id: string;
+  indicator_id: string;
+  title: string;
+  url: string | null;
+  note: string | null;
+  card_id: string | null;
+  position: number;
+  created_at: string;
+  deleted_at: string | null;
+};
+
 export async function createLevel(
   client: SupabaseLike,
   level: { id: string; title: string },
@@ -311,4 +323,101 @@ export async function softDeleteIndicator(
     .update({ deleted_at: new Date().toISOString() })
     .eq("id", id);
   if (error) throw new Error(`indicator delete failed: ${error.message}`);
+}
+
+// ─── Evidence ────────────────────────────────────────────────────────────────
+
+export async function createEvidence(
+  client: SupabaseLike,
+  evidence: {
+    id: string;
+    indicator_id: string;
+    title: string;
+    url?: string | null;
+    note?: string | null;
+    card_id?: string | null;
+    position: number;
+  },
+): Promise<void> {
+  const { error } = await client.from("career_evidence").upsert(
+    {
+      id: evidence.id,
+      indicator_id: evidence.indicator_id,
+      title: evidence.title,
+      url: evidence.url ?? null,
+      note: evidence.note ?? null,
+      card_id: evidence.card_id ?? null,
+      position: evidence.position,
+    },
+    { onConflict: "id" },
+  );
+  if (error) throw new Error(`evidence create failed: ${error.message}`);
+}
+
+export async function listEvidence(
+  client: SupabaseLike,
+  indicatorId: string,
+): Promise<StoredEvidence[]> {
+  const { data, error } = await client
+    .from("career_evidence")
+    .select("*")
+    .eq("indicator_id", indicatorId)
+    .is("deleted_at", null)
+    .order("position", { ascending: true })
+    .limit(200);
+  if (error) throw new Error(`evidence list failed: ${error.message}`);
+  return (data ?? []) as StoredEvidence[];
+}
+
+// Partial update over title / url / note / card_id — all autosave on blur, and
+// only the dirty field needs to write. Mirrors renameIndicator.
+export async function updateEvidence(
+  client: SupabaseLike,
+  id: string,
+  fields: {
+    title?: string;
+    url?: string | null;
+    note?: string | null;
+    card_id?: string | null;
+  },
+): Promise<void> {
+  const update: Record<string, unknown> = {};
+  if (fields.title !== undefined) update.title = fields.title;
+  if (fields.url !== undefined) update.url = fields.url;
+  if (fields.note !== undefined) update.note = fields.note;
+  if (fields.card_id !== undefined) update.card_id = fields.card_id;
+  const { error } = await client
+    .from("career_evidence")
+    .update(update)
+    .eq("id", id);
+  if (error) throw new Error(`evidence update failed: ${error.message}`);
+}
+
+export async function softDeleteEvidence(
+  client: SupabaseLike,
+  id: string,
+): Promise<void> {
+  const { error } = await client
+    .from("career_evidence")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) throw new Error(`evidence delete failed: ${error.message}`);
+}
+
+// Picker support: simple title-prefix search over project_cards. Read-only —
+// the picker never creates cards.
+export async function searchProjectCards(
+  client: SupabaseLike,
+  query: string,
+): Promise<Array<{ id: string; title: string }>> {
+  const trimmed = query.trim();
+  if (!trimmed) return [];
+  const { data, error } = await client
+    .from("project_cards")
+    .select("id,title")
+    .ilike("title", `%${trimmed}%`)
+    .order("created_at", { ascending: false })
+    .limit(10);
+  if (error) throw new Error(`card search failed: ${error.message}`);
+  return (data ?? []) as Array<{ id: string; title: string }>;
 }

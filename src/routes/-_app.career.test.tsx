@@ -3,15 +3,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   AddCompetencyForm,
   AddCriterionForm,
+  AddEvidenceForm,
   AddIndicatorForm,
   CareerLevelView,
   CareerOnboardingView,
   CriteriaList,
+  EvidenceList,
   IndicatorList,
 } from "#/routes/_app.career";
 import type {
   StoredCompetency,
   StoredCriterion,
+  StoredEvidence,
   StoredIndicator,
   StoredLevel,
 } from "#/features/career/store";
@@ -82,6 +85,8 @@ function makeFakeClient(
   initial: StoredCompetency[] = [],
   initialCriteria: StoredCriterion[] = [],
   initialIndicators: StoredIndicator[] = [],
+  initialEvidence: StoredEvidence[] = [],
+  initialCards: Array<{ id: string; title: string }> = [],
 ) {
   const compRowsRef: { current: StoredCompetency[] } = {
     current: [...initial],
@@ -91,6 +96,12 @@ function makeFakeClient(
   };
   const indRowsRef: { current: StoredIndicator[] } = {
     current: [...initialIndicators],
+  };
+  const evRowsRef: { current: StoredEvidence[] } = {
+    current: [...initialEvidence],
+  };
+  const cardRowsRef: { current: Array<{ id: string; title: string }> } = {
+    current: [...initialCards],
   };
   const upsertComp = vi.fn(
     async (values: Record<string, unknown> | Record<string, unknown>[]) => {
@@ -140,6 +151,26 @@ function makeFakeClient(
         description: (v.description as string) ?? "",
         notes: (v.notes as string | null) ?? null,
         score: (v.score as number) ?? 1,
+        position: v.position as number,
+        created_at: new Date().toISOString(),
+        deleted_at: null,
+      });
+      return { error: null };
+    },
+  );
+  const upsertEv = vi.fn(
+    async (values: Record<string, unknown> | Record<string, unknown>[]) => {
+      const v = (Array.isArray(values) ? values[0] : values) as Record<
+        string,
+        unknown
+      >;
+      evRowsRef.current.push({
+        id: v.id as string,
+        indicator_id: v.indicator_id as string,
+        title: (v.title as string) ?? "",
+        url: (v.url as string | null) ?? null,
+        note: (v.note as string | null) ?? null,
+        card_id: (v.card_id as string | null) ?? null,
         position: v.position as number,
         created_at: new Date().toISOString(),
         deleted_at: null,
@@ -220,10 +251,40 @@ function makeFakeClient(
       return updateEq();
     },
   }));
+  const updateEv = vi.fn((values: Record<string, unknown>) => ({
+    eq: (_col: string, id: string) => {
+      evRowsRef.current = evRowsRef.current
+        .map((r) =>
+          r.id === id
+            ? {
+                ...r,
+                ...(typeof values.title === "string"
+                  ? { title: values.title as string }
+                  : {}),
+                ...("url" in values
+                  ? { url: values.url as string | null }
+                  : {}),
+                ...("note" in values
+                  ? { note: values.note as string | null }
+                  : {}),
+                ...("card_id" in values
+                  ? { card_id: values.card_id as string | null }
+                  : {}),
+                ...(typeof values.deleted_at === "string"
+                  ? { deleted_at: values.deleted_at as string }
+                  : {}),
+              }
+            : r,
+        )
+        .filter((r) => r.deleted_at === null);
+      return updateEq();
+    },
+  }));
   const store = {
     compRowsRef,
     critRowsRef,
     indRowsRef,
+    evRowsRef,
     rowsRef: compRowsRef,
     upsert: upsertComp,
     update: updateComp,
@@ -231,16 +292,22 @@ function makeFakeClient(
     updateCrit,
     upsertInd,
     updateInd,
+    upsertEv,
+    updateEv,
     updateEq,
   };
 
   const buildSelectChain = (table: string) => {
     let filteredKey: string | null = null;
     let filteredVal: string | null = null;
+    let ilikePattern: string | null = null;
     const chain = {
       is: vi.fn(() => chain),
       in: vi.fn(() => chain),
-      ilike: vi.fn(() => chain),
+      ilike: vi.fn((_col: string, pattern: string) => {
+        ilikePattern = pattern;
+        return chain;
+      }),
       or: vi.fn(() => chain),
       gte: vi.fn(() => chain),
       lt: vi.fn(() => chain),
@@ -251,6 +318,26 @@ function makeFakeClient(
       }),
       order: vi.fn(() => chain),
       limit: vi.fn(async () => {
+        if (table === "career_evidence") {
+          return {
+            data: evRowsRef.current.filter(
+              (r) =>
+                r.deleted_at === null &&
+                (filteredKey !== "indicator_id" ||
+                  r.indicator_id === filteredVal),
+            ) as unknown as Record<string, unknown>[],
+            error: null,
+          };
+        }
+        if (table === "project_cards") {
+          const stripped = (ilikePattern ?? "").replace(/^%|%$/g, "").toLowerCase();
+          return {
+            data: cardRowsRef.current.filter((c) =>
+              !stripped ? true : c.title.toLowerCase().includes(stripped),
+            ) as unknown as Record<string, unknown>[],
+            error: null,
+          };
+        }
         if (table === "career_indicators") {
           return {
             data: indRowsRef.current.filter(
@@ -287,11 +374,13 @@ function makeFakeClient(
   };
 
   const upsertFor = (table: string) => {
+    if (table === "career_evidence") return upsertEv;
     if (table === "career_indicators") return upsertInd;
     if (table === "career_criteria") return upsertCrit;
     return upsertComp;
   };
   const updateFor = (table: string) => {
+    if (table === "career_evidence") return updateEv;
     if (table === "career_indicators") return updateInd;
     if (table === "career_criteria") return updateCrit;
     return updateComp;
@@ -951,6 +1040,263 @@ describe("AddIndicatorForm", () => {
     render(<AddIndicatorForm onAdd={vi.fn()} />);
     const button = screen.getByRole("button", {
       name: /add indicator/i,
+    }) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+  });
+});
+
+function evidenceRow(
+  overrides: Partial<StoredEvidence> = {},
+): StoredEvidence {
+  return {
+    id: "e1",
+    indicator_id: "i1",
+    title: "Q4 launch postmortem",
+    url: null,
+    note: null,
+    card_id: null,
+    position: 0,
+    created_at: "2026-01-01T00:00:00Z",
+    deleted_at: null,
+    ...overrides,
+  };
+}
+
+function indicatorFixture(
+  overrides: Partial<StoredIndicator> = {},
+): StoredIndicator {
+  return {
+    id: "i1",
+    criterion_id: "cr1",
+    code: "A",
+    description: "Reviews PRs",
+    notes: null,
+    score: 1,
+    position: 0,
+    created_at: "2026-01-01T00:00:00Z",
+    deleted_at: null,
+    ...overrides,
+  };
+}
+
+describe("EvidenceList", () => {
+  const originalConfirm = window.confirm;
+  beforeEach(() => {
+    window.confirm = vi.fn(() => true);
+  });
+  afterEach(() => {
+    window.confirm = originalConfirm;
+  });
+
+  it("loads and renders existing evidence for the indicator", async () => {
+    const { client } = makeFakeClient(
+      [],
+      [],
+      [],
+      [
+        evidenceRow({ id: "e1", indicator_id: "i1", title: "Postmortem" }),
+        evidenceRow({
+          id: "e2",
+          indicator_id: "i1",
+          title: "Design doc",
+          position: 1024,
+        }),
+      ],
+    );
+    render(<EvidenceList indicator={indicatorFixture()} client={client} />);
+    await waitFor(() => {
+      expect(screen.getByDisplayValue("Postmortem")).toBeTruthy();
+      expect(screen.getByDisplayValue("Design doc")).toBeTruthy();
+    });
+  });
+
+  it("only loads evidence for the matching indicator", async () => {
+    const { client } = makeFakeClient(
+      [],
+      [],
+      [],
+      [
+        evidenceRow({ id: "e1", indicator_id: "i1", title: "Mine" }),
+        evidenceRow({ id: "e2", indicator_id: "i2", title: "Other" }),
+      ],
+    );
+    render(<EvidenceList indicator={indicatorFixture()} client={client} />);
+    await waitFor(() =>
+      expect(screen.getByDisplayValue("Mine")).toBeTruthy(),
+    );
+    expect(screen.queryByDisplayValue("Other")).toBeNull();
+  });
+
+  it("adds an evidence row via the form with title-only payload", async () => {
+    const { client, store } = makeFakeClient();
+    render(<EvidenceList indicator={indicatorFixture()} client={client} />);
+    const input = await screen.findByLabelText("New evidence title");
+    fireEvent.change(input, { target: { value: "  Postmortem  " } });
+    fireEvent.click(screen.getByRole("button", { name: /add evidence/i }));
+    await waitFor(() =>
+      expect(screen.getByDisplayValue("Postmortem")).toBeTruthy(),
+    );
+    expect(store.upsertEv).toHaveBeenCalledTimes(1);
+    const args = store.upsertEv.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(args.title).toBe("Postmortem");
+    expect(args.indicator_id).toBe("i1");
+    expect(args.url).toBeNull();
+    expect(args.note).toBeNull();
+    expect(args.card_id).toBeNull();
+    expect(args.position).toBe(0);
+  });
+
+  it("renames the title on input blur with a different value", async () => {
+    const { client, store } = makeFakeClient(
+      [],
+      [],
+      [],
+      [evidenceRow({ id: "e1", indicator_id: "i1", title: "Old" })],
+    );
+    render(<EvidenceList indicator={indicatorFixture()} client={client} />);
+    const input = (await screen.findByDisplayValue("Old")) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "New" } });
+    fireEvent.blur(input);
+    await waitFor(() =>
+      expect(store.updateEv).toHaveBeenCalledWith({ title: "New" }),
+    );
+  });
+
+  it("writes a valid URL on blur and renders an open link", async () => {
+    const { client, store } = makeFakeClient(
+      [],
+      [],
+      [],
+      [evidenceRow({ id: "e1", indicator_id: "i1", title: "Postmortem" })],
+    );
+    render(<EvidenceList indicator={indicatorFixture()} client={client} />);
+    const url = (await screen.findByLabelText(
+      "URL for Postmortem",
+    )) as HTMLInputElement;
+    fireEvent.change(url, { target: { value: "https://example.com/x" } });
+    fireEvent.blur(url);
+    await waitFor(() =>
+      expect(store.updateEv).toHaveBeenCalledWith({
+        url: "https://example.com/x",
+      }),
+    );
+  });
+
+  it("ignores an invalid URL on blur (does not write)", async () => {
+    const { client, store } = makeFakeClient(
+      [],
+      [],
+      [],
+      [evidenceRow({ id: "e1", indicator_id: "i1", title: "Postmortem" })],
+    );
+    render(<EvidenceList indicator={indicatorFixture()} client={client} />);
+    const url = (await screen.findByLabelText(
+      "URL for Postmortem",
+    )) as HTMLInputElement;
+    fireEvent.change(url, { target: { value: "not-a-url" } });
+    fireEvent.blur(url);
+    expect(store.updateEv).not.toHaveBeenCalled();
+  });
+
+  it("links a project card via the picker", async () => {
+    const { client, store } = makeFakeClient(
+      [],
+      [],
+      [],
+      [evidenceRow({ id: "e1", indicator_id: "i1", title: "Postmortem" })],
+      [{ id: "card-1", title: "Q4 launch retro" }],
+    );
+    render(<EvidenceList indicator={indicatorFixture()} client={client} />);
+    const search = (await screen.findByLabelText(
+      "Search project cards for Postmortem",
+    )) as HTMLInputElement;
+    fireEvent.change(search, { target: { value: "launch" } });
+    const result = await screen.findByRole("button", { name: /Q4 launch retro/i });
+    fireEvent.click(result);
+    await waitFor(() =>
+      expect(store.updateEv).toHaveBeenCalledWith({ card_id: "card-1" }),
+    );
+  });
+
+  it("unlinks a card via the unlink button", async () => {
+    const { client, store } = makeFakeClient(
+      [],
+      [],
+      [],
+      [
+        evidenceRow({
+          id: "e1",
+          indicator_id: "i1",
+          title: "Postmortem",
+          card_id: "card-1",
+        }),
+      ],
+    );
+    render(<EvidenceList indicator={indicatorFixture()} client={client} />);
+    const unlink = await screen.findByRole("button", {
+      name: /unlink card from postmortem/i,
+    });
+    fireEvent.click(unlink);
+    await waitFor(() =>
+      expect(store.updateEv).toHaveBeenCalledWith({ card_id: null }),
+    );
+  });
+
+  it("soft-deletes evidence and removes it from the list", async () => {
+    const { client, store } = makeFakeClient(
+      [],
+      [],
+      [],
+      [evidenceRow({ id: "e1", indicator_id: "i1", title: "Postmortem" })],
+    );
+    render(<EvidenceList indicator={indicatorFixture()} client={client} />);
+    const deleteBtn = await screen.findByRole("button", {
+      name: /delete evidence postmortem/i,
+    });
+    fireEvent.click(deleteBtn);
+    await waitFor(() => expect(store.updateEv).toHaveBeenCalledTimes(1));
+    const arg = store.updateEv.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(typeof arg.deleted_at).toBe("string");
+    await waitFor(() =>
+      expect(screen.queryByDisplayValue("Postmortem")).toBeNull(),
+    );
+  });
+
+  it("does not delete when the user cancels the confirm prompt", async () => {
+    window.confirm = vi.fn(() => false);
+    const { client, store } = makeFakeClient(
+      [],
+      [],
+      [],
+      [evidenceRow({ id: "e1", indicator_id: "i1", title: "Postmortem" })],
+    );
+    render(<EvidenceList indicator={indicatorFixture()} client={client} />);
+    const deleteBtn = await screen.findByRole("button", {
+      name: /delete evidence postmortem/i,
+    });
+    fireEvent.click(deleteBtn);
+    expect(store.updateEv).not.toHaveBeenCalled();
+    expect(screen.getByDisplayValue("Postmortem")).toBeTruthy();
+  });
+});
+
+describe("AddEvidenceForm", () => {
+  it("submits the trimmed title and clears the input", async () => {
+    const onAdd = vi.fn();
+    render(<AddEvidenceForm onAdd={onAdd} />);
+    const input = screen.getByLabelText(
+      "New evidence title",
+    ) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "  Postmortem  " } });
+    fireEvent.click(screen.getByRole("button", { name: /add evidence/i }));
+    expect(onAdd).toHaveBeenCalledWith("Postmortem");
+    expect(input.value).toBe("");
+  });
+
+  it("disables the button when the title is empty", () => {
+    render(<AddEvidenceForm onAdd={vi.fn()} />);
+    const button = screen.getByRole("button", {
+      name: /add evidence/i,
     }) as HTMLButtonElement;
     expect(button.disabled).toBe(true);
   });
