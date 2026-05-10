@@ -156,6 +156,18 @@ export async function renameCompetency(
   if (error) throw new Error(`competency rename failed: ${error.message}`);
 }
 
+export async function setCompetencyPosition(
+  client: SupabaseLike,
+  id: string,
+  position: number,
+): Promise<void> {
+  const { error } = await client
+    .from("career_competencies")
+    .update({ position })
+    .eq("id", id);
+  if (error) throw new Error(`competency reorder failed: ${error.message}`);
+}
+
 // Soft-delete: stamps deleted_at. Cascade-hide of children is handled by the
 // child list queries (each level filters `deleted_at is null`).
 export async function softDeleteCompetency(
@@ -231,6 +243,18 @@ export async function setCriterionTarget(
     .update({ target })
     .eq("id", id);
   if (error) throw new Error(`criterion target update failed: ${error.message}`);
+}
+
+export async function setCriterionPosition(
+  client: SupabaseLike,
+  id: string,
+  position: number,
+): Promise<void> {
+  const { error } = await client
+    .from("career_criteria")
+    .update({ position })
+    .eq("id", id);
+  if (error) throw new Error(`criterion reorder failed: ${error.message}`);
 }
 
 export async function softDeleteCriterion(
@@ -316,6 +340,18 @@ export async function setIndicatorScore(
   if (error) throw new Error(`indicator score update failed: ${error.message}`);
 }
 
+export async function setIndicatorPosition(
+  client: SupabaseLike,
+  id: string,
+  position: number,
+): Promise<void> {
+  const { error } = await client
+    .from("career_indicators")
+    .update({ position })
+    .eq("id", id);
+  if (error) throw new Error(`indicator reorder failed: ${error.message}`);
+}
+
 export async function softDeleteIndicator(
   client: SupabaseLike,
   id: string,
@@ -393,6 +429,18 @@ export async function updateEvidence(
     .update(update)
     .eq("id", id);
   if (error) throw new Error(`evidence update failed: ${error.message}`);
+}
+
+export async function setEvidencePosition(
+  client: SupabaseLike,
+  id: string,
+  position: number,
+): Promise<void> {
+  const { error } = await client
+    .from("career_evidence")
+    .update({ position })
+    .eq("id", id);
+  if (error) throw new Error(`evidence reorder failed: ${error.message}`);
 }
 
 export async function softDeleteEvidence(

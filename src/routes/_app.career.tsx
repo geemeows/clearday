@@ -1,8 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { ArrowDown, ArrowUp, Target, Trash2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "#/components/coss/button";
 import { CareerWheel } from "#/features/career/components/CareerWheel";
+import { reorderWithinParent } from "#/features/career/order";
 import {
   cloneArchivedLevelAsActive,
   createCompetency,
@@ -22,7 +23,11 @@ import {
   renameCriterion,
   renameIndicator,
   searchProjectCards,
+  setCompetencyPosition,
+  setCriterionPosition,
   setCriterionTarget,
+  setEvidencePosition,
+  setIndicatorPosition,
   setLevelHeader,
   setIndicatorScore,
   softDeleteCompetency,
@@ -350,6 +355,46 @@ export function CareerLevelView({
     }
   };
 
+  const dragIdRef = useRef<string | null>(null);
+  const dropTargetIdRef = useRef<string | null>(null);
+
+  const handleReorder = async (movedId: string, afterId: string | null) => {
+    if (!competencies) return;
+    const orderable = competencies.map((c) => ({
+      id: c.id,
+      position: c.position,
+    }));
+    const reordered = reorderWithinParent(orderable, movedId, afterId);
+    if (reordered === orderable) return;
+    const prev = competencies;
+    const posMap = new Map(reordered.map((r) => [r.id, r.position]));
+    setCompetencies((cs) =>
+      cs
+        ? [...cs]
+            .map((c) => ({ ...c, position: posMap.get(c.id) ?? c.position }))
+            .sort((a, b) => a.position - b.position)
+        : cs,
+    );
+    try {
+      await Promise.all(
+        reordered.map((r) => setCompetencyPosition(client, r.id, r.position)),
+      );
+    } catch (e) {
+      setCompetencies(prev);
+      setError(e instanceof Error ? e.message : "failed to reorder");
+    }
+  };
+
+  const handleListDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    const draggedId = dragIdRef.current;
+    const afterId = dropTargetIdRef.current;
+    dragIdRef.current = null;
+    dropTargetIdRef.current = null;
+    if (!draggedId) return;
+    handleReorder(draggedId, afterId);
+  };
+
   return (
     <section className="mx-auto max-w-4xl p-8">
       <header className="mb-8 flex items-center gap-3">
@@ -417,7 +462,12 @@ export function CareerLevelView({
             No competencies yet.
           </p>
         ) : (
-          <ul className="mb-4 space-y-2">
+          <ul
+            aria-label="Competencies"
+            className="mb-4 space-y-2"
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={handleListDrop}
+          >
             {competencies.map((c) => (
               <CompetencyRow
                 key={c.id}
@@ -425,6 +475,15 @@ export function CareerLevelView({
                 client={client}
                 onRename={handleRename}
                 onDelete={handleDelete}
+                onDragStart={() => {
+                  dragIdRef.current = c.id;
+                  dropTargetIdRef.current = null;
+                }}
+                onDragEnter={() => {
+                  if (dragIdRef.current && dragIdRef.current !== c.id) {
+                    dropTargetIdRef.current = c.id;
+                  }
+                }}
               />
             ))}
           </ul>
@@ -616,16 +675,25 @@ function CompetencyRow({
   client,
   onRename,
   onDelete,
+  onDragStart,
+  onDragEnter,
 }: {
   competency: StoredCompetency;
   client: SupabaseLike;
   onRename: (id: string, name: string) => void;
   onDelete: (id: string) => void;
+  onDragStart?: () => void;
+  onDragEnter?: () => void;
 }) {
   const [draft, setDraft] = useState(competency.name);
 
   return (
-    <li className="rounded-md border border-border bg-background px-3 py-2">
+    <li
+      draggable
+      onDragStart={onDragStart}
+      onDragEnter={onDragEnter}
+      className="cursor-grab rounded-md border border-border bg-background px-3 py-2 active:cursor-grabbing"
+    >
       <div className="flex items-center gap-2">
         <input
           type="text"
@@ -737,6 +805,44 @@ export function CriteriaList({
     }
   };
 
+  const dragIdRef = useRef<string | null>(null);
+  const dropTargetIdRef = useRef<string | null>(null);
+
+  const handleReorder = async (movedId: string, afterId: string | null) => {
+    if (!criteria) return;
+    const orderable = criteria.map((c) => ({ id: c.id, position: c.position }));
+    const reordered = reorderWithinParent(orderable, movedId, afterId);
+    if (reordered === orderable) return;
+    const prev = criteria;
+    const posMap = new Map(reordered.map((r) => [r.id, r.position]));
+    setCriteria((cs) =>
+      cs
+        ? [...cs]
+            .map((c) => ({ ...c, position: posMap.get(c.id) ?? c.position }))
+            .sort((a, b) => a.position - b.position)
+        : cs,
+    );
+    try {
+      await Promise.all(
+        reordered.map((r) => setCriterionPosition(client, r.id, r.position)),
+      );
+    } catch (e) {
+      setCriteria(prev);
+      setError(e instanceof Error ? e.message : "failed to reorder");
+    }
+  };
+
+  const handleListDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const draggedId = dragIdRef.current;
+    const afterId = dropTargetIdRef.current;
+    dragIdRef.current = null;
+    dropTargetIdRef.current = null;
+    if (!draggedId) return;
+    handleReorder(draggedId, afterId);
+  };
+
   return (
     <div className="mt-2 ml-4 space-y-2 border-border border-l pl-4">
       {error && (
@@ -750,7 +856,15 @@ export function CriteriaList({
       {criteria === null ? (
         <p className="text-muted-foreground text-xs">Loading…</p>
       ) : criteria.length === 0 ? null : (
-        <ul className="space-y-1.5">
+        <ul
+          aria-label="Criteria"
+          className="space-y-1.5"
+          onDragOver={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }}
+          onDrop={handleListDrop}
+        >
           {criteria.map((c) => (
             <CriterionRow
               key={c.id}
@@ -759,6 +873,15 @@ export function CriteriaList({
               onRename={handleRename}
               onSetTarget={handleSetTarget}
               onDelete={handleDelete}
+              onDragStart={() => {
+                dragIdRef.current = c.id;
+                dropTargetIdRef.current = null;
+              }}
+              onDragEnter={() => {
+                if (dragIdRef.current && dragIdRef.current !== c.id) {
+                  dropTargetIdRef.current = c.id;
+                }
+              }}
             />
           ))}
         </ul>
@@ -774,18 +897,27 @@ function CriterionRow({
   onRename,
   onSetTarget,
   onDelete,
+  onDragStart,
+  onDragEnter,
 }: {
   criterion: StoredCriterion;
   client: SupabaseLike;
   onRename: (id: string, name: string) => void;
   onSetTarget: (id: string, target: number) => void;
   onDelete: (id: string) => void;
+  onDragStart?: () => void;
+  onDragEnter?: () => void;
 }) {
   const [draft, setDraft] = useState(criterion.name);
   const [targetDraft, setTargetDraft] = useState(String(criterion.target));
 
   return (
-    <li className="rounded-md border border-border bg-card px-2.5 py-1.5">
+    <li
+      draggable
+      onDragStart={onDragStart}
+      onDragEnter={onDragEnter}
+      className="cursor-grab rounded-md border border-border bg-card px-2.5 py-1.5 active:cursor-grabbing"
+    >
       <div className="flex items-center gap-2">
         <input
           type="text"
@@ -917,6 +1049,47 @@ export function IndicatorList({
     }
   };
 
+  const dragIdRef = useRef<string | null>(null);
+  const dropTargetIdRef = useRef<string | null>(null);
+
+  const handleReorder = async (movedId: string, afterId: string | null) => {
+    if (!indicators) return;
+    const orderable = indicators.map((i) => ({
+      id: i.id,
+      position: i.position,
+    }));
+    const reordered = reorderWithinParent(orderable, movedId, afterId);
+    if (reordered === orderable) return;
+    const prev = indicators;
+    const posMap = new Map(reordered.map((r) => [r.id, r.position]));
+    setIndicators((cs) =>
+      cs
+        ? [...cs]
+            .map((c) => ({ ...c, position: posMap.get(c.id) ?? c.position }))
+            .sort((a, b) => a.position - b.position)
+        : cs,
+    );
+    try {
+      await Promise.all(
+        reordered.map((r) => setIndicatorPosition(client, r.id, r.position)),
+      );
+    } catch (e) {
+      setIndicators(prev);
+      setError(e instanceof Error ? e.message : "failed to reorder");
+    }
+  };
+
+  const handleListDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const draggedId = dragIdRef.current;
+    const afterId = dropTargetIdRef.current;
+    dragIdRef.current = null;
+    dropTargetIdRef.current = null;
+    if (!draggedId) return;
+    handleReorder(draggedId, afterId);
+  };
+
   return (
     <div className="mt-2 ml-4 space-y-1.5 border-border border-l pl-3">
       {error && (
@@ -930,7 +1103,15 @@ export function IndicatorList({
       {indicators === null ? (
         <p className="text-muted-foreground text-xs">Loading…</p>
       ) : indicators.length === 0 ? null : (
-        <ul className="space-y-1">
+        <ul
+          aria-label="Indicators"
+          className="space-y-1"
+          onDragOver={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }}
+          onDrop={handleListDrop}
+        >
           {indicators.map((i) => (
             <IndicatorRow
               key={i.id}
@@ -939,6 +1120,15 @@ export function IndicatorList({
               onRename={handleRename}
               onSetScore={handleSetScore}
               onDelete={handleDelete}
+              onDragStart={() => {
+                dragIdRef.current = i.id;
+                dropTargetIdRef.current = null;
+              }}
+              onDragEnter={() => {
+                if (dragIdRef.current && dragIdRef.current !== i.id) {
+                  dropTargetIdRef.current = i.id;
+                }
+              }}
             />
           ))}
         </ul>
@@ -954,6 +1144,8 @@ function IndicatorRow({
   onRename,
   onSetScore,
   onDelete,
+  onDragStart,
+  onDragEnter,
 }: {
   indicator: StoredIndicator;
   client: SupabaseLike;
@@ -963,6 +1155,8 @@ function IndicatorRow({
   ) => void;
   onSetScore: (id: string, score: number) => void;
   onDelete: (id: string) => void;
+  onDragStart?: () => void;
+  onDragEnter?: () => void;
 }) {
   const [codeDraft, setCodeDraft] = useState(indicator.code ?? "");
   const [descDraft, setDescDraft] = useState(indicator.description);
@@ -972,7 +1166,12 @@ function IndicatorRow({
   const label = indicator.code || indicator.description;
 
   return (
-    <li className="rounded-md border border-border bg-background px-2 py-1.5">
+    <li
+      draggable
+      onDragStart={onDragStart}
+      onDragEnter={onDragEnter}
+      className="cursor-grab rounded-md border border-border bg-background px-2 py-1.5 active:cursor-grabbing"
+    >
       <div className="flex items-center gap-2">
         <input
           type="text"
@@ -1127,6 +1326,47 @@ export function EvidenceList({
     }
   };
 
+  const dragIdRef = useRef<string | null>(null);
+  const dropTargetIdRef = useRef<string | null>(null);
+
+  const handleReorder = async (movedId: string, afterId: string | null) => {
+    if (!evidence) return;
+    const orderable = evidence.map((ev) => ({
+      id: ev.id,
+      position: ev.position,
+    }));
+    const reordered = reorderWithinParent(orderable, movedId, afterId);
+    if (reordered === orderable) return;
+    const prev = evidence;
+    const posMap = new Map(reordered.map((r) => [r.id, r.position]));
+    setEvidence((cs) =>
+      cs
+        ? [...cs]
+            .map((c) => ({ ...c, position: posMap.get(c.id) ?? c.position }))
+            .sort((a, b) => a.position - b.position)
+        : cs,
+    );
+    try {
+      await Promise.all(
+        reordered.map((r) => setEvidencePosition(client, r.id, r.position)),
+      );
+    } catch (e) {
+      setEvidence(prev);
+      setError(e instanceof Error ? e.message : "failed to reorder");
+    }
+  };
+
+  const handleListDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const draggedId = dragIdRef.current;
+    const afterId = dropTargetIdRef.current;
+    dragIdRef.current = null;
+    dropTargetIdRef.current = null;
+    if (!draggedId) return;
+    handleReorder(draggedId, afterId);
+  };
+
   return (
     <div className="mt-2 ml-3 space-y-1.5 border-border border-l pl-3">
       {error && (
@@ -1140,7 +1380,15 @@ export function EvidenceList({
       {evidence === null ? (
         <p className="text-muted-foreground text-xs">Loading…</p>
       ) : evidence.length === 0 ? null : (
-        <ul className="space-y-1">
+        <ul
+          aria-label="Evidence"
+          className="space-y-1"
+          onDragOver={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }}
+          onDrop={handleListDrop}
+        >
           {evidence.map((ev) => (
             <EvidenceRow
               key={ev.id}
@@ -1148,6 +1396,15 @@ export function EvidenceList({
               client={client}
               onUpdate={handleUpdate}
               onDelete={handleDelete}
+              onDragStart={() => {
+                dragIdRef.current = ev.id;
+                dropTargetIdRef.current = null;
+              }}
+              onDragEnter={() => {
+                if (dragIdRef.current && dragIdRef.current !== ev.id) {
+                  dropTargetIdRef.current = ev.id;
+                }
+              }}
             />
           ))}
         </ul>
@@ -1162,6 +1419,8 @@ function EvidenceRow({
   client,
   onUpdate,
   onDelete,
+  onDragStart,
+  onDragEnter,
 }: {
   evidence: StoredEvidence;
   client: SupabaseLike;
@@ -1175,6 +1434,8 @@ function EvidenceRow({
     },
   ) => void;
   onDelete: (id: string) => void;
+  onDragStart?: () => void;
+  onDragEnter?: () => void;
 }) {
   const [titleDraft, setTitleDraft] = useState(evidence.title);
   const [urlDraft, setUrlDraft] = useState(evidence.url ?? "");
@@ -1190,7 +1451,12 @@ function EvidenceRow({
   };
 
   return (
-    <li className="rounded-md border border-border bg-card px-2 py-1.5">
+    <li
+      draggable
+      onDragStart={onDragStart}
+      onDragEnter={onDragEnter}
+      className="cursor-grab rounded-md border border-border bg-card px-2 py-1.5 active:cursor-grabbing"
+    >
       <div className="flex items-center gap-2">
         <input
           type="text"

@@ -18,7 +18,11 @@ import {
   renameCriterion,
   renameIndicator,
   searchProjectCards,
+  setCompetencyPosition,
+  setCriterionPosition,
   setCriterionTarget,
+  setEvidencePosition,
+  setIndicatorPosition,
   seedSampleTemplate,
   setIndicatorScore,
   setLevelHeader,
@@ -255,6 +259,24 @@ describe("renameCompetency", () => {
   });
 });
 
+describe("setCompetencyPosition", () => {
+  it("updates position on the matching id", async () => {
+    const { client, spies } = makeClient();
+    await setCompetencyPosition(client, "c1", 2048);
+    expect(spies.update).toHaveBeenCalledWith({ position: 2048 });
+    expect(spies.updateEq).toHaveBeenCalledWith("id", "c1");
+  });
+
+  it("throws when update fails", async () => {
+    const { client } = makeClient({
+      updateResult: { error: { message: "pos boom" } },
+    });
+    await expect(setCompetencyPosition(client, "c1", 0)).rejects.toThrow(
+      "pos boom",
+    );
+  });
+});
+
 describe("softDeleteCompetency", () => {
   it("stamps deleted_at on the matching id", async () => {
     const { client, spies } = makeClient();
@@ -382,6 +404,24 @@ describe("setCriterionTarget", () => {
     });
     await expect(setCriterionTarget(client, "cr1", 2)).rejects.toThrow(
       "target boom",
+    );
+  });
+});
+
+describe("setCriterionPosition", () => {
+  it("updates position on the matching id", async () => {
+    const { client, spies } = makeClient();
+    await setCriterionPosition(client, "cr1", 1024);
+    expect(spies.update).toHaveBeenCalledWith({ position: 1024 });
+    expect(spies.updateEq).toHaveBeenCalledWith("id", "cr1");
+  });
+
+  it("throws when update fails", async () => {
+    const { client } = makeClient({
+      updateResult: { error: { message: "pos boom" } },
+    });
+    await expect(setCriterionPosition(client, "cr1", 0)).rejects.toThrow(
+      "pos boom",
     );
   });
 });
@@ -543,6 +583,24 @@ describe("setIndicatorScore", () => {
   });
 });
 
+describe("setIndicatorPosition", () => {
+  it("updates position on the matching id", async () => {
+    const { client, spies } = makeClient();
+    await setIndicatorPosition(client, "i1", 2048);
+    expect(spies.update).toHaveBeenCalledWith({ position: 2048 });
+    expect(spies.updateEq).toHaveBeenCalledWith("id", "i1");
+  });
+
+  it("throws when update fails", async () => {
+    const { client } = makeClient({
+      updateResult: { error: { message: "pos boom" } },
+    });
+    await expect(setIndicatorPosition(client, "i1", 0)).rejects.toThrow(
+      "pos boom",
+    );
+  });
+});
+
 describe("softDeleteIndicator", () => {
   it("stamps deleted_at on the matching id", async () => {
     const { client, spies } = makeClient();
@@ -687,6 +745,24 @@ describe("updateEvidence", () => {
     await expect(
       updateEvidence(client, "e1", { title: "x" }),
     ).rejects.toThrow("update boom");
+  });
+});
+
+describe("setEvidencePosition", () => {
+  it("updates position on the matching id", async () => {
+    const { client, spies } = makeClient();
+    await setEvidencePosition(client, "ev1", 1024);
+    expect(spies.update).toHaveBeenCalledWith({ position: 1024 });
+    expect(spies.updateEq).toHaveBeenCalledWith("id", "ev1");
+  });
+
+  it("throws when update fails", async () => {
+    const { client } = makeClient({
+      updateResult: { error: { message: "pos boom" } },
+    });
+    await expect(setEvidencePosition(client, "ev1", 0)).rejects.toThrow(
+      "pos boom",
+    );
   });
 });
 

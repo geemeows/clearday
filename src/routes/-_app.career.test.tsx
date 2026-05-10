@@ -685,6 +685,78 @@ describe("CareerLevelView", () => {
   });
 });
 
+describe("CareerLevelView drag-reorder", () => {
+  const originalConfirm = window.confirm;
+  beforeEach(() => {
+    window.confirm = vi.fn(() => true);
+  });
+  afterEach(() => {
+    window.confirm = originalConfirm;
+  });
+
+  it("reorders competencies via drag-and-drop and persists positions", async () => {
+    const { client, store } = makeFakeClient([
+      competency({ id: "c1", name: "Alpha", position: 0 }),
+      competency({ id: "c2", name: "Beta", position: 1024 }),
+    ]);
+    render(<CareerLevelView level={level()} client={client} />);
+    await waitFor(() => {
+      expect(screen.getByDisplayValue("Alpha")).toBeTruthy();
+      expect(screen.getByDisplayValue("Beta")).toBeTruthy();
+    });
+
+    const list = screen.getByRole("list", { name: "Competencies" });
+    const rows = list.querySelectorAll(":scope > li");
+    expect(rows.length).toBe(2);
+
+    // Drag Alpha (row 0) and drop after Beta (row 1).
+    fireEvent.dragStart(rows[0]);
+    fireEvent.dragEnter(rows[1]);
+    fireEvent.drop(list);
+
+    // Optimistic patch: visible order should swap based on rewritten positions.
+    await waitFor(() => {
+      const labels = Array.from(
+        list.querySelectorAll('input[aria-label^="Rename competency"]'),
+      ).map((el) => el.getAttribute("aria-label"));
+      expect(labels).toEqual([
+        "Rename competency Beta",
+        "Rename competency Alpha",
+      ]);
+    });
+
+    // Two position writes hit the store (one per competency in the new order).
+    const positionWrites = store.update.mock.calls
+      .map((c) => c[0] as Record<string, unknown>)
+      .filter((v) => typeof v.position === "number");
+    expect(positionWrites.map((v) => v.position).sort()).toEqual([0, 1024]);
+  });
+
+  it("no-ops when dragged onto its current position", async () => {
+    const { client, store } = makeFakeClient([
+      competency({ id: "c1", name: "Alpha", position: 0 }),
+      competency({ id: "c2", name: "Beta", position: 1024 }),
+    ]);
+    render(<CareerLevelView level={level()} client={client} />);
+    await waitFor(() => expect(screen.getByDisplayValue("Alpha")).toBeTruthy());
+
+    const list = screen.getByRole("list", { name: "Competencies" });
+    const rows = list.querySelectorAll(":scope > li");
+    // Drag Alpha (row 0, already at top) with no dragEnter on a different row
+    // — drop falls back to afterId=null, which puts Alpha at the top: a no-op.
+    // The pure module's no-churn check returns the input array unchanged so
+    // no position writes are issued.
+    fireEvent.dragStart(rows[0]);
+    fireEvent.drop(list);
+
+    const positionWrites = store.update.mock.calls.filter((c) => {
+      const v = c[0] as Record<string, unknown>;
+      return typeof v.position === "number";
+    });
+    expect(positionWrites).toHaveLength(0);
+  });
+});
+
 describe("AddCompetencyForm", () => {
   it("submits the trimmed name and clears the input", async () => {
     const onAdd = vi.fn();
