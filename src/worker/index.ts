@@ -53,6 +53,10 @@ import {
   runBriefingTick,
 } from "#/features/briefing/api";
 import {
+  syncCareerLevelToSheet,
+  unlinkCareerSheet,
+} from "#/features/career/sheets/sync";
+import {
   type DraftReplyDeps,
   handleDraftReply,
 } from "#/features/draft-reply/api";
@@ -272,6 +276,14 @@ export default {
 
     if (url.pathname === "/api/calendar/decline" && request.method === "POST") {
       return handleDeclineCalendarEvent(request, service);
+    }
+
+    if (url.pathname === "/api/career/sync" && request.method === "POST") {
+      return handleCareerSync(request, service);
+    }
+
+    if (url.pathname === "/api/career/unlink" && request.method === "POST") {
+      return handleCareerUnlink(request, service);
     }
 
     if (
@@ -661,7 +673,10 @@ export default {
           });
         } catch (err) {
           return json(
-            { ok: false, error: err instanceof Error ? err.message : String(err) },
+            {
+              ok: false,
+              error: err instanceof Error ? err.message : String(err),
+            },
             400,
           );
         }
@@ -678,7 +693,10 @@ export default {
           await promotePrimary(service, accountId);
         } catch (err) {
           return json(
-            { ok: false, error: err instanceof Error ? err.message : String(err) },
+            {
+              ok: false,
+              error: err instanceof Error ? err.message : String(err),
+            },
             400,
           );
         }
@@ -1187,9 +1205,7 @@ async function handleStartFocus(
   );
   await stampSlackAuthFailures(service, [
     ...result.slack.flatMap((s) =>
-      s.status.ok || s.status.reason !== "auth_failed"
-        ? []
-        : [s.accountId],
+      s.status.ok || s.status.reason !== "auth_failed" ? [] : [s.accountId],
     ),
     ...result.slack.flatMap((s) =>
       s.dnd.ok || s.dnd.reason !== "auth_failed" ? [] : [s.accountId],
@@ -1206,9 +1222,7 @@ async function handleEndFocus(service: SupabaseService): Promise<Response> {
   });
   await stampSlackAuthFailures(service, [
     ...result.slack.flatMap((s) =>
-      s.status.ok || s.status.reason !== "auth_failed"
-        ? []
-        : [s.accountId],
+      s.status.ok || s.status.reason !== "auth_failed" ? [] : [s.accountId],
     ),
     ...result.slack.flatMap((s) =>
       s.dnd.ok || s.dnd.reason !== "auth_failed" ? [] : [s.accountId],
@@ -1687,6 +1701,55 @@ async function handleRescheduleCalendarEvent(
   if (out.ok && signalId) {
     await dismissSignal(service, signalId);
   }
+  return json(out, out.ok ? 200 : 400);
+}
+
+async function handleCareerSync(
+  request: Request,
+  service: SupabaseService,
+): Promise<Response> {
+  let body: { level_id?: unknown };
+  try {
+    body = (await request.json()) as typeof body;
+  } catch {
+    return json({ ok: false, error: "invalid json" }, 400);
+  }
+  const levelId = typeof body.level_id === "string" ? body.level_id : "";
+  if (!levelId) {
+    return json({ ok: false, error: "level_id required" }, 400);
+  }
+  const { data, error } = await service
+    .from("provider_accounts")
+    .select("access_token")
+    .eq("provider", "google")
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  const token =
+    (data as { access_token: string | null } | null)?.access_token ?? null;
+
+  const out = await syncCareerLevelToSheet(levelId, {
+    client: service,
+    token,
+    fetch: (i, init) => fetch(i, init),
+  });
+  return json(out, out.ok ? 200 : 400);
+}
+
+async function handleCareerUnlink(
+  request: Request,
+  service: SupabaseService,
+): Promise<Response> {
+  let body: { level_id?: unknown };
+  try {
+    body = (await request.json()) as typeof body;
+  } catch {
+    return json({ ok: false, error: "invalid json" }, 400);
+  }
+  const levelId = typeof body.level_id === "string" ? body.level_id : "";
+  if (!levelId) {
+    return json({ ok: false, error: "level_id required" }, 400);
+  }
+  const out = await unlinkCareerSheet(levelId, service);
   return json(out, out.ok ? 200 : 400);
 }
 

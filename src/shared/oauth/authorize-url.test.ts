@@ -92,6 +92,12 @@ describe("buildAuthorizeUrl (github)", () => {
       "https://www.googleapis.com/auth/calendar.events",
     );
     expect(url.searchParams.get("scope")).toContain("openid");
+    expect(url.searchParams.get("scope")).toContain(
+      "https://www.googleapis.com/auth/spreadsheets",
+    );
+    expect(url.searchParams.get("scope")).toContain(
+      "https://www.googleapis.com/auth/drive.file",
+    );
     expect(url.searchParams.get("access_type")).toBe("offline");
     expect(url.searchParams.get("prompt")).toBe("consent");
     expect(url.searchParams.get("response_type")).toBe("code");

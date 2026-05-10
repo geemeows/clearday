@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { ArrowDown, ArrowUp, Target, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "#/components/coss/button";
+import { CareerSyncControls } from "#/features/career/components/CareerSyncControls";
 import { CareerWheel } from "#/features/career/components/CareerWheel";
 import { ShareLinkDialog } from "#/features/career/components/ShareLinkDialog";
 import { reorderWithinParent } from "#/features/career/order";
@@ -19,27 +20,27 @@ import {
   listEvidence,
   listIndicators,
   listLevels,
-  seedSampleTemplate,
   renameCompetency,
   renameCriterion,
   renameIndicator,
-  searchProjectCards,
-  setCompetencyPosition,
-  setCriterionPosition,
-  setCriterionTarget,
-  setEvidencePosition,
-  setIndicatorPosition,
-  setLevelHeader,
-  setIndicatorScore,
-  softDeleteCompetency,
-  softDeleteCriterion,
-  softDeleteEvidence,
-  softDeleteIndicator,
   type StoredCompetency,
   type StoredCriterion,
   type StoredEvidence,
   type StoredIndicator,
   type StoredLevel,
+  searchProjectCards,
+  seedSampleTemplate,
+  setCompetencyPosition,
+  setCriterionPosition,
+  setCriterionTarget,
+  setEvidencePosition,
+  setIndicatorPosition,
+  setIndicatorScore,
+  setLevelHeader,
+  softDeleteCompetency,
+  softDeleteCriterion,
+  softDeleteEvidence,
+  softDeleteIndicator,
   updateEvidence,
 } from "#/features/career/store";
 import { supabase } from "#/lib/supabase";
@@ -175,13 +176,13 @@ export function CareerOnboardingView({
             Career
           </h1>
           <p className="text-muted-foreground text-sm">
-            Track competencies, criteria, and evidence across your career levels.
+            Track competencies, criteria, and evidence across your career
+            levels.
           </p>
         </div>
       </header>
 
-      <div
-        role="region"
+      <section
         aria-label="Create level"
         className="rounded-xl border border-border bg-card p-6 shadow-sm"
       >
@@ -221,7 +222,7 @@ export function CareerOnboardingView({
             {submitting ? "Creating…" : "Create level"}
           </Button>
         </form>
-      </div>
+      </section>
 
       {archivedLevels.length > 0 && onCloneArchived && (
         <ArchivedLevelsPanel
@@ -241,8 +242,7 @@ export function ArchivedLevelsPanel({
   onCloneArchived: (levelId: string, newTitle: string) => void;
 }) {
   return (
-    <div
-      role="region"
+    <section
       aria-label="Archived levels"
       className="mt-6 rounded-xl border border-border bg-card p-6 shadow-sm"
     >
@@ -250,8 +250,8 @@ export function ArchivedLevelsPanel({
         Archived levels
       </h2>
       <p className="mb-4 text-muted-foreground text-sm">
-        Clone an archived level as a new starting template. Targets and structure
-        carry over; scores reset and evidence is dropped.
+        Clone an archived level as a new starting template. Targets and
+        structure carry over; scores reset and evidence is dropped.
       </p>
       <ul className="space-y-2">
         {archivedLevels.map((lvl) => (
@@ -262,7 +262,7 @@ export function ArchivedLevelsPanel({
           />
         ))}
       </ul>
-    </div>
+    </section>
   );
 }
 
@@ -321,6 +321,10 @@ export function CareerLevelView({
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<"tree" | "wheel">("tree");
   const [shareOpen, setShareOpen] = useState(false);
+  const [sheetId, setSheetId] = useState<string | null>(level.sheet_id);
+  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(
+    level.last_synced_at,
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -439,6 +443,19 @@ export function CareerLevelView({
         >
           Generate share link
         </Button>
+        <CareerSyncControls
+          levelId={level.id}
+          sheetId={sheetId}
+          lastSyncedAt={lastSyncedAt}
+          onChanged={(next) => {
+            setSheetId(
+              next.spreadsheetUrl
+                ? (extractSheetId(next.spreadsheetUrl) ?? sheetId)
+                : null,
+            );
+            setLastSyncedAt(next.lastSyncedAt);
+          }}
+        />
       </header>
 
       <ShareLinkDialog
@@ -487,47 +504,46 @@ export function CareerLevelView({
       {view === "wheel" ? (
         <CareerWheel level={level} client={client} />
       ) : (
-      <div
-        role="region"
-        aria-label="Competency tree"
-        className="rounded-xl border border-border bg-card p-6 shadow-sm"
-      >
-        {competencies === null ? (
-          <p className="text-muted-foreground text-sm">Loading…</p>
-        ) : competencies.length === 0 ? (
-          <p className="mb-4 text-muted-foreground text-sm">
-            No competencies yet.
-          </p>
-        ) : (
-          <ul
-            aria-label="Competencies"
-            className="mb-4 space-y-2"
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={handleListDrop}
-          >
-            {competencies.map((c) => (
-              <CompetencyRow
-                key={c.id}
-                competency={c}
-                client={client}
-                onRename={handleRename}
-                onDelete={handleDelete}
-                onDragStart={() => {
-                  dragIdRef.current = c.id;
-                  dropTargetIdRef.current = null;
-                }}
-                onDragEnter={() => {
-                  if (dragIdRef.current && dragIdRef.current !== c.id) {
-                    dropTargetIdRef.current = c.id;
-                  }
-                }}
-              />
-            ))}
-          </ul>
-        )}
+        <section
+          aria-label="Competency tree"
+          className="rounded-xl border border-border bg-card p-6 shadow-sm"
+        >
+          {competencies === null ? (
+            <p className="text-muted-foreground text-sm">Loading…</p>
+          ) : competencies.length === 0 ? (
+            <p className="mb-4 text-muted-foreground text-sm">
+              No competencies yet.
+            </p>
+          ) : (
+            <ul
+              aria-label="Competencies"
+              className="mb-4 space-y-2"
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={handleListDrop}
+            >
+              {competencies.map((c) => (
+                <CompetencyRow
+                  key={c.id}
+                  competency={c}
+                  client={client}
+                  onRename={handleRename}
+                  onDelete={handleDelete}
+                  onDragStart={() => {
+                    dragIdRef.current = c.id;
+                    dropTargetIdRef.current = null;
+                  }}
+                  onDragEnter={() => {
+                    if (dragIdRef.current && dragIdRef.current !== c.id) {
+                      dropTargetIdRef.current = c.id;
+                    }
+                  }}
+                />
+              ))}
+            </ul>
+          )}
 
-        <AddCompetencyForm onAdd={handleAdd} />
-      </div>
+          <AddCompetencyForm onAdd={handleAdd} />
+        </section>
       )}
     </section>
   );
@@ -579,8 +595,7 @@ export function LevelHeader({
   };
 
   return (
-    <div
-      role="region"
+    <section
       aria-label="Level header"
       className="mb-4 rounded-xl border border-border bg-card p-4 shadow-sm"
     >
@@ -614,13 +629,15 @@ export function LevelHeader({
                 onSetValue={(v) => updateRow(i, "value", v)}
                 onDelete={() => deleteRow(i)}
                 onMoveUp={i > 0 ? () => moveRow(i, -1) : undefined}
-                onMoveDown={i < rows.length - 1 ? () => moveRow(i, 1) : undefined}
+                onMoveDown={
+                  i < rows.length - 1 ? () => moveRow(i, 1) : undefined
+                }
               />
             </li>
           ))}
         </ul>
       )}
-    </div>
+    </section>
   );
 }
 
@@ -828,11 +845,7 @@ export function CriteriaList({
   const handleDelete = async (id: string) => {
     const target = criteria?.find((c) => c.id === id);
     if (!target) return;
-    if (
-      !confirm(
-        `Delete "${target.name}" and its indicators / evidence?`,
-      )
-    )
+    if (!confirm(`Delete "${target.name}" and its indicators / evidence?`))
       return;
     setCriteria((prev) => (prev ? prev.filter((c) => c.id !== id) : prev));
     try {
@@ -1050,7 +1063,11 @@ export function IndicatorList({
 
   const handleRename = async (
     id: string,
-    fields: { code?: string | null; description?: string; notes?: string | null },
+    fields: {
+      code?: string | null;
+      description?: string;
+      notes?: string | null;
+    },
   ) => {
     setIndicators((prev) =>
       prev ? prev.map((i) => (i.id === id ? { ...i, ...fields } : i)) : prev,
@@ -1188,7 +1205,11 @@ function IndicatorRow({
   client: SupabaseLike;
   onRename: (
     id: string,
-    fields: { code?: string | null; description?: string; notes?: string | null },
+    fields: {
+      code?: string | null;
+      description?: string;
+      notes?: string | null;
+    },
   ) => void;
   onSetScore: (id: string, score: number) => void;
   onDelete: (id: string) => void;
@@ -1342,7 +1363,9 @@ export function EvidenceList({
     },
   ) => {
     setEvidence((prev) =>
-      prev ? prev.map((ev) => (ev.id === id ? { ...ev, ...fields } : ev)) : prev,
+      prev
+        ? prev.map((ev) => (ev.id === id ? { ...ev, ...fields } : ev))
+        : prev,
     );
     try {
       await updateEvidence(client, id, fields);
@@ -1633,7 +1656,6 @@ export function CardPicker({
           />
           {results.length > 0 && (
             <ul
-              role="listbox"
               aria-label={`Card search results for ${evidence.title}`}
               className="absolute z-10 mt-1 w-full rounded-md border border-border bg-popover p-1 shadow-md"
             >
@@ -1660,11 +1682,7 @@ export function CardPicker({
   );
 }
 
-export function AddEvidenceForm({
-  onAdd,
-}: {
-  onAdd: (title: string) => void;
-}) {
+export function AddEvidenceForm({ onAdd }: { onAdd: (title: string) => void }) {
   const [title, setTitle] = useState("");
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
@@ -1724,11 +1742,7 @@ export function AddIndicatorForm({
   );
 }
 
-export function AddCriterionForm({
-  onAdd,
-}: {
-  onAdd: (name: string) => void;
-}) {
+export function AddCriterionForm({ onAdd }: { onAdd: (name: string) => void }) {
   const [name, setName] = useState("");
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
@@ -1786,4 +1800,11 @@ export function AddCompetencyForm({
       </Button>
     </form>
   );
+}
+
+// Best-effort id extraction from a Google Sheets URL: handles both the
+// /d/{id}/edit and /d/{id} forms. Returns null when the URL has no /d/{id}.
+function extractSheetId(url: string): string | null {
+  const m = url.match(/\/spreadsheets\/d\/([^/?#]+)/);
+  return m ? decodeURIComponent(m[1]) : null;
 }
