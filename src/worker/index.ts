@@ -66,7 +66,8 @@ import {
   runEmailDigestTick,
   sendEmailDigestTest,
 } from "#/features/email-digest/api";
-import { startFocusSession } from "#/features/focus/session";
+import { endFocusSession, startFocusSession } from "#/features/focus/session";
+import { resolve as resolveAccount } from "#/features/integrations/account-resolver/resolve";
 import {
   listAccounts,
   promotePrimary,
@@ -236,6 +237,10 @@ export default {
 
     if (url.pathname === "/api/focus" && request.method === "POST") {
       return handleStartFocus(request, service);
+    }
+
+    if (url.pathname === "/api/focus/end" && request.method === "POST") {
+      return handleEndFocus(service);
     }
 
     if (url.pathname === "/api/pr/review" && request.method === "POST") {
@@ -1170,16 +1175,45 @@ async function handleStartFocus(
       ? body.message.trim()
       : undefined;
 
-  const tokens = await loadFocusTokens(service);
+  const ctx = await loadFocusContext(service);
   const defaults = await loadFocusDefaults(service);
   const result = await startFocusSession(
     { duration_minutes: duration, message },
     {
-      tokens,
+      tokens: { google: ctx.google, slack: ctx.slack },
       fetch: (i, init) => fetch(i, init),
       statusEmoji: defaults.status_emoji,
     },
   );
+  await stampSlackAuthFailures(service, [
+    ...result.slack.flatMap((s) =>
+      s.status.ok || s.status.reason !== "auth_failed"
+        ? []
+        : [s.accountId],
+    ),
+    ...result.slack.flatMap((s) =>
+      s.dnd.ok || s.dnd.reason !== "auth_failed" ? [] : [s.accountId],
+    ),
+  ]);
+  return json(result);
+}
+
+async function handleEndFocus(service: SupabaseService): Promise<Response> {
+  const ctx = await loadFocusContext(service);
+  const result = await endFocusSession({
+    tokens: { slack: ctx.slack },
+    fetch: (i, init) => fetch(i, init),
+  });
+  await stampSlackAuthFailures(service, [
+    ...result.slack.flatMap((s) =>
+      s.status.ok || s.status.reason !== "auth_failed"
+        ? []
+        : [s.accountId],
+    ),
+    ...result.slack.flatMap((s) =>
+      s.dnd.ok || s.dnd.reason !== "auth_failed" ? [] : [s.accountId],
+    ),
+  ]);
   return json(result);
 }
 
@@ -1673,20 +1707,98 @@ async function loadFocusDefaults(
     : {};
 }
 
-async function loadFocusTokens(
+type FocusContext = {
+  google: string | null;
+  slack: Array<{ accountId: string; token: string }>;
+};
+
+/**
+ * Build the focus session's outbound context from `provider_accounts`,
+ * routed through `account-resolver`:
+ * - Google calendar event → primary account (single-target).
+ * - Slack DND/status → fan-out to every connected Slack account (#120).
+ *
+ * Tokens are matched by `provider_accounts.id` so a per-account auth
+ * failure can be recorded against the right row via
+ * `stampSlackAuthFailures`.
+ */
+async function loadFocusContext(
   service: SupabaseService,
-): Promise<{ google: string | null; slack: string | null }> {
+): Promise<FocusContext> {
   const { data, error } = await service
     .from("provider_accounts")
-    .select("provider, access_token");
+    .select(
+      "id, provider, account_id, handle, display_name, context, primary, added_at, access_token",
+    );
   if (error) throw new Error(error.message);
   const rows = (data ?? []) as Array<{
+    id: string;
     provider: string;
+    account_id: string | null;
+    handle: string | null;
+    display_name: string | null;
+    context: string | null;
+    primary: boolean | null;
+    added_at: string;
     access_token: string | null;
   }>;
-  const find = (p: string) =>
-    rows.find((r) => r.provider === p)?.access_token ?? null;
-  return { google: find("google"), slack: find("slack") };
+  const accounts = rows.map((r) => ({
+    id: r.id,
+    provider: r.provider,
+    account_id: r.account_id,
+    handle: r.handle,
+    display_name: r.display_name,
+    context: r.context,
+    primary: r.primary === true,
+    added_at: r.added_at,
+  }));
+  const tokenById = new Map(rows.map((r) => [r.id, r.access_token]));
+
+  const googleResolved = resolveAccount({
+    providerId: "google",
+    actionKind: "calendar-event-create",
+    accounts,
+  });
+  const googleToken =
+    googleResolved.accounts[0] && tokenById.get(googleResolved.accounts[0].id);
+  const slackResolved = resolveAccount({
+    providerId: "slack",
+    actionKind: "focus-slack-dnd",
+    accounts,
+  });
+  const slack = slackResolved.accounts.flatMap((a) => {
+    const tok = tokenById.get(a.id);
+    return tok ? [{ accountId: a.id, token: tok }] : [];
+  });
+  return { google: googleToken ?? null, slack };
+}
+
+/**
+ * Stamp `provider_accounts.status='auth_failed'` for any account whose Slack
+ * fan-out write returned an auth-style failure (HTTP 401/403 or Slack
+ * `invalid_auth` / `token_revoked` / `token_expired` / `account_inactive`).
+ * The existing per-account `provider-account-status` derive (#121) reads
+ * this column and renders the warn dot per AccountRow without further
+ * plumbing.
+ */
+async function stampSlackAuthFailures(
+  service: SupabaseService,
+  accountIds: string[],
+): Promise<void> {
+  const unique = Array.from(new Set(accountIds));
+  if (unique.length === 0) return;
+  await Promise.all(
+    unique.map(async (id) => {
+      const { error } = await service
+        .from("provider_accounts")
+        .update({ status: "auth_failed", updated_at: new Date().toISOString() })
+        .eq("id", id);
+      if (error) {
+        // best-effort: a failure here must not block the focus response
+        console.error(`focus: stamp auth_failed for ${id}: ${error.message}`);
+      }
+    }),
+  );
 }
 
 const PROFILE_COLUMNS = "display_name, timezone, locale, avatar_url";

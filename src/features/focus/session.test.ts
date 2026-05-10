@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   emitFocusEnded,
   emitFocusStarted,
+  endFocusSession,
   startFocusSession,
 } from "#/features/focus/session";
 
@@ -24,6 +25,7 @@ function jsonResponse(status: number, body: unknown): Response {
 }
 
 const fixedNow = new Date("2026-05-04T13:00:00Z");
+const oneSlack = [{ accountId: "acc-slack-1", token: "s-tok" }];
 
 describe("startFocusSession", () => {
   it("writes Calendar event + Slack status + DND with the right durations", async () => {
@@ -43,7 +45,7 @@ describe("startFocusSession", () => {
     const result = await startFocusSession(
       { duration_minutes: 60, message: "Deep work" },
       {
-        tokens: { google: "g-tok", slack: "s-tok" },
+        tokens: { google: "g-tok", slack: oneSlack },
         fetch: fn,
         now: () => fixedNow,
       },
@@ -51,8 +53,10 @@ describe("startFocusSession", () => {
 
     expect(result.calendar.ok).toBe(true);
     if (result.calendar.ok) expect(result.calendar.eventId).toBe("event-123");
-    expect(result.slack_status.ok).toBe(true);
-    expect(result.slack_dnd.ok).toBe(true);
+    expect(result.slack).toHaveLength(1);
+    expect(result.slack[0].accountId).toBe("acc-slack-1");
+    expect(result.slack[0].status.ok).toBe(true);
+    expect(result.slack[0].dnd.ok).toBe(true);
 
     const cal = calls.find((c) => c.url.includes("calendar/v3"));
     expect(cal).toBeDefined();
@@ -86,7 +90,11 @@ describe("startFocusSession", () => {
     });
     await startFocusSession(
       { duration_minutes: 30 },
-      { tokens: { google: "g", slack: "s" }, fetch: fn, now: () => fixedNow },
+      {
+        tokens: { google: "g", slack: oneSlack },
+        fetch: fn,
+        now: () => fixedNow,
+      },
     );
     const cal = calls.find((c) => c.url.includes("calendar/v3"));
     expect(JSON.parse(cal?.init.body as string).summary).toBe("Focus");
@@ -103,27 +111,31 @@ describe("startFocusSession", () => {
 
     const result = await startFocusSession(
       { duration_minutes: 45 },
-      { tokens: { google: "g", slack: "s" }, fetch: fn, now: () => fixedNow },
+      {
+        tokens: { google: "g", slack: oneSlack },
+        fetch: fn,
+        now: () => fixedNow,
+      },
     );
 
     expect(result.calendar.ok).toBe(true);
-    expect(result.slack_status.ok).toBe(false);
-    if (!result.slack_status.ok) {
-      expect(result.slack_status.error).toContain("token_revoked");
+    expect(result.slack[0].status.ok).toBe(false);
+    if (!result.slack[0].status.ok) {
+      expect(result.slack[0].status.error).toContain("token_revoked");
+      expect(result.slack[0].status.reason).toBe("auth_failed");
     }
-    expect(result.slack_dnd.ok).toBe(true);
+    expect(result.slack[0].dnd.ok).toBe(true);
   });
 
-  it("reports no_token reason when a provider is not connected", async () => {
+  it("reports no_token reason when google is not connected", async () => {
     const { fn } = recordingFetch(() => jsonResponse(200, { ok: true }));
     const result = await startFocusSession(
       { duration_minutes: 30 },
-      { tokens: { google: null, slack: null }, fetch: fn, now: () => fixedNow },
+      { tokens: { google: null, slack: [] }, fetch: fn, now: () => fixedNow },
     );
     expect(result.calendar.ok).toBe(false);
     if (!result.calendar.ok) expect(result.calendar.reason).toBe("no_token");
-    expect(result.slack_status.ok).toBe(false);
-    expect(result.slack_dnd.ok).toBe(false);
+    expect(result.slack).toEqual([]);
   });
 
   it("surfaces calendar HTTP error bodies", async () => {
@@ -134,7 +146,11 @@ describe("startFocusSession", () => {
     });
     const result = await startFocusSession(
       { duration_minutes: 25 },
-      { tokens: { google: "g", slack: "s" }, fetch: fn, now: () => fixedNow },
+      {
+        tokens: { google: "g", slack: oneSlack },
+        fetch: fn,
+        now: () => fixedNow,
+      },
     );
     expect(result.calendar.ok).toBe(false);
     if (!result.calendar.ok) {
@@ -151,7 +167,7 @@ describe("startFocusSession", () => {
     await startFocusSession(
       { duration_minutes: 30 },
       {
-        tokens: { google: "g", slack: "s" },
+        tokens: { google: "g", slack: oneSlack },
         fetch: fn,
         now: () => fixedNow,
         statusEmoji: ":headphones:",
@@ -169,7 +185,11 @@ describe("startFocusSession", () => {
     });
     await startFocusSession(
       { duration_minutes: 30 },
-      { tokens: { google: "g", slack: "s" }, fetch: fn, now: () => fixedNow },
+      {
+        tokens: { google: "g", slack: oneSlack },
+        fetch: fn,
+        now: () => fixedNow,
+      },
     );
     const status = calls.find((c) => c.url.endsWith("users.profile.set"));
     const body = JSON.parse(status?.init.body as string);
@@ -181,11 +201,155 @@ describe("startFocusSession", () => {
       startFocusSession(
         { duration_minutes: 0 },
         {
-          tokens: { google: "g", slack: "s" },
+          tokens: { google: "g", slack: oneSlack },
           fetch: vi.fn() as unknown as typeof fetch,
         },
       ),
     ).rejects.toThrow(/positive/);
+  });
+
+  it("fans out DND + status across every connected Slack account (#120)", async () => {
+    const slackCallsByToken: Record<string, string[]> = {};
+    const { fn } = recordingFetch((url, init) => {
+      if (url.includes("calendar/v3")) return jsonResponse(200, { id: "e" });
+      const auth = String(
+        (init.headers as Record<string, string>)["authorization"] ?? "",
+      );
+      const token = auth.replace(/^Bearer /, "");
+      slackCallsByToken[token] = slackCallsByToken[token] ?? [];
+      if (url.endsWith("users.profile.set"))
+        slackCallsByToken[token].push("status");
+      if (url.endsWith("dnd.setSnooze")) slackCallsByToken[token].push("dnd");
+      return jsonResponse(200, { ok: true });
+    });
+
+    const result = await startFocusSession(
+      { duration_minutes: 30 },
+      {
+        tokens: {
+          google: "g",
+          slack: [
+            { accountId: "acc-A", token: "tok-A" },
+            { accountId: "acc-B", token: "tok-B" },
+            { accountId: "acc-C", token: "tok-C" },
+          ],
+        },
+        fetch: fn,
+        now: () => fixedNow,
+      },
+    );
+
+    expect(result.slack).toHaveLength(3);
+    expect(result.slack.map((s) => s.accountId).sort()).toEqual([
+      "acc-A",
+      "acc-B",
+      "acc-C",
+    ]);
+    for (const acct of result.slack) {
+      expect(acct.status.ok).toBe(true);
+      expect(acct.dnd.ok).toBe(true);
+    }
+    // Each account's token saw exactly one status + one dnd call.
+    expect(slackCallsByToken["tok-A"].sort()).toEqual(["dnd", "status"]);
+    expect(slackCallsByToken["tok-B"].sort()).toEqual(["dnd", "status"]);
+    expect(slackCallsByToken["tok-C"].sort()).toEqual(["dnd", "status"]);
+  });
+
+  it("partial fan-out failure: one expired token does not abort the rest (#120)", async () => {
+    const { fn } = recordingFetch((url, init) => {
+      if (url.includes("calendar/v3")) return jsonResponse(200, { id: "e" });
+      const auth = String(
+        (init.headers as Record<string, string>)["authorization"] ?? "",
+      );
+      if (auth === "Bearer tok-bad") {
+        return jsonResponse(200, { ok: false, error: "token_expired" });
+      }
+      return jsonResponse(200, { ok: true });
+    });
+    const result = await startFocusSession(
+      { duration_minutes: 25 },
+      {
+        tokens: {
+          google: "g",
+          slack: [
+            { accountId: "acc-good", token: "tok-good" },
+            { accountId: "acc-bad", token: "tok-bad" },
+          ],
+        },
+        fetch: fn,
+        now: () => fixedNow,
+      },
+    );
+    const good = result.slack.find((s) => s.accountId === "acc-good");
+    const bad = result.slack.find((s) => s.accountId === "acc-bad");
+    expect(good?.status.ok).toBe(true);
+    expect(good?.dnd.ok).toBe(true);
+    expect(bad?.status.ok).toBe(false);
+    if (bad && !bad.status.ok) expect(bad.status.reason).toBe("auth_failed");
+    expect(bad?.dnd.ok).toBe(false);
+    if (bad && !bad.dnd.ok) expect(bad.dnd.reason).toBe("auth_failed");
+    // Calendar still wrote despite Slack partial failure.
+    expect(result.calendar.ok).toBe(true);
+  });
+});
+
+describe("endFocusSession (#120)", () => {
+  it("clears DND + status symmetrically across all Slack accounts", async () => {
+    const { fn, calls } = recordingFetch(() =>
+      jsonResponse(200, { ok: true }),
+    );
+    const result = await endFocusSession({
+      tokens: {
+        slack: [
+          { accountId: "acc-A", token: "tok-A" },
+          { accountId: "acc-B", token: "tok-B" },
+        ],
+      },
+      fetch: fn,
+    });
+
+    expect(result.slack).toHaveLength(2);
+    for (const acct of result.slack) {
+      expect(acct.status.ok).toBe(true);
+      expect(acct.dnd.ok).toBe(true);
+    }
+    // dnd.endDnd called per account; profile.set with empty status per account.
+    const dndCalls = calls.filter((c) => c.url.endsWith("dnd.endDnd"));
+    const statusCalls = calls.filter((c) => c.url.endsWith("users.profile.set"));
+    expect(dndCalls).toHaveLength(2);
+    expect(statusCalls).toHaveLength(2);
+    const cleared = JSON.parse(statusCalls[0].init.body as string);
+    expect(cleared.profile.status_text).toBe("");
+    expect(cleared.profile.status_emoji).toBe("");
+    expect(cleared.profile.status_expiration).toBe(0);
+  });
+
+  it("partial failure on end records per-account auth_failed and continues", async () => {
+    const { fn } = recordingFetch((_url, init) => {
+      const auth = String(
+        (init.headers as Record<string, string>)["authorization"] ?? "",
+      );
+      if (auth === "Bearer tok-bad") {
+        return jsonResponse(200, { ok: false, error: "invalid_auth" });
+      }
+      return jsonResponse(200, { ok: true });
+    });
+    const result = await endFocusSession({
+      tokens: {
+        slack: [
+          { accountId: "acc-good", token: "tok-good" },
+          { accountId: "acc-bad", token: "tok-bad" },
+        ],
+      },
+      fetch: fn,
+    });
+    const good = result.slack.find((s) => s.accountId === "acc-good");
+    const bad = result.slack.find((s) => s.accountId === "acc-bad");
+    expect(good?.status.ok).toBe(true);
+    expect(good?.dnd.ok).toBe(true);
+    expect(bad?.status.ok).toBe(false);
+    if (bad && !bad.status.ok) expect(bad.status.reason).toBe("auth_failed");
+    expect(bad?.dnd.ok).toBe(false);
   });
 });
 
