@@ -682,6 +682,113 @@ export async function cloneArchivedLevelAsActive(
   return newLevelId;
 }
 
+// ─── Share links ────────────────────────────────────────────────────────────
+
+export type StoredShare = {
+  id: string;
+  level_id: string;
+  token: string;
+  revoked_at: string | null;
+  created_at: string;
+};
+
+// 32 random bytes, URL-safe base64. ~256 bits of entropy — collision-resistant
+// well past any plausible share count for this app.
+function makeShareToken(): string {
+  const buf = new Uint8Array(32);
+  crypto.getRandomValues(buf);
+  let bin = "";
+  for (const b of buf) bin += String.fromCharCode(b);
+  return btoa(bin)
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+}
+
+export async function createShareLink(
+  client: SupabaseLike,
+  levelId: string,
+): Promise<StoredShare> {
+  const id = crypto.randomUUID();
+  const token = makeShareToken();
+  const { error } = await client
+    .from("career_shares")
+    .upsert(
+      { id, level_id: levelId, token },
+      { onConflict: "id" },
+    );
+  if (error) throw new Error(`share link create failed: ${error.message}`);
+  return {
+    id,
+    level_id: levelId,
+    token,
+    revoked_at: null,
+    created_at: new Date().toISOString(),
+  };
+}
+
+export async function getShareLinks(
+  client: SupabaseLike,
+  levelId: string,
+): Promise<StoredShare[]> {
+  const { data, error } = await client
+    .from("career_shares")
+    .select("*")
+    .eq("level_id", levelId)
+    .order("created_at", { ascending: false })
+    .limit(50);
+  if (error) throw new Error(`share link list failed: ${error.message}`);
+  return (data ?? []) as StoredShare[];
+}
+
+export async function revokeShareLink(
+  client: SupabaseLike,
+  shareId: string,
+): Promise<void> {
+  const { error } = await client
+    .from("career_shares")
+    .update({ revoked_at: new Date().toISOString() })
+    .eq("id", shareId);
+  if (error) throw new Error(`share link revoke failed: ${error.message}`);
+}
+
+// Anon-callable read of a level tree by share token. Goes through the
+// SECURITY DEFINER fn `career_share_read` so anon never queries the tree
+// tables directly. Returns null on unknown/revoked tokens.
+export type SharedLevelHeaderRow = { key: string; value: string };
+
+export type SharedLevel = {
+  id: string;
+  title: string;
+  status: string;
+  header: SharedLevelHeaderRow[];
+  created_at: string;
+  archived_at: string | null;
+};
+
+export type SharedTree = {
+  level: SharedLevel;
+  competencies: StoredCompetency[];
+  criteria: StoredCriterion[];
+  indicators: StoredIndicator[];
+  evidence: StoredEvidence[];
+};
+
+export async function readSharedLevel(
+  client: SupabaseLike,
+  token: string,
+): Promise<SharedTree | null> {
+  if (!client.rpc) {
+    throw new Error("share read failed: client missing rpc");
+  }
+  const { data, error } = await client.rpc("career_share_read", {
+    p_token: token,
+  });
+  if (error) throw new Error(`share read failed: ${error.message}`);
+  if (!data) return null;
+  return data as SharedTree;
+}
+
 // Picker support: simple title-prefix search over project_cards. Read-only —
 // the picker never creates cards.
 export async function searchProjectCards(

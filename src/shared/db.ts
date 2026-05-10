@@ -14,6 +14,13 @@ export type SupabaseLike = {
     update: (values: Record<string, unknown>) => UpdateChain;
     delete?: () => DeleteChain;
   };
+  rpc?: (
+    fn: string,
+    args?: Record<string, unknown>,
+  ) => Promise<{
+    data: unknown;
+    error: { message: string } | null;
+  }>;
 };
 
 export type SelectChain = {

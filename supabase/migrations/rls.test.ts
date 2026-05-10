@@ -74,6 +74,11 @@ const careerRescaleSql = readFileSync(
   "utf8",
 );
 
+const careerSharesSql = readFileSync(
+  resolve(__dirname, "0030_career_shares.sql"),
+  "utf8",
+);
+
 describe("0001_init.sql contents", () => {
   it("declares the (provider, kind, source_id) unique constraint on signals", () => {
     expect(migrationSql).toMatch(
@@ -260,6 +265,47 @@ describe("0029_career_rescale.sql contents", () => {
   it("drops label_0 from career_scale_legend", () => {
     expect(careerRescaleSql).toMatch(
       /alter table public\.career_scale_legend[\s\S]+drop column if exists label_0/i,
+    );
+  });
+});
+
+describe("0030_career_shares.sql contents", () => {
+  it("creates the career_shares table with token unique and revoked_at", () => {
+    expect(careerSharesSql).toMatch(
+      /create table public\.career_shares/i,
+    );
+    expect(careerSharesSql).toMatch(/token text not null unique/i);
+    expect(careerSharesSql).toMatch(/revoked_at timestamptz/i);
+  });
+
+  it("references career_levels(id) on delete cascade", () => {
+    expect(careerSharesSql).toMatch(
+      /references public\.career_levels \(id\) on delete cascade/i,
+    );
+  });
+
+  it("enables RLS with the allowed-user predicate on career_shares", () => {
+    expect(careerSharesSql).toMatch(
+      /alter table public\.career_shares enable row level security/i,
+    );
+    expect(careerSharesSql).toMatch(/public\.is_allowed_user\(\)/);
+  });
+
+  it("declares the SECURITY DEFINER career_share_read(token) function", () => {
+    expect(careerSharesSql).toMatch(
+      /create or replace function public\.career_share_read\(p_token text\)/i,
+    );
+    expect(careerSharesSql).toMatch(/security definer/i);
+  });
+
+  it("filters the share lookup by token and revoked_at IS NULL", () => {
+    expect(careerSharesSql).toMatch(/s\.token = p_token/i);
+    expect(careerSharesSql).toMatch(/s\.revoked_at is null/i);
+  });
+
+  it("grants execute on career_share_read to anon and authenticated", () => {
+    expect(careerSharesSql).toMatch(
+      /grant execute on function public\.career_share_read\(text\) to anon, authenticated/i,
     );
   });
 });

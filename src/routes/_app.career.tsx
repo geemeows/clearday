@@ -3,6 +3,7 @@ import { ArrowDown, ArrowUp, Target, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "#/components/coss/button";
 import { CareerWheel } from "#/features/career/components/CareerWheel";
+import { ShareLinkDialog } from "#/features/career/components/ShareLinkDialog";
 import { reorderWithinParent } from "#/features/career/order";
 import {
   cloneArchivedLevelAsActive,
@@ -272,18 +273,37 @@ function ArchivedLevelRow({
   level: StoredLevel;
   onClone: (newTitle: string) => void;
 }) {
+  const [shareOpen, setShareOpen] = useState(false);
+  const client = supabase as unknown as SupabaseLike;
   return (
     <li className="flex items-center justify-between gap-2 rounded-md border border-border bg-background px-3 py-2">
       <span className="text-foreground text-sm">{level.title}</span>
-      <Button
-        type="button"
-        size="sm"
-        variant="outline"
-        aria-label={`Clone ${level.title} as starting template`}
-        onClick={() => onClone(level.title)}
-      >
-        Clone as starting template
-      </Button>
+      <div className="flex items-center gap-2">
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          aria-label={`Generate share link for ${level.title}`}
+          onClick={() => setShareOpen(true)}
+        >
+          Share
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          aria-label={`Clone ${level.title} as starting template`}
+          onClick={() => onClone(level.title)}
+        >
+          Clone as starting template
+        </Button>
+      </div>
+      <ShareLinkDialog
+        open={shareOpen}
+        onOpenChange={setShareOpen}
+        levelId={level.id}
+        client={client}
+      />
     </li>
   );
 }
@@ -300,6 +320,7 @@ export function CareerLevelView({
   );
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<"tree" | "wheel">("tree");
+  const [shareOpen, setShareOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -401,7 +422,7 @@ export function CareerLevelView({
         <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
           <Target className="h-5 w-5 text-primary" />
         </div>
-        <div>
+        <div className="flex-1">
           <h1 className="font-semibold text-2xl text-foreground tracking-tight">
             {level.title}
           </h1>
@@ -409,7 +430,23 @@ export function CareerLevelView({
             Active level — add competencies to start building your tree.
           </p>
         </div>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          aria-label="Generate share link"
+          onClick={() => setShareOpen(true)}
+        >
+          Generate share link
+        </Button>
       </header>
+
+      <ShareLinkDialog
+        open={shareOpen}
+        onOpenChange={setShareOpen}
+        levelId={level.id}
+        client={client}
+      />
 
       {error && (
         <p

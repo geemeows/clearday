@@ -2,6 +2,10 @@ import { describe, expect, it, vi } from "vitest";
 import {
   cloneArchivedLevelAsActive,
   createCompetency,
+  createShareLink,
+  getShareLinks,
+  readSharedLevel,
+  revokeShareLink,
   createCriterion,
   createEvidence,
   createIndicator,
@@ -1319,5 +1323,147 @@ describe("setScaleLegend", () => {
     await expect(
       setScaleLegend(client, { label_1: "x" }),
     ).rejects.toThrow("set boom");
+  });
+});
+
+describe("createShareLink", () => {
+  it("upserts a row with a new id, level_id, and url-safe random token", async () => {
+    const { client, spies } = makeClient();
+    const share = await createShareLink(client, "lvl1");
+    expect(spies.upsert).toHaveBeenCalledTimes(1);
+    const arg = spies.upsert.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(arg.level_id).toBe("lvl1");
+    expect(typeof arg.id).toBe("string");
+    expect(typeof arg.token).toBe("string");
+    expect((arg.token as string).length).toBeGreaterThan(20);
+    // URL-safe base64 alphabet only.
+    expect(arg.token).toMatch(/^[A-Za-z0-9_-]+$/);
+    expect(share.token).toBe(arg.token);
+    expect(share.level_id).toBe("lvl1");
+    expect(share.revoked_at).toBeNull();
+  });
+
+  it("generates a different token on each call", async () => {
+    const { client } = makeClient();
+    const a = await createShareLink(client, "lvl1");
+    const b = await createShareLink(client, "lvl1");
+    expect(a.token).not.toBe(b.token);
+  });
+
+  it("throws when upsert fails", async () => {
+    const { client } = makeClient({
+      upsertResult: { error: { message: "share boom" } },
+    });
+    await expect(createShareLink(client, "lvl1")).rejects.toThrow(
+      "share boom",
+    );
+  });
+});
+
+describe("getShareLinks", () => {
+  it("filters by level_id, orders by created_at desc, returns rows", async () => {
+    const row = {
+      id: "s1",
+      level_id: "lvl1",
+      token: "tok",
+      revoked_at: null,
+      created_at: "2026-05-10T00:00:00Z",
+    };
+    const { client, spies } = makeClient({ listData: [row] });
+    const result = await getShareLinks(client, "lvl1");
+    expect(spies.eq).toHaveBeenCalledWith("level_id", "lvl1");
+    expect(spies.order).toHaveBeenCalledWith("created_at", {
+      ascending: false,
+    });
+    expect(result).toEqual([row]);
+  });
+
+  it("throws when list fails", async () => {
+    const { client } = makeClient({ listError: { message: "list boom" } });
+    await expect(getShareLinks(client, "lvl1")).rejects.toThrow("list boom");
+  });
+});
+
+describe("revokeShareLink", () => {
+  it("stamps revoked_at on the matching id", async () => {
+    const { client, spies } = makeClient();
+    await revokeShareLink(client, "s1");
+    const arg = spies.update.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(typeof arg.revoked_at).toBe("string");
+    expect(spies.updateEq).toHaveBeenCalledWith("id", "s1");
+  });
+
+  it("throws when update fails", async () => {
+    const { client } = makeClient({
+      updateResult: { error: { message: "revoke boom" } },
+    });
+    await expect(revokeShareLink(client, "s1")).rejects.toThrow("revoke boom");
+  });
+});
+
+describe("readSharedLevel", () => {
+  it("calls career_share_read with the token and returns the payload", async () => {
+    const payload = {
+      level: {
+        id: "lvl1",
+        title: "L4",
+        status: "active",
+        header: [],
+        created_at: "2026-01-01T00:00:00Z",
+        archived_at: null,
+      },
+      competencies: [],
+      criteria: [],
+      indicators: [],
+      evidence: [],
+    };
+    const rpc = vi.fn(async () => ({ data: payload, error: null }));
+    const client: SupabaseLike = {
+      from: () => {
+        throw new Error("from() should not be called for share read");
+      },
+      rpc,
+    };
+    const result = await readSharedLevel(client, "tok123");
+    expect(rpc).toHaveBeenCalledWith("career_share_read", {
+      p_token: "tok123",
+    });
+    expect(result).toEqual(payload);
+  });
+
+  it("returns null when the rpc returns no data (unknown/revoked token)", async () => {
+    const rpc = vi.fn(async () => ({ data: null, error: null }));
+    const client: SupabaseLike = {
+      from: () => {
+        throw new Error("from() should not be called for share read");
+      },
+      rpc,
+    };
+    expect(await readSharedLevel(client, "bad")).toBeNull();
+  });
+
+  it("throws when the rpc errors", async () => {
+    const rpc = vi.fn(async () => ({
+      data: null,
+      error: { message: "rpc boom" },
+    }));
+    const client: SupabaseLike = {
+      from: () => {
+        throw new Error("from() should not be called for share read");
+      },
+      rpc,
+    };
+    await expect(readSharedLevel(client, "tok")).rejects.toThrow("rpc boom");
+  });
+
+  it("throws when the client has no rpc method", async () => {
+    const client: SupabaseLike = {
+      from: () => {
+        throw new Error("from() should not be called for share read");
+      },
+    };
+    await expect(readSharedLevel(client, "tok")).rejects.toThrow(
+      "missing rpc",
+    );
   });
 });

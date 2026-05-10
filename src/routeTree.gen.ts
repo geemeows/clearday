@@ -23,6 +23,7 @@ import { Route as AppCalendarRouteImport } from './routes/_app.calendar'
 import { Route as AppAutomationsRouteImport } from './routes/_app.automations'
 import { Route as AppSettingsIndexRouteImport } from './routes/_app.settings.index'
 import { Route as AppProjectsIndexRouteImport } from './routes/_app.projects.index'
+import { Route as ShareCareerTokenRouteImport } from './routes/share.career.$token'
 import { Route as AppSettingsSelfhostRouteImport } from './routes/_app.settings.selfhost'
 import { Route as AppSettingsProfileRouteImport } from './routes/_app.settings.profile'
 import { Route as AppSettingsNotificationsRouteImport } from './routes/_app.settings.notifications'
@@ -100,6 +101,11 @@ const AppProjectsIndexRoute = AppProjectsIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AppProjectsRoute,
 } as any)
+const ShareCareerTokenRoute = ShareCareerTokenRouteImport.update({
+  id: '/share/career/$token',
+  path: '/share/career/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AppSettingsSelfhostRoute = AppSettingsSelfhostRouteImport.update({
   id: '/selfhost',
   path: '/selfhost',
@@ -156,6 +162,7 @@ export interface FileRoutesByFullPath {
   '/settings/notifications': typeof AppSettingsNotificationsRoute
   '/settings/profile': typeof AppSettingsProfileRoute
   '/settings/selfhost': typeof AppSettingsSelfhostRoute
+  '/share/career/$token': typeof ShareCareerTokenRoute
   '/projects/': typeof AppProjectsIndexRoute
   '/settings/': typeof AppSettingsIndexRoute
 }
@@ -176,6 +183,7 @@ export interface FileRoutesByTo {
   '/settings/notifications': typeof AppSettingsNotificationsRoute
   '/settings/profile': typeof AppSettingsProfileRoute
   '/settings/selfhost': typeof AppSettingsSelfhostRoute
+  '/share/career/$token': typeof ShareCareerTokenRoute
   '/projects': typeof AppProjectsIndexRoute
   '/settings': typeof AppSettingsIndexRoute
 }
@@ -200,6 +208,7 @@ export interface FileRoutesById {
   '/_app/settings/notifications': typeof AppSettingsNotificationsRoute
   '/_app/settings/profile': typeof AppSettingsProfileRoute
   '/_app/settings/selfhost': typeof AppSettingsSelfhostRoute
+  '/share/career/$token': typeof ShareCareerTokenRoute
   '/_app/projects/': typeof AppProjectsIndexRoute
   '/_app/settings/': typeof AppSettingsIndexRoute
 }
@@ -224,6 +233,7 @@ export interface FileRouteTypes {
     | '/settings/notifications'
     | '/settings/profile'
     | '/settings/selfhost'
+    | '/share/career/$token'
     | '/projects/'
     | '/settings/'
   fileRoutesByTo: FileRoutesByTo
@@ -244,6 +254,7 @@ export interface FileRouteTypes {
     | '/settings/notifications'
     | '/settings/profile'
     | '/settings/selfhost'
+    | '/share/career/$token'
     | '/projects'
     | '/settings'
   id:
@@ -267,6 +278,7 @@ export interface FileRouteTypes {
     | '/_app/settings/notifications'
     | '/_app/settings/profile'
     | '/_app/settings/selfhost'
+    | '/share/career/$token'
     | '/_app/projects/'
     | '/_app/settings/'
   fileRoutesById: FileRoutesById
@@ -277,6 +289,7 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   OnboardingRoute: typeof OnboardingRoute
   AuthCallbackRoute: typeof AuthCallbackRoute
+  ShareCareerTokenRoute: typeof ShareCareerTokenRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -378,6 +391,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/projects/'
       preLoaderRoute: typeof AppProjectsIndexRouteImport
       parentRoute: typeof AppProjectsRoute
+    }
+    '/share/career/$token': {
+      id: '/share/career/$token'
+      path: '/share/career/$token'
+      fullPath: '/share/career/$token'
+      preLoaderRoute: typeof ShareCareerTokenRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/_app/settings/selfhost': {
       id: '/_app/settings/selfhost'
@@ -497,6 +517,7 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   OnboardingRoute: OnboardingRoute,
   AuthCallbackRoute: AuthCallbackRoute,
+  ShareCareerTokenRoute: ShareCareerTokenRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
