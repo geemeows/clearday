@@ -13,6 +13,11 @@ import {
   kindGroup,
   severityOf,
 } from "#/features/signals/display";
+import {
+  SourceFilter,
+  type SourceProvider,
+  type SourceSelection,
+} from "#/features/signals/components/SourceFilter";
 import { cn } from "#/lib/cn";
 import type { Signal } from "#/shared/signal";
 
@@ -63,6 +68,9 @@ function defaultDetail(): ReactNode {
 export function InboxView({
   filter,
   onFilterChange,
+  source,
+  onSourceChange,
+  sourceProviders,
   signals,
   error,
   onDismiss,
@@ -75,6 +83,15 @@ export function InboxView({
 }: {
   filter: Filter;
   onFilterChange: (f: Filter) => void;
+  /**
+   * Source axis (provider + optional account_id) layered on top of the kind
+   * filter. Optional so existing tests / call sites that only care about
+   * the kind chips keep working — when omitted, the source rail is hidden
+   * and the inbox stays unified across all accounts.
+   */
+  source?: SourceSelection;
+  onSourceChange?: (next: SourceSelection) => void;
+  sourceProviders?: SourceProvider[];
   signals: StoredSignal[] | null;
   error: string | null;
   onDismiss: (id: string) => void;
@@ -270,6 +287,13 @@ export function InboxView({
               Mark all read
             </button>
           </div>
+          {sourceProviders && source && onSourceChange && (
+            <SourceFilter
+              providers={sourceProviders}
+              value={source}
+              onChange={onSourceChange}
+            />
+          )}
           <nav
             aria-label="Inbox filters"
             className="flex flex-wrap items-center gap-1.5"

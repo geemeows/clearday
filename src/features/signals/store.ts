@@ -92,6 +92,12 @@ export async function upsertSignals(
 export type ListSignalsArgs = {
   kinds?: SignalKind[];
   providers?: SignalProvider[];
+  /**
+   * `provider_accounts.id` to scope to a single connected account. Layered on
+   * top of `providers` so the Inbox source filter can drill from "all
+   * accounts of provider X" down to "just this one account".
+   */
+  accountId?: string;
   includeDismissed?: boolean;
   /** Case-insensitive substring match against `title`. */
   query?: string;
@@ -116,6 +122,7 @@ export async function listSignals(
   if (args.kinds && args.kinds.length > 0) q = q.in("kind", args.kinds);
   if (args.providers && args.providers.length > 0)
     q = q.in("provider", args.providers);
+  if (args.accountId) q = q.eq("account_id", args.accountId);
   if (args.query && args.query.trim().length > 0) {
     q = q.ilike("title", `%${escapeLikePattern(args.query.trim())}%`);
   }

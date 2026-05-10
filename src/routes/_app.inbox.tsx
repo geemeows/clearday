@@ -38,6 +38,12 @@ import { SlackReplyComposer } from "#/features/signals/details/slack/ReplyCompos
 import { SlackThreadContext } from "#/features/signals/details/slack/ThreadContext";
 import { TaskDetail } from "#/features/signals/details/task";
 import { type Filter, kindGroup, relAgo } from "#/features/signals/display";
+import type {
+  SourceProvider,
+  SourceSelection,
+} from "#/features/signals/components/SourceFilter";
+import type { SourceStatus } from "#/features/signals/server/api";
+import type { SignalProvider } from "#/shared/signal";
 import {
   createCard,
   getLinkForSignal,
@@ -103,10 +109,25 @@ export const Route = createFileRoute("/_app/inbox")({
   component: InboxPage,
 });
 
+const PROVIDER_LABEL: Record<SignalProvider, string> = {
+  github: "GitHub",
+  google: "Google Calendar",
+  slack: "Slack",
+  linear: "Linear",
+  jira: "Jira",
+};
+
 function InboxPage() {
   const search = Route.useSearch();
   const navigate = Route.useNavigate();
   const [filter, setFilter] = useState<Filter>("all");
+  const [source, setSource] = useState<SourceSelection>({
+    provider: null,
+    accountId: null,
+  });
+  const [sourceProviders, setSourceProviders] = useState<
+    SourceProvider[] | null
+  >(null);
   const [signals, setSignals] = useState<StoredSignal[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const selectedId = search.signal ?? null;
@@ -123,19 +144,61 @@ function InboxPage() {
 
   const reload = useCallback(async () => {
     try {
-      const body = (await apiFetch("/api/signals?filter=all")) as {
-        signals: StoredSignal[];
-      };
+      const params = new URLSearchParams({ filter: "all" });
+      if (source.provider) params.set("provider", source.provider);
+      if (source.accountId) params.set("account_id", source.accountId);
+      const body = (await apiFetch(
+        `/api/signals?${params.toString()}`,
+      )) as { signals: StoredSignal[] };
       setSignals(body.signals);
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "failed to load");
     }
-  }, []);
+  }, [source.provider, source.accountId]);
 
   useEffect(() => {
     reload();
   }, [reload]);
+
+  // Load the connected-account list once for the source filter chip rail.
+  // Falls back to "no providers" on auth/network failure — the rail then
+  // renders only the "All sources" chip and the inbox stays unified.
+  useEffect(() => {
+    let cancelled = false;
+    apiFetch("/api/sources")
+      .then((body) => {
+        if (cancelled) return;
+        const sources = (body as { sources: SourceStatus[] }).sources;
+        const byProvider = new Map<SignalProvider, SourceProvider>();
+        for (const s of sources) {
+          if (!s.id) continue; // neutral placeholders carry no account
+          const provider = s.provider as SignalProvider;
+          let bucket = byProvider.get(provider);
+          if (!bucket) {
+            bucket = {
+              provider,
+              label: PROVIDER_LABEL[provider] ?? provider,
+              accounts: [],
+            };
+            byProvider.set(provider, bucket);
+          }
+          bucket.accounts.push({
+            id: s.id,
+            handle: s.handle,
+            context: s.context,
+            status: s.status,
+          });
+        }
+        setSourceProviders([...byProvider.values()]);
+      })
+      .catch(() => {
+        if (!cancelled) setSourceProviders([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useAutoRefresh(reload);
 
@@ -181,6 +244,9 @@ function InboxPage() {
     <InboxView
       filter={filter}
       onFilterChange={setFilter}
+      source={source}
+      onSourceChange={setSource}
+      sourceProviders={sourceProviders ?? undefined}
       signals={visibleSignals}
       error={error}
       onDismiss={dismiss}

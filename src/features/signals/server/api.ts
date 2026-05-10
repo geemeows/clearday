@@ -54,8 +54,19 @@ export async function handleListSignals(
       : undefined;
   const includeDismissed = url.searchParams.get("include_dismissed") === "true";
   const includeSnoozed = url.searchParams.get("include_snoozed") === "true";
+  const providerParam = url.searchParams.get("provider");
+  const providers =
+    providerParam && PROVIDERS.includes(providerParam as SignalProvider)
+      ? [providerParam as SignalProvider]
+      : undefined;
+  if (providerParam && !providers) {
+    return json({ error: `unknown provider: ${providerParam}` }, 400);
+  }
+  const accountId = url.searchParams.get("account_id") ?? undefined;
   const signals = await listSignals(client, {
     kinds,
+    providers,
+    accountId,
     query,
     limit,
     since,
