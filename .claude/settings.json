@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pnpm test)",
+      "Bash(pnpm test *)",
+      "Bash(pnpm typecheck)",
+      "Bash(pnpm typecheck *)",
+      "Bash(pnpm run test)",
+      "Bash(pnpm run test *)",
+      "Bash(pnpm run typecheck)",
+      "Bash(pnpm run typecheck *)",
+      "Bash(pnpm vitest run *)",
+      "Bash(npx vitest run *)",
+      "Bash(pnpm tsc *)",
+      "Bash(npx tsc *)"
+    ]
+  }
+}
