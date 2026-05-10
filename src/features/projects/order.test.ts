@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
+import type { Orderable, OrderableCard } from "#/features/projects/order";
 import {
   moveBetweenColumns,
   reorderColumns,
   reorderWithinColumn,
 } from "#/features/projects/order";
-import type { Orderable, OrderableCard } from "#/features/projects/order";
 
 function col(id: string, order: number): Orderable {
   return { id, order };
@@ -54,14 +54,14 @@ describe("reorderWithinColumn", () => {
 
 describe("moveBetweenColumns", () => {
   it("moves a card to the top of destination column", () => {
-    const cards = [
-      card("a", "c1", 0),
-      card("b", "c1", 1),
-      card("x", "c2", 0),
-    ];
+    const cards = [card("a", "c1", 0), card("b", "c1", 1), card("x", "c2", 0)];
     const result = moveBetweenColumns(cards, "b", "c2", null);
-    const c1 = result.filter((c) => c.column_id === "c1").sort((a, b) => a.order - b.order);
-    const c2 = result.filter((c) => c.column_id === "c2").sort((a, b) => a.order - b.order);
+    const c1 = result
+      .filter((c) => c.column_id === "c1")
+      .sort((a, b) => a.order - b.order);
+    const c2 = result
+      .filter((c) => c.column_id === "c2")
+      .sort((a, b) => a.order - b.order);
     expect(c1.map((c) => c.id)).toEqual(["a"]);
     expect(c1.map((c) => c.order)).toEqual([0]);
     expect(c2.map((c) => c.id)).toEqual(["b", "x"]);
@@ -69,25 +69,21 @@ describe("moveBetweenColumns", () => {
   });
 
   it("inserts after a given card in the destination column", () => {
-    const cards = [
-      card("a", "c1", 0),
-      card("x", "c2", 0),
-      card("y", "c2", 1),
-    ];
+    const cards = [card("a", "c1", 0), card("x", "c2", 0), card("y", "c2", 1)];
     const result = moveBetweenColumns(cards, "a", "c2", "x");
-    const c2 = result.filter((c) => c.column_id === "c2").sort((a, b) => a.order - b.order);
+    const c2 = result
+      .filter((c) => c.column_id === "c2")
+      .sort((a, b) => a.order - b.order);
     expect(c2.map((c) => c.id)).toEqual(["x", "a", "y"]);
     expect(c2.map((c) => c.order)).toEqual([0, 1, 2]);
   });
 
   it("leaves the source column densely ordered after removal", () => {
-    const cards = [
-      card("a", "c1", 0),
-      card("b", "c1", 1),
-      card("c", "c1", 2),
-    ];
+    const cards = [card("a", "c1", 0), card("b", "c1", 1), card("c", "c1", 2)];
     const result = moveBetweenColumns(cards, "b", "c2", null);
-    const c1 = result.filter((c) => c.column_id === "c1").sort((a, b) => a.order - b.order);
+    const c1 = result
+      .filter((c) => c.column_id === "c1")
+      .sort((a, b) => a.order - b.order);
     expect(c1.map((c) => c.id)).toEqual(["a", "c"]);
     expect(c1.map((c) => c.order)).toEqual([0, 1]);
   });

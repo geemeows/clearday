@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
 import type { Account } from "#/features/integrations/accounts/store";
 import {
-  resolve,
   type ActionKind,
   type OriginatingSignalContext,
+  resolve,
 } from "./resolve";
 
-function acct(overrides: Partial<Account> & { id: string; provider: string }): Account {
+function acct(
+  overrides: Partial<Account> & { id: string; provider: string },
+): Account {
   return {
     id: overrides.id,
     provider: overrides.provider,
@@ -29,7 +31,11 @@ const KINDS: ActionKind[] = [
 describe("account-resolver", () => {
   it("returns the originating Signal's account as the smart default", () => {
     const work = acct({ id: "gh-work", provider: "github" });
-    const personal = acct({ id: "gh-personal", provider: "github", primary: true });
+    const personal = acct({
+      id: "gh-personal",
+      provider: "github",
+      primary: true,
+    });
     const signal: OriginatingSignalContext = {
       provider: "github",
       account_id: "gh-work",
@@ -46,7 +52,11 @@ describe("account-resolver", () => {
 
   it("falls back to the primary account when there is no Signal context", () => {
     const work = acct({ id: "gh-work", provider: "github" });
-    const personal = acct({ id: "gh-personal", provider: "github", primary: true });
+    const personal = acct({
+      id: "gh-personal",
+      provider: "github",
+      primary: true,
+    });
     for (const kind of KINDS) {
       const out = resolve({
         providerId: "github",
@@ -60,7 +70,11 @@ describe("account-resolver", () => {
 
   it("returns the only available account for single-account providers regardless of context", () => {
     const only = acct({ id: "gh-only", provider: "github", primary: true });
-    const otherProvider = acct({ id: "slack-1", provider: "slack", primary: true });
+    const otherProvider = acct({
+      id: "slack-1",
+      provider: "slack",
+      primary: true,
+    });
     const out = resolve({
       providerId: "github",
       actionKind: "draft-reply-send",
@@ -145,8 +159,16 @@ describe("account-resolver", () => {
   it("falls back to the first account when no row is flagged primary", () => {
     // Defensive: the foundations migration guarantees a primary, but we
     // resolve gracefully if a future code path has cleared the flag.
-    const a = acct({ id: "gh-a", provider: "github", added_at: "2026-01-01T00:00:00.000Z" });
-    const b = acct({ id: "gh-b", provider: "github", added_at: "2026-02-01T00:00:00.000Z" });
+    const a = acct({
+      id: "gh-a",
+      provider: "github",
+      added_at: "2026-01-01T00:00:00.000Z",
+    });
+    const b = acct({
+      id: "gh-b",
+      provider: "github",
+      added_at: "2026-02-01T00:00:00.000Z",
+    });
     const out = resolve({
       providerId: "github",
       actionKind: "draft-reply-send",

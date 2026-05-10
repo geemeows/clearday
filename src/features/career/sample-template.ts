@@ -49,7 +49,10 @@ export const SAMPLE_TEMPLATE: SampleTemplate = {
           target: 3,
           indicators: [
             { code: "A", description: "Owns one critical service end-to-end" },
-            { code: "B", description: "Holds on-call without escalating routine issues" },
+            {
+              code: "B",
+              description: "Holds on-call without escalating routine issues",
+            },
           ],
         },
       ],

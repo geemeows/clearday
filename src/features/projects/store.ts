@@ -223,10 +223,12 @@ export async function linkSignalToCard(
   cardId: string,
   projectId: string,
 ): Promise<void> {
-  const { error } = await client.from("project_card_signals").upsert(
-    { signal_id: signalId, card_id: cardId, project_id: projectId },
-    { onConflict: "signal_id" },
-  );
+  const { error } = await client
+    .from("project_card_signals")
+    .upsert(
+      { signal_id: signalId, card_id: cardId, project_id: projectId },
+      { onConflict: "signal_id" },
+    );
   if (error) throw new Error(`link signal failed: ${error.message}`);
 }
 
@@ -406,5 +408,8 @@ export async function listCardsDueOn(
   if (error) throw new Error(`card list failed: ${error.message}`);
   const cards = (data ?? []) as StoredCard[];
   const nameMap = new Map(projects.map((p) => [p.id, p.name]));
-  return cards.map((c) => ({ ...c, project_name: nameMap.get(c.project_id) ?? "" }));
+  return cards.map((c) => ({
+    ...c,
+    project_name: nameMap.get(c.project_id) ?? "",
+  }));
 }

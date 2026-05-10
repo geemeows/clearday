@@ -2,11 +2,6 @@ import { useCallback, useState } from "react";
 import { Tabs, TabsList, TabsPanel, TabsTab } from "#/components/coss/tabs";
 import type { StoredSignal } from "#/features/signals/components/InboxView";
 import { SourceGlyph } from "#/features/signals/components/SourceGlyph";
-import { PrComments } from "./Comments";
-import { PrDescription } from "./Description";
-import { PrDiffViewer } from "./DiffViewer";
-import { PrReviewActions } from "./ReviewActions";
-import { PrReviewSubmitPanel } from "./ReviewComposer";
 import {
   type PrFilesLoader,
   type PrIssueComment,
@@ -16,6 +11,11 @@ import {
   type ReviewDraft,
   reviewDraftKey,
 } from "./_shared";
+import { PrComments } from "./Comments";
+import { PrDescription } from "./Description";
+import { PrDiffViewer } from "./DiffViewer";
+import { PrReviewActions } from "./ReviewActions";
+import { PrReviewSubmitPanel } from "./ReviewComposer";
 
 export function PRDetail({
   signal,

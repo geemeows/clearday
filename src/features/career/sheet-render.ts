@@ -120,7 +120,11 @@ export type ChartSpec = {
 };
 
 export type ChartPosition = {
-  overlayPosition: { anchorCell: GridCoord; widthPixels: number; heightPixels: number };
+  overlayPosition: {
+    anchorCell: GridCoord;
+    widthPixels: number;
+    heightPixels: number;
+  };
 };
 
 // ─── Public API ──────────────────────────────────────────────────────────────
@@ -148,7 +152,9 @@ export function renderSheet(input: SheetRenderInput): SheetRenderOutput {
   const reportRows: RowData[] = [];
 
   // Top bar — merged across all five report columns, level title.
-  reportRows.push(row([textCell(input.level.title, { bold: true, align: "CENTER" })]));
+  reportRows.push(
+    row([textCell(input.level.title, { bold: true, align: "CENTER" })]),
+  );
   reportRequests.push({
     mergeCells: {
       range: gridRange(reportSheetId, 0, 1, 0, REPORT_COLS),
@@ -186,7 +192,9 @@ export function renderSheet(input: SheetRenderInput): SheetRenderOutput {
 
     // Competency header row.
     reportRows.push(
-      row([textCell(compNode.competency.name, { bold: true, align: "CENTER" })]),
+      row([
+        textCell(compNode.competency.name, { bold: true, align: "CENTER" }),
+      ]),
     );
     const compHeaderRowIndex = reportRows.length - 1;
     reportRequests.push({
@@ -217,7 +225,10 @@ export function renderSheet(input: SheetRenderInput): SheetRenderOutput {
           textCell(""),
           textCell(""),
           textCell(""),
-          textCell(`Target ${critNode.criterion.target}`, { bold: true, align: "RIGHT" }),
+          textCell(`Target ${critNode.criterion.target}`, {
+            bold: true,
+            align: "RIGHT",
+          }),
         ]),
       );
 
@@ -405,7 +416,13 @@ function gridRange(
   startColumnIndex: number,
   endColumnIndex: number,
 ): GridRange {
-  return { sheetId, startRowIndex, endRowIndex, startColumnIndex, endColumnIndex };
+  return {
+    sheetId,
+    startRowIndex,
+    endRowIndex,
+    startColumnIndex,
+    endColumnIndex,
+  };
 }
 
 // 0 -> "A", 1 -> "B", ..., 25 -> "Z", 26 -> "AA". Matches the existing sheet's

@@ -98,7 +98,10 @@ describe("renderSheet", () => {
             {
               criterion: crit(),
               indicators: [
-                { indicator: ind({ id: "i1", code: "1", score: 2 }), evidence: [] },
+                {
+                  indicator: ind({ id: "i1", code: "1", score: 2 }),
+                  evidence: [],
+                },
                 {
                   indicator: ind({
                     id: "i2",
@@ -114,7 +117,9 @@ describe("renderSheet", () => {
         },
       ],
     };
-    expect(renderSheet({ level: level(), tree, legend: LEGEND })).toMatchSnapshot();
+    expect(
+      renderSheet({ level: level(), tree, legend: LEGEND }),
+    ).toMatchSnapshot();
   });
 
   it("resets criterion lettering A/B/C per competency", () => {
@@ -124,11 +129,19 @@ describe("renderSheet", () => {
           competency: comp({ id: "c1", name: "Engineering" }),
           criteria: [
             {
-              criterion: crit({ id: "cr1a", competency_id: "c1", name: "Quality" }),
+              criterion: crit({
+                id: "cr1a",
+                competency_id: "c1",
+                name: "Quality",
+              }),
               indicators: [],
             },
             {
-              criterion: crit({ id: "cr1b", competency_id: "c1", name: "Velocity" }),
+              criterion: crit({
+                id: "cr1b",
+                competency_id: "c1",
+                name: "Velocity",
+              }),
               indicators: [],
             },
           ],
@@ -137,11 +150,19 @@ describe("renderSheet", () => {
           competency: comp({ id: "c2", name: "Leadership" }),
           criteria: [
             {
-              criterion: crit({ id: "cr2a", competency_id: "c2", name: "Mentoring" }),
+              criterion: crit({
+                id: "cr2a",
+                competency_id: "c2",
+                name: "Mentoring",
+              }),
               indicators: [],
             },
             {
-              criterion: crit({ id: "cr2b", competency_id: "c2", name: "Direction" }),
+              criterion: crit({
+                id: "cr2b",
+                competency_id: "c2",
+                name: "Direction",
+              }),
               indicators: [],
             },
           ],
@@ -173,9 +194,17 @@ describe("renderSheet", () => {
                 {
                   indicator: ind(),
                   evidence: [
-                    ev({ id: "e1", title: "PR #42", url: "https://example.com/42" }),
+                    ev({
+                      id: "e1",
+                      title: "PR #42",
+                      url: "https://example.com/42",
+                    }),
                     ev({ id: "e2", title: "Doc", url: null }),
-                    ev({ id: "e3", title: "Demo", url: "https://example.com/demo" }),
+                    ev({
+                      id: "e3",
+                      title: "Demo",
+                      url: "https://example.com/demo",
+                    }),
                   ],
                 },
               ],
@@ -186,7 +215,8 @@ describe("renderSheet", () => {
     };
     const out = renderSheet({ level: level(), tree, legend: LEGEND });
     const updateCells = out.reportBatchUpdate.requests.find(
-      (r): r is Extract<typeof r, { updateCells: unknown }> => "updateCells" in r,
+      (r): r is Extract<typeof r, { updateCells: unknown }> =>
+        "updateCells" in r,
     );
     if (!updateCells) throw new Error("no updateCells");
     // Find the indicator row (the one with a number in column C).
@@ -195,7 +225,9 @@ describe("renderSheet", () => {
     );
     if (!indicatorRow) throw new Error("no indicator row");
     const evidenceCell = indicatorRow.values[3];
-    expect(evidenceCell?.userEnteredValue.stringValue).toBe("PR #42, Doc, Demo");
+    expect(evidenceCell?.userEnteredValue.stringValue).toBe(
+      "PR #42, Doc, Demo",
+    );
     // Run map: "PR #42" link, reset before ", ", reset before ", Demo", Demo link.
     // Offsets index into "PR #42, Doc, Demo".
     expect(evidenceCell?.textFormatRuns).toEqual([
@@ -235,7 +267,10 @@ describe("renderSheet", () => {
             {
               criterion: crit({ id: "cr1", competency_id: "c1", target: 4 }),
               indicators: [
-                { indicator: ind({ id: "i1", criterion_id: "cr1", score: 2 }), evidence: [] },
+                {
+                  indicator: ind({ id: "i1", criterion_id: "cr1", score: 2 }),
+                  evidence: [],
+                },
               ],
             },
           ],
@@ -246,7 +281,10 @@ describe("renderSheet", () => {
             {
               criterion: crit({ id: "cr2", competency_id: "c2", target: 3 }),
               indicators: [
-                { indicator: ind({ id: "i2", criterion_id: "cr2", score: 3 }), evidence: [] },
+                {
+                  indicator: ind({ id: "i2", criterion_id: "cr2", score: 3 }),
+                  evidence: [],
+                },
               ],
             },
           ],
@@ -257,7 +295,8 @@ describe("renderSheet", () => {
     expect(out.chartSpec).toMatchSnapshot();
     // Wheel tab data (header + 2 competencies = 3 rows) — chart sources should
     // span exactly that range.
-    const sources = out.chartSpec.basicChart.domains[0]?.domain.sourceRange.sources;
+    const sources =
+      out.chartSpec.basicChart.domains[0]?.domain.sourceRange.sources;
     expect(sources?.[0]?.endRowIndex).toBe(3);
     expect(out.chartSpec.basicChart.series).toHaveLength(2);
     expect(out.chartSpec.basicChart.chartType).toBe("RADAR");
@@ -276,11 +315,19 @@ describe("renderSheet", () => {
                   indicator: ind({ id: "i1" }),
                   evidence: [
                     ev({ id: "e1", title: "live", url: null }),
-                    ev({ id: "e2", title: "gone", url: null, deleted_at: "2026-01-02T00:00:00Z" }),
+                    ev({
+                      id: "e2",
+                      title: "gone",
+                      url: null,
+                      deleted_at: "2026-01-02T00:00:00Z",
+                    }),
                   ],
                 },
                 {
-                  indicator: ind({ id: "i2", deleted_at: "2026-01-02T00:00:00Z" }),
+                  indicator: ind({
+                    id: "i2",
+                    deleted_at: "2026-01-02T00:00:00Z",
+                  }),
                   evidence: [],
                 },
               ],
@@ -309,7 +356,9 @@ describe("renderSheet", () => {
     const out = renderSheet({ level: level(), tree, legend: LEGEND });
     const stringValues = out.reportBatchUpdate.requests
       .flatMap((r) => ("updateCells" in r ? r.updateCells.rows : []))
-      .flatMap((row) => row.values.map((v) => v.userEnteredValue.stringValue ?? ""));
+      .flatMap((row) =>
+        row.values.map((v) => v.userEnteredValue.stringValue ?? ""),
+      );
     expect(stringValues).toContain("Live");
     expect(stringValues).not.toContain("Dead");
     expect(stringValues).not.toContain("DeadCriterion");
@@ -319,7 +368,9 @@ describe("renderSheet", () => {
     // Wheel tab should also skip the dead competency.
     const wheelStrings = out.wheelBatchUpdate.requests
       .flatMap((r) => ("updateCells" in r ? r.updateCells.rows : []))
-      .flatMap((row) => row.values.map((v) => v.userEnteredValue.stringValue ?? ""));
+      .flatMap((row) =>
+        row.values.map((v) => v.userEnteredValue.stringValue ?? ""),
+      );
     expect(wheelStrings).toContain("Live");
     expect(wheelStrings).not.toContain("Dead");
   });

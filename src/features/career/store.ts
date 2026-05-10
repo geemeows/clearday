@@ -7,7 +7,10 @@
 // drive it without the SDK; RLS gates access to the allowed user.
 
 import { cloneArchivedLevel } from "#/features/career/clone";
-import { SAMPLE_TEMPLATE, type SampleTemplate } from "#/features/career/sample-template";
+import {
+  SAMPLE_TEMPLATE,
+  type SampleTemplate,
+} from "#/features/career/sample-template";
 import type { SupabaseLike } from "#/shared/db";
 
 export type LevelStatus = "active" | "archived";
@@ -79,9 +82,7 @@ export async function createLevel(
   if (error) throw new Error(`career level create failed: ${error.message}`);
 }
 
-export async function listLevels(
-  client: SupabaseLike,
-): Promise<StoredLevel[]> {
+export async function listLevels(client: SupabaseLike): Promise<StoredLevel[]> {
   const { data, error } = await client
     .from("career_levels")
     .select("*")
@@ -100,7 +101,8 @@ export async function getActiveLevel(
     .eq("status", "active")
     .order("created_at", { ascending: false })
     .limit(1);
-  if (error) throw new Error(`career active level fetch failed: ${error.message}`);
+  if (error)
+    throw new Error(`career active level fetch failed: ${error.message}`);
   const rows = (data ?? []) as StoredLevel[];
   return rows[0] ?? null;
 }
@@ -242,7 +244,8 @@ export async function setCriterionTarget(
     .from("career_criteria")
     .update({ target })
     .eq("id", id);
-  if (error) throw new Error(`criterion target update failed: ${error.message}`);
+  if (error)
+    throw new Error(`criterion target update failed: ${error.message}`);
 }
 
 export async function setCriterionPosition(
@@ -699,10 +702,7 @@ function makeShareToken(): string {
   crypto.getRandomValues(buf);
   let bin = "";
   for (const b of buf) bin += String.fromCharCode(b);
-  return btoa(bin)
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=+$/, "");
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
 export async function createShareLink(
@@ -713,10 +713,7 @@ export async function createShareLink(
   const token = makeShareToken();
   const { error } = await client
     .from("career_shares")
-    .upsert(
-      { id, level_id: levelId, token },
-      { onConflict: "id" },
-    );
+    .upsert({ id, level_id: levelId, token }, { onConflict: "id" });
   if (error) throw new Error(`share link create failed: ${error.message}`);
   return {
     id,

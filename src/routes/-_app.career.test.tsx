@@ -1,6 +1,17 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  getActiveLevel,
+  listCompetencies,
+  listLevels,
+  type StoredCompetency,
+  type StoredCriterion,
+  type StoredEvidence,
+  type StoredIndicator,
+  type StoredLevel,
+  seedSampleTemplate,
+} from "#/features/career/store";
+import {
   AddCompetencyForm,
   AddCriterionForm,
   AddEvidenceForm,
@@ -13,17 +24,6 @@ import {
   IndicatorList,
   LevelHeader,
 } from "#/routes/_app.career";
-import {
-  getActiveLevel,
-  listCompetencies,
-  listLevels,
-  seedSampleTemplate,
-  type StoredCompetency,
-  type StoredCriterion,
-  type StoredEvidence,
-  type StoredIndicator,
-  type StoredLevel,
-} from "#/features/career/store";
 import type { SupabaseLike } from "#/shared/db";
 
 // CareerPage uses the bundled supabase client, while sub-component tests pass
@@ -36,7 +36,8 @@ vi.mock("#/lib/supabase", () => ({
 }));
 
 vi.mock("#/features/career/store", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("#/features/career/store")>();
+  const actual =
+    await importOriginal<typeof import("#/features/career/store")>();
   return {
     ...actual,
     listLevels: vi.fn(actual.listLevels),
@@ -63,9 +64,9 @@ function level(overrides: Partial<StoredLevel> = {}): StoredLevel {
 describe("CareerPage first-run seed", () => {
   let originalListCompetencies: typeof listCompetencies;
   beforeEach(async () => {
-    const actual = await vi.importActual<typeof import("#/features/career/store")>(
-      "#/features/career/store",
-    );
+    const actual = await vi.importActual<
+      typeof import("#/features/career/store")
+    >("#/features/career/store");
     originalListCompetencies = actual.listCompetencies;
     vi.mocked(listLevels).mockReset();
     vi.mocked(getActiveLevel).mockReset();
@@ -152,9 +153,7 @@ describe("CareerOnboardingView", () => {
   it("renders the level title input and create button", () => {
     render(<CareerOnboardingView onCreateLevel={vi.fn()} />);
     expect(screen.getByLabelText("Level name")).toBeTruthy();
-    expect(
-      screen.getByRole("button", { name: /create level/i }),
-    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: /create level/i })).toBeTruthy();
   });
 
   it("calls onCreateLevel with the trimmed title on submit", async () => {
@@ -162,12 +161,8 @@ describe("CareerOnboardingView", () => {
     render(<CareerOnboardingView onCreateLevel={onCreateLevel} />);
     const input = screen.getByLabelText("Level name") as HTMLInputElement;
     fireEvent.change(input, { target: { value: "  L5  " } });
-    fireEvent.click(
-      screen.getByRole("button", { name: /create level/i }),
-    );
-    await waitFor(() =>
-      expect(onCreateLevel).toHaveBeenCalledWith("L5"),
-    );
+    fireEvent.click(screen.getByRole("button", { name: /create level/i }));
+    await waitFor(() => expect(onCreateLevel).toHaveBeenCalledWith("L5"));
   });
 
   it("disables the create button when title is empty", () => {
@@ -182,7 +177,9 @@ describe("CareerOnboardingView", () => {
 
   it("does not render the archived levels panel when there are none", () => {
     render(<CareerOnboardingView onCreateLevel={vi.fn()} />);
-    expect(screen.queryByRole("region", { name: "Archived levels" })).toBeNull();
+    expect(
+      screen.queryByRole("region", { name: "Archived levels" }),
+    ).toBeNull();
   });
 
   it("renders archived levels and triggers onCloneArchived with id + title", () => {
@@ -202,7 +199,9 @@ describe("CareerOnboardingView", () => {
         onCloneArchived={onCloneArchived}
       />,
     );
-    expect(screen.getByRole("region", { name: "Archived levels" })).toBeTruthy();
+    expect(
+      screen.getByRole("region", { name: "Archived levels" }),
+    ).toBeTruthy();
     fireEvent.click(
       screen.getByRole("button", {
         name: /clone old l4 as starting template/i,
@@ -475,7 +474,9 @@ function makeFakeClient(
           };
         }
         if (table === "project_cards") {
-          const stripped = (ilikePattern ?? "").replace(/^%|%$/g, "").toLowerCase();
+          const stripped = (ilikePattern ?? "")
+            .replace(/^%|%$/g, "")
+            .toLowerCase();
           return {
             data: cardRowsRef.current.filter((c) =>
               !stripped ? true : c.title.toLowerCase().includes(stripped),
@@ -665,9 +666,7 @@ describe("CareerLevelView", () => {
     });
     const arg = store.update.mock.calls[0]?.[0] as Record<string, unknown>;
     expect(typeof arg.deleted_at).toBe("string");
-    await waitFor(() =>
-      expect(screen.queryByDisplayValue("Craft")).toBeNull(),
-    );
+    await waitFor(() => expect(screen.queryByDisplayValue("Craft")).toBeNull());
   });
 
   it("does not delete when the user cancels the confirm prompt", async () => {
@@ -779,9 +778,7 @@ describe("AddCompetencyForm", () => {
   });
 });
 
-function criterion(
-  overrides: Partial<StoredCriterion> = {},
-): StoredCriterion {
+function criterion(overrides: Partial<StoredCriterion> = {}): StoredCriterion {
   return {
     id: "cr1",
     competency_id: "c1",
@@ -863,9 +860,7 @@ describe("CriteriaList", () => {
     );
     const input = await screen.findByLabelText("New criterion name");
     fireEvent.change(input, { target: { value: "  Review depth  " } });
-    fireEvent.click(
-      screen.getByRole("button", { name: /add criterion/i }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: /add criterion/i }));
     await waitFor(() =>
       expect(screen.getByDisplayValue("Review depth")).toBeTruthy(),
     );
@@ -969,9 +964,7 @@ describe("CriteriaList", () => {
       name: /delete criterion review depth/i,
     });
     fireEvent.click(deleteBtn);
-    await waitFor(() =>
-      expect(store.updateCrit).toHaveBeenCalledTimes(1),
-    );
+    await waitFor(() => expect(store.updateCrit).toHaveBeenCalledTimes(1));
     const arg = store.updateCrit.mock.calls[0]?.[0] as Record<string, unknown>;
     expect(typeof arg.deleted_at).toBe("string");
     await waitFor(() =>
@@ -1022,9 +1015,7 @@ describe("AddCriterionForm", () => {
   });
 });
 
-function indicator(
-  overrides: Partial<StoredIndicator> = {},
-): StoredIndicator {
+function indicator(overrides: Partial<StoredIndicator> = {}): StoredIndicator {
   return {
     id: "i1",
     criterion_id: "cr1",
@@ -1053,7 +1044,11 @@ describe("IndicatorList", () => {
       [],
       [],
       [
-        indicator({ id: "i1", criterion_id: "cr1", description: "Reviews PRs" }),
+        indicator({
+          id: "i1",
+          criterion_id: "cr1",
+          description: "Reviews PRs",
+        }),
         indicator({
           id: "i2",
           criterion_id: "cr1",
@@ -1089,9 +1084,7 @@ describe("IndicatorList", () => {
         client={client}
       />,
     );
-    await waitFor(() =>
-      expect(screen.getByDisplayValue("A1")).toBeTruthy(),
-    );
+    await waitFor(() => expect(screen.getByDisplayValue("A1")).toBeTruthy());
     expect(screen.queryByDisplayValue("B1")).toBeNull();
   });
 
@@ -1283,9 +1276,7 @@ describe("AddIndicatorForm", () => {
   });
 });
 
-function evidenceRow(
-  overrides: Partial<StoredEvidence> = {},
-): StoredEvidence {
+function evidenceRow(overrides: Partial<StoredEvidence> = {}): StoredEvidence {
   return {
     id: "e1",
     indicator_id: "i1",
@@ -1359,9 +1350,7 @@ describe("EvidenceList", () => {
       ],
     );
     render(<EvidenceList indicator={indicatorFixture()} client={client} />);
-    await waitFor(() =>
-      expect(screen.getByDisplayValue("Mine")).toBeTruthy(),
-    );
+    await waitFor(() => expect(screen.getByDisplayValue("Mine")).toBeTruthy());
     expect(screen.queryByDisplayValue("Other")).toBeNull();
   });
 
@@ -1449,7 +1438,9 @@ describe("EvidenceList", () => {
       "Search project cards for Postmortem",
     )) as HTMLInputElement;
     fireEvent.change(search, { target: { value: "launch" } });
-    const result = await screen.findByRole("button", { name: /Q4 launch retro/i });
+    const result = await screen.findByRole("button", {
+      name: /Q4 launch retro/i,
+    });
     fireEvent.click(result);
     await waitFor(() =>
       expect(store.updateEv).toHaveBeenCalledWith({ card_id: "card-1" }),

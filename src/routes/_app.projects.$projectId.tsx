@@ -1,13 +1,26 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router";
+import {
+  Calendar,
+  ChevronDown,
+  ChevronUp,
+  Plus,
+  Settings,
+  Trash2,
+  X,
+} from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { z } from "zod";
-import { Calendar, ChevronDown, Plus, Settings, X, ChevronUp, Trash2 } from "lucide-react";
-import { useRef, useEffect, useState } from "react";
 import { CardDetailPane } from "#/features/projects/CardDetailPane";
 import {
+  formatGithubKey,
+  githubKeyUrl,
+  parseGithubLink,
+} from "#/features/projects/links/github";
+import {
   moveBetweenColumns,
+  type OrderableCard,
   reorderColumns,
   reorderWithinColumn,
-  type OrderableCard,
 } from "#/features/projects/order";
 import {
   type CardPatch,
@@ -30,11 +43,6 @@ import {
   updateColumn,
   updateTicketMeta,
 } from "#/features/projects/store";
-import {
-  formatGithubKey,
-  githubKeyUrl,
-  parseGithubLink,
-} from "#/features/projects/links/github";
 import { apiFetch } from "#/lib/api-client";
 import { supabase } from "#/lib/supabase";
 import type { SupabaseLike } from "#/shared/db";
@@ -262,7 +270,10 @@ function ProjectBoardPage() {
     }
   };
 
-  const handleReorderColumns = async (movedId: string, afterId: string | null) => {
+  const handleReorderColumns = async (
+    movedId: string,
+    afterId: string | null,
+  ) => {
     const orderable = columns.map((c) => ({ id: c.id, order: c.order }));
     const reordered = reorderColumns(orderable, movedId, afterId);
     const prev = columns;
@@ -285,13 +296,14 @@ function ProjectBoardPage() {
   const handleLinkGithub = async (
     cardId: string,
     input: string,
-  ): Promise<{ error?: string } | void> => {
+  ): Promise<{ error?: string } | undefined> => {
     const key = parseGithubLink(input);
     if (!key) return { error: "not a GitHub URL or owner/repo#N" };
     const extId = formatGithubKey(key);
     if (
       tickets.some(
-        (t) => t.card_id === cardId && t.source === "github" && t.ext_id === extId,
+        (t) =>
+          t.card_id === cardId && t.source === "github" && t.ext_id === extId,
       )
     ) {
       return { error: "already linked" };
@@ -332,7 +344,7 @@ function ProjectBoardPage() {
   ) => {
     const ticket = keyOverride
       ? null
-      : tickets.find((t) => t.id === ticketId) ?? null;
+      : (tickets.find((t) => t.id === ticketId) ?? null);
     let key = keyOverride;
     if (!key && ticket) {
       const parsed = parseGithubLink(`${ticket.ext_id}`);
@@ -352,7 +364,11 @@ function ProjectBoardPage() {
       })) as
         | {
             ok: true;
-            meta: { status: string; assignee: string | null; last_seen_at: string };
+            meta: {
+              status: string;
+              assignee: string | null;
+              last_seen_at: string;
+            };
           }
         | { ok: false; reason: string; error: string };
       if (out.ok) {
@@ -472,7 +488,7 @@ export function ProjectBoardView({
   onLinkGithub?: (
     cardId: string,
     input: string,
-  ) => Promise<{ error?: string } | void>;
+  ) => Promise<{ error?: string } | undefined>;
   onUnlinkTicket?: (ticketId: string) => void;
   onRefreshTicket?: (ticketId: string) => void;
   onNavigateToProject?: (id: string) => void;
@@ -596,10 +612,7 @@ export function ProjectBoardView({
       )}
 
       {loading && !error && (
-        <p
-          aria-busy="true"
-          className="px-6 pt-4 text-muted-foreground text-sm"
-        >
+        <p aria-busy="true" className="px-6 pt-4 text-muted-foreground text-sm">
           Loading…
         </p>
       )}
@@ -682,8 +695,8 @@ function ColumnSettingsPanel({
   onClose: () => void;
 }) {
   const sorted = [...columns].sort((a, b) => a.order - b.order);
-  const [draftNames, setDraftNames] = useState<Record<string, string>>(
-    () => Object.fromEntries(columns.map((c) => [c.id, c.name])),
+  const [draftNames, setDraftNames] = useState<Record<string, string>>(() =>
+    Object.fromEntries(columns.map((c) => [c.id, c.name])),
   );
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [newColName, setNewColName] = useState("");
@@ -751,7 +764,9 @@ function ColumnSettingsPanel({
 
         <div className="flex flex-1 flex-col gap-2 overflow-y-auto px-4 py-3">
           {sorted.map((col, idx) => {
-            const cardCount = cards.filter((c) => c.column_id === col.id).length;
+            const cardCount = cards.filter(
+              (c) => c.column_id === col.id,
+            ).length;
             const isLast = sorted.length === 1;
             const isDeleting = deleteConfirmId === col.id;
 
@@ -797,7 +812,10 @@ function ColumnSettingsPanel({
                       if (trimmed && trimmed !== col.name) {
                         onRename(col.id, trimmed);
                       } else if (!trimmed) {
-                        setDraftNames((prev) => ({ ...prev, [col.id]: col.name }));
+                        setDraftNames((prev) => ({
+                          ...prev,
+                          [col.id]: col.name,
+                        }));
                       }
                     }}
                     className="min-w-0 flex-1 rounded border border-transparent bg-transparent px-1.5 py-0.5 text-foreground text-sm outline-none focus:border-border focus:bg-muted"
@@ -809,7 +827,11 @@ function ColumnSettingsPanel({
                         ? "Cannot delete the only column"
                         : `Delete column ${col.name}`
                     }
-                    title={isLast ? "Projects must have at least one column" : undefined}
+                    title={
+                      isLast
+                        ? "Projects must have at least one column"
+                        : undefined
+                    }
                     disabled={isLast}
                     onClick={() =>
                       setDeleteConfirmId(isDeleting ? null : col.id)
@@ -838,7 +860,9 @@ function ColumnSettingsPanel({
                       const val = e.target.value;
                       onSetWipLimit(
                         col.id,
-                        val === "" ? null : Math.max(1, Number.parseInt(val, 10)),
+                        val === ""
+                          ? null
+                          : Math.max(1, Number.parseInt(val, 10)),
                       );
                     }}
                     className="w-20 rounded border border-border bg-muted px-2 py-0.5 text-right text-foreground text-xs outline-none focus:border-primary"
@@ -967,8 +991,7 @@ function KanbanColumn({
     setComposing(false);
   };
 
-  const wipOver =
-    column.wip_limit != null && cards.length > column.wip_limit;
+  const wipOver = column.wip_limit != null && cards.length > column.wip_limit;
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
@@ -1001,9 +1024,7 @@ function KanbanColumn({
       .sort((a, b) => a.order - b.order);
     // Place at the bottom of the target column.
     const afterId =
-      targetCards.length > 0
-        ? targetCards[targetCards.length - 1].id
-        : null;
+      targetCards.length > 0 ? targetCards[targetCards.length - 1].id : null;
     onMoveCard?.(cardId, targetCol.id, afterId);
   };
 

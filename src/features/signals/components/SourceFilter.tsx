@@ -10,8 +10,8 @@
 
 import { useState } from "react";
 import { providerSourceKind } from "#/features/integrations/display";
-import { SourceGlyph } from "#/features/signals/components/SourceGlyph";
 import type { ProviderAccountStatus } from "#/features/integrations/provider-account-status";
+import { SourceGlyph } from "#/features/signals/components/SourceGlyph";
 import type { SignalProvider } from "#/shared/signal";
 
 export type SourceAccount = {
@@ -80,7 +80,7 @@ export function SourceFilter({
         const expandable = p.accounts.length >= 2;
         const expanded = openProvider === p.provider;
         const selectedAccount = accountActive
-          ? p.accounts.find((a) => a.id === value.accountId) ?? null
+          ? (p.accounts.find((a) => a.id === value.accountId) ?? null)
           : null;
         return (
           <div key={p.provider} className="relative inline-flex items-center">
@@ -104,9 +104,7 @@ export function SourceFilter({
               <SourceGlyph source={providerSourceKind(p.provider)} size={14} />
               <span>
                 {p.label}
-                {selectedAccount && selectedAccount.handle
-                  ? ` · ${selectedAccount.handle}`
-                  : ""}
+                {selectedAccount?.handle ? ` · ${selectedAccount.handle}` : ""}
               </span>
             </button>
             {expandable && (
@@ -130,7 +128,6 @@ export function SourceFilter({
             )}
             {expandable && expanded && (
               <ul
-                role="menu"
                 data-slot="source-filter-menu"
                 data-provider={p.provider}
                 className="absolute left-0 top-full z-10 mt-1 min-w-[200px] overflow-hidden rounded-lg shadow-md"

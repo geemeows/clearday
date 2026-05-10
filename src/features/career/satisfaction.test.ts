@@ -98,9 +98,7 @@ describe("computeSatisfaction", () => {
 
   it("falls back to {1,1} for empty competencies", () => {
     const tree: LevelTree = {
-      competencies: [
-        { competency: comp({ id: "c1" }), criteria: [] },
-      ],
+      competencies: [{ competency: comp({ id: "c1" }), criteria: [] }],
     };
     const { perCompetency, perCriterion } = computeSatisfaction(tree);
     expect(perCompetency.get("c1")).toEqual({ current: 1, target: 1 });

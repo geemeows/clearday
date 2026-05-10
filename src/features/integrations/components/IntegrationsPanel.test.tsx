@@ -156,9 +156,7 @@ describe("IntegrationsPanel", () => {
         now={NOW}
       />,
     );
-    fireEvent.click(
-      screen.getByRole("button", { name: "Add GitHub account" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Add GitHub account" }));
     await waitFor(() => {
       expect(connectUrl).toHaveBeenCalled();
       expect(openUrl).toHaveBeenCalledWith(
@@ -313,10 +311,7 @@ describe("IntegrationsPanel", () => {
   it("week-start setting renders inside the Calendar card and persists to localStorage + dispatches devy:weekStartChanged", () => {
     const loader = loaderWith([]);
     const handler = vi.fn();
-    window.addEventListener(
-      "devy:weekStartChanged",
-      handler as EventListener,
-    );
+    window.addEventListener("devy:weekStartChanged", handler as EventListener);
 
     render(
       <IntegrationsPanel

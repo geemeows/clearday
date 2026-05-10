@@ -65,10 +65,7 @@ export function AccountPicker({
   const selected = accounts.find((a) => a.id === value) ?? accounts[0];
   const unhealthy = selected ? UNHEALTHY.has(selected.status) : false;
   return (
-    <div
-      aria-label={label ?? `${providerId} account picker`}
-      className="inline-flex items-center gap-2 text-xs"
-    >
+    <div className="inline-flex items-center gap-2 text-xs">
       <span
         aria-hidden="true"
         data-account-status={selected?.status ?? "neutral"}

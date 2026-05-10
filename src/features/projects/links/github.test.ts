@@ -20,21 +20,25 @@ function jsonResponse(status: number, body: unknown): Response {
 
 describe("parseGithubLink", () => {
   it("parses an https PR URL", () => {
-    expect(parseGithubLink("https://github.com/octocat/Hello-World/pull/42")).toEqual(
-      { owner: "octocat", repo: "Hello-World", number: 42 },
-    );
+    expect(
+      parseGithubLink("https://github.com/octocat/Hello-World/pull/42"),
+    ).toEqual({ owner: "octocat", repo: "Hello-World", number: 42 });
   });
 
   it("parses an https issue URL", () => {
-    expect(
-      parseGithubLink("https://github.com/octo/repo/issues/7"),
-    ).toEqual({ owner: "octo", repo: "repo", number: 7 });
+    expect(parseGithubLink("https://github.com/octo/repo/issues/7")).toEqual({
+      owner: "octo",
+      repo: "repo",
+      number: 7,
+    });
   });
 
   it("parses a git ssh PR URL", () => {
-    expect(
-      parseGithubLink("git@github.com:octo/repo/pull/3"),
-    ).toEqual({ owner: "octo", repo: "repo", number: 3 });
+    expect(parseGithubLink("git@github.com:octo/repo/pull/3")).toEqual({
+      owner: "octo",
+      repo: "repo",
+      number: 3,
+    });
   });
 
   it("parses owner/repo#N shorthand", () => {
@@ -46,7 +50,9 @@ describe("parseGithubLink", () => {
   });
 
   it("rejects unrelated URLs", () => {
-    expect(parseGithubLink("https://gitlab.com/x/y/-/merge_requests/1")).toBeNull();
+    expect(
+      parseGithubLink("https://gitlab.com/x/y/-/merge_requests/1"),
+    ).toBeNull();
   });
 
   it("rejects malformed input", () => {
@@ -103,7 +109,9 @@ describe("fetchGithubTicketMeta", () => {
   });
 
   it("returns no_token + needs_reauth when token is missing", async () => {
-    const fn = vi.fn(async () => jsonResponse(200, {})) as unknown as typeof fetch;
+    const fn = vi.fn(async () =>
+      jsonResponse(200, {}),
+    ) as unknown as typeof fetch;
     const out = await fetchGithubTicketMeta(
       { owner: "o", repo: "r", number: 1 },
       { token: null, fetch: fn },
@@ -143,10 +151,7 @@ describe("fetchGithubTicketMeta", () => {
   });
 
   it("source contains no write-side endpoints (no POST/PATCH/PUT/DELETE to api.github.com)", () => {
-    const src = readFileSync(
-      resolve(__dirname, "github.ts"),
-      "utf8",
-    );
+    const src = readFileSync(resolve(__dirname, "github.ts"), "utf8");
     expect(src).not.toMatch(/method:\s*"(POST|PATCH|PUT|DELETE)"/i);
   });
 });

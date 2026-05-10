@@ -8,12 +8,7 @@
 // stay stable across CI zones (TZ=UTC in CI).
 
 import type { LinkedItem, StoredSignal } from "#/shared/signal";
-import type {
-  Conflict,
-  DayBucket,
-  MeetingEvent,
-  MonthCell,
-} from "./types";
+import type { Conflict, DayBucket, MeetingEvent, MonthCell } from "./types";
 
 export type { Conflict, DayBucket, MeetingEvent, MonthCell };
 

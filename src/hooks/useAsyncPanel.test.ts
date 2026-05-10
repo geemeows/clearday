@@ -105,7 +105,9 @@ describe("useAsyncPanel", () => {
     await act(async () => {
       result.current.persist({ a: 2 });
     });
-    await waitFor(() => expect(result.current.error?.message).toBe("first-fail"));
+    await waitFor(() =>
+      expect(result.current.error?.message).toBe("first-fail"),
+    );
 
     await act(async () => {
       result.current.persist({ a: 3 });
@@ -190,7 +192,9 @@ describe("useAsyncPanel", () => {
     const save = vi.fn(async () => {});
 
     const { result } = renderHook(() => useAsyncPanel({ load, save }));
-    await waitFor(() => expect(result.current.error?.message).toBe("fail-load"));
+    await waitFor(() =>
+      expect(result.current.error?.message).toBe("fail-load"),
+    );
 
     act(() => {
       result.current.reload();
@@ -202,7 +206,10 @@ describe("useAsyncPanel", () => {
 
   it("is StrictMode-safe: only the latest load wins", async () => {
     let calls = 0;
-    const responses = [{ a: 1, b: "first" }, { a: 2, b: "second" }];
+    const responses = [
+      { a: 1, b: "first" },
+      { a: 2, b: "second" },
+    ];
     const load = vi.fn(async () => {
       const i = calls++;
       return responses[Math.min(i, responses.length - 1)] as Settings;

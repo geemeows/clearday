@@ -9,9 +9,9 @@ import {
 } from "#/features/calendar/events";
 import {
   type ConflictPair,
-  detectConflicts,
   dayLabel,
   dayLongLabel,
+  detectConflicts,
   fmtHour,
   fmtMinutes,
   layoutLanes,
@@ -783,4 +783,3 @@ function kindClass(kind: EventKind): string {
   if (kind === "break") return "bg-secondary text-foreground";
   return "bg-primary text-primary-foreground";
 }
-

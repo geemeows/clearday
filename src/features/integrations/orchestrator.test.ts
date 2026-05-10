@@ -539,7 +539,7 @@ describe("runScheduledPoll", () => {
       }
       if (url.includes("conversations.history")) {
         const m = url.match(/channel=([^&]+)/);
-        const ch = m ? decodeURIComponent(m[1]!) : "";
+        const ch = m?.[1] ? decodeURIComponent(m[1]) : "";
         const messages =
           ch === "D1"
             ? [

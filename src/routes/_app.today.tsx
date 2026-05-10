@@ -9,11 +9,12 @@ import {
 } from "react";
 import { Button as CossButton } from "#/components/coss/button";
 import type { BriefingResult } from "#/features/briefing/morning-briefing";
+import type { MeetingEvent } from "#/features/calendar/events";
+import { type DueCard, listCardsDueOn } from "#/features/projects/store";
 import type { ProfileView } from "#/features/settings/profile/api";
 import { InboxPreviewRow } from "#/features/signals/components/InboxPreviewRow";
 import { SourceGlyph } from "#/features/signals/components/SourceGlyph";
 import { daysInProgress, prRefOf } from "#/features/signals/display";
-import type { MeetingEvent } from "#/features/calendar/events";
 import {
   filterMeetingsToToday,
   pickInboxPreview,
@@ -27,13 +28,9 @@ import { PulseCard } from "#/features/today/PulseCard";
 import { useAutoRefresh } from "#/hooks/use-auto-refresh";
 import { useDismissedAlerts } from "#/hooks/useDismissedAlerts";
 import { apiFetch } from "#/lib/api-client";
-import type { StoredSignal } from "#/shared/signal";
-import {
-  listCardsDueOn,
-  type DueCard,
-} from "#/features/projects/store";
 import { supabase } from "#/lib/supabase";
 import type { SupabaseLike } from "#/shared/db";
+import type { StoredSignal } from "#/shared/signal";
 
 export const Route = createFileRoute("/_app/today")({
   component: TodayPage,
@@ -861,7 +858,7 @@ export function DueTodayCard({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loader]);
+  }, [loader, now]);
 
   if (!error && cards != null && cards.length === 0) return null;
 
@@ -1013,4 +1010,3 @@ export function InProgressCard({
     </article>
   );
 }
-

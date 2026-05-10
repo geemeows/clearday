@@ -112,9 +112,7 @@ describe("NavigationSidebar — Projects section", () => {
   it("renders the Projects toggle button", () => {
     renderSidebar();
     const nav = screen.getByRole("navigation", { name: /projects/i });
-    expect(
-      within(nav).getByRole("button", { name: /projects/i }),
-    ).toBeTruthy();
+    expect(within(nav).getByRole("button", { name: /projects/i })).toBeTruthy();
   });
 
   it("hides the project list when projectsOpen is false", () => {
@@ -180,8 +178,6 @@ describe("NavigationSidebar — Projects section", () => {
 
   it("shows the New project button when projects list is expanded", () => {
     renderSidebar({ projectsOpen: true });
-    expect(
-      screen.getByRole("button", { name: /new project/i }),
-    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: /new project/i })).toBeTruthy();
   });
 });

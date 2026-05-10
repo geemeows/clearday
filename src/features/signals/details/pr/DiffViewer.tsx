@@ -5,10 +5,10 @@ import { cn } from "#/lib/cn";
 import {
   defaultPrFilesLoader,
   Markdown,
-  parsePatch,
   type PrFile,
   type PrFilesLoader,
   type PrReviewComment,
+  parsePatch,
   type ReviewDraft,
   type ReviewDraftSide,
   reviewDraftKey,

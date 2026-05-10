@@ -8,6 +8,7 @@ export function Label({
   ...props
 }: React.ComponentProps<"label">): React.ReactElement {
   return (
+    // biome-ignore lint/a11y/noLabelWithoutControl: this is a generic Label primitive — consumers attach htmlFor or wrap an input/control.
     <label
       data-slot="label"
       className={cn(

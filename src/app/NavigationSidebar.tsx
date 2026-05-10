@@ -2,7 +2,13 @@
 // props — no fetches, no router lookups inside. The parent (AppShell) wires
 // hooks and route navigation; this module just renders.
 
-import { ChevronRight, Kanban, Plus, Settings as SettingsIcon, Target } from "lucide-react";
+import {
+  ChevronRight,
+  Kanban,
+  Plus,
+  Settings as SettingsIcon,
+  Target,
+} from "lucide-react";
 import type { ReactNode } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "#/components/coss/avatar";
 import { Button } from "#/components/coss/button";
@@ -143,7 +149,9 @@ export function NavigationSidebar({
           className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent"
         >
           <Kanban className="h-4 w-4 shrink-0 text-muted-foreground" />
-          <span className="flex-1 text-left font-normal text-foreground">Projects</span>
+          <span className="flex-1 text-left font-normal text-foreground">
+            Projects
+          </span>
           <ChevronRight
             className={cn(
               "h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-150",

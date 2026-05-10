@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  POSITION_STEP,
-  reorderWithinParent,
-} from "#/features/career/order";
+import { POSITION_STEP, reorderWithinParent } from "#/features/career/order";
 
 type Item = { id: string; position: number };
 

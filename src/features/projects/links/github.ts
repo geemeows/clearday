@@ -20,9 +20,7 @@ export function parseGithubLink(input: string): GithubLinkKey | null {
   if (!raw) return null;
 
   // Shorthand: owner/repo#N
-  const shorthand = raw.match(
-    /^([A-Za-z0-9._-]+)\/([A-Za-z0-9._-]+)#(\d+)$/,
-  );
+  const shorthand = raw.match(/^([A-Za-z0-9._-]+)\/([A-Za-z0-9._-]+)#(\d+)$/);
   if (shorthand) {
     return {
       owner: shorthand[1],
@@ -82,13 +80,24 @@ export type FetchGithubTicketDeps = {
 
 export type FetchGithubTicketResult =
   | { ok: true; meta: GithubTicketMeta }
-  | { ok: false; reason: "no_token" | "invalid_repo" | "api_error"; error: string; needs_reauth?: boolean };
+  | {
+      ok: false;
+      reason: "no_token" | "invalid_repo" | "api_error";
+      error: string;
+      needs_reauth?: boolean;
+    };
 
 export async function fetchGithubTicketMeta(
   key: GithubLinkKey,
   deps: FetchGithubTicketDeps,
 ): Promise<FetchGithubTicketResult> {
-  if (!key || !key.owner || !key.repo || !Number.isInteger(key.number) || key.number <= 0) {
+  if (
+    !key ||
+    !key.owner ||
+    !key.repo ||
+    !Number.isInteger(key.number) ||
+    key.number <= 0
+  ) {
     return { ok: false, reason: "invalid_repo", error: "invalid key" };
   }
   if (!deps.token) {
@@ -148,7 +157,8 @@ export async function fetchGithubTicketMeta(
     typeof body?.state_reason === "string"
       ? (body.state_reason as string)
       : null;
-  const merged = (body?.pull_request as { merged_at?: string } | undefined)?.merged_at;
+  const merged = (body?.pull_request as { merged_at?: string } | undefined)
+    ?.merged_at;
   const status = isPr
     ? merged
       ? "merged"

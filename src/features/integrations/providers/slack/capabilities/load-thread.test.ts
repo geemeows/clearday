@@ -21,7 +21,7 @@ describe("loadSlackThread", () => {
       }
       if (url.includes("users.info")) {
         const m = url.match(/user=([^&]+)/);
-        const id = m ? decodeURIComponent(m[1]!) : "";
+        const id = m?.[1] ? decodeURIComponent(m[1]) : "";
         const name = id === "U001SELF" ? "geemeows" : "Other Person";
         return jsonResponse({
           ok: true,

@@ -10,7 +10,12 @@ import {
 import type { MeetingEvent, WeekEvent } from "#/features/calendar/types";
 import type { StoredSignal } from "#/shared/signal";
 
-const ev = (id: string, day: number, start: number, end: number): WeekEvent => ({
+const ev = (
+  id: string,
+  day: number,
+  start: number,
+  end: number,
+): WeekEvent => ({
   id,
   day,
   start,

@@ -41,10 +41,7 @@ export function UserAvatar({
   size?: Size;
   className?: string;
   title?: string;
-} & Omit<
-  React.HTMLAttributes<HTMLSpanElement>,
-  "title"
->): React.ReactElement {
+} & Omit<React.HTMLAttributes<HTMLSpanElement>, "title">): React.ReactElement {
   const px = SIZE_PX[size];
   const fontSize = FONT_PX[size];
   const background = tint ?? hashTint(name);

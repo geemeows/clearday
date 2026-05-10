@@ -41,7 +41,11 @@ export type FocusDeps = {
 
 export type ProviderOutcome =
   | { ok: true }
-  | { ok: false; error: string; reason?: "no_token" | "auth_failed" | "api_error" };
+  | {
+      ok: false;
+      error: string;
+      reason?: "no_token" | "auth_failed" | "api_error";
+    };
 
 export type SlackAccountOutcome = {
   accountId: string;
@@ -267,7 +271,8 @@ async function slackOutcome(
   label: string,
 ): Promise<ProviderOutcome> {
   if (!res.ok) {
-    const reason = res.status === 401 || res.status === 403 ? "auth_failed" : "api_error";
+    const reason =
+      res.status === 401 || res.status === 403 ? "auth_failed" : "api_error";
     return {
       ok: false,
       error: `${label} HTTP ${res.status}`,

@@ -28,11 +28,9 @@ export function reorderWithinColumn(
           return idx === -1 ? rest.length : idx + 1;
         })();
 
-  return [
-    ...rest.slice(0, insertAt),
-    moved,
-    ...rest.slice(insertAt),
-  ].map((c, i) => ({ ...c, order: i }));
+  return [...rest.slice(0, insertAt), moved, ...rest.slice(insertAt)].map(
+    (c, i) => ({ ...c, order: i }),
+  );
 }
 
 // Move a card to a different column, inserting it after afterId (null = top).
@@ -102,9 +100,7 @@ export function reorderColumns(
           return idx === -1 ? rest.length : idx + 1;
         })();
 
-  return [
-    ...rest.slice(0, insertAt),
-    moved,
-    ...rest.slice(insertAt),
-  ].map((c, i) => ({ ...c, order: i }));
+  return [...rest.slice(0, insertAt), moved, ...rest.slice(insertAt)].map(
+    (c, i) => ({ ...c, order: i }),
+  );
 }

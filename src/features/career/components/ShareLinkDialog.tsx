@@ -21,8 +21,7 @@ import type { SupabaseLike } from "#/shared/db";
 
 export function shareUrlFor(token: string, origin?: string): string {
   const base =
-    origin ??
-    (typeof window !== "undefined" ? window.location.origin : "");
+    origin ?? (typeof window !== "undefined" ? window.location.origin : "");
   return `${base}/share/career/${token}`;
 }
 

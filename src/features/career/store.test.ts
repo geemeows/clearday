@@ -2,32 +2,37 @@ import { describe, expect, it, vi } from "vitest";
 import {
   cloneArchivedLevelAsActive,
   createCompetency,
-  createShareLink,
-  getShareLinks,
-  readSharedLevel,
-  revokeShareLink,
   createCriterion,
   createEvidence,
   createIndicator,
   createLevel,
+  createShareLink,
   getActiveLevel,
   getLevelTree,
   getScaleLegend,
+  getShareLinks,
   listCompetencies,
   listCriteria,
   listEvidence,
   listIndicators,
   listLevels,
+  readSharedLevel,
   renameCompetency,
   renameCriterion,
   renameIndicator,
+  revokeShareLink,
+  type StoredCompetency,
+  type StoredCriterion,
+  type StoredEvidence,
+  type StoredIndicator,
+  type StoredLevel,
   searchProjectCards,
+  seedSampleTemplate,
   setCompetencyPosition,
   setCriterionPosition,
   setCriterionTarget,
   setEvidencePosition,
   setIndicatorPosition,
-  seedSampleTemplate,
   setIndicatorScore,
   setLevelHeader,
   setScaleLegend,
@@ -35,21 +40,18 @@ import {
   softDeleteCriterion,
   softDeleteEvidence,
   softDeleteIndicator,
-  type StoredCompetency,
-  type StoredCriterion,
-  type StoredEvidence,
-  type StoredIndicator,
-  type StoredLevel,
   updateEvidence,
 } from "#/features/career/store";
 import type { SupabaseLike } from "#/shared/db";
 
-function makeClient(overrides: {
-  upsertResult?: { error: { message: string } | null };
-  listData?: Record<string, unknown>[];
-  listError?: { message: string } | null;
-  updateResult?: { error: { message: string } | null };
-} = {}): {
+function makeClient(
+  overrides: {
+    upsertResult?: { error: { message: string } | null };
+    listData?: Record<string, unknown>[];
+    listError?: { message: string } | null;
+    updateResult?: { error: { message: string } | null };
+  } = {},
+): {
   client: SupabaseLike;
   spies: {
     upsert: ReturnType<typeof vi.fn>;
@@ -82,9 +84,7 @@ function makeClient(overrides: {
   };
   const select = vi.fn(() => chain);
   const upsert = vi.fn(async () => overrides.upsertResult ?? { error: null });
-  const updateEq = vi.fn(
-    async () => overrides.updateResult ?? { error: null },
-  );
+  const updateEq = vi.fn(async () => overrides.updateResult ?? { error: null });
   const update = vi.fn(() => ({ eq: updateEq }));
   const client: SupabaseLike = {
     from: () => ({
@@ -139,7 +139,9 @@ describe("listLevels", () => {
     const row = level();
     const { client, spies } = makeClient({ listData: [row] });
     const result = await listLevels(client);
-    expect(spies.order).toHaveBeenCalledWith("created_at", { ascending: false });
+    expect(spies.order).toHaveBeenCalledWith("created_at", {
+      ascending: false,
+    });
     expect(result).toEqual([row]);
   });
 
@@ -301,9 +303,7 @@ describe("softDeleteCompetency", () => {
   });
 });
 
-function criterion(
-  overrides: Partial<StoredCriterion> = {},
-): StoredCriterion {
+function criterion(overrides: Partial<StoredCriterion> = {}): StoredCriterion {
   return {
     id: "cr1",
     competency_id: "c1",
@@ -450,9 +450,7 @@ describe("softDeleteCriterion", () => {
   });
 });
 
-function indicator(
-  overrides: Partial<StoredIndicator> = {},
-): StoredIndicator {
+function indicator(overrides: Partial<StoredIndicator> = {}): StoredIndicator {
   return {
     id: "i1",
     criterion_id: "cr1",
@@ -625,9 +623,7 @@ describe("softDeleteIndicator", () => {
   });
 });
 
-function evidence(
-  overrides: Partial<StoredEvidence> = {},
-): StoredEvidence {
+function evidence(overrides: Partial<StoredEvidence> = {}): StoredEvidence {
   return {
     id: "e1",
     indicator_id: "i1",
@@ -746,9 +742,9 @@ describe("updateEvidence", () => {
     const { client } = makeClient({
       updateResult: { error: { message: "update boom" } },
     });
-    await expect(
-      updateEvidence(client, "e1", { title: "x" }),
-    ).rejects.toThrow("update boom");
+    await expect(updateEvidence(client, "e1", { title: "x" })).rejects.toThrow(
+      "update boom",
+    );
   });
 });
 
@@ -852,7 +848,9 @@ describe("getScaleLegend", () => {
     };
     const { client, spies } = makeClient({ listData: [row] });
     const result = await getScaleLegend(client);
-    expect(spies.select).toHaveBeenCalledWith("label_1,label_2,label_3,label_4");
+    expect(spies.select).toHaveBeenCalledWith(
+      "label_1,label_2,label_3,label_4",
+    );
     expect(spies.eq).toHaveBeenCalledWith("id", "1");
     expect(result).toEqual(row);
   });
@@ -989,8 +987,10 @@ describe("getLevelTree", () => {
 
 describe("seedSampleTemplate", () => {
   it("writes one level, then competencies, criteria, and indicators", async () => {
-    const upsertCalls: Array<{ table: string; values: Record<string, unknown> }> =
-      [];
+    const upsertCalls: Array<{
+      table: string;
+      values: Record<string, unknown>;
+    }> = [];
     const client: SupabaseLike = {
       from: (table: string) => ({
         upsert: async (
@@ -1036,7 +1036,10 @@ describe("seedSampleTemplate", () => {
       "career_competencies",
     ]);
     const levelCall = upsertCalls[0];
-    expect(levelCall?.values).toMatchObject({ title: "Sample", status: "active" });
+    expect(levelCall?.values).toMatchObject({
+      title: "Sample",
+      status: "active",
+    });
     const compCall = upsertCalls[1];
     expect(compCall?.values).toMatchObject({
       name: "C1",
@@ -1066,8 +1069,10 @@ describe("seedSampleTemplate", () => {
   });
 
   it("uses the bundled SAMPLE_TEMPLATE by default", async () => {
-    const upsertCalls: Array<{ table: string; values: Record<string, unknown> }> =
-      [];
+    const upsertCalls: Array<{
+      table: string;
+      values: Record<string, unknown>;
+    }> = [];
     const client: SupabaseLike = {
       from: (table: string) => ({
         upsert: async (
@@ -1124,8 +1129,10 @@ describe("cloneArchivedLevelAsActive", () => {
     criteria?: StoredCriterion[];
     indicators?: StoredIndicator[];
   }) {
-    const upsertCalls: Array<{ table: string; values: Record<string, unknown> }> =
-      [];
+    const upsertCalls: Array<{
+      table: string;
+      values: Record<string, unknown>;
+    }> = [];
     const client: SupabaseLike = {
       from: (table: string) => {
         let currentTable = table;
@@ -1187,9 +1194,7 @@ describe("cloneArchivedLevelAsActive", () => {
     return { client, upsertCalls };
   }
 
-  function archivedSource(
-    overrides: Partial<StoredLevel> = {},
-  ): StoredLevel {
+  function archivedSource(overrides: Partial<StoredLevel> = {}): StoredLevel {
     return level({
       id: "lvl-arch",
       title: "Old L4",
@@ -1239,7 +1244,11 @@ describe("cloneArchivedLevelAsActive", () => {
       ],
     });
 
-    const newId = await cloneArchivedLevelAsActive(client, "lvl-arch", "New L4");
+    const newId = await cloneArchivedLevelAsActive(
+      client,
+      "lvl-arch",
+      "New L4",
+    );
 
     expect(typeof newId).toBe("string");
     const tables = upsertCalls.map((c) => c.table);
@@ -1320,9 +1329,9 @@ describe("setScaleLegend", () => {
     const { client } = makeClient({
       updateResult: { error: { message: "set boom" } },
     });
-    await expect(
-      setScaleLegend(client, { label_1: "x" }),
-    ).rejects.toThrow("set boom");
+    await expect(setScaleLegend(client, { label_1: "x" })).rejects.toThrow(
+      "set boom",
+    );
   });
 });
 
@@ -1354,9 +1363,7 @@ describe("createShareLink", () => {
     const { client } = makeClient({
       upsertResult: { error: { message: "share boom" } },
     });
-    await expect(createShareLink(client, "lvl1")).rejects.toThrow(
-      "share boom",
-    );
+    await expect(createShareLink(client, "lvl1")).rejects.toThrow("share boom");
   });
 });
 
@@ -1462,8 +1469,6 @@ describe("readSharedLevel", () => {
         throw new Error("from() should not be called for share read");
       },
     };
-    await expect(readSharedLevel(client, "tok")).rejects.toThrow(
-      "missing rpc",
-    );
+    await expect(readSharedLevel(client, "tok")).rejects.toThrow("missing rpc");
   });
 });

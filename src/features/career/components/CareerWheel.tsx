@@ -229,18 +229,14 @@ export function CareerWheel({
   }
   if (points === null) {
     return (
-      <p
-        aria-busy="true"
-        className="text-muted-foreground text-sm"
-      >
+      <p aria-busy="true" className="text-muted-foreground text-sm">
         Loading wheel…
       </p>
     );
   }
 
   return (
-    <div
-      role="region"
+    <section
       aria-label="Career wheel"
       className="rounded-xl border border-border bg-card p-6 shadow-sm"
     >
@@ -255,6 +251,6 @@ export function CareerWheel({
           Target
         </li>
       </ul>
-    </div>
+    </section>
   );
 }

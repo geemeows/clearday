@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { SharedLevelView } from "#/routes/share.career.$token";
 import type { SharedTree } from "#/features/career/store";
+import { SharedLevelView } from "#/routes/share.career.$token";
 import type { SupabaseLike } from "#/shared/db";
 
 function clientWithRpc(data: SharedTree | null) {

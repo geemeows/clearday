@@ -32,7 +32,8 @@ export function StatusBadge({
   title?: string;
 } & Omit<
   React.HTMLAttributes<HTMLSpanElement>,
-  "title" | "children">): React.ReactElement {
+  "title" | "children"
+>): React.ReactElement {
   return (
     <span
       data-slot="status-badge"

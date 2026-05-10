@@ -29,10 +29,7 @@ export function Checkbox({
       {...props}
     >
       {loading ? (
-        <Spinner
-          data-slot="checkbox-spinner"
-          className="size-3 text-current"
-        />
+        <Spinner data-slot="checkbox-spinner" className="size-3 text-current" />
       ) : (
         <CheckboxPrimitive.Indicator
           data-slot="checkbox-indicator"
