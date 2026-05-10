@@ -40,12 +40,18 @@ Run all three, fix anything red, re-run until clean:
 ```sh
 pnpm run typecheck
 pnpm run test
-pnpm run check
+npx biome check --write <files-you-touched>     # scope to your files only
 ```
 
-`pnpm run check` runs Biome (lint + format). For autofixable issues, run `pnpm run check` and re-run to confirm clean.
+**Do not run `pnpm run check`** during a task. It's `biome check --write .` over the whole repo, which auto-rewrites unrelated legacy files in your working tree — collides with stashes, bloats your diff, and surfaces pre-existing errors that aren't yours to fix. Scope biome to the files you actually changed (paste the list from `git status -s`).
 
-If a check fails, fix the root cause — don't loosen types, skip tests, or disable Biome rules to make them pass. Re-run the full loop after each fix until all three pass.
+Biome will still flag pre-existing errors in any file you've touched (the pre-commit hook does the same on staged files). When that happens:
+
+- If the fix is a trivial swap that preserves behavior (e.g. `<div role="region">` → `<section>`, dropping a non-load-bearing `role`), make it as part of your commit and note it as a drive-by in the message.
+- If the fix is a real refactor (e.g. `<button role="radio">` → `<input type="radio">` would change styling/keyboard semantics), add a narrowly-scoped `// biome-ignore lint/<rule>: <reason>` directly above the offending line and explain why in the commit body.
+- Never use `--no-verify` to bypass the hook. Never run `pnpm run check` to "fix it everywhere" — that's a separate cleanup task, not part of feature work.
+
+For typecheck and tests, fix the root cause — don't loosen types, skip tests, or disable Biome rules to make them pass. Re-run the loop after each fix until all three pass.
 
 Every module (FE + BE) ships with tests; never silently drop test coverage to save time.
 
