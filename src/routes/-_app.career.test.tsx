@@ -2,10 +2,16 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   AddCompetencyForm,
+  AddCriterionForm,
   CareerLevelView,
   CareerOnboardingView,
+  CriteriaList,
 } from "#/routes/_app.career";
-import type { StoredCompetency, StoredLevel } from "#/features/career/store";
+import type {
+  StoredCompetency,
+  StoredCriterion,
+  StoredLevel,
+} from "#/features/career/store";
 import type { SupabaseLike } from "#/shared/db";
 
 function level(overrides: Partial<StoredLevel> = {}): StoredLevel {
@@ -69,15 +75,23 @@ function competency(
   };
 }
 
-function makeFakeClient(initial: StoredCompetency[] = []) {
-  const rowsRef: { current: StoredCompetency[] } = { current: [...initial] };
-  const upsert = vi.fn(
+function makeFakeClient(
+  initial: StoredCompetency[] = [],
+  initialCriteria: StoredCriterion[] = [],
+) {
+  const compRowsRef: { current: StoredCompetency[] } = {
+    current: [...initial],
+  };
+  const critRowsRef: { current: StoredCriterion[] } = {
+    current: [...initialCriteria],
+  };
+  const upsertComp = vi.fn(
     async (values: Record<string, unknown> | Record<string, unknown>[]) => {
       const v = (Array.isArray(values) ? values[0] : values) as Record<
         string,
         unknown
       >;
-      rowsRef.current.push({
+      compRowsRef.current.push({
         id: v.id as string,
         level_id: v.level_id as string,
         name: v.name as string,
@@ -88,10 +102,28 @@ function makeFakeClient(initial: StoredCompetency[] = []) {
       return { error: null };
     },
   );
+  const upsertCrit = vi.fn(
+    async (values: Record<string, unknown> | Record<string, unknown>[]) => {
+      const v = (Array.isArray(values) ? values[0] : values) as Record<
+        string,
+        unknown
+      >;
+      critRowsRef.current.push({
+        id: v.id as string,
+        competency_id: v.competency_id as string,
+        name: v.name as string,
+        target: (v.target as number) ?? 1,
+        position: v.position as number,
+        created_at: new Date().toISOString(),
+        deleted_at: null,
+      });
+      return { error: null };
+    },
+  );
   const updateEq = vi.fn(async () => ({ error: null as null }));
-  const update = vi.fn((values: Record<string, unknown>) => ({
+  const updateComp = vi.fn((values: Record<string, unknown>) => ({
     eq: (_col: string, id: string) => {
-      rowsRef.current = rowsRef.current
+      compRowsRef.current = compRowsRef.current
         .map((r) =>
           r.id === id
             ? {
@@ -109,10 +141,43 @@ function makeFakeClient(initial: StoredCompetency[] = []) {
       return updateEq();
     },
   }));
-  const store = { rowsRef, upsert, update, updateEq };
+  const updateCrit = vi.fn((values: Record<string, unknown>) => ({
+    eq: (_col: string, id: string) => {
+      critRowsRef.current = critRowsRef.current
+        .map((r) =>
+          r.id === id
+            ? {
+                ...r,
+                ...(typeof values.name === "string"
+                  ? { name: values.name as string }
+                  : {}),
+                ...(typeof values.target === "number"
+                  ? { target: values.target as number }
+                  : {}),
+                ...(typeof values.deleted_at === "string"
+                  ? { deleted_at: values.deleted_at as string }
+                  : {}),
+              }
+            : r,
+        )
+        .filter((r) => r.deleted_at === null);
+      return updateEq();
+    },
+  }));
+  const store = {
+    compRowsRef,
+    critRowsRef,
+    rowsRef: compRowsRef,
+    upsert: upsertComp,
+    update: updateComp,
+    upsertCrit,
+    updateCrit,
+    updateEq,
+  };
 
-  const buildSelectChain = () => {
-    let filteredLevelId: string | null = null;
+  const buildSelectChain = (table: string) => {
+    let filteredKey: string | null = null;
+    let filteredVal: string | null = null;
     const chain = {
       is: vi.fn(() => chain),
       in: vi.fn(() => chain),
@@ -121,27 +186,41 @@ function makeFakeClient(initial: StoredCompetency[] = []) {
       gte: vi.fn(() => chain),
       lt: vi.fn(() => chain),
       eq: vi.fn((col: string, val: string) => {
-        if (col === "level_id") filteredLevelId = val;
+        filteredKey = col;
+        filteredVal = val;
         return chain;
       }),
       order: vi.fn(() => chain),
-      limit: vi.fn(async () => ({
-        data: rowsRef.current.filter(
-          (r) =>
-            r.deleted_at === null &&
-            (filteredLevelId === null || r.level_id === filteredLevelId),
-        ) as unknown as Record<string, unknown>[],
-        error: null,
-      })),
+      limit: vi.fn(async () => {
+        if (table === "career_criteria") {
+          return {
+            data: critRowsRef.current.filter(
+              (r) =>
+                r.deleted_at === null &&
+                (filteredKey !== "competency_id" ||
+                  r.competency_id === filteredVal),
+            ) as unknown as Record<string, unknown>[],
+            error: null,
+          };
+        }
+        return {
+          data: compRowsRef.current.filter(
+            (r) =>
+              r.deleted_at === null &&
+              (filteredKey !== "level_id" || r.level_id === filteredVal),
+          ) as unknown as Record<string, unknown>[],
+          error: null,
+        };
+      }),
     };
     return chain;
   };
 
   const client: SupabaseLike = {
-    from: () => ({
-      upsert,
-      select: vi.fn(() => buildSelectChain()),
-      update,
+    from: (table: string) => ({
+      upsert: table === "career_criteria" ? upsertCrit : upsertComp,
+      select: vi.fn(() => buildSelectChain(table)),
+      update: table === "career_criteria" ? updateCrit : updateComp,
       delete: vi.fn(() => ({ eq: vi.fn() })),
     }),
   };
@@ -288,6 +367,249 @@ describe("AddCompetencyForm", () => {
     render(<AddCompetencyForm onAdd={vi.fn()} />);
     const button = screen.getByRole("button", {
       name: /add competency/i,
+    }) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+  });
+});
+
+function criterion(
+  overrides: Partial<StoredCriterion> = {},
+): StoredCriterion {
+  return {
+    id: "cr1",
+    competency_id: "c1",
+    name: "Code review depth",
+    target: 1,
+    position: 0,
+    created_at: "2026-01-01T00:00:00Z",
+    deleted_at: null,
+    ...overrides,
+  };
+}
+
+describe("CriteriaList", () => {
+  const originalConfirm = window.confirm;
+  beforeEach(() => {
+    window.confirm = vi.fn(() => true);
+  });
+  afterEach(() => {
+    window.confirm = originalConfirm;
+  });
+
+  it("loads and renders existing criteria for the competency", async () => {
+    const { client } = makeFakeClient(
+      [competency({ id: "c1", name: "Craft" })],
+      [
+        criterion({ id: "cr1", competency_id: "c1", name: "Review depth" }),
+        criterion({
+          id: "cr2",
+          competency_id: "c1",
+          name: "Design tradeoffs",
+          position: 1024,
+        }),
+      ],
+    );
+    render(
+      <CriteriaList
+        competency={competency({ id: "c1", name: "Craft" })}
+        client={client}
+      />,
+    );
+    await waitFor(() => {
+      expect(screen.getByDisplayValue("Review depth")).toBeTruthy();
+      expect(screen.getByDisplayValue("Design tradeoffs")).toBeTruthy();
+    });
+  });
+
+  it("only loads criteria for the matching competency", async () => {
+    const { client } = makeFakeClient(
+      [
+        competency({ id: "c1", name: "Craft" }),
+        competency({ id: "c2", name: "Collab" }),
+      ],
+      [
+        criterion({ id: "cr1", competency_id: "c1", name: "Review depth" }),
+        criterion({ id: "cr2", competency_id: "c2", name: "Mentoring" }),
+      ],
+    );
+    render(
+      <CriteriaList
+        competency={competency({ id: "c1", name: "Craft" })}
+        client={client}
+      />,
+    );
+    await waitFor(() =>
+      expect(screen.getByDisplayValue("Review depth")).toBeTruthy(),
+    );
+    expect(screen.queryByDisplayValue("Mentoring")).toBeNull();
+  });
+
+  it("adds a criterion via the form with target default 1", async () => {
+    const { client, store } = makeFakeClient([
+      competency({ id: "c1", name: "Craft" }),
+    ]);
+    render(
+      <CriteriaList
+        competency={competency({ id: "c1", name: "Craft" })}
+        client={client}
+      />,
+    );
+    const input = await screen.findByLabelText("New criterion name");
+    fireEvent.change(input, { target: { value: "  Review depth  " } });
+    fireEvent.click(
+      screen.getByRole("button", { name: /add criterion/i }),
+    );
+    await waitFor(() =>
+      expect(screen.getByDisplayValue("Review depth")).toBeTruthy(),
+    );
+    expect(store.upsertCrit).toHaveBeenCalledTimes(1);
+    const args = store.upsertCrit.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(args.name).toBe("Review depth");
+    expect(args.competency_id).toBe("c1");
+    expect(args.target).toBe(1);
+    expect(args.position).toBe(0);
+  });
+
+  it("renames a criterion on input blur with a different value", async () => {
+    const { client, store } = makeFakeClient(
+      [competency({ id: "c1", name: "Craft" })],
+      [criterion({ id: "cr1", competency_id: "c1", name: "Review depth" })],
+    );
+    render(
+      <CriteriaList
+        competency={competency({ id: "c1", name: "Craft" })}
+        client={client}
+      />,
+    );
+    const input = (await screen.findByDisplayValue(
+      "Review depth",
+    )) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "Code review depth" } });
+    fireEvent.blur(input);
+    await waitFor(() =>
+      expect(store.updateCrit).toHaveBeenCalledWith({
+        name: "Code review depth",
+      }),
+    );
+  });
+
+  it("writes the target on blur and clamps out-of-range values", async () => {
+    const { client, store } = makeFakeClient(
+      [competency({ id: "c1", name: "Craft" })],
+      [
+        criterion({
+          id: "cr1",
+          competency_id: "c1",
+          name: "Review depth",
+          target: 1,
+        }),
+      ],
+    );
+    render(
+      <CriteriaList
+        competency={competency({ id: "c1", name: "Craft" })}
+        client={client}
+      />,
+    );
+    const target = (await screen.findByLabelText(
+      "Target for Review depth",
+    )) as HTMLInputElement;
+    fireEvent.change(target, { target: { value: "9" } });
+    fireEvent.blur(target);
+    await waitFor(() =>
+      expect(store.updateCrit).toHaveBeenCalledWith({ target: 4 }),
+    );
+    expect(target.value).toBe("4");
+  });
+
+  it("does not write a target on blur when the value is unchanged", async () => {
+    const { client, store } = makeFakeClient(
+      [competency({ id: "c1", name: "Craft" })],
+      [
+        criterion({
+          id: "cr1",
+          competency_id: "c1",
+          name: "Review depth",
+          target: 2,
+        }),
+      ],
+    );
+    render(
+      <CriteriaList
+        competency={competency({ id: "c1", name: "Craft" })}
+        client={client}
+      />,
+    );
+    const target = (await screen.findByLabelText(
+      "Target for Review depth",
+    )) as HTMLInputElement;
+    fireEvent.blur(target);
+    expect(store.updateCrit).not.toHaveBeenCalled();
+  });
+
+  it("soft-deletes a criterion and removes it from the list", async () => {
+    const { client, store } = makeFakeClient(
+      [competency({ id: "c1", name: "Craft" })],
+      [criterion({ id: "cr1", competency_id: "c1", name: "Review depth" })],
+    );
+    render(
+      <CriteriaList
+        competency={competency({ id: "c1", name: "Craft" })}
+        client={client}
+      />,
+    );
+    const deleteBtn = await screen.findByRole("button", {
+      name: /delete criterion review depth/i,
+    });
+    fireEvent.click(deleteBtn);
+    await waitFor(() =>
+      expect(store.updateCrit).toHaveBeenCalledTimes(1),
+    );
+    const arg = store.updateCrit.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(typeof arg.deleted_at).toBe("string");
+    await waitFor(() =>
+      expect(screen.queryByDisplayValue("Review depth")).toBeNull(),
+    );
+  });
+
+  it("does not delete when the user cancels the confirm prompt", async () => {
+    window.confirm = vi.fn(() => false);
+    const { client, store } = makeFakeClient(
+      [competency({ id: "c1", name: "Craft" })],
+      [criterion({ id: "cr1", competency_id: "c1", name: "Review depth" })],
+    );
+    render(
+      <CriteriaList
+        competency={competency({ id: "c1", name: "Craft" })}
+        client={client}
+      />,
+    );
+    const deleteBtn = await screen.findByRole("button", {
+      name: /delete criterion review depth/i,
+    });
+    fireEvent.click(deleteBtn);
+    expect(store.updateCrit).not.toHaveBeenCalled();
+    expect(screen.getByDisplayValue("Review depth")).toBeTruthy();
+  });
+});
+
+describe("AddCriterionForm", () => {
+  it("submits the trimmed name and clears the input", async () => {
+    const onAdd = vi.fn();
+    render(<AddCriterionForm onAdd={onAdd} />);
+    const input = screen.getByLabelText(
+      "New criterion name",
+    ) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "  Review depth  " } });
+    fireEvent.click(screen.getByRole("button", { name: /add criterion/i }));
+    expect(onAdd).toHaveBeenCalledWith("Review depth");
+    expect(input.value).toBe("");
+  });
+
+  it("disables the button when the name is empty", () => {
+    render(<AddCriterionForm onAdd={vi.fn()} />);
+    const button = screen.getByRole("button", {
+      name: /add criterion/i,
     }) as HTMLButtonElement;
     expect(button.disabled).toBe(true);
   });

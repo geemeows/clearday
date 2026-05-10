@@ -4,12 +4,18 @@ import { useEffect, useState } from "react";
 import { Button } from "#/components/coss/button";
 import {
   createCompetency,
+  createCriterion,
   createLevel,
   getActiveLevel,
   listCompetencies,
+  listCriteria,
   renameCompetency,
+  renameCriterion,
+  setCriterionTarget,
   softDeleteCompetency,
+  softDeleteCriterion,
   type StoredCompetency,
+  type StoredCriterion,
   type StoredLevel,
 } from "#/features/career/store";
 import { supabase } from "#/lib/supabase";
@@ -268,6 +274,7 @@ export function CareerLevelView({
               <CompetencyRow
                 key={c.id}
                 competency={c}
+                client={client}
                 onRename={handleRename}
                 onDelete={handleDelete}
               />
@@ -283,41 +290,254 @@ export function CareerLevelView({
 
 function CompetencyRow({
   competency,
+  client,
   onRename,
   onDelete,
 }: {
   competency: StoredCompetency;
+  client: SupabaseLike;
   onRename: (id: string, name: string) => void;
   onDelete: (id: string) => void;
 }) {
   const [draft, setDraft] = useState(competency.name);
 
   return (
-    <li className="flex items-center gap-2 rounded-md border border-border bg-background px-3 py-2">
+    <li className="rounded-md border border-border bg-background px-3 py-2">
+      <div className="flex items-center gap-2">
+        <input
+          type="text"
+          aria-label={`Rename competency ${competency.name}`}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={() => {
+            const trimmed = draft.trim();
+            if (trimmed && trimmed !== competency.name) {
+              onRename(competency.id, trimmed);
+            } else if (!trimmed) {
+              setDraft(competency.name);
+            }
+          }}
+          className="min-w-0 flex-1 rounded border border-transparent bg-transparent px-1.5 py-0.5 text-foreground text-sm outline-none focus:border-border focus:bg-muted"
+        />
+        <button
+          type="button"
+          aria-label={`Delete competency ${competency.name}`}
+          onClick={() => onDelete(competency.id)}
+          className="flex h-7 w-7 items-center justify-center rounded text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
+      </div>
+      <CriteriaList competency={competency} client={client} />
+    </li>
+  );
+}
+
+export function CriteriaList({
+  competency,
+  client,
+}: {
+  competency: StoredCompetency;
+  client: SupabaseLike;
+}) {
+  const [criteria, setCriteria] = useState<StoredCriterion[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    listCriteria(client, competency.id)
+      .then((rows) => {
+        if (!cancelled) setCriteria(rows);
+      })
+      .catch((e) => {
+        if (!cancelled) setError(e instanceof Error ? e.message : "failed");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [client, competency.id]);
+
+  const handleAdd = async (name: string) => {
+    const id = crypto.randomUUID();
+    const position = (criteria?.length ?? 0) * 1024;
+    try {
+      await createCriterion(client, {
+        id,
+        competency_id: competency.id,
+        name,
+        target: 1,
+        position,
+      });
+      const rows = await listCriteria(client, competency.id);
+      setCriteria(rows);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "failed to add criterion");
+    }
+  };
+
+  const handleRename = async (id: string, name: string) => {
+    setCriteria((prev) =>
+      prev ? prev.map((c) => (c.id === id ? { ...c, name } : c)) : prev,
+    );
+    try {
+      await renameCriterion(client, id, name);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "failed to rename criterion");
+    }
+  };
+
+  const handleSetTarget = async (id: string, target: number) => {
+    setCriteria((prev) =>
+      prev ? prev.map((c) => (c.id === id ? { ...c, target } : c)) : prev,
+    );
+    try {
+      await setCriterionTarget(client, id, target);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "failed to update target");
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    const target = criteria?.find((c) => c.id === id);
+    if (!target) return;
+    if (
+      !confirm(
+        `Delete "${target.name}" and its indicators / evidence?`,
+      )
+    )
+      return;
+    setCriteria((prev) => (prev ? prev.filter((c) => c.id !== id) : prev));
+    try {
+      await softDeleteCriterion(client, id);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "failed to delete criterion");
+    }
+  };
+
+  return (
+    <div className="mt-2 ml-4 space-y-2 border-border border-l pl-4">
+      {error && (
+        <p
+          role="alert"
+          className="rounded-sm border border-destructive/30 bg-destructive/10 p-2 text-destructive text-xs"
+        >
+          {error}
+        </p>
+      )}
+      {criteria === null ? (
+        <p className="text-muted-foreground text-xs">Loading…</p>
+      ) : criteria.length === 0 ? null : (
+        <ul className="space-y-1.5">
+          {criteria.map((c) => (
+            <CriterionRow
+              key={c.id}
+              criterion={c}
+              onRename={handleRename}
+              onSetTarget={handleSetTarget}
+              onDelete={handleDelete}
+            />
+          ))}
+        </ul>
+      )}
+      <AddCriterionForm onAdd={handleAdd} />
+    </div>
+  );
+}
+
+function CriterionRow({
+  criterion,
+  onRename,
+  onSetTarget,
+  onDelete,
+}: {
+  criterion: StoredCriterion;
+  onRename: (id: string, name: string) => void;
+  onSetTarget: (id: string, target: number) => void;
+  onDelete: (id: string) => void;
+}) {
+  const [draft, setDraft] = useState(criterion.name);
+  const [targetDraft, setTargetDraft] = useState(String(criterion.target));
+
+  return (
+    <li className="flex items-center gap-2 rounded-md border border-border bg-card px-2.5 py-1.5">
       <input
         type="text"
-        aria-label={`Rename competency ${competency.name}`}
+        aria-label={`Rename criterion ${criterion.name}`}
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={() => {
           const trimmed = draft.trim();
-          if (trimmed && trimmed !== competency.name) {
-            onRename(competency.id, trimmed);
+          if (trimmed && trimmed !== criterion.name) {
+            onRename(criterion.id, trimmed);
           } else if (!trimmed) {
-            setDraft(competency.name);
+            setDraft(criterion.name);
           }
         }}
         className="min-w-0 flex-1 rounded border border-transparent bg-transparent px-1.5 py-0.5 text-foreground text-sm outline-none focus:border-border focus:bg-muted"
       />
+      <input
+        type="number"
+        aria-label={`Target for ${criterion.name}`}
+        min={1}
+        max={4}
+        step={1}
+        value={targetDraft}
+        onChange={(e) => setTargetDraft(e.target.value)}
+        onBlur={() => {
+          const parsed = Number.parseInt(targetDraft, 10);
+          if (Number.isFinite(parsed)) {
+            const clamped = Math.max(1, Math.min(4, parsed));
+            setTargetDraft(String(clamped));
+            if (clamped !== criterion.target) {
+              onSetTarget(criterion.id, clamped);
+            }
+          } else {
+            setTargetDraft(String(criterion.target));
+          }
+        }}
+        className="w-12 rounded border border-border bg-background px-1.5 py-0.5 text-center text-foreground text-sm outline-none focus:ring-2 focus:ring-primary/50"
+      />
       <button
         type="button"
-        aria-label={`Delete competency ${competency.name}`}
-        onClick={() => onDelete(competency.id)}
-        className="flex h-7 w-7 items-center justify-center rounded text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+        aria-label={`Delete criterion ${criterion.name}`}
+        onClick={() => onDelete(criterion.id)}
+        className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
       >
-        <Trash2 className="h-3.5 w-3.5" />
+        <Trash2 className="h-3 w-3" />
       </button>
     </li>
+  );
+}
+
+export function AddCriterionForm({
+  onAdd,
+}: {
+  onAdd: (name: string) => void;
+}) {
+  const [name, setName] = useState("");
+
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    onAdd(trimmed);
+    setName("");
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="flex items-center gap-2">
+      <input
+        type="text"
+        aria-label="New criterion name"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="Add criterion…"
+        className="min-w-0 flex-1 rounded-md border border-border bg-background px-2.5 py-1 text-foreground text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+      />
+      <Button type="submit" disabled={!name.trim()} size="sm">
+        Add criterion
+      </Button>
+    </form>
   );
 }
 

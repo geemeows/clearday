@@ -30,6 +30,16 @@ export type StoredCompetency = {
   deleted_at: string | null;
 };
 
+export type StoredCriterion = {
+  id: string;
+  competency_id: string;
+  name: string;
+  target: number;
+  position: number;
+  created_at: string;
+  deleted_at: string | null;
+};
+
 export async function createLevel(
   client: SupabaseLike,
   level: { id: string; title: string },
@@ -131,4 +141,79 @@ export async function softDeleteCompetency(
     .update({ deleted_at: new Date().toISOString() })
     .eq("id", id);
   if (error) throw new Error(`competency delete failed: ${error.message}`);
+}
+
+// ─── Criteria ────────────────────────────────────────────────────────────────
+
+export async function createCriterion(
+  client: SupabaseLike,
+  criterion: {
+    id: string;
+    competency_id: string;
+    name: string;
+    target: number;
+    position: number;
+  },
+): Promise<void> {
+  const { error } = await client.from("career_criteria").upsert(
+    {
+      id: criterion.id,
+      competency_id: criterion.competency_id,
+      name: criterion.name,
+      target: criterion.target,
+      position: criterion.position,
+    },
+    { onConflict: "id" },
+  );
+  if (error) throw new Error(`criterion create failed: ${error.message}`);
+}
+
+export async function listCriteria(
+  client: SupabaseLike,
+  competencyId: string,
+): Promise<StoredCriterion[]> {
+  const { data, error } = await client
+    .from("career_criteria")
+    .select("*")
+    .eq("competency_id", competencyId)
+    .is("deleted_at", null)
+    .order("position", { ascending: true })
+    .limit(200);
+  if (error) throw new Error(`criterion list failed: ${error.message}`);
+  return (data ?? []) as StoredCriterion[];
+}
+
+export async function renameCriterion(
+  client: SupabaseLike,
+  id: string,
+  name: string,
+): Promise<void> {
+  const { error } = await client
+    .from("career_criteria")
+    .update({ name })
+    .eq("id", id);
+  if (error) throw new Error(`criterion rename failed: ${error.message}`);
+}
+
+export async function setCriterionTarget(
+  client: SupabaseLike,
+  id: string,
+  target: number,
+): Promise<void> {
+  const { error } = await client
+    .from("career_criteria")
+    .update({ target })
+    .eq("id", id);
+  if (error) throw new Error(`criterion target update failed: ${error.message}`);
+}
+
+export async function softDeleteCriterion(
+  client: SupabaseLike,
+  id: string,
+): Promise<void> {
+  const { error } = await client
+    .from("career_criteria")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) throw new Error(`criterion delete failed: ${error.message}`);
 }

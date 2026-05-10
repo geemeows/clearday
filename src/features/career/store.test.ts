@@ -1,13 +1,19 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   createCompetency,
+  createCriterion,
   createLevel,
   getActiveLevel,
   listCompetencies,
+  listCriteria,
   listLevels,
   renameCompetency,
+  renameCriterion,
+  setCriterionTarget,
   softDeleteCompetency,
+  softDeleteCriterion,
   type StoredCompetency,
+  type StoredCriterion,
   type StoredLevel,
 } from "#/features/career/store";
 import type { SupabaseLike } from "#/shared/db";
@@ -246,6 +252,137 @@ describe("softDeleteCompetency", () => {
       updateResult: { error: { message: "delete boom" } },
     });
     await expect(softDeleteCompetency(client, "c1")).rejects.toThrow(
+      "delete boom",
+    );
+  });
+});
+
+function criterion(
+  overrides: Partial<StoredCriterion> = {},
+): StoredCriterion {
+  return {
+    id: "cr1",
+    competency_id: "c1",
+    name: "Code review depth",
+    target: 1,
+    position: 0,
+    created_at: "2026-01-01T00:00:00Z",
+    deleted_at: null,
+    ...overrides,
+  };
+}
+
+describe("createCriterion", () => {
+  it("upserts on id with competency_id, name, target, position", async () => {
+    const { client, spies } = makeClient();
+    await createCriterion(client, {
+      id: "cr1",
+      competency_id: "c1",
+      name: "Code review depth",
+      target: 1,
+      position: 0,
+    });
+    expect(spies.upsert).toHaveBeenCalledWith(
+      {
+        id: "cr1",
+        competency_id: "c1",
+        name: "Code review depth",
+        target: 1,
+        position: 0,
+      },
+      { onConflict: "id" },
+    );
+  });
+
+  it("throws when upsert fails", async () => {
+    const { client } = makeClient({
+      upsertResult: { error: { message: "boom" } },
+    });
+    await expect(
+      createCriterion(client, {
+        id: "cr1",
+        competency_id: "c1",
+        name: "x",
+        target: 1,
+        position: 0,
+      }),
+    ).rejects.toThrow("boom");
+  });
+});
+
+describe("listCriteria", () => {
+  it("filters by competency_id, excludes soft-deleted, orders by position asc", async () => {
+    const row = criterion();
+    const { client, spies } = makeClient({ listData: [row] });
+    const result = await listCriteria(client, "c1");
+    expect(spies.eq).toHaveBeenCalledWith("competency_id", "c1");
+    expect(spies.is).toHaveBeenCalledWith("deleted_at", null);
+    expect(spies.order).toHaveBeenCalledWith("position", { ascending: true });
+    expect(result).toEqual([row]);
+  });
+
+  it("returns empty array when no rows", async () => {
+    const { client } = makeClient({ listData: [] });
+    expect(await listCriteria(client, "c1")).toEqual([]);
+  });
+
+  it("throws when list fails", async () => {
+    const { client } = makeClient({ listError: { message: "db error" } });
+    await expect(listCriteria(client, "c1")).rejects.toThrow("db error");
+  });
+});
+
+describe("renameCriterion", () => {
+  it("updates the name on the matching id", async () => {
+    const { client, spies } = makeClient();
+    await renameCriterion(client, "cr1", "Review depth");
+    expect(spies.update).toHaveBeenCalledWith({ name: "Review depth" });
+    expect(spies.updateEq).toHaveBeenCalledWith("id", "cr1");
+  });
+
+  it("throws when update fails", async () => {
+    const { client } = makeClient({
+      updateResult: { error: { message: "rename boom" } },
+    });
+    await expect(renameCriterion(client, "cr1", "x")).rejects.toThrow(
+      "rename boom",
+    );
+  });
+});
+
+describe("setCriterionTarget", () => {
+  it("updates target on the matching id", async () => {
+    const { client, spies } = makeClient();
+    await setCriterionTarget(client, "cr1", 3);
+    expect(spies.update).toHaveBeenCalledWith({ target: 3 });
+    expect(spies.updateEq).toHaveBeenCalledWith("id", "cr1");
+  });
+
+  it("throws when update fails", async () => {
+    const { client } = makeClient({
+      updateResult: { error: { message: "target boom" } },
+    });
+    await expect(setCriterionTarget(client, "cr1", 2)).rejects.toThrow(
+      "target boom",
+    );
+  });
+});
+
+describe("softDeleteCriterion", () => {
+  it("stamps deleted_at on the matching id", async () => {
+    const { client, spies } = makeClient();
+    await softDeleteCriterion(client, "cr1");
+    expect(spies.update).toHaveBeenCalledTimes(1);
+    const arg = spies.update.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(typeof arg.deleted_at).toBe("string");
+    expect(spies.updateEq).toHaveBeenCalledWith("id", "cr1");
+  });
+
+  it("throws when update fails", async () => {
+    const { client } = makeClient({
+      updateResult: { error: { message: "delete boom" } },
+    });
+    await expect(softDeleteCriterion(client, "cr1")).rejects.toThrow(
       "delete boom",
     );
   });
