@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  cloneArchivedLevelAsActive,
   createCompetency,
   createCriterion,
   createEvidence,
@@ -1032,6 +1033,192 @@ describe("seedSampleTemplate", () => {
       }),
     };
     await expect(seedSampleTemplate(client)).rejects.toThrow("boom");
+  });
+});
+
+describe("cloneArchivedLevelAsActive", () => {
+  function makeCloneClient(opts: {
+    activeLevels?: StoredLevel[];
+    sourceLevel?: StoredLevel | null;
+    competencies?: StoredCompetency[];
+    criteria?: StoredCriterion[];
+    indicators?: StoredIndicator[];
+  }) {
+    const upsertCalls: Array<{ table: string; values: Record<string, unknown> }> =
+      [];
+    const client: SupabaseLike = {
+      from: (table: string) => {
+        let currentTable = table;
+        const chain = {
+          is: () => chain,
+          in: () => chain,
+          ilike: () => chain,
+          or: () => chain,
+          gte: () => chain,
+          lt: () => chain,
+          eq: (col: string, value: unknown) => {
+            if (currentTable === "career_levels" && col === "status") {
+              chain.__listData = (opts.activeLevels ?? []) as Record<
+                string,
+                unknown
+              >[];
+            } else if (currentTable === "career_levels" && col === "id") {
+              chain.__listData = opts.sourceLevel
+                ? [opts.sourceLevel as unknown as Record<string, unknown>]
+                : [];
+              void value;
+            }
+            return chain;
+          },
+          order: () => chain,
+          limit: async () => ({
+            data:
+              currentTable === "career_competencies"
+                ? (opts.competencies ?? [])
+                : currentTable === "career_criteria"
+                  ? (opts.criteria ?? [])
+                  : currentTable === "career_indicators"
+                    ? (opts.indicators ?? [])
+                    : (chain.__listData ?? []),
+            error: null,
+          }),
+          __listData: undefined as Record<string, unknown>[] | undefined,
+        };
+        return {
+          upsert: async (
+            values: Record<string, unknown> | Record<string, unknown>[],
+          ) => {
+            const v = (Array.isArray(values) ? values[0] : values) as Record<
+              string,
+              unknown
+            >;
+            upsertCalls.push({ table, values: v });
+            return { error: null as null };
+          },
+          select: () => {
+            currentTable = table;
+            return chain;
+          },
+          update: () => ({ eq: async () => ({ error: null as null }) }),
+          delete: () => ({ eq: async () => ({ error: null as null }) }),
+        };
+      },
+    };
+    return { client, upsertCalls };
+  }
+
+  function archivedSource(
+    overrides: Partial<StoredLevel> = {},
+  ): StoredLevel {
+    return level({
+      id: "lvl-arch",
+      title: "Old L4",
+      status: "archived",
+      archived_at: "2026-04-01T00:00:00Z",
+      ...overrides,
+    });
+  }
+
+  it("writes a new active level + cloned tree, returns the new id", async () => {
+    const { client, upsertCalls } = makeCloneClient({
+      activeLevels: [],
+      sourceLevel: archivedSource(),
+      competencies: [
+        {
+          id: "c1",
+          level_id: "lvl-arch",
+          name: "Eng",
+          position: 0,
+          created_at: "2026-01-01T00:00:00Z",
+          deleted_at: null,
+        },
+      ],
+      criteria: [
+        {
+          id: "cr1",
+          competency_id: "c1",
+          name: "Quality",
+          target: 3,
+          position: 0,
+          created_at: "2026-01-01T00:00:00Z",
+          deleted_at: null,
+        },
+      ],
+      indicators: [
+        {
+          id: "i1",
+          criterion_id: "cr1",
+          code: "A",
+          description: "tests",
+          notes: null,
+          score: 4,
+          position: 0,
+          created_at: "2026-01-01T00:00:00Z",
+          deleted_at: null,
+        },
+      ],
+    });
+
+    const newId = await cloneArchivedLevelAsActive(client, "lvl-arch", "New L4");
+
+    expect(typeof newId).toBe("string");
+    const tables = upsertCalls.map((c) => c.table);
+    expect(tables).toEqual([
+      "career_levels",
+      "career_competencies",
+      "career_criteria",
+      "career_indicators",
+    ]);
+    expect(upsertCalls[0]?.values).toMatchObject({
+      title: "New L4",
+      status: "active",
+    });
+    expect(upsertCalls[1]?.values).toMatchObject({
+      name: "Eng",
+      level_id: upsertCalls[0]?.values.id,
+    });
+    expect(upsertCalls[2]?.values).toMatchObject({
+      name: "Quality",
+      target: 3,
+      competency_id: upsertCalls[1]?.values.id,
+    });
+    expect(upsertCalls[3]?.values).toMatchObject({
+      code: "A",
+      description: "tests",
+      notes: null,
+      criterion_id: upsertCalls[2]?.values.id,
+      score: 1,
+    });
+  });
+
+  it("throws when an active level already exists", async () => {
+    const { client } = makeCloneClient({
+      activeLevels: [level({ id: "lvl-active", status: "active" })],
+      sourceLevel: archivedSource(),
+    });
+    await expect(
+      cloneArchivedLevelAsActive(client, "lvl-arch", "New"),
+    ).rejects.toThrow(/active level already exists/);
+  });
+
+  it("throws when the source level is not archived", async () => {
+    const { client } = makeCloneClient({
+      activeLevels: [],
+      sourceLevel: level({ id: "lvl-arch", status: "active" }),
+    });
+    await expect(
+      cloneArchivedLevelAsActive(client, "lvl-arch", "New"),
+    ).rejects.toThrow(/not archived/);
+  });
+
+  it("throws when the source level does not exist", async () => {
+    const { client } = makeCloneClient({
+      activeLevels: [],
+      sourceLevel: null,
+    });
+    await expect(
+      cloneArchivedLevelAsActive(client, "missing", "New"),
+    ).rejects.toThrow(/source level not found/);
   });
 });
 

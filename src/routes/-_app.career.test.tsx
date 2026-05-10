@@ -179,6 +179,37 @@ describe("CareerOnboardingView", () => {
     }) as HTMLButtonElement;
     expect(button.disabled).toBe(true);
   });
+
+  it("does not render the archived levels panel when there are none", () => {
+    render(<CareerOnboardingView onCreateLevel={vi.fn()} />);
+    expect(screen.queryByRole("region", { name: "Archived levels" })).toBeNull();
+  });
+
+  it("renders archived levels and triggers onCloneArchived with id + title", () => {
+    const onCloneArchived = vi.fn();
+    const archived = [
+      level({
+        id: "lvl-arch",
+        title: "Old L4",
+        status: "archived",
+        archived_at: "2026-04-01T00:00:00Z",
+      }),
+    ];
+    render(
+      <CareerOnboardingView
+        onCreateLevel={vi.fn()}
+        archivedLevels={archived}
+        onCloneArchived={onCloneArchived}
+      />,
+    );
+    expect(screen.getByRole("region", { name: "Archived levels" })).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /clone old l4 as starting template/i,
+      }),
+    );
+    expect(onCloneArchived).toHaveBeenCalledWith("lvl-arch", "Old L4");
+  });
 });
 
 function competency(

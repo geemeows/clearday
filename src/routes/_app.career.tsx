@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Button } from "#/components/coss/button";
 import { CareerWheel } from "#/features/career/components/CareerWheel";
 import {
+  cloneArchivedLevelAsActive,
   createCompetency,
   createCriterion,
   createEvidence,
@@ -46,6 +47,7 @@ export function CareerPage() {
   const [active, setActive] = useState<StoredLevel | null | undefined>(
     undefined,
   );
+  const [archived, setArchived] = useState<StoredLevel[]>([]);
   const [error, setError] = useState<string | null>(null);
   const client = supabase as unknown as SupabaseLike;
 
@@ -61,8 +63,12 @@ export function CareerPage() {
         if (levels.length === 0) {
           await seedSampleTemplate(client);
         }
+        const refreshed = await listLevels(client);
         const active = await getActiveLevel(client);
-        if (!cancelled) setActive(active);
+        if (!cancelled) {
+          setActive(active);
+          setArchived(refreshed.filter((l) => l.status === "archived"));
+        }
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : "failed");
       }
@@ -81,6 +87,18 @@ export function CareerPage() {
       setActive(level);
     } catch (e) {
       setError(e instanceof Error ? e.message : "failed to create level");
+    }
+  };
+
+  const handleCloneArchived = async (levelId: string, newTitle: string) => {
+    try {
+      await cloneArchivedLevelAsActive(client, levelId, newTitle);
+      const refreshed = await listLevels(client);
+      const next = await getActiveLevel(client);
+      setActive(next);
+      setArchived(refreshed.filter((l) => l.status === "archived"));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "failed to clone level");
     }
   };
 
@@ -109,7 +127,13 @@ export function CareerPage() {
   }
 
   if (active === null) {
-    return <CareerOnboardingView onCreateLevel={handleCreate} />;
+    return (
+      <CareerOnboardingView
+        onCreateLevel={handleCreate}
+        archivedLevels={archived}
+        onCloneArchived={handleCloneArchived}
+      />
+    );
   }
 
   return <CareerLevelView level={active} client={client} />;
@@ -117,8 +141,12 @@ export function CareerPage() {
 
 export function CareerOnboardingView({
   onCreateLevel,
+  archivedLevels = [],
+  onCloneArchived,
 }: {
   onCreateLevel: (title: string) => void;
+  archivedLevels?: StoredLevel[];
+  onCloneArchived?: (levelId: string, newTitle: string) => void;
 }) {
   const [title, setTitle] = useState("L4");
   const [submitting, setSubmitting] = useState(false);
@@ -188,7 +216,70 @@ export function CareerOnboardingView({
           </Button>
         </form>
       </div>
+
+      {archivedLevels.length > 0 && onCloneArchived && (
+        <ArchivedLevelsPanel
+          archivedLevels={archivedLevels}
+          onCloneArchived={onCloneArchived}
+        />
+      )}
     </section>
+  );
+}
+
+export function ArchivedLevelsPanel({
+  archivedLevels,
+  onCloneArchived,
+}: {
+  archivedLevels: StoredLevel[];
+  onCloneArchived: (levelId: string, newTitle: string) => void;
+}) {
+  return (
+    <div
+      role="region"
+      aria-label="Archived levels"
+      className="mt-6 rounded-xl border border-border bg-card p-6 shadow-sm"
+    >
+      <h2 className="mb-1 font-semibold text-foreground text-lg">
+        Archived levels
+      </h2>
+      <p className="mb-4 text-muted-foreground text-sm">
+        Clone an archived level as a new starting template. Targets and structure
+        carry over; scores reset and evidence is dropped.
+      </p>
+      <ul className="space-y-2">
+        {archivedLevels.map((lvl) => (
+          <ArchivedLevelRow
+            key={lvl.id}
+            level={lvl}
+            onClone={(newTitle) => onCloneArchived(lvl.id, newTitle)}
+          />
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function ArchivedLevelRow({
+  level,
+  onClone,
+}: {
+  level: StoredLevel;
+  onClone: (newTitle: string) => void;
+}) {
+  return (
+    <li className="flex items-center justify-between gap-2 rounded-md border border-border bg-background px-3 py-2">
+      <span className="text-foreground text-sm">{level.title}</span>
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        aria-label={`Clone ${level.title} as starting template`}
+        onClick={() => onClone(level.title)}
+      >
+        Clone as starting template
+      </Button>
+    </li>
   );
 }
 

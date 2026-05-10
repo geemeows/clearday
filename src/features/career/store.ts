@@ -6,6 +6,7 @@
 // Mirrors features/projects/store.ts — thin SupabaseLike client so tests can
 // drive it without the SDK; RLS gates access to the allowed user.
 
+import { cloneArchivedLevel } from "#/features/career/clone";
 import { SAMPLE_TEMPLATE, type SampleTemplate } from "#/features/career/sample-template";
 import type { SupabaseLike } from "#/shared/db";
 
@@ -558,6 +559,79 @@ export async function seedSampleTemplate(
       }
     }
   }
+}
+
+// "Clone as starting template" — writes the cloned seed of an archived level as
+// a new active level. Composes the existing CRUD fns (mirrors seedSampleTemplate)
+// so defaults like score=1 and status="active" stay consistent with hand-created
+// rows. Precondition: no active level may exist; the caller surfaces the error
+// as a toast. Returns the new level id.
+export async function cloneArchivedLevelAsActive(
+  client: SupabaseLike,
+  levelId: string,
+  newTitle: string,
+): Promise<string> {
+  const active = await getActiveLevel(client);
+  if (active) {
+    throw new Error(
+      "an active level already exists; archive it before cloning",
+    );
+  }
+  const { data, error } = await client
+    .from("career_levels")
+    .select("*")
+    .eq("id", levelId)
+    .limit(1);
+  if (error) throw new Error(`level fetch failed: ${error.message}`);
+  const source = ((data ?? []) as StoredLevel[])[0];
+  if (!source) throw new Error("source level not found");
+  if (source.status !== "archived") {
+    throw new Error("source level is not archived");
+  }
+
+  const tree = await getLevelTree(client, levelId);
+  const seed = cloneArchivedLevel(
+    {
+      title: source.title,
+      competencies: tree.competencies,
+      criteria: tree.criteria,
+      indicators: tree.indicators,
+    },
+    newTitle,
+  );
+
+  const newLevelId = crypto.randomUUID();
+  await createLevel(client, { id: newLevelId, title: seed.title });
+  for (const comp of seed.competencies) {
+    const compId = crypto.randomUUID();
+    await createCompetency(client, {
+      id: compId,
+      level_id: newLevelId,
+      name: comp.name,
+      position: comp.position,
+    });
+    for (const crit of comp.criteria) {
+      const critId = crypto.randomUUID();
+      await createCriterion(client, {
+        id: critId,
+        competency_id: compId,
+        name: crit.name,
+        target: crit.target,
+        position: crit.position,
+      });
+      for (const ind of crit.indicators) {
+        await createIndicator(client, {
+          id: crypto.randomUUID(),
+          criterion_id: critId,
+          code: ind.code,
+          description: ind.description,
+          notes: ind.notes,
+          position: ind.position,
+        });
+      }
+    }
+  }
+  return newLevelId;
 }
 
 // Picker support: simple title-prefix search over project_cards. Read-only —
