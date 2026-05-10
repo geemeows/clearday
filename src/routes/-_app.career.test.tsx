@@ -7,19 +7,44 @@ import {
   AddIndicatorForm,
   CareerLevelView,
   CareerOnboardingView,
+  CareerPage,
   CriteriaList,
   EvidenceList,
   IndicatorList,
   LevelHeader,
 } from "#/routes/_app.career";
-import type {
-  StoredCompetency,
-  StoredCriterion,
-  StoredEvidence,
-  StoredIndicator,
-  StoredLevel,
+import {
+  getActiveLevel,
+  listCompetencies,
+  listLevels,
+  seedSampleTemplate,
+  type StoredCompetency,
+  type StoredCriterion,
+  type StoredEvidence,
+  type StoredIndicator,
+  type StoredLevel,
 } from "#/features/career/store";
 import type { SupabaseLike } from "#/shared/db";
+
+// CareerPage uses the bundled supabase client, while sub-component tests pass
+// their own fake. Stub the module so a component-level render of CareerPage
+// can drive the store fns directly via vi.mocked(...). Sub-components keep
+// using their fake clients — the real store fns (listCompetencies / etc) are
+// pass-through except for the four listed below.
+vi.mock("#/lib/supabase", () => ({
+  supabase: { from: () => ({}) },
+}));
+
+vi.mock("#/features/career/store", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("#/features/career/store")>();
+  return {
+    ...actual,
+    listLevels: vi.fn(actual.listLevels),
+    getActiveLevel: vi.fn(actual.getActiveLevel),
+    seedSampleTemplate: vi.fn(actual.seedSampleTemplate),
+    listCompetencies: vi.fn(actual.listCompetencies),
+  };
+});
 
 function level(overrides: Partial<StoredLevel> = {}): StoredLevel {
   return {
@@ -34,6 +59,94 @@ function level(overrides: Partial<StoredLevel> = {}): StoredLevel {
     ...overrides,
   };
 }
+
+describe("CareerPage first-run seed", () => {
+  let originalListCompetencies: typeof listCompetencies;
+  beforeEach(async () => {
+    const actual = await vi.importActual<typeof import("#/features/career/store")>(
+      "#/features/career/store",
+    );
+    originalListCompetencies = actual.listCompetencies;
+    vi.mocked(listLevels).mockReset();
+    vi.mocked(getActiveLevel).mockReset();
+    vi.mocked(seedSampleTemplate).mockReset();
+    vi.mocked(listCompetencies).mockReset().mockResolvedValue([]);
+    vi.mocked(seedSampleTemplate).mockResolvedValue(undefined);
+  });
+  afterEach(() => {
+    vi.mocked(listCompetencies).mockImplementation(originalListCompetencies);
+  });
+
+  it("seeds the sample template when no levels exist and renders the active level", async () => {
+    vi.mocked(listLevels).mockResolvedValue([]);
+    vi.mocked(getActiveLevel).mockResolvedValue({
+      id: "lvl-seeded",
+      title: "Sample",
+      status: "active",
+      header: [],
+      sheet_id: null,
+      last_synced_at: null,
+      created_at: "2026-05-10T00:00:00Z",
+      archived_at: null,
+    });
+    render(<CareerPage />);
+    await waitFor(() => {
+      expect(screen.getByText("Sample")).toBeTruthy();
+    });
+    expect(seedSampleTemplate).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not re-seed when levels already exist", async () => {
+    vi.mocked(listLevels).mockResolvedValue([
+      {
+        id: "lvl-existing",
+        title: "L4",
+        status: "active",
+        header: [],
+        sheet_id: null,
+        last_synced_at: null,
+        created_at: "2026-05-10T00:00:00Z",
+        archived_at: null,
+      },
+    ]);
+    vi.mocked(getActiveLevel).mockResolvedValue({
+      id: "lvl-existing",
+      title: "L4",
+      status: "active",
+      header: [],
+      sheet_id: null,
+      last_synced_at: null,
+      created_at: "2026-05-10T00:00:00Z",
+      archived_at: null,
+    });
+    render(<CareerPage />);
+    await waitFor(() => {
+      expect(screen.getByText("L4")).toBeTruthy();
+    });
+    expect(seedSampleTemplate).not.toHaveBeenCalled();
+  });
+
+  it("does not re-seed when only archived levels remain", async () => {
+    vi.mocked(listLevels).mockResolvedValue([
+      {
+        id: "lvl-archived",
+        title: "Old",
+        status: "archived",
+        header: [],
+        sheet_id: null,
+        last_synced_at: null,
+        created_at: "2026-05-10T00:00:00Z",
+        archived_at: "2026-05-10T00:00:00Z",
+      },
+    ]);
+    vi.mocked(getActiveLevel).mockResolvedValue(null);
+    render(<CareerPage />);
+    await waitFor(() => {
+      expect(screen.getByLabelText("Level name")).toBeTruthy();
+    });
+    expect(seedSampleTemplate).not.toHaveBeenCalled();
+  });
+});
 
 describe("CareerOnboardingView", () => {
   it("renders the level title input and create button", () => {

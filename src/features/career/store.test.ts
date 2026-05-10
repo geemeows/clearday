@@ -18,6 +18,7 @@ import {
   renameIndicator,
   searchProjectCards,
   setCriterionTarget,
+  seedSampleTemplate,
   setIndicatorScore,
   setLevelHeader,
   setScaleLegend,
@@ -902,6 +903,135 @@ describe("getLevelTree", () => {
       indicators: [],
     });
     expect(inSpies).toEqual([]);
+  });
+});
+
+describe("seedSampleTemplate", () => {
+  it("writes one level, then competencies, criteria, and indicators", async () => {
+    const upsertCalls: Array<{ table: string; values: Record<string, unknown> }> =
+      [];
+    const client: SupabaseLike = {
+      from: (table: string) => ({
+        upsert: async (
+          values: Record<string, unknown> | Record<string, unknown>[],
+        ) => {
+          const v = (Array.isArray(values) ? values[0] : values) as Record<
+            string,
+            unknown
+          >;
+          upsertCalls.push({ table, values: v });
+          return { error: null as null };
+        },
+        select: vi.fn() as never,
+        update: vi.fn() as never,
+        delete: vi.fn() as never,
+      }),
+    };
+    await seedSampleTemplate(client, {
+      title: "Sample",
+      competencies: [
+        {
+          name: "C1",
+          criteria: [
+            {
+              name: "Cr1",
+              target: 3,
+              indicators: [{ code: "A", description: "Ind1" }],
+            },
+          ],
+        },
+        {
+          name: "C2",
+          criteria: [],
+        },
+      ],
+    });
+    const tables = upsertCalls.map((c) => c.table);
+    expect(tables).toEqual([
+      "career_levels",
+      "career_competencies",
+      "career_criteria",
+      "career_indicators",
+      "career_competencies",
+    ]);
+    const levelCall = upsertCalls[0];
+    expect(levelCall?.values).toMatchObject({ title: "Sample", status: "active" });
+    const compCall = upsertCalls[1];
+    expect(compCall?.values).toMatchObject({
+      name: "C1",
+      level_id: levelCall?.values.id,
+      position: 0,
+    });
+    const critCall = upsertCalls[2];
+    expect(critCall?.values).toMatchObject({
+      name: "Cr1",
+      target: 3,
+      competency_id: compCall?.values.id,
+      position: 0,
+    });
+    const indCall = upsertCalls[3];
+    expect(indCall?.values).toMatchObject({
+      code: "A",
+      description: "Ind1",
+      criterion_id: critCall?.values.id,
+      score: 1,
+      position: 0,
+    });
+    const comp2Call = upsertCalls[4];
+    expect(comp2Call?.values).toMatchObject({
+      name: "C2",
+      position: 1024,
+    });
+  });
+
+  it("uses the bundled SAMPLE_TEMPLATE by default", async () => {
+    const upsertCalls: Array<{ table: string; values: Record<string, unknown> }> =
+      [];
+    const client: SupabaseLike = {
+      from: (table: string) => ({
+        upsert: async (
+          values: Record<string, unknown> | Record<string, unknown>[],
+        ) => {
+          const v = (Array.isArray(values) ? values[0] : values) as Record<
+            string,
+            unknown
+          >;
+          upsertCalls.push({ table, values: v });
+          return { error: null as null };
+        },
+        select: vi.fn() as never,
+        update: vi.fn() as never,
+        delete: vi.fn() as never,
+      }),
+    };
+    await seedSampleTemplate(client);
+    expect(upsertCalls[0]?.values).toMatchObject({ title: "Sample" });
+    const compCount = upsertCalls.filter(
+      (c) => c.table === "career_competencies",
+    ).length;
+    const indCount = upsertCalls.filter(
+      (c) => c.table === "career_indicators",
+    ).length;
+    expect(compCount).toBe(2);
+    expect(indCount).toBe(6);
+  });
+
+  it("throws when an inner write fails", async () => {
+    let calls = 0;
+    const client: SupabaseLike = {
+      from: (_table: string) => ({
+        upsert: async () => {
+          calls += 1;
+          if (calls === 2)
+            return { error: { message: "boom" } as { message: string } };
+          return { error: null as null };
+        },
+        select: vi.fn() as never,
+        update: vi.fn() as never,
+        delete: vi.fn() as never,
+      }),
+    };
+    await expect(seedSampleTemplate(client)).rejects.toThrow("boom");
   });
 });
 

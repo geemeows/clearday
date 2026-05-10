@@ -15,6 +15,8 @@ import {
   listCriteria,
   listEvidence,
   listIndicators,
+  listLevels,
+  seedSampleTemplate,
   renameCompetency,
   renameCriterion,
   renameIndicator,
@@ -40,7 +42,7 @@ export const Route = createFileRoute("/_app/career")({
   component: CareerPage,
 });
 
-function CareerPage() {
+export function CareerPage() {
   const [active, setActive] = useState<StoredLevel | null | undefined>(
     undefined,
   );
@@ -49,13 +51,22 @@ function CareerPage() {
 
   useEffect(() => {
     let cancelled = false;
-    getActiveLevel(client)
-      .then((level) => {
-        if (!cancelled) setActive(level);
-      })
-      .catch((e) => {
+    // First-run seed: if no levels have ever existed (active or archived), write
+    // the sample template so the user lands on a real tree instead of an empty
+    // create-form. Archived levels count as "exists" so the seed never re-fires
+    // after the user archives the sample.
+    (async () => {
+      try {
+        const levels = await listLevels(client);
+        if (levels.length === 0) {
+          await seedSampleTemplate(client);
+        }
+        const active = await getActiveLevel(client);
+        if (!cancelled) setActive(active);
+      } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : "failed");
-      });
+      }
+    })();
     return () => {
       cancelled = true;
     };

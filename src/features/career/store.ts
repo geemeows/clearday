@@ -6,6 +6,7 @@
 // Mirrors features/projects/store.ts — thin SupabaseLike client so tests can
 // drive it without the SDK; RLS gates access to the allowed user.
 
+import { SAMPLE_TEMPLATE, type SampleTemplate } from "#/features/career/sample-template";
 import type { SupabaseLike } from "#/shared/db";
 
 export type LevelStatus = "active" | "archived";
@@ -508,6 +509,55 @@ export async function getLevelTree(
     indicators = (data ?? []) as StoredIndicator[];
   }
   return { competencies, criteria, indicators };
+}
+
+// First-run seed: writes the sample template (level + competencies + criteria
+// + indicators) as a single active level. Caller gates on listLevels() being
+// empty so the seed runs at most once per user. Composes the existing CRUD fns
+// rather than batching at the wire level — the row count is small (~12) and
+// reusing them keeps the seed shape (defaults, error wrapping) consistent with
+// hand-created rows.
+export async function seedSampleTemplate(
+  client: SupabaseLike,
+  template: SampleTemplate = SAMPLE_TEMPLATE,
+): Promise<void> {
+  const levelId = crypto.randomUUID();
+  await createLevel(client, { id: levelId, title: template.title });
+  for (let ci = 0; ci < template.competencies.length; ci++) {
+    const comp = template.competencies[ci];
+    if (!comp) continue;
+    const compId = crypto.randomUUID();
+    await createCompetency(client, {
+      id: compId,
+      level_id: levelId,
+      name: comp.name,
+      position: ci * 1024,
+    });
+    for (let cri = 0; cri < comp.criteria.length; cri++) {
+      const crit = comp.criteria[cri];
+      if (!crit) continue;
+      const critId = crypto.randomUUID();
+      await createCriterion(client, {
+        id: critId,
+        competency_id: compId,
+        name: crit.name,
+        target: crit.target,
+        position: cri * 1024,
+      });
+      for (let ii = 0; ii < crit.indicators.length; ii++) {
+        const ind = crit.indicators[ii];
+        if (!ind) continue;
+        await createIndicator(client, {
+          id: crypto.randomUUID(),
+          criterion_id: critId,
+          code: ind.code ?? null,
+          description: ind.description,
+          notes: ind.notes ?? null,
+          position: ii * 1024,
+        });
+      }
+    }
+  }
 }
 
 // Picker support: simple title-prefix search over project_cards. Read-only —
