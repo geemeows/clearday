@@ -3,19 +3,30 @@
 // Worker glue loads tokens and calls this; nothing about the session is
 // stored locally — the providers' own expirations are the source of truth.
 //
-// Best-effort semantics: each provider write is independent. A failure in
-// one (e.g. Slack token revoked) must not roll back the others — Calendar
-// can still hold the busy block, etc. The result records per-provider
-// outcomes so the caller can surface a clear partial-success message.
+// Multi-account (#120): Slack is the one explicit fan-out — DND + status
+// are set on every connected Slack account so heads-down means heads-down
+// everywhere. Each per-account write is independent; one expired token on
+// workspace B does not abort the session for workspace A or for Calendar.
+// The result records per-account outcomes so the caller can stamp
+// `provider_accounts.status` (the per-account status surface) for the
+// failing rows without aborting the session.
 
 export type FocusStartParams = {
   duration_minutes: number;
   message?: string;
 };
 
+export type SlackAccountToken = {
+  /** `provider_accounts.id` for the account row this token belongs to. */
+  accountId: string;
+  token: string;
+};
+
 export type FocusTokens = {
   google: string | null;
-  slack: string | null;
+  /** One entry per connected Slack account. Empty array = no Slack
+   * connected; the session continues with Calendar-only side effects. */
+  slack: SlackAccountToken[];
 };
 
 export type FocusDeps = {
@@ -30,15 +41,39 @@ export type FocusDeps = {
 
 export type ProviderOutcome =
   | { ok: true }
-  | { ok: false; error: string; reason?: "no_token" | "api_error" };
+  | { ok: false; error: string; reason?: "no_token" | "auth_failed" | "api_error" };
+
+export type SlackAccountOutcome = {
+  accountId: string;
+  status: ProviderOutcome;
+  dnd: ProviderOutcome;
+};
 
 export type FocusStartResult = {
   calendar: ProviderOutcome & { eventId?: string };
-  slack_status: ProviderOutcome;
-  slack_dnd: ProviderOutcome;
+  slack: SlackAccountOutcome[];
+};
+
+export type FocusEndDeps = {
+  tokens: { slack: SlackAccountToken[] };
+  fetch: typeof fetch;
+};
+
+export type FocusEndResult = {
+  slack: SlackAccountOutcome[];
 };
 
 const DEFAULT_EMOJI = ":no_bell:";
+
+// Slack error codes that mean "this token is dead — record the per-account
+// failure so the user can reauthorize that one workspace from Settings".
+const SLACK_AUTH_ERRORS = new Set([
+  "invalid_auth",
+  "not_authed",
+  "token_revoked",
+  "token_expired",
+  "account_inactive",
+]);
 
 export async function startFocusSession(
   params: FocusStartParams,
@@ -55,13 +90,39 @@ export async function startFocusSession(
   const end = new Date(now.getTime() + params.duration_minutes * 60 * 1000);
   const summary = (params.message ?? "Focus").trim() || "Focus";
 
-  const [calendar, slack_status, slack_dnd] = await Promise.all([
-    writeCalendarEvent(summary, start, end, deps),
-    writeSlackStatus(summary, end, deps),
-    writeSlackDnd(params.duration_minutes, deps),
-  ]);
+  const calendarP = writeCalendarEvent(summary, start, end, deps);
+  const slackP = Promise.all(
+    deps.tokens.slack.map(async (acct) => {
+      const [status, dnd] = await Promise.all([
+        writeSlackStatus(summary, end, acct.token, deps),
+        writeSlackDnd(params.duration_minutes, acct.token, deps),
+      ]);
+      return { accountId: acct.accountId, status, dnd };
+    }),
+  );
+  const [calendar, slack] = await Promise.all([calendarP, slackP]);
+  return { calendar, slack };
+}
 
-  return { calendar, slack_status, slack_dnd };
+/**
+ * End an in-progress Focus session: clear DND and the status emoji/text on
+ * every connected Slack account. Symmetric counterpart to
+ * `startFocusSession` — partial failures are reported per-account and never
+ * abort the rest of the fan-out.
+ */
+export async function endFocusSession(
+  deps: FocusEndDeps,
+): Promise<FocusEndResult> {
+  const slack = await Promise.all(
+    deps.tokens.slack.map(async (acct) => {
+      const [status, dnd] = await Promise.all([
+        clearSlackStatus(acct.token, deps.fetch),
+        clearSlackDnd(acct.token, deps.fetch),
+      ]);
+      return { accountId: acct.accountId, status, dnd };
+    }),
+  );
+  return { slack };
 }
 
 async function writeCalendarEvent(
@@ -113,11 +174,9 @@ async function writeCalendarEvent(
 async function writeSlackStatus(
   message: string,
   end: Date,
+  token: string,
   deps: FocusDeps,
 ): Promise<ProviderOutcome> {
-  const token = deps.tokens.slack;
-  if (!token)
-    return { ok: false, error: "slack not connected", reason: "no_token" };
   try {
     const res = await deps.fetch("https://slack.com/api/users.profile.set", {
       method: "POST",
@@ -141,11 +200,9 @@ async function writeSlackStatus(
 
 async function writeSlackDnd(
   durationMinutes: number,
+  token: string,
   deps: FocusDeps,
 ): Promise<ProviderOutcome> {
-  const token = deps.tokens.slack;
-  if (!token)
-    return { ok: false, error: "slack not connected", reason: "no_token" };
   try {
     // dnd.setSnooze takes a form-encoded `num_minutes`.
     const body = new URLSearchParams({
@@ -165,23 +222,68 @@ async function writeSlackDnd(
   }
 }
 
+async function clearSlackStatus(
+  token: string,
+  fetchImpl: typeof fetch,
+): Promise<ProviderOutcome> {
+  try {
+    const res = await fetchImpl("https://slack.com/api/users.profile.set", {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${token}`,
+        "content-type": "application/json; charset=utf-8",
+      },
+      body: JSON.stringify({
+        profile: { status_text: "", status_emoji: "", status_expiration: 0 },
+      }),
+    });
+    return await slackOutcome(res, "users.profile.set");
+  } catch (err) {
+    return { ok: false, error: errMsg(err), reason: "api_error" };
+  }
+}
+
+async function clearSlackDnd(
+  token: string,
+  fetchImpl: typeof fetch,
+): Promise<ProviderOutcome> {
+  try {
+    const res = await fetchImpl("https://slack.com/api/dnd.endDnd", {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${token}`,
+        "content-type": "application/x-www-form-urlencoded",
+      },
+      body: "",
+    });
+    return await slackOutcome(res, "dnd.endDnd");
+  } catch (err) {
+    return { ok: false, error: errMsg(err), reason: "api_error" };
+  }
+}
+
 async function slackOutcome(
   res: { ok: boolean; status: number; json: () => Promise<unknown> },
   label: string,
 ): Promise<ProviderOutcome> {
   if (!res.ok) {
+    const reason = res.status === 401 || res.status === 403 ? "auth_failed" : "api_error";
     return {
       ok: false,
       error: `${label} HTTP ${res.status}`,
-      reason: "api_error",
+      reason,
     };
   }
   const body = (await res.json()) as { ok?: boolean; error?: string };
   if (!body.ok) {
+    const code = body.error ?? "unknown_error";
+    const reason: "auth_failed" | "api_error" = SLACK_AUTH_ERRORS.has(code)
+      ? "auth_failed"
+      : "api_error";
     return {
       ok: false,
-      error: `${label}: ${body.error ?? "unknown_error"}`,
-      reason: "api_error",
+      error: `${label}: ${code}`,
+      reason,
     };
   }
   return { ok: true };

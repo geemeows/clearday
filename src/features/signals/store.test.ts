@@ -96,7 +96,9 @@ describe("upsertSignal", () => {
     await upsertSignal(client, sample);
     expect(spies.upsert).toHaveBeenCalledTimes(1);
     const [rows, opts] = spies.upsert.mock.calls[0];
-    expect(opts).toEqual({ onConflict: "provider,kind,source_id" });
+    expect(opts).toEqual({
+      onConflict: "provider,account_id,kind,source_id",
+    });
     const values = rows[0];
     expect(values).toMatchObject({
       provider: "github",
@@ -182,6 +184,27 @@ describe("listSignals", () => {
     const { client, spies } = makeClient({ listData: [] });
     await listSignals(client, {});
     expect(spies.gte).not.toHaveBeenCalled();
+  });
+
+  it("filters by provider via .in('provider', [..])", async () => {
+    const { client, spies } = makeClient({ listData: [] });
+    await listSignals(client, { providers: ["github"] });
+    expect(spies.in).toHaveBeenCalledWith("provider", ["github"]);
+  });
+
+  it("scopes to a single account via .eq('account_id', id) when accountId is set", async () => {
+    const { client, spies } = makeClient({ listData: [] });
+    await listSignals(client, { accountId: "acc-1" });
+    expect(spies.selectEq).toHaveBeenCalledWith("account_id", "acc-1");
+  });
+
+  it("default (no accountId) does not constrain account_id — tombstoned signals still come through", async () => {
+    const { client, spies } = makeClient({ listData: [] });
+    await listSignals(client, {});
+    const accountIdCall = spies.selectEq.mock.calls.find(
+      (call: unknown[]) => call[0] === "account_id",
+    );
+    expect(accountIdCall).toBeUndefined();
   });
 });
 

@@ -18,7 +18,7 @@ function listClient() {
   const chain = { is, in: inFn, ilike, or, gte, lt, eq, order, limit };
   const select = vi.fn(() => chain);
   return {
-    spies: { is, in: inFn, ilike, or, gte, order, limit, select },
+    spies: { is, in: inFn, ilike, or, gte, eq, order, limit, select },
     client: {
       from: () => ({
         select,
@@ -139,6 +139,56 @@ describe("handleListSignals", () => {
       client,
     );
     expect(spies.or).toHaveBeenCalled();
+  });
+
+  it("forwards provider= as a single-provider .in filter", async () => {
+    const { client, spies } = listClient();
+    await handleListSignals(
+      new URL("https://x/api/signals?filter=all&provider=github"),
+      client,
+    );
+    expect(spies.in).toHaveBeenCalledWith("provider", ["github"]);
+  });
+
+  it("rejects an unknown provider value", async () => {
+    const { client } = listClient();
+    const res = await handleListSignals(
+      new URL("https://x/api/signals?filter=all&provider=bogus"),
+      client,
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it("forwards account_id= as an .eq filter", async () => {
+    const { client, spies } = listClient();
+    await handleListSignals(
+      new URL("https://x/api/signals?filter=all&account_id=acc-7"),
+      client,
+    );
+    expect(spies.eq).toHaveBeenCalledWith("account_id", "acc-7");
+  });
+
+  it("provider+account_id combines as a provider filter scoped to a single account", async () => {
+    const { client, spies } = listClient();
+    await handleListSignals(
+      new URL(
+        "https://x/api/signals?filter=all&provider=github&account_id=acc-7",
+      ),
+      client,
+    );
+    expect(spies.in).toHaveBeenCalledWith("provider", ["github"]);
+  });
+
+  it("default (no provider, no account_id) returns the union — no provider/account_id constraints", async () => {
+    const { client, spies } = listClient();
+    await handleListSignals(
+      new URL("https://x/api/signals?filter=all"),
+      client,
+    );
+    const providerCall = spies.in.mock.calls.find(
+      (call: unknown[]) => call[0] === "provider",
+    );
+    expect(providerCall).toBeUndefined();
   });
 
   it("clamps user-supplied limit to 200", async () => {
@@ -307,5 +357,34 @@ describe("handleSources", () => {
     };
     const slack = body.sources.find((s) => s.provider === "slack");
     expect(slack?.status).toBe("stale");
+  });
+
+  it("returns one source row per (provider, account_id)", async () => {
+    const res = await handleSources(async () => [
+      {
+        provider: "github",
+        account_id: "personal",
+        updated_at: "2026-05-01T00:00:00Z",
+        status: "ok",
+      },
+      {
+        provider: "github",
+        account_id: "work",
+        updated_at: "2026-05-02T00:00:00Z",
+        status: "auth_failed",
+      },
+    ]);
+    const body = (await res.json()) as {
+      sources: Array<{
+        provider: string;
+        account_id: string | null;
+        status: string;
+      }>;
+    };
+    const github = body.sources.filter((s) => s.provider === "github");
+    expect(github).toHaveLength(2);
+    const map = Object.fromEntries(github.map((s) => [s.account_id, s.status]));
+    expect(map.personal).toBe("ok");
+    expect(map.work).toBe("auth_failed");
   });
 });

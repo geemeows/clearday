@@ -18,4 +18,24 @@ describe("SlackReplyComposer", () => {
     const send = screen.getByText("Send") as HTMLButtonElement;
     expect(send.disabled).toBe(true);
   });
+
+  it("renders a 'From: @handle · workspace' indicator when an account is provided", () => {
+    render(
+      <SlackReplyComposer
+        channel="C123"
+        account={{ handle: "@kovacs.dev", workspace: "Acme" }}
+        submit={async () => ({ ok: true })}
+      />,
+    );
+    expect(screen.getByLabelText("Sending account").textContent).toBe(
+      "From: @kovacs.dev · Acme",
+    );
+  });
+
+  it("omits the From indicator when no account is provided", () => {
+    render(
+      <SlackReplyComposer channel="C123" submit={async () => ({ ok: true })} />,
+    );
+    expect(screen.queryByLabelText("Sending account")).toBeNull();
+  });
 });

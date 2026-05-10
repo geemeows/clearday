@@ -42,6 +42,11 @@ export type LinkedItem =
 
 export type StoredSignal = Signal & {
   id: string;
+  // Provenance: which connected provider account brought this Signal in.
+  // Stamped at ingest by `upsertSignals(... { accountId })`. Nullable
+  // because removing a connected account tombstones the Signal's provenance
+  // (FK ON DELETE SET NULL) — the Signal survives in Inbox history.
+  account_id?: string | null;
   unread_count: number;
   created_at: string;
   updated_at: string;

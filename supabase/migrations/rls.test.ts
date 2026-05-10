@@ -59,6 +59,16 @@ const lastPolledSql = readFileSync(
   "utf8",
 );
 
+const multiAccountSql = readFileSync(
+  resolve(__dirname, "0027_multi_account_foundations.sql"),
+  "utf8",
+);
+
+const careerSql = readFileSync(
+  resolve(__dirname, "0028_career.sql"),
+  "utf8",
+);
+
 describe("0001_init.sql contents", () => {
   it("declares the (provider, kind, source_id) unique constraint on signals", () => {
     expect(migrationSql).toMatch(
@@ -116,6 +126,104 @@ describe("0020_provider_accounts_last_polled.sql contents", () => {
     expect(lastPolledSql).toMatch(
       /alter table public\.provider_accounts\s+add column if not exists last_polled_at timestamptz null/i,
     );
+  });
+});
+
+describe("0027_multi_account_foundations.sql contents", () => {
+  it("adopts a synthetic uuid id as the new provider_accounts primary key", () => {
+    expect(multiAccountSql).toMatch(
+      /add column if not exists id uuid not null default gen_random_uuid\(\)/i,
+    );
+    expect(multiAccountSql).toMatch(
+      /drop constraint if exists provider_accounts_pkey/i,
+    );
+    expect(multiAccountSql).toMatch(
+      /add constraint provider_accounts_pkey primary key \(id\)/i,
+    );
+  });
+
+  it("adds the account columns required by the multi-account UI", () => {
+    for (const col of ["handle", "display_name", "context", "added_at"]) {
+      expect(multiAccountSql).toContain(col);
+    }
+    expect(multiAccountSql).toMatch(/"primary" boolean not null default false/);
+  });
+
+  it("auto-flags existing rows as primary so single-account deployments migrate in place", () => {
+    expect(multiAccountSql).toMatch(/set\s+"primary"\s*=\s*true/i);
+  });
+
+  it("declares the (provider, account_id) unique index and the partial primary unique", () => {
+    expect(multiAccountSql).toMatch(
+      /create unique index if not exists provider_accounts_provider_account_idx[\s\S]+\(provider, account_id\)/i,
+    );
+    expect(multiAccountSql).toMatch(
+      /create unique index if not exists provider_accounts_one_primary_idx[\s\S]+where "primary"/i,
+    );
+  });
+
+  it("adds signals.account_id with on-delete-set-null FK to provider_accounts(id)", () => {
+    expect(multiAccountSql).toMatch(
+      /alter table public\.signals\s+add column if not exists account_id uuid\s+references public\.provider_accounts \(id\) on delete set null/i,
+    );
+  });
+
+  it("relaxes the signals unique to (provider, account_id, kind, source_id)", () => {
+    expect(multiAccountSql).toMatch(
+      /drop constraint if exists signals_provider_kind_source_id_key/i,
+    );
+    expect(multiAccountSql).toMatch(
+      /create unique index if not exists signals_provider_account_kind_source_idx[\s\S]+\(provider, account_id, kind, source_id\)/i,
+    );
+  });
+});
+
+describe("0028_career.sql contents", () => {
+  it("creates the five career tree tables plus scale legend", () => {
+    for (const t of [
+      "career_levels",
+      "career_competencies",
+      "career_criteria",
+      "career_indicators",
+      "career_evidence",
+      "career_scale_legend",
+    ]) {
+      expect(careerSql).toMatch(
+        new RegExp(`create table public\\.${t}`, "i"),
+      );
+    }
+  });
+
+  it("enforces exactly one active level via a partial unique index", () => {
+    expect(careerSql).toMatch(
+      /create unique index career_levels_one_active_idx[\s\S]+where status = 'active'/i,
+    );
+  });
+
+  it("constrains target and score to the 0–4 range", () => {
+    expect(careerSql).toMatch(/target between 0 and 4/i);
+    expect(careerSql).toMatch(/score between 0 and 4/i);
+  });
+
+  it("cascades deletes from level → competency → criterion → indicator → evidence", () => {
+    const cascades = careerSql.match(/on delete cascade/gi) ?? [];
+    expect(cascades.length).toBeGreaterThanOrEqual(4);
+  });
+
+  it("enables RLS with the allowed-user predicate on every career table", () => {
+    for (const t of [
+      "career_levels",
+      "career_competencies",
+      "career_criteria",
+      "career_indicators",
+      "career_evidence",
+      "career_scale_legend",
+    ]) {
+      expect(careerSql).toMatch(
+        new RegExp(`alter table public\\.${t} enable row level security`, "i"),
+      );
+    }
+    expect(careerSql).toMatch(/public\.is_allowed_user\(\)/);
   });
 });
 

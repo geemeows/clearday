@@ -111,6 +111,37 @@ describe("runScheduledPoll", () => {
     expect(firstCall[1].headers.authorization).toBe("Bearer ghu_abc");
   });
 
+  it("stamps account_id on every upserted Signal from the polling account row", async () => {
+    const store = makeStore();
+    const fetchImpl = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ items: [githubItem] }), { status: 200 }),
+    );
+    const deps: OrchestratorDeps = {
+      loadAccounts: async () => [
+        {
+          id: "acct-uuid-1",
+          provider: "github",
+          access_token: "ghu_abc",
+          refresh_token: null,
+          expires_at: null,
+        },
+      ],
+      store: store.client,
+      fetch: fetchImpl as unknown as typeof fetch,
+    };
+    await runScheduledPoll(deps);
+    expect(store.upsert).toHaveBeenCalledTimes(1);
+    const [rows, opts] = store.upsert.mock.calls[0] as unknown as [
+      Array<Record<string, unknown>>,
+      { onConflict: string },
+    ];
+    expect(rows[0]?.account_id).toBe("acct-uuid-1");
+    expect(opts).toEqual({
+      onConflict: "provider,account_id,kind,source_id",
+    });
+  });
+
   it("captures per-provider errors without throwing the whole batch", async () => {
     const store = makeStore();
     const fetchImpl = vi.fn(

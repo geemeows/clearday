@@ -18,6 +18,7 @@ import { Route as AppTodayRouteImport } from './routes/_app.today'
 import { Route as AppSettingsRouteImport } from './routes/_app.settings'
 import { Route as AppProjectsRouteImport } from './routes/_app.projects'
 import { Route as AppInboxRouteImport } from './routes/_app.inbox'
+import { Route as AppCareerRouteImport } from './routes/_app.career'
 import { Route as AppCalendarRouteImport } from './routes/_app.calendar'
 import { Route as AppAutomationsRouteImport } from './routes/_app.automations'
 import { Route as AppSettingsIndexRouteImport } from './routes/_app.settings.index'
@@ -71,6 +72,11 @@ const AppProjectsRoute = AppProjectsRouteImport.update({
 const AppInboxRoute = AppInboxRouteImport.update({
   id: '/inbox',
   path: '/inbox',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppCareerRoute = AppCareerRouteImport.update({
+  id: '/career',
+  path: '/career',
   getParentRoute: () => AppRoute,
 } as any)
 const AppCalendarRoute = AppCalendarRouteImport.update({
@@ -131,6 +137,7 @@ export interface FileRoutesByFullPath {
   '/onboarding': typeof OnboardingRoute
   '/automations': typeof AppAutomationsRoute
   '/calendar': typeof AppCalendarRoute
+  '/career': typeof AppCareerRoute
   '/inbox': typeof AppInboxRoute
   '/projects': typeof AppProjectsRouteWithChildren
   '/settings': typeof AppSettingsRouteWithChildren
@@ -151,6 +158,7 @@ export interface FileRoutesByTo {
   '/onboarding': typeof OnboardingRoute
   '/automations': typeof AppAutomationsRoute
   '/calendar': typeof AppCalendarRoute
+  '/career': typeof AppCareerRoute
   '/inbox': typeof AppInboxRoute
   '/today': typeof AppTodayRoute
   '/auth/callback': typeof AuthCallbackRoute
@@ -171,6 +179,7 @@ export interface FileRoutesById {
   '/onboarding': typeof OnboardingRoute
   '/_app/automations': typeof AppAutomationsRoute
   '/_app/calendar': typeof AppCalendarRoute
+  '/_app/career': typeof AppCareerRoute
   '/_app/inbox': typeof AppInboxRoute
   '/_app/projects': typeof AppProjectsRouteWithChildren
   '/_app/settings': typeof AppSettingsRouteWithChildren
@@ -193,6 +202,7 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/automations'
     | '/calendar'
+    | '/career'
     | '/inbox'
     | '/projects'
     | '/settings'
@@ -213,6 +223,7 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/automations'
     | '/calendar'
+    | '/career'
     | '/inbox'
     | '/today'
     | '/auth/callback'
@@ -232,6 +243,7 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/_app/automations'
     | '/_app/calendar'
+    | '/_app/career'
     | '/_app/inbox'
     | '/_app/projects'
     | '/_app/settings'
@@ -318,6 +330,13 @@ declare module '@tanstack/react-router' {
       path: '/inbox'
       fullPath: '/inbox'
       preLoaderRoute: typeof AppInboxRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/career': {
+      id: '/_app/career'
+      path: '/career'
+      fullPath: '/career'
+      preLoaderRoute: typeof AppCareerRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/calendar': {
@@ -432,6 +451,7 @@ const AppSettingsRouteWithChildren = AppSettingsRoute._addFileChildren(
 interface AppRouteChildren {
   AppAutomationsRoute: typeof AppAutomationsRoute
   AppCalendarRoute: typeof AppCalendarRoute
+  AppCareerRoute: typeof AppCareerRoute
   AppInboxRoute: typeof AppInboxRoute
   AppProjectsRoute: typeof AppProjectsRouteWithChildren
   AppSettingsRoute: typeof AppSettingsRouteWithChildren
@@ -441,6 +461,7 @@ interface AppRouteChildren {
 const AppRouteChildren: AppRouteChildren = {
   AppAutomationsRoute: AppAutomationsRoute,
   AppCalendarRoute: AppCalendarRoute,
+  AppCareerRoute: AppCareerRoute,
   AppInboxRoute: AppInboxRoute,
   AppProjectsRoute: AppProjectsRouteWithChildren,
   AppSettingsRoute: AppSettingsRouteWithChildren,

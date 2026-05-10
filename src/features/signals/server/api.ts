@@ -54,8 +54,19 @@ export async function handleListSignals(
       : undefined;
   const includeDismissed = url.searchParams.get("include_dismissed") === "true";
   const includeSnoozed = url.searchParams.get("include_snoozed") === "true";
+  const providerParam = url.searchParams.get("provider");
+  const providers =
+    providerParam && PROVIDERS.includes(providerParam as SignalProvider)
+      ? [providerParam as SignalProvider]
+      : undefined;
+  if (providerParam && !providers) {
+    return json({ error: `unknown provider: ${providerParam}` }, 400);
+  }
+  const accountId = url.searchParams.get("account_id") ?? undefined;
   const signals = await listSignals(client, {
     kinds,
+    providers,
+    accountId,
     query,
     limit,
     since,
@@ -80,6 +91,13 @@ export type SourceStatusRow = {
   updated_at: string | null;
   status: string | null;
   last_polled_at?: string | null;
+  /** Synthetic provider_accounts.id (uuid). Needed by the FE for
+   * `DELETE /api/accounts/:id` and `POST /api/accounts/:id/primary`. */
+  id?: string | null;
+  handle?: string | null;
+  display_name?: string | null;
+  context?: string | null;
+  primary?: boolean | null;
 };
 
 export type SourceStatus = {
@@ -88,6 +106,12 @@ export type SourceStatus = {
   account_id: string | null;
   updated_at: string | null;
   last_polled_at: string | null;
+  /** Synthetic provider_accounts.id (uuid), null for unconnected providers. */
+  id: string | null;
+  handle: string | null;
+  display_name: string | null;
+  context: string | null;
+  primary: boolean;
 };
 
 export async function handleSources(
@@ -95,22 +119,50 @@ export async function handleSources(
   now: number = Date.now(),
 ): Promise<Response> {
   const rows = await loadAccounts();
-  const byProvider = new Map(rows.map((r) => [r.provider, r]));
-  const sources: SourceStatus[] = PROVIDERS.map((provider) => {
-    const row = byProvider.get(provider);
-    return {
-      provider,
-      status: deriveProviderAccountStatus({
-        providerId: provider,
-        rowPresent: row !== undefined,
-        rowStatus: row?.status ?? null,
-        lastPolledAt: row?.last_polled_at ?? null,
-        now,
-      }),
-      account_id: row?.account_id ?? null,
-      updated_at: row?.updated_at ?? null,
-      last_polled_at: row?.last_polled_at ?? null,
-    };
-  });
+  const sources: SourceStatus[] = [];
+  for (const provider of PROVIDERS) {
+    const matches = rows.filter((r) => r.provider === provider);
+    if (matches.length === 0) {
+      sources.push({
+        provider,
+        status: deriveProviderAccountStatus({
+          providerId: provider,
+          rowPresent: false,
+          rowStatus: null,
+          lastPolledAt: null,
+          now,
+        }),
+        account_id: null,
+        updated_at: null,
+        last_polled_at: null,
+        id: null,
+        handle: null,
+        display_name: null,
+        context: null,
+        primary: false,
+      });
+      continue;
+    }
+    for (const row of matches) {
+      sources.push({
+        provider,
+        status: deriveProviderAccountStatus({
+          providerId: provider,
+          rowPresent: true,
+          rowStatus: row.status ?? null,
+          lastPolledAt: row.last_polled_at ?? null,
+          now,
+        }),
+        account_id: row.account_id ?? null,
+        updated_at: row.updated_at ?? null,
+        last_polled_at: row.last_polled_at ?? null,
+        id: row.id ?? null,
+        handle: row.handle ?? null,
+        display_name: row.display_name ?? null,
+        context: row.context ?? null,
+        primary: row.primary === true,
+      });
+    }
+  }
   return json({ sources });
 }

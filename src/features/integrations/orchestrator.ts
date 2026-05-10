@@ -168,7 +168,10 @@ async function pollOne(
   };
 
   const { signals, delta } = await provider.poll(accessToken, ctx, state);
-  await upsertSignals(deps.store, signals, { automations });
+  await upsertSignals(deps.store, signals, {
+    automations,
+    accountId: account.id ?? null,
+  });
   if (provider.saveState) {
     try {
       await provider.saveState(stateDeps, delta);

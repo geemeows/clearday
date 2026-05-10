@@ -24,6 +24,9 @@ export type ProviderAccountRow = {
   expires_at: string | null;
   created_at: string | null;
   updated_at: string | null;
+  /** Multi-account reshape (#121) — true on the provider's primary row.
+   *  Pre-reshape rows behave as primary by virtue of being the only row. */
+  primary?: boolean;
 };
 
 export type IntegrationView = {
@@ -45,7 +48,20 @@ export async function getIntegrations(
   store: IntegrationsStore,
 ): Promise<{ integrations: IntegrationView[] }> {
   const rows = await store.loadAccounts();
-  const byProvider = new Map(rows.map((r) => [r.provider, r]));
+  // Multi-account reshape (#121): collapse to the primary row per provider
+  // so the existing single-account UI keeps working. Multi-row rendering
+  // lands in the IntegrationsPanel rewrite (#123).
+  const byProvider = new Map<string, ProviderAccountRow>();
+  for (const row of rows) {
+    const current = byProvider.get(row.provider);
+    if (!current) {
+      byProvider.set(row.provider, row);
+      continue;
+    }
+    if (row.primary === true && current.primary !== true) {
+      byProvider.set(row.provider, row);
+    }
+  }
   const integrations = KNOWN_PROVIDERS.map((provider) => {
     const row = byProvider.get(provider);
     return toView(provider, row);

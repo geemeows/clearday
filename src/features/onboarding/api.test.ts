@@ -73,6 +73,33 @@ describe("buildConnectUrl", () => {
     expect(out.ok).toBe(false);
   });
 
+  it("appends ?account_id= for re-auth of an existing account row", () => {
+    const out = buildConnectUrl(
+      "github",
+      "https://auth.example.com",
+      null,
+      "acct-123",
+    );
+    expect(out).toEqual({
+      ok: true,
+      url: "https://auth.example.com/start/github?account_id=acct-123",
+    });
+  });
+
+  it("combines ?backend= and ?account_id= when both are supplied", () => {
+    const out = buildConnectUrl(
+      "github",
+      "https://auth.example.com",
+      "https://owner.example.com",
+      "acct-123",
+    );
+    expect(out.ok).toBe(true);
+    if (!out.ok) return;
+    const url = new URL(out.url);
+    expect(url.searchParams.get("backend")).toBe("https://owner.example.com");
+    expect(url.searchParams.get("account_id")).toBe("acct-123");
+  });
+
   it("appends the user-Worker URL as ?backend= when supplied", () => {
     const out = buildConnectUrl(
       "github",

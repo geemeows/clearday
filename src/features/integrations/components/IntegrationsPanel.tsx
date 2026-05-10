@@ -1,19 +1,23 @@
-// Settings → Integrations panel (per PRD #29 mockup #2).
+// Settings → Integrations panel.
 //
-// Lists each provider as a row with SourceGlyph, name, description, scopes,
-// live status (read off /api/sources — derivation is server-side, see
-// features/integrations/provider-account-status.ts), Reauthorize button, and
-// an on/off Switch. Below the list, a Slack channel allowlist renders
-// existing channels as removable chips with a "+ Add channel" input.
+// One provider card per provider. Each card has a header (glyph, name, account
+// count, description, single "+ Add account" button) and a list of AccountRow
+// rows below it — one per connected account. Provider-scoped settings (Slack
+// channel allowlist, Google Calendar week-start) nest below the account list,
+// inside the same card. There is no per-account on/off toggle and no
+// provider-level toggle anywhere; account presence is the on/off.
 //
-// Backend persistence for the on/off toggle and allowlist is deferred —
-// edits update local state only, matching the per-section slice pattern.
+// Status reads off /api/sources, which after the multi-account foundations
+// reshape returns one row per (provider, account_id) with the account's
+// synthetic id, handle, primary flag, and context. Reauthorize hits the
+// connect-url proxy keyed by account_id (#122). Remove hits
+// DELETE /api/accounts/:id (#122).
 
 import { Plus, X } from "lucide-react";
 import { useMemo, useState } from "react";
+import { Avatar, AvatarFallback } from "#/components/coss/avatar";
 import { Button } from "#/components/coss/button";
 import { Input } from "#/components/coss/input";
-import { Switch } from "#/components/coss/switch";
 import { SettingsPanel } from "#/components/ui/SettingsPanel";
 import type { ProviderAccountStatus } from "#/features/integrations/provider-account-status";
 import {
@@ -28,14 +32,20 @@ type ApiSource = {
   provider: string;
   status: ProviderAccountStatus;
   last_polled_at?: string | null;
+  id?: string | null;
+  account_id?: string | null;
+  handle?: string | null;
+  display_name?: string | null;
+  context?: string | null;
+  primary?: boolean | null;
 };
 
 type SourcesPayload = { sources: ApiSource[] };
 
-type DisconnectResult = { ok: boolean; error?: string };
 type ConnectUrlResult = { ok: boolean; url?: string; error?: string };
+type RemoveResult = { ok: boolean; error?: string };
 
-type RowDef = {
+type ProviderDef = {
   id: string;
   providerKey: string;
   kind: SourceKind;
@@ -45,7 +55,7 @@ type RowDef = {
   isMock?: boolean;
 };
 
-const ROWS: ReadonlyArray<RowDef> = [
+const PROVIDERS: ReadonlyArray<ProviderDef> = [
   {
     id: "github",
     providerKey: "github",
@@ -77,41 +87,61 @@ const ROWS: ReadonlyArray<RowDef> = [
     label: "Linear",
     description: "Tickets and sprint state",
     scopes: "issues:read, team:read",
-    // TODO(post-redesign): wire to real Linear adapter — see PRD #29 provider scope.
     isMock: true,
   },
 ];
 
 const DEFAULT_SLACK_CHANNELS = ["#eng-platform", "#oncall", "#design-review"];
 
+const WEEK_START_KEY = "devy:weekStart";
+
+type WeekStart = "sunday" | "monday";
+
+export type AccountRow = {
+  id: string;
+  account_id: string | null;
+  handle: string | null;
+  display_name: string | null;
+  context: string | null;
+  primary: boolean;
+  status: ProviderAccountStatus;
+  lastPolledAt: string | null;
+};
+
 export type IntegrationsPanelProps = {
   sourcesLoader?: () => Promise<SourcesPayload>;
   initialAllowlist?: string[];
+  initialWeekStart?: WeekStart;
   now?: number;
-  disconnect?: (provider: string) => Promise<DisconnectResult>;
-  connectUrl?: (provider: string) => Promise<ConnectUrlResult>;
+  connectUrl?: (
+    provider: string,
+    accountId?: string,
+  ) => Promise<ConnectUrlResult>;
+  removeAccount?: (accountId: string) => Promise<RemoveResult>;
   openUrl?: (url: string) => void;
 };
 
-type PanelData = { statuses: Record<string, RowStatus> };
+type PanelData = { accountsByProvider: Record<string, AccountRow[]> };
 
 export function IntegrationsPanel({
   sourcesLoader,
   initialAllowlist,
+  initialWeekStart,
   now,
-  disconnect,
   connectUrl,
+  removeAccount,
   openUrl,
 }: IntegrationsPanelProps = {}) {
-  const [enabled, setEnabled] = useState<Record<string, boolean>>(() =>
-    Object.fromEntries(ROWS.map((r) => [r.id, true])),
-  );
   const [channels, setChannels] = useState<string[]>(
     () => initialAllowlist ?? DEFAULT_SLACK_CHANNELS,
   );
   const [draft, setDraft] = useState("");
+  const [busyAccount, setBusyAccount] = useState<string | null>(null);
   const [busyProvider, setBusyProvider] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [weekStart, setWeekStart] = useState<WeekStart>(
+    () => initialWeekStart ?? readWeekStart(),
+  );
 
   const load = useMemo(
     () =>
@@ -119,23 +149,27 @@ export function IntegrationsPanel({
       (() => apiFetch("/api/sources") as Promise<SourcesPayload>),
     [sourcesLoader],
   );
-  const doDisconnect = useMemo(
-    () =>
-      disconnect ??
-      ((provider: string) =>
-        apiFetch(`/api/integrations/${provider}`, {
-          method: "DELETE",
-        }) as Promise<DisconnectResult>),
-    [disconnect],
-  );
   const doConnectUrl = useMemo(
     () =>
       connectUrl ??
-      ((provider: string) =>
-        apiFetch(
-          `/api/providers/${provider}/connect-url`,
-        ) as Promise<ConnectUrlResult>),
+      ((provider: string, accountId?: string) => {
+        const qs = accountId
+          ? `?account_id=${encodeURIComponent(accountId)}`
+          : "";
+        return apiFetch(
+          `/api/providers/${provider}/connect-url${qs}`,
+        ) as Promise<ConnectUrlResult>;
+      }),
     [connectUrl],
+  );
+  const doRemove = useMemo(
+    () =>
+      removeAccount ??
+      ((accountId: string) =>
+        apiFetch(`/api/accounts/${accountId}`, {
+          method: "DELETE",
+        }) as Promise<RemoveResult>),
+    [removeAccount],
   );
   const doOpen = useMemo(
     () =>
@@ -146,34 +180,41 @@ export function IntegrationsPanel({
     [openUrl],
   );
 
-  // Toggle / allowlist are local-only state per the panel's design (no backend
-  // persistence yet), so save is a no-op. The hook drives the load + reload
-  // path; reauthorize/disconnect remain bespoke action handlers since they
-  // aren't shallow-merge persists.
   const { data, error: loadError, busy, reload } = useAsyncPanel<PanelData>({
     load: async () => {
       const body = await load();
-      const statuses: Record<string, RowStatus> = {};
-      for (const row of ROWS) {
-        if (row.isMock) {
-          statuses[row.id] = { status: "neutral", lastPolledAt: null };
-          continue;
-        }
-        const match = body.sources.find((s) => s.provider === row.providerKey);
-        statuses[row.id] = {
-          status: match?.status ?? "neutral",
-          lastPolledAt: match?.last_polled_at ?? null,
-        };
+      const accountsByProvider: Record<string, AccountRow[]> = {};
+      for (const provider of PROVIDERS) {
+        accountsByProvider[provider.id] = [];
       }
-      return { statuses };
+      for (const src of body.sources) {
+        // Only rows with a synthetic id are real connected accounts. The
+        // server emits a neutral placeholder row (id null) for unconnected
+        // providers so the FE can keep rendering all providers; that
+        // placeholder doesn't represent an account and is dropped here.
+        if (!src.id) continue;
+        const provider = PROVIDERS.find((p) => p.providerKey === src.provider);
+        if (!provider) continue;
+        accountsByProvider[provider.id]?.push({
+          id: src.id,
+          account_id: src.account_id ?? null,
+          handle: src.handle ?? null,
+          display_name: src.display_name ?? null,
+          context: src.context ?? null,
+          primary: src.primary === true,
+          status: src.status,
+          lastPolledAt: src.last_polled_at ?? null,
+        });
+      }
+      return { accountsByProvider };
     },
     save: async () => {},
   });
 
-  const statuses = data?.statuses ?? {};
+  const accountsByProvider = data?.accountsByProvider ?? {};
   const error = actionError ?? (loadError ? loadError.message : null);
 
-  const onReauthorize = async (providerKey: string) => {
+  const onAddAccount = async (providerKey: string) => {
     setBusyProvider(providerKey);
     setActionError(null);
     try {
@@ -187,20 +228,34 @@ export function IntegrationsPanel({
     }
   };
 
-  const onDisconnect = async (providerKey: string) => {
-    setBusyProvider(providerKey);
+  const onReauthorize = async (providerKey: string, accountId: string) => {
+    setBusyAccount(accountId);
     setActionError(null);
     try {
-      const out = await doDisconnect(providerKey);
+      const out = await doConnectUrl(providerKey, accountId);
+      if (out.ok && out.url) doOpen(out.url);
+      else setActionError(out.error ?? "could not start reauthorize");
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusyAccount(null);
+    }
+  };
+
+  const onRemoveAccount = async (accountId: string) => {
+    setBusyAccount(accountId);
+    setActionError(null);
+    try {
+      const out = await doRemove(accountId);
       if (!out.ok) {
-        setActionError(out.error ?? "disconnect failed");
+        setActionError(out.error ?? "remove failed");
         return;
       }
       reload();
     } catch (e) {
       setActionError(e instanceof Error ? e.message : String(e));
     } finally {
-      setBusyProvider(null);
+      setBusyAccount(null);
     }
   };
 
@@ -220,160 +275,344 @@ export function IntegrationsPanel({
     setChannels((prev) => prev.filter((c) => c !== name));
   };
 
+  const onWeekStartChange = (next: WeekStart) => {
+    setWeekStart(next);
+    persistWeekStart(next);
+  };
+
   return (
     <SettingsPanel
       title="Integrations"
       desc="Per-user backend — refresh tokens stored in your own Supabase."
       error={error}
       busy={busy && !data}
-      className="space-y-6"
+      className="space-y-4"
     >
       <ul
         aria-label="Integration providers"
-        className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-card"
+        className="space-y-4"
       >
-        {ROWS.map((row) => {
-          const meta: RowStatus = statuses[row.id] ?? {
-            status: "neutral",
-            lastPolledAt: null,
-          };
-          const isEnabled = enabled[row.id] ?? true;
-          const isConnected = !row.isMock && meta.status !== "neutral";
-          const isBusy = busyProvider === row.providerKey;
+        {PROVIDERS.map((provider) => {
+          const accounts = accountsByProvider[provider.id] ?? [];
+          const isProviderBusy = busyProvider === provider.providerKey;
           return (
             <li
-              key={row.id}
-              aria-label={`${row.label} integration`}
-              className="flex items-center gap-4 px-4 py-4"
+              key={provider.id}
+              aria-label={`${provider.label} integration`}
+              className="overflow-hidden rounded-lg border border-border bg-card"
             >
-              <SourceGlyph source={row.kind} size={32} />
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="font-medium text-sm">{row.label}</span>
-                  {row.isMock ? (
-                    <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
-                      Mock
+              <header className="flex items-center gap-3 px-4 py-3">
+                <SourceGlyph source={provider.kind} size={28} />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-sm">{provider.label}</span>
+                    <span className="text-[11px] text-muted-foreground">
+                      {accountCountLabel(accounts.length)}
                     </span>
-                  ) : null}
+                    {provider.isMock ? (
+                      <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
+                        Mock
+                      </span>
+                    ) : null}
+                  </div>
+                  <p className="mt-0.5 text-muted-foreground text-xs">
+                    {provider.description}
+                  </p>
                 </div>
-                <p className="mt-0.5 text-muted-foreground text-xs">
-                  {row.description}
-                </p>
-                <p className="mt-1 font-mono text-[11px] text-muted-foreground">
-                  {row.scopes}
-                </p>
-                <div className="mt-2 flex items-center gap-2">
-                  <output
-                    aria-label={`${row.label} status: ${statusLabel(meta.status)}`}
-                    data-source={row.id}
-                    data-status={meta.status}
-                    className={cn(
-                      "h-2 w-2 rounded-full",
-                      dotClass(meta.status),
-                    )}
-                  />
-                  <span className="text-[11px] text-muted-foreground">
-                    {statusText(row, meta, now)}
-                  </span>
-                </div>
-              </div>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={isBusy || row.isMock}
-                onClick={() => onReauthorize(row.providerKey)}
-              >
-                Reauthorize
-              </Button>
-              {isConnected ? (
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
-                  disabled={isBusy}
-                  onClick={() => onDisconnect(row.providerKey)}
-                  aria-label={`Disconnect ${row.label}`}
+                  disabled={isProviderBusy || provider.isMock}
+                  onClick={() => onAddAccount(provider.providerKey)}
+                  aria-label={`Add ${provider.label} account`}
                 >
-                  Disconnect
+                  <Plus className="size-3.5" />
+                  Add account
                 </Button>
+              </header>
+
+              {accounts.length > 0 ? (
+                <ul
+                  aria-label={`${provider.label} accounts`}
+                  className="divide-y divide-border border-border border-t"
+                >
+                  {accounts.map((account) => (
+                    <AccountRowItem
+                      key={account.id}
+                      provider={provider}
+                      account={account}
+                      now={now}
+                      busy={busyAccount === account.id}
+                      onReauthorize={() =>
+                        onReauthorize(provider.providerKey, account.id)
+                      }
+                      onRemove={() => onRemoveAccount(account.id)}
+                    />
+                  ))}
+                </ul>
               ) : null}
-              <Switch
-                aria-label={`${row.label} enabled`}
-                checked={isEnabled}
-                loading={isBusy}
-                onCheckedChange={(next) =>
-                  setEnabled((prev) => ({ ...prev, [row.id]: next }))
-                }
-              />
+
+              {provider.providerKey === "slack" ? (
+                <SlackProviderSettings
+                  channels={channels}
+                  draft={draft}
+                  onDraft={setDraft}
+                  onAdd={onAddChannel}
+                  onRemove={onRemoveChannel}
+                />
+              ) : null}
+
+              {provider.providerKey === "google" ? (
+                <CalendarProviderSettings
+                  weekStart={weekStart}
+                  onChange={onWeekStartChange}
+                />
+              ) : null}
             </li>
           );
         })}
       </ul>
-
-      <section>
-        <h3 className="font-semibold text-base tracking-tight">
-          Slack channel allowlist
-        </h3>
-        <p className="mt-1 text-muted-foreground text-sm">
-          <code className="rounded bg-muted px-1 py-px font-mono text-xs">
-            @here
-          </code>{" "}
-          /{" "}
-          <code className="rounded bg-muted px-1 py-px font-mono text-xs">
-            @channel
-          </code>{" "}
-          only become Signals in channels listed here. DMs and explicit
-          @-mentions always come through.
-        </p>
-        <ul
-          aria-label="Slack channel allowlist"
-          className="mt-3 flex flex-wrap gap-2 rounded-lg border border-border bg-card p-4"
-        >
-          {channels.map((name) => (
-            <li key={name}>
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-2.5 py-1 font-mono text-xs">
-                {name}
-                <button
-                  type="button"
-                  onClick={() => onRemoveChannel(name)}
-                  aria-label={`Remove ${name}`}
-                  className="text-muted-foreground hover:text-foreground"
-                >
-                  <X className="size-3" />
-                </button>
-              </span>
-            </li>
-          ))}
-        </ul>
-        <form
-          className="mt-3 flex items-center gap-2"
-          onSubmit={(e) => {
-            e.preventDefault();
-            onAddChannel();
-          }}
-        >
-          <Input
-            aria-label="Add Slack channel"
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            placeholder="#channel"
-            className="max-w-xs"
-          />
-          <Button type="submit" variant="outline" size="sm">
-            <Plus className="size-3.5" />
-            Add channel
-          </Button>
-        </form>
-      </section>
     </SettingsPanel>
   );
 }
 
-type RowStatus = {
-  status: ProviderAccountStatus;
-  lastPolledAt: string | null;
-};
+function AccountRowItem({
+  provider,
+  account,
+  now,
+  busy,
+  onReauthorize,
+  onRemove,
+}: {
+  provider: ProviderDef;
+  account: AccountRow;
+  now?: number;
+  busy: boolean;
+  onReauthorize: () => void;
+  onRemove: () => void;
+}) {
+  const handle =
+    account.handle ?? account.display_name ?? account.account_id ?? "account";
+  const initials = computeInitials(
+    account.display_name ?? account.handle ?? account.account_id ?? "",
+  );
+  return (
+    <li
+      aria-label={`${provider.label} account ${handle}`}
+      data-account-id={account.id}
+      className="flex items-center gap-3 px-4 py-3"
+    >
+      <Avatar size="sm" aria-hidden="true">
+        <AvatarFallback>{initials}</AvatarFallback>
+      </Avatar>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className="truncate font-medium text-sm">{handle}</span>
+          {account.primary ? (
+            <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
+              Primary
+            </span>
+          ) : null}
+        </div>
+        <div className="mt-1 flex items-center gap-2">
+          <output
+            aria-label={`${handle} status: ${statusLabel(account.status)}`}
+            data-account-status={account.status}
+            className={cn("h-2 w-2 rounded-full", dotClass(account.status))}
+          />
+          <span className="text-[11px] text-muted-foreground">
+            {statusText(account, now)}
+          </span>
+          {account.context ? (
+            <span className="text-[11px] text-muted-foreground">
+              · {account.context}
+            </span>
+          ) : null}
+        </div>
+      </div>
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        disabled={busy}
+        onClick={onReauthorize}
+        aria-label={`Reauthorize ${handle}`}
+      >
+        Reauthorize
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        disabled={busy}
+        onClick={onRemove}
+        aria-label={`Remove ${handle}`}
+        className="text-destructive hover:text-destructive"
+      >
+        Remove
+      </Button>
+    </li>
+  );
+}
+
+function SlackProviderSettings({
+  channels,
+  draft,
+  onDraft,
+  onAdd,
+  onRemove,
+}: {
+  channels: string[];
+  draft: string;
+  onDraft: (s: string) => void;
+  onAdd: () => void;
+  onRemove: (name: string) => void;
+}) {
+  return (
+    <section className="border-border border-t px-4 py-3">
+      <h3 className="font-semibold text-sm tracking-tight">
+        Slack channel allowlist
+      </h3>
+      <p className="mt-1 text-muted-foreground text-xs">
+        <code className="rounded bg-muted px-1 py-px font-mono text-xs">
+          @here
+        </code>{" "}
+        /{" "}
+        <code className="rounded bg-muted px-1 py-px font-mono text-xs">
+          @channel
+        </code>{" "}
+        only become Signals in channels listed here. Applies across all your
+        Slack accounts. DMs and explicit @-mentions always come through.
+      </p>
+      <ul
+        aria-label="Slack channel allowlist"
+        className="mt-3 flex flex-wrap gap-2"
+      >
+        {channels.map((name) => (
+          <li key={name}>
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-2.5 py-1 font-mono text-xs">
+              {name}
+              <button
+                type="button"
+                onClick={() => onRemove(name)}
+                aria-label={`Remove ${name}`}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <X className="size-3" />
+              </button>
+            </span>
+          </li>
+        ))}
+      </ul>
+      <form
+        className="mt-3 flex items-center gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          onAdd();
+        }}
+      >
+        <Input
+          aria-label="Add Slack channel"
+          value={draft}
+          onChange={(e) => onDraft(e.target.value)}
+          placeholder="#channel"
+          className="max-w-xs"
+        />
+        <Button type="submit" variant="outline" size="sm">
+          <Plus className="size-3.5" />
+          Add channel
+        </Button>
+      </form>
+    </section>
+  );
+}
+
+function CalendarProviderSettings({
+  weekStart,
+  onChange,
+}: {
+  weekStart: WeekStart;
+  onChange: (next: WeekStart) => void;
+}) {
+  return (
+    <section className="border-border border-t px-4 py-3">
+      <h3 className="font-semibold text-sm tracking-tight">Week start</h3>
+      <p className="mt-1 text-muted-foreground text-xs">
+        First day of the week in the Calendar view. Applies to all your
+        connected calendars.
+      </p>
+      <div
+        role="radiogroup"
+        aria-label="Week start"
+        className="mt-2 inline-flex rounded-md border border-border bg-background p-0.5"
+      >
+        {(["sunday", "monday"] as const).map((day) => (
+          <button
+            key={day}
+            type="button"
+            role="radio"
+            aria-checked={weekStart === day}
+            onClick={() => onChange(day)}
+            className={cn(
+              "rounded-sm px-3 py-1 text-xs capitalize",
+              weekStart === day
+                ? "bg-muted font-medium text-foreground"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {day}
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function readWeekStart(): WeekStart {
+  if (typeof window === "undefined") return "monday";
+  try {
+    const v = window.localStorage.getItem(WEEK_START_KEY);
+    return v === "sunday" ? "sunday" : "monday";
+  } catch {
+    return "monday";
+  }
+}
+
+function persistWeekStart(value: WeekStart): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(WEEK_START_KEY, value);
+  } catch {
+    // localStorage may be unavailable (private mode); the dispatch below
+    // still gives in-memory listeners a chance to react.
+  }
+  try {
+    window.dispatchEvent(
+      new CustomEvent("devy:weekStartChanged", { detail: { weekStart: value } }),
+    );
+  } catch {
+    // CustomEvent isn't available (very old runtimes). Silently skip.
+  }
+}
+
+function accountCountLabel(n: number): string {
+  if (n === 0) return "Not connected";
+  if (n === 1) return "1 account";
+  return `${n} accounts`;
+}
+
+function computeInitials(name: string): string {
+  const trimmed = name.trim();
+  if (!trimmed) return "?";
+  // Drop a leading @ on Slack-style handles.
+  const cleaned = trimmed.startsWith("@") ? trimmed.slice(1) : trimmed;
+  const parts = cleaned.split(/[\s_.-]+/).filter(Boolean);
+  if (parts.length >= 2) {
+    return ((parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "")).toUpperCase();
+  }
+  return cleaned.slice(0, 2).toUpperCase();
+}
 
 function statusLabel(status: ProviderAccountStatus): string {
   switch (status) {
@@ -390,20 +629,18 @@ function statusLabel(status: ProviderAccountStatus): string {
   }
 }
 
-function statusText(row: RowDef, meta: RowStatus, now?: number): string {
-  if (row.isMock) return "Mocked · live integration coming soon";
-  switch (meta.status) {
+function statusText(account: AccountRow, now?: number): string {
+  switch (account.status) {
     case "ok":
-      if (row.providerKey === "slack") return "live · 2 events / min";
-      if (meta.lastPolledAt)
-        return `polled ${formatRelative(meta.lastPolledAt, now)}`;
-      return "Connected";
+      return account.lastPolledAt
+        ? `last sync ${formatRelative(account.lastPolledAt, now)}`
+        : "Connected";
     case "stale":
-      return meta.lastPolledAt
-        ? `stale · last polled ${formatRelative(meta.lastPolledAt, now)}`
+      return account.lastPolledAt
+        ? `stale · last sync ${formatRelative(account.lastPolledAt, now)}`
         : "stale";
     case "rate_limited":
-      return "rate-limited · retry 0:42";
+      return "rate-limited · retry pending";
     case "auth_failed":
       return "auth failed · reauthorize to reconnect";
     default:
