@@ -5,17 +5,23 @@ import { Button } from "#/components/coss/button";
 import {
   createCompetency,
   createCriterion,
+  createIndicator,
   createLevel,
   getActiveLevel,
   listCompetencies,
   listCriteria,
+  listIndicators,
   renameCompetency,
   renameCriterion,
+  renameIndicator,
   setCriterionTarget,
+  setIndicatorScore,
   softDeleteCompetency,
   softDeleteCriterion,
+  softDeleteIndicator,
   type StoredCompetency,
   type StoredCriterion,
+  type StoredIndicator,
   type StoredLevel,
 } from "#/features/career/store";
 import { supabase } from "#/lib/supabase";
@@ -432,6 +438,7 @@ export function CriteriaList({
             <CriterionRow
               key={c.id}
               criterion={c}
+              client={client}
               onRename={handleRename}
               onSetTarget={handleSetTarget}
               onDelete={handleDelete}
@@ -446,11 +453,13 @@ export function CriteriaList({
 
 function CriterionRow({
   criterion,
+  client,
   onRename,
   onSetTarget,
   onDelete,
 }: {
   criterion: StoredCriterion;
+  client: SupabaseLike;
   onRename: (id: string, name: string) => void;
   onSetTarget: (id: string, target: number) => void;
   onDelete: (id: string) => void;
@@ -459,53 +468,301 @@ function CriterionRow({
   const [targetDraft, setTargetDraft] = useState(String(criterion.target));
 
   return (
-    <li className="flex items-center gap-2 rounded-md border border-border bg-card px-2.5 py-1.5">
+    <li className="rounded-md border border-border bg-card px-2.5 py-1.5">
+      <div className="flex items-center gap-2">
+        <input
+          type="text"
+          aria-label={`Rename criterion ${criterion.name}`}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={() => {
+            const trimmed = draft.trim();
+            if (trimmed && trimmed !== criterion.name) {
+              onRename(criterion.id, trimmed);
+            } else if (!trimmed) {
+              setDraft(criterion.name);
+            }
+          }}
+          className="min-w-0 flex-1 rounded border border-transparent bg-transparent px-1.5 py-0.5 text-foreground text-sm outline-none focus:border-border focus:bg-muted"
+        />
+        <input
+          type="number"
+          aria-label={`Target for ${criterion.name}`}
+          min={1}
+          max={4}
+          step={1}
+          value={targetDraft}
+          onChange={(e) => setTargetDraft(e.target.value)}
+          onBlur={() => {
+            const parsed = Number.parseInt(targetDraft, 10);
+            if (Number.isFinite(parsed)) {
+              const clamped = Math.max(1, Math.min(4, parsed));
+              setTargetDraft(String(clamped));
+              if (clamped !== criterion.target) {
+                onSetTarget(criterion.id, clamped);
+              }
+            } else {
+              setTargetDraft(String(criterion.target));
+            }
+          }}
+          className="w-12 rounded border border-border bg-background px-1.5 py-0.5 text-center text-foreground text-sm outline-none focus:ring-2 focus:ring-primary/50"
+        />
+        <button
+          type="button"
+          aria-label={`Delete criterion ${criterion.name}`}
+          onClick={() => onDelete(criterion.id)}
+          className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+        >
+          <Trash2 className="h-3 w-3" />
+        </button>
+      </div>
+      <IndicatorList criterion={criterion} client={client} />
+    </li>
+  );
+}
+
+export function IndicatorList({
+  criterion,
+  client,
+}: {
+  criterion: StoredCriterion;
+  client: SupabaseLike;
+}) {
+  const [indicators, setIndicators] = useState<StoredIndicator[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    listIndicators(client, criterion.id)
+      .then((rows) => {
+        if (!cancelled) setIndicators(rows);
+      })
+      .catch((e) => {
+        if (!cancelled) setError(e instanceof Error ? e.message : "failed");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [client, criterion.id]);
+
+  const handleAdd = async (description: string) => {
+    const id = crypto.randomUUID();
+    const position = (indicators?.length ?? 0) * 1024;
+    try {
+      await createIndicator(client, {
+        id,
+        criterion_id: criterion.id,
+        description,
+        position,
+      });
+      const rows = await listIndicators(client, criterion.id);
+      setIndicators(rows);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "failed to add indicator");
+    }
+  };
+
+  const handleRename = async (
+    id: string,
+    fields: { code?: string | null; description?: string; notes?: string | null },
+  ) => {
+    setIndicators((prev) =>
+      prev ? prev.map((i) => (i.id === id ? { ...i, ...fields } : i)) : prev,
+    );
+    try {
+      await renameIndicator(client, id, fields);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "failed to update indicator");
+    }
+  };
+
+  const handleSetScore = async (id: string, score: number) => {
+    setIndicators((prev) =>
+      prev ? prev.map((i) => (i.id === id ? { ...i, score } : i)) : prev,
+    );
+    try {
+      await setIndicatorScore(client, id, score);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "failed to update score");
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    const target = indicators?.find((i) => i.id === id);
+    if (!target) return;
+    const label = target.code || target.description || "indicator";
+    if (!confirm(`Delete "${label}" and its evidence?`)) return;
+    setIndicators((prev) => (prev ? prev.filter((i) => i.id !== id) : prev));
+    try {
+      await softDeleteIndicator(client, id);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "failed to delete indicator");
+    }
+  };
+
+  return (
+    <div className="mt-2 ml-4 space-y-1.5 border-border border-l pl-3">
+      {error && (
+        <p
+          role="alert"
+          className="rounded-sm border border-destructive/30 bg-destructive/10 p-2 text-destructive text-xs"
+        >
+          {error}
+        </p>
+      )}
+      {indicators === null ? (
+        <p className="text-muted-foreground text-xs">Loading…</p>
+      ) : indicators.length === 0 ? null : (
+        <ul className="space-y-1">
+          {indicators.map((i) => (
+            <IndicatorRow
+              key={i.id}
+              indicator={i}
+              onRename={handleRename}
+              onSetScore={handleSetScore}
+              onDelete={handleDelete}
+            />
+          ))}
+        </ul>
+      )}
+      <AddIndicatorForm onAdd={handleAdd} />
+    </div>
+  );
+}
+
+function IndicatorRow({
+  indicator,
+  onRename,
+  onSetScore,
+  onDelete,
+}: {
+  indicator: StoredIndicator;
+  onRename: (
+    id: string,
+    fields: { code?: string | null; description?: string; notes?: string | null },
+  ) => void;
+  onSetScore: (id: string, score: number) => void;
+  onDelete: (id: string) => void;
+}) {
+  const [codeDraft, setCodeDraft] = useState(indicator.code ?? "");
+  const [descDraft, setDescDraft] = useState(indicator.description);
+  const [notesDraft, setNotesDraft] = useState(indicator.notes ?? "");
+  const [scoreDraft, setScoreDraft] = useState(String(indicator.score));
+
+  const label = indicator.code || indicator.description;
+
+  return (
+    <li className="rounded-md border border-border bg-background px-2 py-1.5">
+      <div className="flex items-center gap-2">
+        <input
+          type="text"
+          aria-label={`Code for ${label}`}
+          value={codeDraft}
+          onChange={(e) => setCodeDraft(e.target.value)}
+          onBlur={() => {
+            const trimmed = codeDraft.trim();
+            const next = trimmed === "" ? null : trimmed;
+            if (next !== (indicator.code ?? null)) {
+              onRename(indicator.id, { code: next });
+            }
+          }}
+          placeholder="A"
+          className="w-10 rounded border border-transparent bg-transparent px-1 py-0.5 text-center text-foreground text-xs outline-none focus:border-border focus:bg-muted"
+        />
+        <input
+          type="text"
+          aria-label={`Description for ${label}`}
+          value={descDraft}
+          onChange={(e) => setDescDraft(e.target.value)}
+          onBlur={() => {
+            const trimmed = descDraft.trim();
+            if (trimmed && trimmed !== indicator.description) {
+              onRename(indicator.id, { description: trimmed });
+            } else if (!trimmed) {
+              setDescDraft(indicator.description);
+            }
+          }}
+          className="min-w-0 flex-1 rounded border border-transparent bg-transparent px-1.5 py-0.5 text-foreground text-xs outline-none focus:border-border focus:bg-muted"
+        />
+        <input
+          type="number"
+          aria-label={`Score for ${label}`}
+          min={1}
+          max={4}
+          step={1}
+          value={scoreDraft}
+          onChange={(e) => setScoreDraft(e.target.value)}
+          onBlur={() => {
+            const parsed = Number.parseInt(scoreDraft, 10);
+            if (Number.isFinite(parsed)) {
+              const clamped = Math.max(1, Math.min(4, parsed));
+              setScoreDraft(String(clamped));
+              if (clamped !== indicator.score) {
+                onSetScore(indicator.id, clamped);
+              }
+            } else {
+              setScoreDraft(String(indicator.score));
+            }
+          }}
+          className="w-12 rounded border border-border bg-background px-1.5 py-0.5 text-center text-foreground text-xs outline-none focus:ring-2 focus:ring-primary/50"
+        />
+        <button
+          type="button"
+          aria-label={`Delete indicator ${label}`}
+          onClick={() => onDelete(indicator.id)}
+          className="flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+        >
+          <Trash2 className="h-3 w-3" />
+        </button>
+      </div>
       <input
         type="text"
-        aria-label={`Rename criterion ${criterion.name}`}
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
+        aria-label={`Notes for ${label}`}
+        value={notesDraft}
+        onChange={(e) => setNotesDraft(e.target.value)}
         onBlur={() => {
-          const trimmed = draft.trim();
-          if (trimmed && trimmed !== criterion.name) {
-            onRename(criterion.id, trimmed);
-          } else if (!trimmed) {
-            setDraft(criterion.name);
+          const trimmed = notesDraft.trim();
+          const next = trimmed === "" ? null : trimmed;
+          if (next !== (indicator.notes ?? null)) {
+            onRename(indicator.id, { notes: next });
           }
         }}
-        className="min-w-0 flex-1 rounded border border-transparent bg-transparent px-1.5 py-0.5 text-foreground text-sm outline-none focus:border-border focus:bg-muted"
+        placeholder="Notes…"
+        className="mt-1 w-full rounded border border-transparent bg-transparent px-1.5 py-0.5 text-muted-foreground text-xs outline-none focus:border-border focus:bg-muted"
       />
-      <input
-        type="number"
-        aria-label={`Target for ${criterion.name}`}
-        min={1}
-        max={4}
-        step={1}
-        value={targetDraft}
-        onChange={(e) => setTargetDraft(e.target.value)}
-        onBlur={() => {
-          const parsed = Number.parseInt(targetDraft, 10);
-          if (Number.isFinite(parsed)) {
-            const clamped = Math.max(1, Math.min(4, parsed));
-            setTargetDraft(String(clamped));
-            if (clamped !== criterion.target) {
-              onSetTarget(criterion.id, clamped);
-            }
-          } else {
-            setTargetDraft(String(criterion.target));
-          }
-        }}
-        className="w-12 rounded border border-border bg-background px-1.5 py-0.5 text-center text-foreground text-sm outline-none focus:ring-2 focus:ring-primary/50"
-      />
-      <button
-        type="button"
-        aria-label={`Delete criterion ${criterion.name}`}
-        onClick={() => onDelete(criterion.id)}
-        className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-      >
-        <Trash2 className="h-3 w-3" />
-      </button>
     </li>
+  );
+}
+
+export function AddIndicatorForm({
+  onAdd,
+}: {
+  onAdd: (description: string) => void;
+}) {
+  const [description, setDescription] = useState("");
+
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const trimmed = description.trim();
+    if (!trimmed) return;
+    onAdd(trimmed);
+    setDescription("");
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="flex items-center gap-2">
+      <input
+        type="text"
+        aria-label="New indicator description"
+        value={description}
+        onChange={(e) => setDescription(e.target.value)}
+        placeholder="Add indicator…"
+        className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1 text-foreground text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+      />
+      <Button type="submit" disabled={!description.trim()} size="sm">
+        Add indicator
+      </Button>
+    </form>
   );
 }
 

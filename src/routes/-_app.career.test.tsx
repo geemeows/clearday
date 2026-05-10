@@ -3,13 +3,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   AddCompetencyForm,
   AddCriterionForm,
+  AddIndicatorForm,
   CareerLevelView,
   CareerOnboardingView,
   CriteriaList,
+  IndicatorList,
 } from "#/routes/_app.career";
 import type {
   StoredCompetency,
   StoredCriterion,
+  StoredIndicator,
   StoredLevel,
 } from "#/features/career/store";
 import type { SupabaseLike } from "#/shared/db";
@@ -78,12 +81,16 @@ function competency(
 function makeFakeClient(
   initial: StoredCompetency[] = [],
   initialCriteria: StoredCriterion[] = [],
+  initialIndicators: StoredIndicator[] = [],
 ) {
   const compRowsRef: { current: StoredCompetency[] } = {
     current: [...initial],
   };
   const critRowsRef: { current: StoredCriterion[] } = {
     current: [...initialCriteria],
+  };
+  const indRowsRef: { current: StoredIndicator[] } = {
+    current: [...initialIndicators],
   };
   const upsertComp = vi.fn(
     async (values: Record<string, unknown> | Record<string, unknown>[]) => {
@@ -113,6 +120,26 @@ function makeFakeClient(
         competency_id: v.competency_id as string,
         name: v.name as string,
         target: (v.target as number) ?? 1,
+        position: v.position as number,
+        created_at: new Date().toISOString(),
+        deleted_at: null,
+      });
+      return { error: null };
+    },
+  );
+  const upsertInd = vi.fn(
+    async (values: Record<string, unknown> | Record<string, unknown>[]) => {
+      const v = (Array.isArray(values) ? values[0] : values) as Record<
+        string,
+        unknown
+      >;
+      indRowsRef.current.push({
+        id: v.id as string,
+        criterion_id: v.criterion_id as string,
+        code: (v.code as string | null) ?? null,
+        description: (v.description as string) ?? "",
+        notes: (v.notes as string | null) ?? null,
+        score: (v.score as number) ?? 1,
         position: v.position as number,
         created_at: new Date().toISOString(),
         deleted_at: null,
@@ -164,14 +191,46 @@ function makeFakeClient(
       return updateEq();
     },
   }));
+  const updateInd = vi.fn((values: Record<string, unknown>) => ({
+    eq: (_col: string, id: string) => {
+      indRowsRef.current = indRowsRef.current
+        .map((r) =>
+          r.id === id
+            ? {
+                ...r,
+                ...("code" in values
+                  ? { code: values.code as string | null }
+                  : {}),
+                ...(typeof values.description === "string"
+                  ? { description: values.description as string }
+                  : {}),
+                ...("notes" in values
+                  ? { notes: values.notes as string | null }
+                  : {}),
+                ...(typeof values.score === "number"
+                  ? { score: values.score as number }
+                  : {}),
+                ...(typeof values.deleted_at === "string"
+                  ? { deleted_at: values.deleted_at as string }
+                  : {}),
+              }
+            : r,
+        )
+        .filter((r) => r.deleted_at === null);
+      return updateEq();
+    },
+  }));
   const store = {
     compRowsRef,
     critRowsRef,
+    indRowsRef,
     rowsRef: compRowsRef,
     upsert: upsertComp,
     update: updateComp,
     upsertCrit,
     updateCrit,
+    upsertInd,
+    updateInd,
     updateEq,
   };
 
@@ -192,6 +251,17 @@ function makeFakeClient(
       }),
       order: vi.fn(() => chain),
       limit: vi.fn(async () => {
+        if (table === "career_indicators") {
+          return {
+            data: indRowsRef.current.filter(
+              (r) =>
+                r.deleted_at === null &&
+                (filteredKey !== "criterion_id" ||
+                  r.criterion_id === filteredVal),
+            ) as unknown as Record<string, unknown>[],
+            error: null,
+          };
+        }
         if (table === "career_criteria") {
           return {
             data: critRowsRef.current.filter(
@@ -216,11 +286,21 @@ function makeFakeClient(
     return chain;
   };
 
+  const upsertFor = (table: string) => {
+    if (table === "career_indicators") return upsertInd;
+    if (table === "career_criteria") return upsertCrit;
+    return upsertComp;
+  };
+  const updateFor = (table: string) => {
+    if (table === "career_indicators") return updateInd;
+    if (table === "career_criteria") return updateCrit;
+    return updateComp;
+  };
   const client: SupabaseLike = {
     from: (table: string) => ({
-      upsert: table === "career_criteria" ? upsertCrit : upsertComp,
+      upsert: upsertFor(table),
       select: vi.fn(() => buildSelectChain(table)),
-      update: table === "career_criteria" ? updateCrit : updateComp,
+      update: updateFor(table),
       delete: vi.fn(() => ({ eq: vi.fn() })),
     }),
   };
@@ -610,6 +690,267 @@ describe("AddCriterionForm", () => {
     render(<AddCriterionForm onAdd={vi.fn()} />);
     const button = screen.getByRole("button", {
       name: /add criterion/i,
+    }) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+  });
+});
+
+function indicator(
+  overrides: Partial<StoredIndicator> = {},
+): StoredIndicator {
+  return {
+    id: "i1",
+    criterion_id: "cr1",
+    code: "A",
+    description: "Reviews PRs with substantive feedback",
+    notes: null,
+    score: 1,
+    position: 0,
+    created_at: "2026-01-01T00:00:00Z",
+    deleted_at: null,
+    ...overrides,
+  };
+}
+
+describe("IndicatorList", () => {
+  const originalConfirm = window.confirm;
+  beforeEach(() => {
+    window.confirm = vi.fn(() => true);
+  });
+  afterEach(() => {
+    window.confirm = originalConfirm;
+  });
+
+  it("loads and renders existing indicators for the criterion", async () => {
+    const { client } = makeFakeClient(
+      [],
+      [],
+      [
+        indicator({ id: "i1", criterion_id: "cr1", description: "Reviews PRs" }),
+        indicator({
+          id: "i2",
+          criterion_id: "cr1",
+          description: "Mentors juniors",
+          position: 1024,
+        }),
+      ],
+    );
+    render(
+      <IndicatorList
+        criterion={criterion({ id: "cr1", name: "Review depth" })}
+        client={client}
+      />,
+    );
+    await waitFor(() => {
+      expect(screen.getByDisplayValue("Reviews PRs")).toBeTruthy();
+      expect(screen.getByDisplayValue("Mentors juniors")).toBeTruthy();
+    });
+  });
+
+  it("only loads indicators for the matching criterion", async () => {
+    const { client } = makeFakeClient(
+      [],
+      [],
+      [
+        indicator({ id: "i1", criterion_id: "cr1", description: "A1" }),
+        indicator({ id: "i2", criterion_id: "cr2", description: "B1" }),
+      ],
+    );
+    render(
+      <IndicatorList
+        criterion={criterion({ id: "cr1", name: "Review depth" })}
+        client={client}
+      />,
+    );
+    await waitFor(() =>
+      expect(screen.getByDisplayValue("A1")).toBeTruthy(),
+    );
+    expect(screen.queryByDisplayValue("B1")).toBeNull();
+  });
+
+  it("adds an indicator via the form with score default 1", async () => {
+    const { client, store } = makeFakeClient();
+    render(
+      <IndicatorList
+        criterion={criterion({ id: "cr1", name: "Review depth" })}
+        client={client}
+      />,
+    );
+    const input = await screen.findByLabelText("New indicator description");
+    fireEvent.change(input, { target: { value: "  Reviews PRs  " } });
+    fireEvent.click(screen.getByRole("button", { name: /add indicator/i }));
+    await waitFor(() =>
+      expect(screen.getByDisplayValue("Reviews PRs")).toBeTruthy(),
+    );
+    expect(store.upsertInd).toHaveBeenCalledTimes(1);
+    const args = store.upsertInd.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(args.description).toBe("Reviews PRs");
+    expect(args.criterion_id).toBe("cr1");
+    expect(args.score).toBe(1);
+    expect(args.position).toBe(0);
+  });
+
+  it("renames the description on input blur with a different value", async () => {
+    const { client, store } = makeFakeClient(
+      [],
+      [],
+      [
+        indicator({
+          id: "i1",
+          criterion_id: "cr1",
+          description: "Reviews PRs",
+        }),
+      ],
+    );
+    render(
+      <IndicatorList
+        criterion={criterion({ id: "cr1", name: "Review depth" })}
+        client={client}
+      />,
+    );
+    const input = (await screen.findByDisplayValue(
+      "Reviews PRs",
+    )) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "Reviews PRs deeply" } });
+    fireEvent.blur(input);
+    await waitFor(() =>
+      expect(store.updateInd).toHaveBeenCalledWith({
+        description: "Reviews PRs deeply",
+      }),
+    );
+  });
+
+  it("writes the score on blur and clamps out-of-range values", async () => {
+    const { client, store } = makeFakeClient(
+      [],
+      [],
+      [
+        indicator({
+          id: "i1",
+          criterion_id: "cr1",
+          description: "Reviews PRs",
+          score: 1,
+        }),
+      ],
+    );
+    render(
+      <IndicatorList
+        criterion={criterion({ id: "cr1", name: "Review depth" })}
+        client={client}
+      />,
+    );
+    const score = (await screen.findByLabelText(
+      "Score for A",
+    )) as HTMLInputElement;
+    fireEvent.change(score, { target: { value: "9" } });
+    fireEvent.blur(score);
+    await waitFor(() =>
+      expect(store.updateInd).toHaveBeenCalledWith({ score: 4 }),
+    );
+    expect(score.value).toBe("4");
+  });
+
+  it("does not write a score on blur when the value is unchanged", async () => {
+    const { client, store } = makeFakeClient(
+      [],
+      [],
+      [
+        indicator({
+          id: "i1",
+          criterion_id: "cr1",
+          description: "Reviews PRs",
+          score: 2,
+        }),
+      ],
+    );
+    render(
+      <IndicatorList
+        criterion={criterion({ id: "cr1", name: "Review depth" })}
+        client={client}
+      />,
+    );
+    const score = (await screen.findByLabelText(
+      "Score for A",
+    )) as HTMLInputElement;
+    fireEvent.blur(score);
+    expect(store.updateInd).not.toHaveBeenCalled();
+  });
+
+  it("soft-deletes an indicator and removes it from the list", async () => {
+    const { client, store } = makeFakeClient(
+      [],
+      [],
+      [
+        indicator({
+          id: "i1",
+          criterion_id: "cr1",
+          description: "Reviews PRs",
+        }),
+      ],
+    );
+    render(
+      <IndicatorList
+        criterion={criterion({ id: "cr1", name: "Review depth" })}
+        client={client}
+      />,
+    );
+    const deleteBtn = await screen.findByRole("button", {
+      name: /delete indicator a/i,
+    });
+    fireEvent.click(deleteBtn);
+    await waitFor(() => expect(store.updateInd).toHaveBeenCalledTimes(1));
+    const arg = store.updateInd.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(typeof arg.deleted_at).toBe("string");
+    await waitFor(() =>
+      expect(screen.queryByDisplayValue("Reviews PRs")).toBeNull(),
+    );
+  });
+
+  it("does not delete when the user cancels the confirm prompt", async () => {
+    window.confirm = vi.fn(() => false);
+    const { client, store } = makeFakeClient(
+      [],
+      [],
+      [
+        indicator({
+          id: "i1",
+          criterion_id: "cr1",
+          description: "Reviews PRs",
+        }),
+      ],
+    );
+    render(
+      <IndicatorList
+        criterion={criterion({ id: "cr1", name: "Review depth" })}
+        client={client}
+      />,
+    );
+    const deleteBtn = await screen.findByRole("button", {
+      name: /delete indicator a/i,
+    });
+    fireEvent.click(deleteBtn);
+    expect(store.updateInd).not.toHaveBeenCalled();
+    expect(screen.getByDisplayValue("Reviews PRs")).toBeTruthy();
+  });
+});
+
+describe("AddIndicatorForm", () => {
+  it("submits the trimmed description and clears the input", async () => {
+    const onAdd = vi.fn();
+    render(<AddIndicatorForm onAdd={onAdd} />);
+    const input = screen.getByLabelText(
+      "New indicator description",
+    ) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "  Reviews PRs  " } });
+    fireEvent.click(screen.getByRole("button", { name: /add indicator/i }));
+    expect(onAdd).toHaveBeenCalledWith("Reviews PRs");
+    expect(input.value).toBe("");
+  });
+
+  it("disables the button when the description is empty", () => {
+    render(<AddIndicatorForm onAdd={vi.fn()} />);
+    const button = screen.getByRole("button", {
+      name: /add indicator/i,
     }) as HTMLButtonElement;
     expect(button.disabled).toBe(true);
   });

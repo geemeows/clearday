@@ -69,6 +69,11 @@ const careerSql = readFileSync(
   "utf8",
 );
 
+const careerRescaleSql = readFileSync(
+  resolve(__dirname, "0029_career_rescale.sql"),
+  "utf8",
+);
+
 describe("0001_init.sql contents", () => {
   it("declares the (provider, kind, source_id) unique constraint on signals", () => {
     expect(migrationSql).toMatch(
@@ -224,6 +229,38 @@ describe("0028_career.sql contents", () => {
       );
     }
     expect(careerSql).toMatch(/public\.is_allowed_user\(\)/);
+  });
+});
+
+describe("0029_career_rescale.sql contents", () => {
+  it("backfills 0→1 on indicator score and criterion target", () => {
+    expect(careerRescaleSql).toMatch(
+      /update public\.career_indicators set score = 1 where score = 0/i,
+    );
+    expect(careerRescaleSql).toMatch(
+      /update public\.career_criteria set target = 1 where target = 0/i,
+    );
+  });
+
+  it("re-constrains score and target to the 1–4 range", () => {
+    expect(careerRescaleSql).toMatch(
+      /career_indicators_score_check[\s\S]+check \(score between 1 and 4\)/i,
+    );
+    expect(careerRescaleSql).toMatch(
+      /career_criteria_target_check[\s\S]+check \(target between 1 and 4\)/i,
+    );
+  });
+
+  it("sets score default to 1", () => {
+    expect(careerRescaleSql).toMatch(
+      /alter table public\.career_indicators[\s\S]+alter column score set default 1/i,
+    );
+  });
+
+  it("drops label_0 from career_scale_legend", () => {
+    expect(careerRescaleSql).toMatch(
+      /alter table public\.career_scale_legend[\s\S]+drop column if exists label_0/i,
+    );
   });
 });
 

@@ -40,6 +40,18 @@ export type StoredCriterion = {
   deleted_at: string | null;
 };
 
+export type StoredIndicator = {
+  id: string;
+  criterion_id: string;
+  code: string | null;
+  description: string;
+  notes: string | null;
+  score: number;
+  position: number;
+  created_at: string;
+  deleted_at: string | null;
+};
+
 export async function createLevel(
   client: SupabaseLike,
   level: { id: string; title: string },
@@ -216,4 +228,87 @@ export async function softDeleteCriterion(
     .update({ deleted_at: new Date().toISOString() })
     .eq("id", id);
   if (error) throw new Error(`criterion delete failed: ${error.message}`);
+}
+
+// ─── Indicators ──────────────────────────────────────────────────────────────
+
+// score defaults to 1 (the new 1–4 floor from migration 0029).
+export async function createIndicator(
+  client: SupabaseLike,
+  indicator: {
+    id: string;
+    criterion_id: string;
+    code?: string | null;
+    description: string;
+    notes?: string | null;
+    position: number;
+  },
+): Promise<void> {
+  const { error } = await client.from("career_indicators").upsert(
+    {
+      id: indicator.id,
+      criterion_id: indicator.criterion_id,
+      code: indicator.code ?? null,
+      description: indicator.description,
+      notes: indicator.notes ?? null,
+      score: 1,
+      position: indicator.position,
+    },
+    { onConflict: "id" },
+  );
+  if (error) throw new Error(`indicator create failed: ${error.message}`);
+}
+
+export async function listIndicators(
+  client: SupabaseLike,
+  criterionId: string,
+): Promise<StoredIndicator[]> {
+  const { data, error } = await client
+    .from("career_indicators")
+    .select("*")
+    .eq("criterion_id", criterionId)
+    .is("deleted_at", null)
+    .order("position", { ascending: true })
+    .limit(200);
+  if (error) throw new Error(`indicator list failed: ${error.message}`);
+  return (data ?? []) as StoredIndicator[];
+}
+
+export async function renameIndicator(
+  client: SupabaseLike,
+  id: string,
+  fields: { code?: string | null; description?: string; notes?: string | null },
+): Promise<void> {
+  const update: Record<string, unknown> = {};
+  if (fields.code !== undefined) update.code = fields.code;
+  if (fields.description !== undefined) update.description = fields.description;
+  if (fields.notes !== undefined) update.notes = fields.notes;
+  const { error } = await client
+    .from("career_indicators")
+    .update(update)
+    .eq("id", id);
+  if (error) throw new Error(`indicator rename failed: ${error.message}`);
+}
+
+export async function setIndicatorScore(
+  client: SupabaseLike,
+  id: string,
+  score: number,
+): Promise<void> {
+  const { error } = await client
+    .from("career_indicators")
+    .update({ score })
+    .eq("id", id);
+  if (error) throw new Error(`indicator score update failed: ${error.message}`);
+}
+
+export async function softDeleteIndicator(
+  client: SupabaseLike,
+  id: string,
+): Promise<void> {
+  const { error } = await client
+    .from("career_indicators")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) throw new Error(`indicator delete failed: ${error.message}`);
 }

@@ -2,18 +2,24 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createCompetency,
   createCriterion,
+  createIndicator,
   createLevel,
   getActiveLevel,
   listCompetencies,
   listCriteria,
+  listIndicators,
   listLevels,
   renameCompetency,
   renameCriterion,
+  renameIndicator,
   setCriterionTarget,
+  setIndicatorScore,
   softDeleteCompetency,
   softDeleteCriterion,
+  softDeleteIndicator,
   type StoredCompetency,
   type StoredCriterion,
+  type StoredIndicator,
   type StoredLevel,
 } from "#/features/career/store";
 import type { SupabaseLike } from "#/shared/db";
@@ -383,6 +389,163 @@ describe("softDeleteCriterion", () => {
       updateResult: { error: { message: "delete boom" } },
     });
     await expect(softDeleteCriterion(client, "cr1")).rejects.toThrow(
+      "delete boom",
+    );
+  });
+});
+
+function indicator(
+  overrides: Partial<StoredIndicator> = {},
+): StoredIndicator {
+  return {
+    id: "i1",
+    criterion_id: "cr1",
+    code: "A",
+    description: "Reviews PRs with substantive feedback",
+    notes: null,
+    score: 1,
+    position: 0,
+    created_at: "2026-01-01T00:00:00Z",
+    deleted_at: null,
+    ...overrides,
+  };
+}
+
+describe("createIndicator", () => {
+  it("upserts on id with criterion_id, fields, score=1, and position", async () => {
+    const { client, spies } = makeClient();
+    await createIndicator(client, {
+      id: "i1",
+      criterion_id: "cr1",
+      code: "A",
+      description: "Reviews PRs",
+      notes: null,
+      position: 0,
+    });
+    expect(spies.upsert).toHaveBeenCalledWith(
+      {
+        id: "i1",
+        criterion_id: "cr1",
+        code: "A",
+        description: "Reviews PRs",
+        notes: null,
+        score: 1,
+        position: 0,
+      },
+      { onConflict: "id" },
+    );
+  });
+
+  it("defaults code and notes to null when omitted", async () => {
+    const { client, spies } = makeClient();
+    await createIndicator(client, {
+      id: "i1",
+      criterion_id: "cr1",
+      description: "x",
+      position: 0,
+    });
+    const arg = spies.upsert.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(arg.code).toBeNull();
+    expect(arg.notes).toBeNull();
+    expect(arg.score).toBe(1);
+  });
+
+  it("throws when upsert fails", async () => {
+    const { client } = makeClient({
+      upsertResult: { error: { message: "boom" } },
+    });
+    await expect(
+      createIndicator(client, {
+        id: "i1",
+        criterion_id: "cr1",
+        description: "x",
+        position: 0,
+      }),
+    ).rejects.toThrow("boom");
+  });
+});
+
+describe("listIndicators", () => {
+  it("filters by criterion_id, excludes soft-deleted, orders by position asc", async () => {
+    const row = indicator();
+    const { client, spies } = makeClient({ listData: [row] });
+    const result = await listIndicators(client, "cr1");
+    expect(spies.eq).toHaveBeenCalledWith("criterion_id", "cr1");
+    expect(spies.is).toHaveBeenCalledWith("deleted_at", null);
+    expect(spies.order).toHaveBeenCalledWith("position", { ascending: true });
+    expect(result).toEqual([row]);
+  });
+
+  it("returns empty array when no rows", async () => {
+    const { client } = makeClient({ listData: [] });
+    expect(await listIndicators(client, "cr1")).toEqual([]);
+  });
+
+  it("throws when list fails", async () => {
+    const { client } = makeClient({ listError: { message: "db error" } });
+    await expect(listIndicators(client, "cr1")).rejects.toThrow("db error");
+  });
+});
+
+describe("renameIndicator", () => {
+  it("updates only the supplied fields", async () => {
+    const { client, spies } = makeClient();
+    await renameIndicator(client, "i1", { description: "Reviews PRs" });
+    expect(spies.update).toHaveBeenCalledWith({
+      description: "Reviews PRs",
+    });
+    expect(spies.updateEq).toHaveBeenCalledWith("id", "i1");
+  });
+
+  it("supports updating code and notes", async () => {
+    const { client, spies } = makeClient();
+    await renameIndicator(client, "i1", { code: "B", notes: "see doc" });
+    expect(spies.update).toHaveBeenCalledWith({ code: "B", notes: "see doc" });
+  });
+
+  it("throws when update fails", async () => {
+    const { client } = makeClient({
+      updateResult: { error: { message: "rename boom" } },
+    });
+    await expect(
+      renameIndicator(client, "i1", { description: "x" }),
+    ).rejects.toThrow("rename boom");
+  });
+});
+
+describe("setIndicatorScore", () => {
+  it("updates score on the matching id", async () => {
+    const { client, spies } = makeClient();
+    await setIndicatorScore(client, "i1", 3);
+    expect(spies.update).toHaveBeenCalledWith({ score: 3 });
+    expect(spies.updateEq).toHaveBeenCalledWith("id", "i1");
+  });
+
+  it("throws when update fails", async () => {
+    const { client } = makeClient({
+      updateResult: { error: { message: "score boom" } },
+    });
+    await expect(setIndicatorScore(client, "i1", 2)).rejects.toThrow(
+      "score boom",
+    );
+  });
+});
+
+describe("softDeleteIndicator", () => {
+  it("stamps deleted_at on the matching id", async () => {
+    const { client, spies } = makeClient();
+    await softDeleteIndicator(client, "i1");
+    expect(spies.update).toHaveBeenCalledTimes(1);
+    const arg = spies.update.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(typeof arg.deleted_at).toBe("string");
+    expect(spies.updateEq).toHaveBeenCalledWith("id", "i1");
+  });
+
+  it("throws when update fails", async () => {
+    const { client } = makeClient({
+      updateResult: { error: { message: "delete boom" } },
+    });
+    await expect(softDeleteIndicator(client, "i1")).rejects.toThrow(
       "delete boom",
     );
   });
