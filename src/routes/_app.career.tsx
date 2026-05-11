@@ -1364,7 +1364,7 @@ function IndicatorRow({
             }
           }}
           placeholder="A"
-          className="w-10 rounded border border-transparent bg-transparent px-1 py-0.5 text-center text-foreground text-xs outline-none focus:border-border focus:bg-muted"
+          className="w-10 rounded-[4px] border border-transparent bg-secondary px-1.5 py-px text-center font-mono font-semibold text-[11px] text-muted-foreground tracking-[0.3px] outline-none focus:border-border focus:bg-muted focus:text-foreground"
         />
         <input
           type="text"
