@@ -23,6 +23,7 @@ import {
   EvidenceList,
   IndicatorList,
   LevelHeader,
+  LevelSwitcher,
 } from "#/routes/_app.career";
 import type { SupabaseLike } from "#/shared/db";
 
@@ -677,6 +678,97 @@ describe("CareerLevelView", () => {
     fireEvent.click(deleteBtn);
     expect(store.update).not.toHaveBeenCalled();
     expect(screen.getByDisplayValue("Craft")).toBeTruthy();
+  });
+});
+
+describe("LevelSwitcher", () => {
+  it("renders the active level title with an Active badge", () => {
+    render(
+      <LevelSwitcher
+        active={level({ title: "L5 · Staff" })}
+        archived={[]}
+        onNewBlankLevel={vi.fn()}
+      />,
+    );
+    expect(
+      screen.getByRole("button", { name: /switch level/i }),
+    ).toBeTruthy();
+    expect(screen.getByText("L5 · Staff")).toBeTruthy();
+    expect(screen.getByText(/active/i)).toBeTruthy();
+  });
+
+  it("opens the menu and lists archived levels", () => {
+    const archived = [
+      level({
+        id: "lvl-a",
+        title: "L4",
+        status: "archived",
+        archived_at: "2026-04-01T00:00:00Z",
+      }),
+      level({
+        id: "lvl-b",
+        title: "L3",
+        status: "archived",
+        archived_at: "2026-01-15T00:00:00Z",
+      }),
+    ];
+    render(
+      <LevelSwitcher
+        active={level({ title: "L5" })}
+        archived={archived}
+        onNewBlankLevel={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /switch level/i }));
+    const list = screen.getByRole("menu", { name: /levels/i });
+    expect(list).toBeTruthy();
+    expect(screen.getByText("L4")).toBeTruthy();
+    expect(screen.getByText("L3")).toBeTruthy();
+    expect(screen.getByText(/archived 2026-04-01/i)).toBeTruthy();
+  });
+
+  it("invokes onNewBlankLevel with the prompted title", () => {
+    const onNewBlankLevel = vi.fn();
+    const originalPrompt = window.prompt;
+    window.prompt = vi.fn(() => "  L6  ");
+    try {
+      render(
+        <LevelSwitcher
+          active={level({ title: "L5" })}
+          archived={[]}
+          onNewBlankLevel={onNewBlankLevel}
+        />,
+      );
+      fireEvent.click(screen.getByRole("button", { name: /switch level/i }));
+      fireEvent.click(
+        screen.getByRole("button", { name: /new blank level/i }),
+      );
+      expect(onNewBlankLevel).toHaveBeenCalledWith("L6");
+    } finally {
+      window.prompt = originalPrompt;
+    }
+  });
+
+  it("does not invoke onNewBlankLevel when the prompt is cancelled", () => {
+    const onNewBlankLevel = vi.fn();
+    const originalPrompt = window.prompt;
+    window.prompt = vi.fn(() => null);
+    try {
+      render(
+        <LevelSwitcher
+          active={level({ title: "L5" })}
+          archived={[]}
+          onNewBlankLevel={onNewBlankLevel}
+        />,
+      );
+      fireEvent.click(screen.getByRole("button", { name: /switch level/i }));
+      fireEvent.click(
+        screen.getByRole("button", { name: /new blank level/i }),
+      );
+      expect(onNewBlankLevel).not.toHaveBeenCalled();
+    } finally {
+      window.prompt = originalPrompt;
+    }
   });
 });
 

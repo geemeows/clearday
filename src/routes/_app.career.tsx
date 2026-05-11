@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { ArrowDown, ArrowUp, Target, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronDown, Plus, Target, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "#/components/coss/button";
 import { CareerSyncControls } from "#/features/career/components/CareerSyncControls";
@@ -143,7 +143,14 @@ export function CareerPage() {
     );
   }
 
-  return <CareerLevelView level={active} client={client} />;
+  return (
+    <CareerLevelView
+      level={active}
+      archived={archived}
+      client={client}
+      onNewBlankLevel={handleCreate}
+    />
+  );
 }
 
 export function CareerOnboardingView({
@@ -311,9 +318,13 @@ function ArchivedLevelRow({
 export function CareerLevelView({
   level,
   client,
+  archived = [],
+  onNewBlankLevel,
 }: {
   level: StoredLevel;
   client: SupabaseLike;
+  archived?: StoredLevel[];
+  onNewBlankLevel?: (title: string) => void;
 }) {
   const [competencies, setCompetencies] = useState<StoredCompetency[] | null>(
     null,
@@ -426,9 +437,11 @@ export function CareerLevelView({
           <Target className="h-5 w-5 text-primary" />
         </div>
         <div className="flex-1">
-          <h1 className="font-semibold text-2xl text-foreground tracking-tight">
-            {level.title}
-          </h1>
+          <LevelSwitcher
+            active={level}
+            archived={archived}
+            onNewBlankLevel={onNewBlankLevel}
+          />
           <p className="text-muted-foreground text-sm">
             Active level — add competencies to start building your tree.
           </p>
@@ -523,6 +536,117 @@ export function CareerLevelView({
       </div>
     </section>
   );
+}
+
+export function LevelSwitcher({
+  active,
+  archived,
+  onNewBlankLevel,
+}: {
+  active: StoredLevel;
+  archived: StoredLevel[];
+  onNewBlankLevel?: (title: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [open]);
+
+  const handleNewBlank = () => {
+    setOpen(false);
+    if (!onNewBlankLevel) return;
+    const title = window.prompt("New level title", "L5");
+    const trimmed = title?.trim();
+    if (trimmed) onNewBlankLevel(trimmed);
+  };
+
+  return (
+    <div ref={wrapRef} className="relative inline-block">
+      <button
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label="Switch level"
+        onClick={() => setOpen((o) => !o)}
+        className="inline-flex items-center gap-2 rounded-md border border-border bg-card px-3 py-1 text-foreground hover:bg-muted"
+      >
+        <span className="font-semibold text-xl tracking-tight">
+          {active.title}
+        </span>
+        <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 font-bold text-[10px] text-emerald-700 uppercase tracking-wider dark:bg-emerald-950 dark:text-emerald-300">
+          Active
+        </span>
+        <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+      </button>
+      {open && (
+        <div
+          role="menu"
+          aria-label="Levels"
+          className="absolute top-full left-0 z-30 mt-1.5 w-80 rounded-md border border-border bg-popover p-1 shadow-md"
+        >
+          <p className="px-2.5 pt-2 pb-1 font-medium text-muted-foreground text-xs uppercase tracking-wide">
+            Active
+          </p>
+          <div className="rounded bg-primary/5 px-2.5 py-1.5">
+            <div className="font-semibold text-foreground text-sm">
+              {active.title}
+            </div>
+            <div className="text-muted-foreground text-xs">
+              Started {formatDateShort(active.created_at)}
+            </div>
+          </div>
+          {archived.length > 0 && (
+            <>
+              <p className="px-2.5 pt-3 pb-1 font-medium text-muted-foreground text-xs uppercase tracking-wide">
+                Archive
+              </p>
+              <ul aria-label="Archived levels list">
+                {archived.map((a) => (
+                  <li key={a.id}>
+                    <div className="px-2.5 py-1.5">
+                      <div className="font-medium text-foreground text-sm">
+                        {a.title}
+                      </div>
+                      <div className="text-muted-foreground text-xs">
+                        Archived {formatDateShort(a.archived_at)}
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+          {onNewBlankLevel && (
+            <div className="mt-1 border-border border-t pt-1">
+              <button
+                type="button"
+                onClick={handleNewBlank}
+                className="flex w-full items-center gap-2 rounded px-2.5 py-1.5 text-left font-medium text-primary text-sm hover:bg-muted"
+              >
+                <Plus className="h-3.5 w-3.5" /> New blank level…
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function formatDateShort(iso: string | null): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toISOString().slice(0, 10);
 }
 
 export function LevelHeader({
