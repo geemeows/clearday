@@ -225,6 +225,29 @@ describe("ProjectBoardView", () => {
     expect(within(done).queryByText("Empty · drop cards here")).toBeNull();
   });
 
+  it("highlights the column with a dashed primary border while dragged over", () => {
+    render(
+      <ProjectBoardView
+        project={project()}
+        columns={[column()]}
+        cards={[]}
+        loading={false}
+        error={null}
+        onAddCard={noop}
+      />,
+    );
+    const col = screen.getByRole("article", { name: "Backlog" });
+    expect(col.getAttribute("data-drag-over")).toBeNull();
+    fireEvent.dragOver(col);
+    expect(col.getAttribute("data-drag-over")).toBe("true");
+    expect((col as HTMLElement).style.borderStyle).toBe("dashed");
+    expect((col as HTMLElement).style.background).toContain(
+      "var(--primary-disabled)",
+    );
+    fireEvent.dragLeave(col);
+    expect(col.getAttribute("data-drag-over")).toBeNull();
+  });
+
   it("renders cards in dense order sequence within a column", () => {
     const cards = [
       card({ id: "k2", column_id: "col1", title: "Second", order: 1 }),

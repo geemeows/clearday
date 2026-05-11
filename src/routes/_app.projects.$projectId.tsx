@@ -973,6 +973,7 @@ function KanbanColumn({
 }) {
   const [composing, setComposing] = useState(false);
   const [draft, setDraft] = useState("");
+  const [isDragOver, setIsDragOver] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   // Tracks which card the drag cursor last entered; used as afterId on drop.
   // undefined = no card entered yet this drag session.
@@ -1004,6 +1005,7 @@ function KanbanColumn({
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
+    setIsDragOver(false);
     const draggedId = dragCardIdRef.current;
     if (!draggedId) return;
     dragCardIdRef.current = null;
@@ -1040,9 +1042,26 @@ function KanbanColumn({
   return (
     <article
       aria-label={column.name}
-      className="flex w-64 shrink-0 flex-col rounded-lg border border-border bg-card"
+      data-drag-over={isDragOver ? "true" : undefined}
+      className="flex w-64 shrink-0 flex-col rounded-lg border border-border bg-card transition-colors"
+      style={
+        isDragOver
+          ? {
+              background: "var(--primary-disabled)",
+              borderColor: "var(--primary)",
+              borderStyle: "dashed",
+              borderWidth: 1.5,
+            }
+          : undefined
+      }
       onDragOver={(e) => {
         e.preventDefault();
+        if (!isDragOver) setIsDragOver(true);
+      }}
+      onDragLeave={(e) => {
+        // Only clear when leaving the column itself, not a child.
+        if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+        setIsDragOver(false);
       }}
       onDrop={handleDrop}
     >
