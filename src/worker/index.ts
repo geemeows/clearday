@@ -125,6 +125,14 @@ import {
   type ThemeStore,
   type ThemeView,
 } from "#/features/settings/theme/api";
+import {
+  DEFAULT_WEEK_START,
+  getWeekStart,
+  putWeekStart,
+  type WeekStartPutBody,
+  type WeekStartStore,
+  type WeekStartView,
+} from "#/features/settings/week-start/api";
 import { runDueRollups } from "#/features/signals/rollup";
 import {
   handleDismissSignal,
@@ -587,6 +595,24 @@ export default {
         const out = await putTheme(body, store);
         if (!out.ok) return json({ ok: false, error: out.error }, 400);
         return json({ ok: true, theme: out.theme });
+      }
+    }
+
+    if (url.pathname === "/api/week-start") {
+      const store = weekStartStore(service);
+      if (request.method === "GET") {
+        return json(await getWeekStart(store));
+      }
+      if (request.method === "PUT") {
+        let body: WeekStartPutBody;
+        try {
+          body = (await request.json()) as WeekStartPutBody;
+        } catch {
+          return json({ ok: false, error: "invalid json" }, 400);
+        }
+        const out = await putWeekStart(body, store);
+        if (!out.ok) return json({ ok: false, error: out.error }, 400);
+        return json({ ok: true, weekStart: out.weekStart });
       }
     }
 
@@ -1929,6 +1955,37 @@ function themeStore(service: SupabaseService): ThemeStore {
       const { error } = await service
         .from("user_preferences")
         .update({ ...patch, updated_at: new Date().toISOString() })
+        .eq("id", true);
+      if (error) throw new Error(error.message);
+      return read();
+    },
+  };
+}
+
+function weekStartStore(service: SupabaseService): WeekStartStore {
+  const read = async (): Promise<WeekStartView> => {
+    const { data, error } = await service
+      .from("user_preferences")
+      .select("calendar_week_start")
+      .eq("id", true)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    const row = (data ?? {}) as { calendar_week_start?: string | null };
+    const value = row.calendar_week_start;
+    if (value === "sun" || value === "mon" || value === "sat") {
+      return { weekStart: value };
+    }
+    return { ...DEFAULT_WEEK_START };
+  };
+  return {
+    load: read,
+    save: async (patch) => {
+      const { error } = await service
+        .from("user_preferences")
+        .update({
+          calendar_week_start: patch.weekStart,
+          updated_at: new Date().toISOString(),
+        })
         .eq("id", true);
       if (error) throw new Error(error.message);
       return read();

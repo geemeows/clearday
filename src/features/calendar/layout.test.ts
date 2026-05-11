@@ -6,6 +6,7 @@ import {
   mondayOf,
   toWeekEvents,
   weekRangeLabel,
+  weekStartOf,
 } from "#/features/calendar/layout";
 import type { MeetingEvent, WeekEvent } from "#/features/calendar/types";
 import type { StoredSignal } from "#/shared/signal";
@@ -76,6 +77,41 @@ describe("mondayOf", () => {
     expect(monday.getMonth()).toBe(3); // April
     expect(monday.getDate()).toBe(27);
     expect(monday.getDay()).toBe(1);
+  });
+});
+
+describe("weekStartOf", () => {
+  // Wed May 6 2026 sits between Sun May 3, Mon May 4, and the previous Sat May 2.
+  const wed = new Date(2026, 4, 6, 14, 30);
+
+  it("'mon' anchors to Monday (matches mondayOf)", () => {
+    const got = weekStartOf(wed, "mon");
+    expect(got.getDay()).toBe(1);
+    expect(got.getDate()).toBe(4);
+    expect(got.getHours()).toBe(0);
+  });
+
+  it("'sun' anchors to Sunday", () => {
+    const got = weekStartOf(wed, "sun");
+    expect(got.getDay()).toBe(0);
+    expect(got.getDate()).toBe(3);
+    expect(got.getHours()).toBe(0);
+  });
+
+  it("'sat' anchors to the previous Saturday", () => {
+    const got = weekStartOf(wed, "sat");
+    expect(got.getDay()).toBe(6);
+    expect(got.getDate()).toBe(2);
+    expect(got.getHours()).toBe(0);
+  });
+
+  it("returns the same day when the anchor day itself is passed", () => {
+    const sun = new Date(2026, 4, 3, 12, 0);
+    expect(weekStartOf(sun, "sun").getDate()).toBe(3);
+    const sat = new Date(2026, 4, 2, 12, 0);
+    expect(weekStartOf(sat, "sat").getDate()).toBe(2);
+    const mon = new Date(2026, 4, 4, 12, 0);
+    expect(weekStartOf(mon, "mon").getDate()).toBe(4);
   });
 });
 

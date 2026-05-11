@@ -23,6 +23,21 @@ export function mondayOf(d: Date): Date {
   return start;
 }
 
+/**
+ * Week-start 00:00 local for the week containing `d`, anchored to the user's
+ * preferred first day of the week. JS Date.getDay() returns 0=Sun..6=Sat;
+ * map weekStart to that anchor.
+ */
+export type WeekStartDay = "sun" | "mon" | "sat";
+
+export function weekStartOf(d: Date, weekStart: WeekStartDay): Date {
+  const anchor = weekStart === "sun" ? 0 : weekStart === "sat" ? 6 : 1;
+  const start = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const offset = (start.getDay() - anchor + 7) % 7;
+  start.setDate(start.getDate() - offset);
+  return start;
+}
+
 /** 0..4 if `d` falls Mon–Fri, else null (weekend). */
 export function mondayCol(d: Date): number | null {
   const offset = (d.getDay() + 6) % 7;

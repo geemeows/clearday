@@ -16,11 +16,12 @@ import {
   fmtMinutes,
   layoutLanes,
   mondayCol,
-  mondayOf,
   monthLabel,
   toWeekEvents,
   weekRangeLabel,
+  weekStartOf,
 } from "#/features/calendar/layout";
+import { useWeekStart } from "#/features/settings/week-start/use-week-start";
 import type { EventKind, WeekEvent } from "#/features/calendar/types";
 import { apiFetch } from "#/lib/api-client";
 import { cn } from "#/lib/cn";
@@ -102,8 +103,12 @@ export function CalendarView({
   defaultMode?: CalendarViewMode;
 }) {
   const [mode, setMode] = useState<CalendarViewMode>(defaultMode);
+  const { weekStart: weekStartPref } = useWeekStart();
 
-  const weekStart = useMemo(() => mondayOf(now), [now]);
+  const weekStart = useMemo(
+    () => weekStartOf(now, weekStartPref),
+    [now, weekStartPref],
+  );
   const weekEvents = useMemo<WeekEvent[]>(() => {
     if (events) return events;
     if (meetings) return toWeekEvents(meetings, weekStart);
@@ -210,6 +215,7 @@ export function CalendarView({
           conflicts={conflicts}
           todayCol={todayCol}
           now={now}
+          weekStart={weekStart}
         />
       )}
 
@@ -310,11 +316,13 @@ function WeekGrid({
   conflicts,
   todayCol,
   now,
+  weekStart,
 }: {
   events: WeekEvent[];
   conflicts: ConflictPair<WeekEvent>[];
   todayCol: number | null;
   now: Date;
+  weekStart: Date;
 }) {
   const conflictIds = useMemo(() => {
     const ids = new Set<string>();
@@ -326,7 +334,6 @@ function WeekGrid({
   }, [conflicts]);
 
   const hours = Array.from({ length: HOURS }, (_, i) => HOUR_START + i);
-  const weekStart = mondayOf(now);
 
   return (
     <section
@@ -420,7 +427,9 @@ function WeekGrid({
           ))}
         </div>
       </div>
-      {conflicts.length > 0 && <ConflictBanner pairs={conflicts} now={now} />}
+      {conflicts.length > 0 && (
+        <ConflictBanner pairs={conflicts} weekStart={weekStart} />
+      )}
     </section>
   );
 }
@@ -750,12 +759,11 @@ function NowLine({ now }: { now: Date }) {
 
 function ConflictBanner({
   pairs,
-  now,
+  weekStart,
 }: {
   pairs: ConflictPair<WeekEvent>[];
-  now: Date;
+  weekStart: Date;
 }) {
-  const weekStart = mondayOf(now);
   return (
     <article
       aria-label="Conflict"
