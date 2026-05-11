@@ -78,7 +78,7 @@ export function PulseCard({
     loader(sinceIso)
       .then((list) => {
         if (cancelled) return;
-        setStats(computeWeekStats(list, new Date()));
+        setStats(computeWeekStats(list, now));
         setError(null);
       })
       .catch((e) => {
@@ -88,7 +88,7 @@ export function PulseCard({
     return () => {
       cancelled = true;
     };
-  }, [loader, sinceIso]);
+  }, [loader, sinceIso, now]);
 
   return (
     <article
