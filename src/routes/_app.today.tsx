@@ -163,9 +163,9 @@ export function TodayView({
   weekStats?: ReactNode;
 }) {
   return (
-    <section className="mx-auto max-w-6xl space-y-6 p-8">
+    <section className="mx-auto flex max-w-7xl flex-col gap-5 px-10 pt-8 pb-16">
       <header>
-        <h1 className="font-semibold text-2xl text-foreground">
+        <h1 className="font-semibold text-3xl text-foreground tracking-tight">
           {greeting ?? "Today"}
         </h1>
         {summary && (
@@ -183,21 +183,20 @@ export function TodayView({
         <p className="text-muted-foreground text-sm">Loading…</p>
       )}
 
+      {weekStats}
+
       {nextUp}
 
       {briefing}
 
       {dueToday}
 
-      <div className="grid gap-6 md:grid-cols-2">
+      <div className="grid gap-5 md:grid-cols-[1.3fr_1fr]">
         {inboxPreview}
         {inProgress}
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2">
-        {schedule}
-        {weekStats}
-      </div>
+      {schedule}
 
       {alertSignal && (
         <MeetingAlertToast signal={alertSignal} onDismiss={onDismissAlert} />
