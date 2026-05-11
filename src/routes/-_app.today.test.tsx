@@ -25,6 +25,7 @@ import {
   formatGreeting,
   InboxPreviewCard,
   InProgressCard,
+  OnboardingBanner,
   renderBold,
   TodaySchedule,
   TodayView,
@@ -591,5 +592,74 @@ describe("DueTodayCard", () => {
     });
     await renderWithProjectRouter(<DueTodayCard now={now} loader={loader} />);
     await waitFor(() => screen.getByText(/network down/i));
+  });
+});
+
+async function renderWithOnboardingRouter(node: ReactElement) {
+  const rootRoute = createRootRoute({ component: () => node });
+  const onboardingRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/onboarding",
+    component: () => null,
+  });
+  const router = createRouter({
+    routeTree: rootRoute.addChildren([onboardingRoute]),
+    history: createMemoryHistory({ initialEntries: ["/today"] }),
+  });
+  await router.load();
+  // biome-ignore lint/suspicious/noExplicitAny: test-only router cast
+  render(<RouterProvider router={router as any} />);
+}
+
+describe("OnboardingBanner", () => {
+  it("shows the banner when not completed and zero providers connected", async () => {
+    const loader = vi.fn(async () => ({
+      onboarded_at: null,
+      providers_connected: 0,
+      auth_proxy_url: "https://auth.example.com",
+    }));
+    const completer = vi.fn();
+    await renderWithOnboardingRouter(
+      <OnboardingBanner loader={loader} completer={completer} />,
+    );
+    await waitFor(() => screen.getByLabelText(/finish onboarding/i));
+    expect(
+      screen.getByRole("link", { name: /continue/i }).getAttribute("href"),
+    ).toBe("/onboarding");
+    expect(completer).not.toHaveBeenCalled();
+  });
+
+  it("hides the banner and auto-completes when ≥1 provider is connected", async () => {
+    const loader = vi.fn(async () => ({
+      onboarded_at: null,
+      providers_connected: 1,
+      auth_proxy_url: null,
+    }));
+    const completer = vi.fn(async () => ({
+      ok: true as const,
+      onboarded_at: "2026-05-11T00:00:00.000Z",
+    }));
+    await renderWithOnboardingRouter(
+      <OnboardingBanner loader={loader} completer={completer} />,
+    );
+    await waitFor(() => expect(completer).toHaveBeenCalledTimes(1));
+    expect(screen.queryByLabelText(/finish onboarding/i)).toBeNull();
+  });
+
+  it("never shows the banner for already-completed users", async () => {
+    const loader = vi.fn(async () => ({
+      onboarded_at: "2026-05-04T12:00:00.000Z",
+      providers_connected: 0,
+      auth_proxy_url: null,
+    }));
+    const completer = vi.fn();
+    await renderWithOnboardingRouter(
+      <OnboardingBanner loader={loader} completer={completer} />,
+    );
+    await act(async () => {
+      await loader.mock.results[0]?.value;
+    });
+    expect(screen.queryByLabelText(/finish onboarding/i)).toBeNull();
+    expect(completer).not.toHaveBeenCalled();
   });
 });

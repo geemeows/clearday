@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   buildConnectUrl,
   completeOnboarding,
+  decideOnboardingGate,
   getOnboardingStatus,
 } from "#/features/onboarding/api";
 
@@ -45,6 +46,41 @@ describe("completeOnboarding", () => {
       onboarded_at: "2026-05-04T15:00:00.000Z",
     });
     expect(setOnboardedAt).toHaveBeenCalledWith("2026-05-04T15:00:00.000Z");
+  });
+});
+
+describe("decideOnboardingGate", () => {
+  it("shows the banner when not completed and zero providers are connected", () => {
+    expect(
+      decideOnboardingGate({
+        onboarded_at: null,
+        providers_connected: 0,
+      }),
+    ).toEqual({ showBanner: true, autoComplete: false });
+  });
+
+  it("auto-completes (no banner) when not completed and ≥1 provider connected", () => {
+    expect(
+      decideOnboardingGate({
+        onboarded_at: null,
+        providers_connected: 1,
+      }),
+    ).toEqual({ showBanner: false, autoComplete: true });
+  });
+
+  it("never shows the banner for already-completed users", () => {
+    expect(
+      decideOnboardingGate({
+        onboarded_at: "2026-05-04T12:00:00.000Z",
+        providers_connected: 0,
+      }),
+    ).toEqual({ showBanner: false, autoComplete: false });
+    expect(
+      decideOnboardingGate({
+        onboarded_at: "2026-05-04T12:00:00.000Z",
+        providers_connected: 3,
+      }),
+    ).toEqual({ showBanner: false, autoComplete: false });
   });
 });
 

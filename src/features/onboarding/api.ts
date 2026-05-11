@@ -41,6 +41,29 @@ export async function completeOnboarding(
   return { ok: true, onboarded_at: iso };
 }
 
+// Soft gate verdict consumed by /today. `onboarded_at` non-null is the
+// source of truth for "completion"; the PRD's nominal `onboarding_completed`
+// boolean would be redundant given the existing column.
+//
+// - `showBanner` → render the "finish onboarding" banner on /today.
+// - `autoComplete` → flip onboarded_at to now() (criterion: ≥1 provider
+//   connected). Callers are expected to POST /api/onboarding/complete and
+//   stop showing the banner afterwards.
+export type GateVerdict = {
+  showBanner: boolean;
+  autoComplete: boolean;
+};
+
+export function decideOnboardingGate(
+  status: Pick<OnboardingStatus, "onboarded_at" | "providers_connected">,
+): GateVerdict {
+  const completed = status.onboarded_at != null;
+  if (completed) return { showBanner: false, autoComplete: false };
+  if (status.providers_connected >= 1)
+    return { showBanner: false, autoComplete: true };
+  return { showBanner: true, autoComplete: false };
+}
+
 const ALLOWED_PROVIDERS = ["github", "slack", "google", "linear", "jira"];
 
 export function buildConnectUrl(

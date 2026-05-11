@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ExternalLink, RefreshCw, Video, X } from "lucide-react";
+import { ExternalLink, RefreshCw, Sparkles, Video, X } from "lucide-react";
 import {
   type ReactNode,
   useCallback,
@@ -10,6 +10,10 @@ import {
 import { Button as CossButton } from "#/components/coss/button";
 import type { BriefingResult } from "#/features/briefing/morning-briefing";
 import type { MeetingEvent } from "#/features/calendar/events";
+import {
+  decideOnboardingGate,
+  type OnboardingStatus,
+} from "#/features/onboarding/api";
 import { type DueCard, listCardsDueOn } from "#/features/projects/store";
 import type { ProfileView } from "#/features/settings/profile/api";
 import { InboxPreviewRow } from "#/features/signals/components/InboxPreviewRow";
@@ -122,6 +126,7 @@ function TodayPage() {
         )
       }
       briefing={<BriefingCard />}
+      onboardingBanner={<OnboardingBanner />}
       schedule={
         meetings != null && <TodaySchedule events={todaysMeetings} now={now} />
       }
@@ -147,6 +152,7 @@ export function TodayView({
   inboxPreview,
   inProgress,
   weekStats,
+  onboardingBanner,
 }: {
   meetings: StoredSignal[] | null;
   error: string | null;
@@ -161,6 +167,7 @@ export function TodayView({
   inboxPreview?: ReactNode;
   inProgress?: ReactNode;
   weekStats?: ReactNode;
+  onboardingBanner?: ReactNode;
 }) {
   return (
     <section className="mx-auto flex max-w-7xl flex-col gap-5 px-10 pt-8 pb-16">
@@ -172,6 +179,8 @@ export function TodayView({
           <p className="mt-1 text-muted-foreground text-sm">{summary}</p>
         )}
       </header>
+
+      {onboardingBanner}
 
       {error && (
         <p className="rounded-sm border border-destructive/30 bg-destructive/10 p-3 text-destructive text-sm">
@@ -269,6 +278,85 @@ function SummaryLine({
 
 function plural(n: number, word: string): string {
   return n === 1 ? word : `${word}s`;
+}
+
+type OnboardingStatusLoader = () => Promise<OnboardingStatus>;
+type OnboardingCompleter = () => Promise<{ ok: true; onboarded_at: string }>;
+
+export function OnboardingBanner({
+  loader,
+  completer,
+}: {
+  loader?: OnboardingStatusLoader;
+  completer?: OnboardingCompleter;
+} = {}) {
+  const load = useMemo(
+    () =>
+      loader ?? (() => apiFetch("/api/onboarding/status") as Promise<OnboardingStatus>),
+    [loader],
+  );
+  const complete = useMemo(
+    () =>
+      completer ??
+      (() =>
+        apiFetch("/api/onboarding/complete", { method: "POST" }) as Promise<{
+          ok: true;
+          onboarded_at: string;
+        }>),
+    [completer],
+  );
+
+  const [verdict, setVerdict] = useState<{ showBanner: boolean } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    load()
+      .then((status) => {
+        if (cancelled) return;
+        const gate = decideOnboardingGate(status);
+        if (gate.autoComplete) {
+          complete().catch(() => {
+            // Best-effort; the next /today load will re-evaluate from the DB.
+          });
+          setVerdict({ showBanner: false });
+          return;
+        }
+        setVerdict({ showBanner: gate.showBanner });
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setVerdict({ showBanner: false });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [load, complete]);
+
+  if (!verdict?.showBanner) return null;
+
+  return (
+    <aside
+      aria-label="Finish onboarding"
+      className="flex items-center gap-3 rounded-lg border border-primary/30 bg-primary/5 p-4"
+    >
+      <Sparkles aria-hidden className="size-4 shrink-0 text-primary" />
+      <div className="min-w-0 flex-1">
+        <p className="font-medium text-foreground text-sm">
+          Finish setting up Devy
+        </p>
+        <p className="mt-0.5 text-muted-foreground text-xs">
+          Connect at least one source — GitHub, Slack, or Google Calendar — to
+          activate your daily command center.
+        </p>
+      </div>
+      <Link
+        to="/onboarding"
+        className="inline-flex shrink-0 items-center rounded-md bg-primary px-3 py-1.5 font-medium text-primary-foreground text-xs hover:opacity-90"
+      >
+        Continue
+      </Link>
+    </aside>
+  );
 }
 
 type Generator = (force: boolean) => Promise<BriefingResult>;
