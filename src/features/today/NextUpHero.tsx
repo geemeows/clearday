@@ -3,6 +3,7 @@ import { Button as CossButton } from "#/components/coss/button";
 import { SourceGlyph } from "#/features/signals/components/SourceGlyph";
 import type { NextUpMeeting } from "#/features/signals/views/today";
 import { CountdownRing } from "#/features/today/CountdownRing";
+import { cn } from "#/lib/cn";
 
 export function NextUpHero({
   meeting,
@@ -21,14 +22,26 @@ export function NextUpHero({
     0,
     Math.round((startsAt.getTime() - now.getTime()) / 60_000),
   );
+  const urgent = minutesUntil <= 10;
 
   return (
     <article
       aria-label="Next up"
-      className="grid grid-cols-1 items-stretch gap-6 rounded-lg border border-border bg-card p-6 md:grid-cols-[1fr_auto]"
+      data-urgent={urgent ? "true" : undefined}
+      className={cn(
+        "grid grid-cols-1 items-stretch gap-6 rounded-lg p-6 transition-colors md:grid-cols-[1fr_auto]",
+        urgent
+          ? "border-0 bg-neutral-900 text-white"
+          : "border border-border bg-card",
+      )}
     >
       <div className="flex min-w-0 flex-col gap-3">
-        <div className="flex flex-wrap items-center gap-2 text-muted-foreground text-xs uppercase tracking-wider">
+        <div
+          className={cn(
+            "flex flex-wrap items-center gap-2 text-xs uppercase tracking-wider",
+            urgent ? "text-white/55" : "text-muted-foreground",
+          )}
+        >
           <SourceGlyph source="cal" size={20} />
           <span>
             <CalendarClock
@@ -38,31 +51,62 @@ export function NextUpHero({
             Next up · {formatRelative(minutesUntil)}
           </span>
           {alertArmed && (
-            <span className="rounded-sm bg-primary/10 px-2 py-0.5 font-medium text-[11px] text-primary normal-case tracking-normal">
+            <span
+              className={cn(
+                "rounded-sm px-2 py-0.5 font-medium text-[11px] normal-case tracking-normal",
+                urgent
+                  ? "bg-white/10 text-white"
+                  : "bg-primary/10 text-primary",
+              )}
+            >
               10-min alert armed
             </span>
           )}
         </div>
 
-        <h2 className="font-semibold text-2xl text-foreground leading-tight">
+        <h2
+          className={cn(
+            "font-semibold text-2xl leading-tight",
+            urgent ? "text-white" : "text-foreground",
+          )}
+        >
           {signal.title}
         </h2>
-        <p className="font-mono text-muted-foreground text-xs">
+        <p
+          className={cn(
+            "font-mono text-xs",
+            urgent ? "text-white/60" : "text-muted-foreground",
+          )}
+        >
           {formatTimeRange(startsAt, endsAt)}
         </p>
 
         {linkedItems.length > 0 && (
           <div className="mt-1 flex flex-col gap-1">
-            <div className="font-mono text-[10px] text-muted-foreground uppercase tracking-wider">
+            <div
+              className={cn(
+                "font-mono text-[10px] uppercase tracking-wider",
+                urgent ? "text-white/55" : "text-muted-foreground",
+              )}
+            >
               Agenda · pulled from invite
             </div>
             <ul className="flex flex-col gap-0.5">
               {linkedItems.map((item) => (
                 <li
                   key={item.url}
-                  className="flex items-baseline gap-2 text-foreground text-sm"
+                  className={cn(
+                    "flex items-baseline gap-2 text-sm",
+                    urgent ? "text-white/80" : "text-foreground",
+                  )}
                 >
-                  <span className="text-muted-foreground">·</span>
+                  <span
+                    className={
+                      urgent ? "text-white/40" : "text-muted-foreground"
+                    }
+                  >
+                    ·
+                  </span>
                   <a
                     href={item.url}
                     target="_blank"

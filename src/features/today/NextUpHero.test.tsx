@@ -124,6 +124,32 @@ describe("NextUpHero", () => {
     );
   });
 
+  it("applies the urgent palette when the meeting is within 10 minutes", () => {
+    const { container } = render(
+      <NextUpHero
+        meeting={meeting({
+          startsAt: new Date("2026-05-04T12:08:00.000Z"),
+        })}
+        now={new Date("2026-05-04T12:00:00.000Z")}
+        alertArmed={false}
+      />,
+    );
+    const article = container.querySelector('article[aria-label="Next up"]');
+    expect(article?.getAttribute("data-urgent")).toBe("true");
+  });
+
+  it("does not apply the urgent palette when the meeting is more than 10 minutes out", () => {
+    const { container } = render(
+      <NextUpHero
+        meeting={meeting()}
+        now={new Date("2026-05-04T12:00:00.000Z")}
+        alertArmed={false}
+      />,
+    );
+    const article = container.querySelector('article[aria-label="Next up"]');
+    expect(article?.getAttribute("data-urgent")).toBeNull();
+  });
+
   it("renders the countdown ring with mm:ss", () => {
     render(
       <NextUpHero
