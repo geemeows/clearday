@@ -53,9 +53,9 @@ import type { Signal, StoredSignal } from "#/shared/signal";
 const PAGES: NavPage[] = [
   { to: "/today", label: "Today", icon: Sun },
   { to: "/inbox", label: "Inbox", icon: Inbox },
+  { to: "/career", label: "Career", icon: Target },
   { to: "/calendar", label: "Calendar", icon: Calendar },
   { to: "/automations", label: "Automations", icon: Zap },
-  { to: "/career", label: "Career", icon: Target },
 ];
 
 type SourceDef = { id: string; label: string; kind: SourceKind };

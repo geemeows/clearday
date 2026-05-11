@@ -3,13 +3,14 @@
 // hooks and route navigation; this module just renders.
 
 import {
+  ChevronDown,
   ChevronRight,
   Kanban,
   Plus,
   Settings as SettingsIcon,
   Target,
 } from "lucide-react";
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "#/components/coss/avatar";
 import { Button } from "#/components/coss/button";
 import { FocusActiveBlock } from "#/features/focus/components/FocusActiveBlock";
@@ -115,7 +116,7 @@ export function NavigationSidebar({
             const active = page === p.to || page.startsWith(`${p.to}/`);
             const badge = p.to === "/inbox" ? inboxBadge : 0;
             const badgeId = p.to === "/inbox" ? "inbox-badge" : undefined;
-            return (
+            const items = [
               <li key={p.to}>
                 <Button
                   type="button"
@@ -135,70 +136,148 @@ export function NavigationSidebar({
                     </span>
                   ) : null}
                 </Button>
-              </li>
-            );
+              </li>,
+            ];
+            // Projects nav sits between Inbox and Career per design.
+            if (p.to === "/inbox") {
+              items.push(
+                <li key="__projects" className="list-none">
+                  <ProjectsNav
+                    page={page}
+                    projects={projects}
+                    projectsOpen={projectsOpen}
+                    onToggleProjects={onToggleProjects}
+                    onNavigateToProject={onNavigateToProject}
+                    onNewProject={onNewProject}
+                  />
+                </li>,
+              );
+            }
+            return items;
           })}
         </ul>
       </nav>
 
-      <nav aria-label="Projects" className="mt-4 px-2">
-        <button
-          type="button"
-          onClick={onToggleProjects}
-          aria-expanded={projectsOpen}
-          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent"
-        >
-          <Kanban className="h-4 w-4 shrink-0 text-muted-foreground" />
-          <span className="flex-1 text-left font-normal text-foreground">
-            Projects
-          </span>
-          <ChevronRight
-            className={cn(
-              "h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-150",
-              projectsOpen && "rotate-90",
-            )}
-          />
-        </button>
+      <SourcesRail sources={sources} />
 
-        {projectsOpen && (
-          <ul className="mt-0.5 max-h-52 space-y-0.5 overflow-y-auto">
-            {projects.map((p) => {
-              const active =
-                page === `/projects/${p.id}` ||
-                page.startsWith(`/projects/${p.id}/`);
-              return (
-                <li key={p.id}>
-                  <Button
-                    type="button"
-                    variant={active ? "secondary" : "ghost"}
-                    onClick={() => onNavigateToProject(p.id)}
-                    aria-current={active ? "page" : undefined}
-                    className="h-8 w-full justify-start gap-2 pl-7 font-normal"
-                  >
-                    <span className="flex-1 truncate text-left text-sm">
-                      {p.name}
-                    </span>
-                  </Button>
-                </li>
-              );
-            })}
-            <li>
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={onNewProject}
-                className="h-8 w-full justify-start gap-2 pl-7 font-normal text-muted-foreground"
-              >
-                <Plus className="h-3.5 w-3.5" />
-                <span className="text-sm">New project</span>
-              </Button>
-            </li>
-          </ul>
-        )}
-      </nav>
+      <div className="mt-auto flex flex-col gap-2 px-3 pb-3">
+        <FocusSlot focus={focus} onStartFocus={onStartFocus} />
+        <AccountRow profile={profile} onOpenSettings={onOpenSettings} />
+      </div>
+    </aside>
+  );
+}
 
-      <nav aria-label="Sources" className="mt-4 px-2">
-        <SectionTitle>Sources</SectionTitle>
+function ProjectsNav({
+  page,
+  projects,
+  projectsOpen,
+  onToggleProjects,
+  onNavigateToProject,
+  onNewProject,
+}: {
+  page: string;
+  projects: NavProject[];
+  projectsOpen: boolean;
+  onToggleProjects: () => void;
+  onNavigateToProject: (id: string) => void;
+  onNewProject: () => void;
+}) {
+  return (
+    <nav aria-label="Projects">
+      <button
+        type="button"
+        onClick={onToggleProjects}
+        aria-expanded={projectsOpen}
+        className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent"
+      >
+        <Kanban className="h-4 w-4 shrink-0 text-muted-foreground" />
+        <span className="flex-1 text-left font-normal text-foreground">
+          Projects
+        </span>
+        <ChevronRight
+          className={cn(
+            "h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-150",
+            projectsOpen && "rotate-90",
+          )}
+        />
+      </button>
+
+      {projectsOpen && (
+        <ul className="mt-0.5 max-h-52 space-y-0.5 overflow-y-auto">
+          {projects.map((p) => {
+            const active =
+              page === `/projects/${p.id}` ||
+              page.startsWith(`/projects/${p.id}/`);
+            return (
+              <li key={p.id}>
+                <Button
+                  type="button"
+                  variant={active ? "secondary" : "ghost"}
+                  onClick={() => onNavigateToProject(p.id)}
+                  aria-current={active ? "page" : undefined}
+                  className="h-8 w-full justify-start gap-2 pl-7 font-normal"
+                >
+                  <span className="flex-1 truncate text-left text-sm">
+                    {p.name}
+                  </span>
+                </Button>
+              </li>
+            );
+          })}
+          <li>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={onNewProject}
+              className="h-8 w-full justify-start gap-2 pl-7 font-normal text-muted-foreground"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              <span className="text-sm">New project</span>
+            </Button>
+          </li>
+        </ul>
+      )}
+    </nav>
+  );
+}
+
+// Collapsible sources rail per design: header row summarises connection state
+// with a single dot + count; expanding reveals each provider's row.
+function SourcesRail({ sources }: { sources: NavSource[] }) {
+  const [open, setOpen] = useState(false);
+  if (sources.length === 0) return null;
+  const bad = sources.filter((s) => s.status === "auth_failed").length;
+  const warn = sources.filter(
+    (s) => s.status === "stale" || s.status === "rate_limited",
+  ).length;
+  const good = sources.filter((s) => s.status === "ok").length;
+  const summary: ProviderAccountStatus =
+    bad > 0 ? "auth_failed" : warn > 0 ? "stale" : good > 0 ? "ok" : "neutral";
+  const summaryLabel =
+    bad > 0 ? `${bad} down` : warn > 0 ? `${warn} warn` : `${good} connected`;
+  const Chev = open ? ChevronDown : ChevronRight;
+  return (
+    <nav aria-label="Sources" className="mt-4 px-2">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className="flex w-full items-center gap-2 rounded-md px-2 py-1.5"
+      >
+        <span className="flex-1 text-left font-medium text-[10px] text-muted-foreground uppercase tracking-wider">
+          Sources
+        </span>
+        <span
+          className={cn("h-1.5 w-1.5 rounded-full", dotClass(summary))}
+          aria-hidden="true"
+        />
+        <span className="font-mono text-[10px] text-muted-foreground">
+          {summaryLabel}
+        </span>
+        <Chev className="h-3 w-3 shrink-0 text-muted-foreground" />
+      </button>
+      {open ? (
         <ul className="mt-1 space-y-0.5">
           {sources.map((s) => (
             <li
@@ -220,13 +299,8 @@ export function NavigationSidebar({
             </li>
           ))}
         </ul>
-      </nav>
-
-      <div className="mt-auto flex flex-col gap-2 px-3 pb-3">
-        <FocusSlot focus={focus} onStartFocus={onStartFocus} />
-        <AccountRow profile={profile} onOpenSettings={onOpenSettings} />
-      </div>
-    </aside>
+      ) : null}
+    </nav>
   );
 }
 
@@ -240,9 +314,6 @@ function BrandWordmark() {
         D
       </span>
       <span className="font-semibold text-sm tracking-tight">Devy</span>
-      <span className="ml-auto rounded bg-muted px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
-        Self-hosted
-      </span>
     </div>
   );
 }

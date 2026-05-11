@@ -153,6 +153,9 @@ describe("AppShell sidebar", () => {
   it("renders Sources rail with neutral dots for every provider", async () => {
     await renderShell();
     const sources = await screen.findByRole("navigation", { name: /sources/i });
+    // Rail is collapsed by default per design — expand it before asserting
+    // per-provider rows.
+    fireEvent.click(within(sources).getByRole("button", { name: /sources/i }));
     for (const label of [
       "GitHub",
       "Slack",
