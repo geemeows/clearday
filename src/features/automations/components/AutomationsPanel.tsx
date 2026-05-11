@@ -454,36 +454,46 @@ export function AutomationsPanel({
   );
 
   return (
-    <section aria-label="Automations" className="space-y-6">
-      <header className="flex items-end justify-between">
-        <div>
-          <h2 className="font-semibold text-2xl tracking-tight">Automations</h2>
-          <p className="mt-1 font-mono text-[11px] text-muted-foreground">
-            Trigger → predicates → actions, evaluated when a Signal lands.
+    <section aria-label="Automations" className="space-y-[18px]">
+      <div>
+        <h2 className="font-semibold text-2xl tracking-tight">Automations</h2>
+        <p className="mt-1 text-muted-foreground text-sm">
+          When something happens, do something. Spans GitHub, Slack, Calendar,
+          and Focus.
+        </p>
+      </div>
+      <div className="flex flex-wrap items-center gap-2.5">
+        {buckets && automations && automations.length > 0 ? (
+          <p
+            aria-label="Automations summary"
+            role="note"
+            className="font-mono text-[11px] text-muted-foreground"
+          >
+            {buckets.active} active · {buckets.paused} paused · {buckets.dryRun}{" "}
+            dry-run
           </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {demo && (
-            <button
-              type="button"
-              aria-label="Toggle empty state preview"
-              aria-pressed={showEmptyPreview}
-              onClick={() => setShowEmptyPreview((v) => !v)}
-              className="rounded-md border border-border bg-background px-3 py-1.5 text-sm hover:bg-muted"
-            >
-              {showEmptyPreview ? "Show populated" : "Show empty state"}
-            </button>
-          )}
+        ) : null}
+        <span className="flex-1" />
+        {demo && (
           <button
             type="button"
-            onClick={openNew}
-            disabled={busy || automations === null}
-            className="rounded-md border border-border bg-primary px-3 py-1.5 text-primary-foreground text-sm hover:opacity-90 disabled:opacity-50"
+            aria-label="Toggle empty state preview"
+            aria-pressed={showEmptyPreview}
+            onClick={() => setShowEmptyPreview((v) => !v)}
+            className="rounded-md border border-border bg-background px-3 py-1.5 text-sm hover:bg-muted"
           >
-            New automation
+            {showEmptyPreview ? "Show populated" : "Show empty state"}
           </button>
-        </div>
-      </header>
+        )}
+        <button
+          type="button"
+          onClick={openNew}
+          disabled={busy || automations === null}
+          className="rounded-md border border-border bg-primary px-3 py-1.5 text-primary-foreground text-sm hover:opacity-90 disabled:opacity-50"
+        >
+          New automation
+        </button>
+      </div>
 
       {error && (
         <p
@@ -510,7 +520,7 @@ export function AutomationsPanel({
 
       {automations && !(demo && showEmptyPreview) && (
         <>
-          <div className="relative">
+          <div className="relative max-w-[360px]">
             <Search
               aria-hidden="true"
               className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
@@ -518,22 +528,12 @@ export function AutomationsPanel({
             <input
               type="search"
               aria-label="Search automations"
-              placeholder="Search automations…"
+              placeholder="Filter automations…"
               value={q}
               onChange={(e) => setQ(e.target.value)}
               className="h-9 w-full rounded-md border border-border bg-background py-1 pr-3 pl-8 text-sm placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
             />
           </div>
-          {buckets && automations.length > 0 && (
-            <p
-              aria-label="Automations summary"
-              role="note"
-              className="font-mono text-[11px] text-muted-foreground"
-            >
-              {buckets.active} active · {buckets.paused} paused ·{" "}
-              {buckets.dryRun} dry-run
-            </p>
-          )}
           <div className="space-y-3 rounded-lg border border-border bg-card p-3">
             {automations.length === 0 && (
               <EmptyState

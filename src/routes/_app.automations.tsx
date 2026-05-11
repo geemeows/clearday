@@ -28,7 +28,7 @@ function AutomationsRoute() {
     [navigate],
   );
   return (
-    <div className="mx-auto max-w-[1100px] space-y-6 p-8">
+    <div className="mx-auto max-w-7xl space-y-5 px-10 pt-8 pb-16">
       <AutomationsPanel q={q} onQChange={onQChange} demo={demo} />
     </div>
   );
