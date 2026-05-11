@@ -479,9 +479,9 @@ describe("AiSafeguardsPanel", () => {
 
   it("renders spend / budget and shows the green bar below 80%", async () => {
     render(<AiSafeguardsPanel loader={async () => baseView} />);
-    await waitFor(() =>
-      expect(screen.getByText(/\$5\.00 of \$25\.00/)).toBeTruthy(),
-    );
+    await waitFor(() => expect(screen.getByText(/\$5\.00/)).toBeTruthy());
+    expect(screen.getByText(/of \$25\.00 cap/)).toBeTruthy();
+    expect(screen.getByText(/20% used/)).toBeTruthy();
     // No fallback or budget-reached banner below 80%.
     expect(screen.queryByText(/running on fallback/i)).toBeNull();
     expect(screen.queryByText(/budget reached/i)).toBeNull();

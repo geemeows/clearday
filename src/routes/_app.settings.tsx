@@ -820,6 +820,27 @@ const FALLBACK_THRESHOLD_OPTIONS: Array<{
   { value: null, label: "Never (always primary)" },
 ];
 
+const MONTH_SHORT = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+];
+
+function formatMonthReset(now: Date): string {
+  // Last day of the current month, in the user's local timezone.
+  const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+  return `${MONTH_SHORT[end.getMonth()]} ${end.getDate()}`;
+}
+
 function formatLastValidated(iso: string): string {
   const then = Date.parse(iso);
   if (!Number.isFinite(then)) return "just now";
@@ -1360,13 +1381,22 @@ export function AiSafeguardsPanel({
   const budget = view?.monthly_budget_usd ?? 25;
   const spent = view?.month_spent_usd ?? 0;
   const ratio = budget > 0 ? spent / budget : 0;
+  const pct = Math.min(100, Math.round(ratio * 100));
   const overFallback = ratio >= 0.8;
   const overBudget = ratio >= 1;
   const pctClass = overBudget
     ? "bg-destructive"
     : overFallback
       ? "bg-amber-500"
-      : "bg-emerald-500";
+      : "bg-primary";
+  const thresholdPct =
+    view?.fallback_threshold_pct === undefined
+      ? 80
+      : view?.fallback_threshold_pct;
+  const fallbackAmount =
+    thresholdPct === null ? null : (budget * thresholdPct) / 100;
+  const fallbackLabel = view?.fallback_model || "fallback model";
+  const resetsLabel = formatMonthReset(new Date());
 
   return (
     <SettingsPanel
@@ -1377,20 +1407,44 @@ export function AiSafeguardsPanel({
     >
       {view && (
         <div className="mt-4 space-y-6">
-          <div>
-            <div className="flex items-baseline justify-between">
-              <span className="font-medium text-foreground text-sm">
-                Monthly spend
+          <div className="rounded-md border border-border bg-card p-4">
+            <div className="flex items-baseline gap-1.5">
+              <span className="font-bold text-3xl text-foreground tracking-tight">
+                ${spent.toFixed(2)}
               </span>
-              <span className="text-foreground text-sm">
-                ${spent.toFixed(2)} of ${budget.toFixed(2)}
+              <span className="text-muted-foreground text-sm">
+                of ${budget.toFixed(2)} cap
+              </span>
+              <span
+                className="ml-auto font-mono text-[11px] text-muted-foreground"
+                data-testid="budget-meter-pct"
+              >
+                {pct}% used · resets {resetsLabel}
               </span>
             </div>
-            <div className="mt-2 h-2 w-full overflow-hidden rounded bg-muted">
+            <div className="mt-2.5 h-2 w-full overflow-hidden rounded-full bg-muted">
               <div
                 className={`h-full ${pctClass}`}
-                style={{ width: `${Math.min(100, Math.round(ratio * 100))}%` }}
+                style={{ width: `${pct}%` }}
               />
+            </div>
+            <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-muted-foreground text-xs">
+              <span>
+                ↓{" "}
+                <b className="font-medium text-foreground">
+                  Fallback at{" "}
+                  {thresholdPct === null ? "never" : `${thresholdPct}%`}
+                </b>
+                {fallbackAmount !== null && (
+                  <> (${fallbackAmount.toFixed(2)})</>
+                )}{" "}
+                → <span className="font-mono">{fallbackLabel}</span>
+              </span>
+              <span>
+                ·{" "}
+                <b className="font-medium text-foreground">Hard stop at 100%</b>{" "}
+                (${budget.toFixed(2)})
+              </span>
             </div>
             {overBudget && (
               <p className="mt-2 text-destructive text-sm">
@@ -1398,7 +1452,7 @@ export function AiSafeguardsPanel({
               </p>
             )}
             {overFallback && !overBudget && (
-              <p className="mt-2 text-amber-700 text-sm">
+              <p className="mt-2 text-amber-700 text-sm dark:text-amber-400">
                 Running on fallback model (≥80% of budget spent).
               </p>
             )}
