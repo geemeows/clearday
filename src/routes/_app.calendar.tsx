@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, ChevronLeft, ChevronRight } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
   eventsByMonthGrid,
@@ -134,9 +134,12 @@ export function CalendarView({
         : monthLabel(now);
 
   return (
-    <section className="mx-auto max-w-6xl space-y-5 p-8">
+    <section className="mx-auto max-w-[1400px] space-y-4 px-9 pt-7 pb-12">
       <header className="flex items-center gap-3">
-        <h1 className="font-semibold text-2xl text-foreground tracking-tight">
+        <h1
+          className="font-semibold text-3xl text-foreground"
+          style={{ letterSpacing: "-0.6px" }}
+        >
           Calendar
         </h1>
         <span className="flex-1" />
@@ -144,12 +147,46 @@ export function CalendarView({
       </header>
 
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <span className="font-semibold text-foreground text-lg">
+        <span
+          className="font-semibold text-2xl text-foreground"
+          style={{ letterSpacing: "-0.4px" }}
+        >
           {rangeLabel}
         </span>
         <span className="font-mono text-muted-foreground text-xs">
           {summary}
         </span>
+        <span className="flex-1" />
+        <button
+          type="button"
+          className="rounded-md px-2.5 py-1 font-medium text-xs text-foreground transition-colors hover:bg-secondary"
+          style={{
+            background: "var(--canvas, var(--background))",
+            border: "1px solid var(--hairline-soft, var(--border))",
+          }}
+        >
+          Today
+        </button>
+        <button
+          type="button"
+          aria-label="Previous"
+          className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+          style={{
+            border: "1px solid var(--hairline-soft, var(--border))",
+          }}
+        >
+          <ChevronLeft className="h-3.5 w-3.5" />
+        </button>
+        <button
+          type="button"
+          aria-label="Next"
+          className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+          style={{
+            border: "1px solid var(--hairline-soft, var(--border))",
+          }}
+        >
+          <ChevronRight className="h-3.5 w-3.5" />
+        </button>
       </div>
 
       <Legend />
@@ -190,7 +227,7 @@ export function CalendarView({
 function Legend() {
   const items: { label: string; swatch: string; bordered?: boolean }[] = [
     { label: "Focus", swatch: "var(--ink, var(--foreground))" },
-    { label: "Meeting", swatch: "var(--accent, var(--primary))" },
+    { label: "Meeting", swatch: "var(--primary)" },
     {
       label: "Break",
       swatch: "var(--surface-strong, var(--secondary))",
@@ -318,7 +355,7 @@ function WeekGrid({
               style={{
                 borderLeft: "1px solid var(--hairline-soft, var(--border))",
                 background: isToday
-                  ? "var(--accent-tint, transparent)"
+                  ? "var(--primary-disabled, transparent)"
                   : undefined,
               }}
             >
@@ -326,10 +363,10 @@ function WeekGrid({
                 {label}
               </span>
               <span
-                className="font-semibold text-base"
+                className="font-semibold text-lg"
                 style={{
                   color: isToday
-                    ? "var(--accent-active, var(--primary))"
+                    ? "var(--primary-active, var(--primary))"
                     : "var(--ink, var(--foreground))",
                 }}
               >
@@ -646,7 +683,7 @@ function MonthGrid({ cells, now }: { cells: MonthCell[]; now: Date }) {
                 borderBottom: "1px solid var(--hairline-soft, var(--border))",
                 borderLeft: "1px solid var(--hairline-soft, var(--border))",
                 background: isToday
-                  ? "var(--accent-tint, transparent)"
+                  ? "var(--primary-disabled, transparent)"
                   : !cell.inMonth
                     ? "var(--surface-strong, var(--muted))"
                     : undefined,
@@ -656,7 +693,7 @@ function MonthGrid({ cells, now }: { cells: MonthCell[]; now: Date }) {
                 className="font-semibold text-xs"
                 style={{
                   color: isToday
-                    ? "var(--accent-active, var(--primary))"
+                    ? "var(--primary-active, var(--primary))"
                     : cell.inMonth
                       ? "var(--ink, var(--foreground))"
                       : "var(--muted-foreground)",
@@ -670,7 +707,7 @@ function MonthGrid({ cells, now }: { cells: MonthCell[]; now: Date }) {
                     <li
                       key={ev.signal.id}
                       className="truncate rounded-xs px-1.5 py-0.5 font-medium text-[10px] text-primary-foreground"
-                      style={{ background: "var(--accent, var(--primary))" }}
+                      style={{ background: "var(--primary)" }}
                     >
                       {ev.signal.title}
                     </li>
