@@ -4,7 +4,7 @@
 // routing matrix, and a Quiet hours card with day strip + allow-through
 // pills. Backend dispatch is out of scope — toggles update local state only.
 
-import { Plus, X } from "lucide-react";
+import { Bell, Mail, Monitor, Plus, X } from "lucide-react";
 import { useState } from "react";
 import { Button } from "#/components/coss/button";
 import { Input } from "#/components/coss/input";
@@ -15,12 +15,14 @@ import {
   type MatrixValue,
   NotificationMatrix,
 } from "#/features/alerts/components/NotificationMatrix";
+import { SourceGlyph } from "#/features/signals/components/SourceGlyph";
 import { cn } from "#/lib/cn";
 
 type ChannelDef = {
   id: string;
   label: string;
   description: string;
+  icon: "push" | "slack" | "email" | "desktop";
 };
 
 const CHANNELS: ReadonlyArray<ChannelDef> = [
@@ -28,23 +30,41 @@ const CHANNELS: ReadonlyArray<ChannelDef> = [
     id: "web_push",
     label: "PWA Web Push",
     description: "Native browser notifications on registered devices.",
+    icon: "push",
   },
   {
     id: "slack_dm",
     label: "Slack self-DM",
     description: "Posts to your Slackbot DM via your connected Slack account.",
+    icon: "slack",
   },
   {
     id: "email",
     label: "Email digest",
     description: "Daily rollup to your work email at 08:00 local.",
+    icon: "email",
   },
   {
     id: "desktop",
     label: "Desktop banner",
     description: "Native OS banner via the desktop companion app.",
+    icon: "desktop",
   },
 ];
+
+function ChannelIcon({ kind }: { kind: ChannelDef["icon"] }) {
+  return (
+    <span
+      aria-hidden
+      className="inline-flex size-8 shrink-0 items-center justify-center rounded-md bg-secondary text-muted-foreground"
+    >
+      {kind === "push" && <Bell className="size-4" />}
+      {kind === "slack" && <SourceGlyph source="slack" size={18} />}
+      {kind === "email" && <Mail className="size-4" />}
+      {kind === "desktop" && <Monitor className="size-4" />}
+    </span>
+  );
+}
 
 const MATRIX_KINDS: ReadonlyArray<MatrixKind> = [
   { id: "pr_review", label: "PR review" },
@@ -173,6 +193,7 @@ export function NotificationsPanel() {
         >
           {CHANNELS.map((c) => (
             <li key={c.id} className="flex items-center gap-4 px-4 py-3">
+              <ChannelIcon kind={c.icon} />
               <div className="min-w-0 flex-1">
                 <div className="font-medium text-sm">{c.label}</div>
                 <p className="mt-0.5 text-muted-foreground text-xs">
