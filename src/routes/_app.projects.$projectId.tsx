@@ -539,10 +539,11 @@ export function ProjectBoardView({
               aria-haspopup="listbox"
               aria-expanded={switcherOpen}
               onClick={() => setSwitcherOpen((o) => !o)}
-              className="flex items-center gap-1.5 rounded-md px-1 py-0.5 font-semibold text-foreground text-xl tracking-tight hover:bg-accent"
+              className="flex items-center gap-1.5 rounded-md px-1 py-0.5 font-semibold text-[30px] text-foreground leading-[1.2] hover:bg-accent"
+              style={{ letterSpacing: "-0.6px" }}
             >
               {project?.name ?? "Project"}
-              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+              <ChevronDown className="h-5 w-5 text-muted-foreground" />
             </button>
             {switcherOpen && (
               <div
@@ -581,14 +582,21 @@ export function ProjectBoardView({
             )}
           </div>
         ) : (
-          <h1 className="font-semibold text-xl text-foreground tracking-tight">
+          <h1
+            className="font-semibold text-[30px] text-foreground leading-[1.2]"
+            style={{ letterSpacing: "-0.6px" }}
+          >
             {project?.name ?? "Project"}
           </h1>
         )}
-        <span className="font-mono text-muted-foreground text-xs">
-          {cards.length} cards
+        <div
+          aria-hidden="true"
+          className="h-[22px] w-px bg-border"
+        />
+        <span className="ml-auto text-[12px] text-muted-foreground leading-[1.3]">
+          {cards.length} cards · {columns.length} columns
         </span>
-        <div className="ml-auto">
+        <div>
           <button
             type="button"
             aria-label="Column settings"
