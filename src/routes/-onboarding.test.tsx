@@ -1,6 +1,17 @@
+import { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterProvider } from "@tanstack/react-router";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { OnboardingHero, SlackAllowlistPanel } from "#/routes/onboarding";
+import { OnboardingFlow, OnboardingHero, SlackAllowlistPanel } from "#/routes/onboarding";
+
+function renderInRouter(ui: React.ReactNode) {
+  const rootRoute = createRootRoute({ component: () => <>{ui}</> });
+  const todayRoute = createRoute({ getParentRoute: () => rootRoute, path: "/today", component: () => null });
+  const router = createRouter({
+    routeTree: rootRoute.addChildren([todayRoute]),
+    history: createMemoryHistory({ initialEntries: ["/"] }),
+  });
+  return render(<RouterProvider router={router} />);
+}
 
 describe("OnboardingHero", () => {
   it("renders the Devy headline and one card per v1 provider", async () => {
@@ -176,6 +187,47 @@ describe("OnboardingHero", () => {
     await waitFor(() =>
       expect(screen.getByText(/auth-proxy not configured/i)).toBeTruthy(),
     );
+  });
+});
+
+describe("OnboardingFlow", () => {
+  const baseProps = () => ({
+    onFinish: vi.fn(),
+    complete: vi.fn(async () => ({ ok: true as const })),
+    loader: vi.fn(async () => ({ sources: [] as never[] })),
+  });
+
+  it("renders the 5-step stepper rail and Skip link", async () => {
+    renderInRouter(<OnboardingFlow {...baseProps()} />);
+    for (const name of ["Welcome", "Integrations", "AI provider", "Alerts", "Ready"]) {
+      const matches = await screen.findAllByText(name);
+      expect(matches.length).toBeGreaterThan(0);
+    }
+    expect(screen.getByText(/skip setup/i)).toBeTruthy();
+    expect(screen.getAllByText(/step 1 of 5/i).length).toBeGreaterThan(0);
+  });
+
+  it("advances through steps with Continue and reaches Ready on step 5", async () => {
+    renderInRouter(<OnboardingFlow {...baseProps()} />);
+    await screen.findByRole("heading", { name: /welcome to your devy/i });
+
+    for (let i = 0; i < 4; i++) {
+      fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    }
+    await screen.findByRole("heading", { name: /you're all set/i });
+    expect(screen.getByRole("button", { name: /open devy/i })).toBeTruthy();
+  });
+
+  it("Open Devy on the final step calls complete + onFinish", async () => {
+    const props = baseProps();
+    renderInRouter(<OnboardingFlow {...props} />);
+    await screen.findByRole("heading", { name: /welcome to your devy/i });
+    for (let i = 0; i < 4; i++) {
+      fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    }
+    fireEvent.click(await screen.findByRole("button", { name: /open devy/i }));
+    await waitFor(() => expect(props.complete).toHaveBeenCalledTimes(1));
+    expect(props.onFinish).toHaveBeenCalledTimes(1);
   });
 });
 
