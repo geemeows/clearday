@@ -10,6 +10,8 @@ const CASES: Array<{ kind: SourceKind; label: string }> = [
   { kind: "slack", label: "Slack source" },
   { kind: "cal", label: "Calendar source" },
   { kind: "task", label: "Task source" },
+  { kind: "linear", label: "Linear source" },
+  { kind: "jira", label: "Jira source" },
   { kind: "ai", label: "AI source" },
 ];
 
@@ -28,5 +30,16 @@ describe("SourceGlyph", () => {
     const tile = screen.getByRole("img", { name: "Git source" });
     expect(tile.style.width).toBe("40px");
     expect(tile.style.height).toBe("40px");
+  });
+
+  it("renders a brand SVG for third-party providers (not a letter)", () => {
+    const { container } = render(<SourceGlyph source="git" />);
+    expect(container.querySelector("svg")).not.toBeNull();
+  });
+
+  it("renders the sparkle character for the AI variant (no SVG)", () => {
+    const { container } = render(<SourceGlyph source="ai" />);
+    expect(container.querySelector("svg")).toBeNull();
+    expect(container.textContent).toContain("✦");
   });
 });
