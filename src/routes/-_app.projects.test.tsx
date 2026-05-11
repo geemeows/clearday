@@ -662,6 +662,31 @@ describe("ProjectBoardView", () => {
     );
   });
 
+  it("renders KanbanCard on bg-card with rounded-[10px] geometry", () => {
+    render(
+      <ProjectBoardView
+        project={project()}
+        columns={[column()]}
+        cards={[
+          card({
+            id: "k1",
+            column_id: "col1",
+            title: "Surface card",
+            order: 0,
+          }),
+        ]}
+        loading={false}
+        error={null}
+        onAddCard={() => {}}
+      />,
+    );
+    const cardButton = screen.getByRole("button", { name: "Surface card" });
+    expect(cardButton.className).toContain("bg-card");
+    expect(cardButton.className).toContain("rounded-[10px]");
+    expect(cardButton.className).toContain("py-2.5");
+    expect(cardButton.className).not.toContain("bg-background");
+  });
+
   it("dueRelative returns today/tomorrow/null based on local day diff", () => {
     const now = new Date("2026-05-11T10:00:00");
     expect(dueRelative(new Date("2026-05-11T23:00:00").toISOString(), now)).toBe("today");

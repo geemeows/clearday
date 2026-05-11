@@ -1217,7 +1217,7 @@ function CardChip({
           onKeyboardMove?.("right");
         }
       }}
-      className="w-full cursor-grab rounded-md border border-border bg-background px-3 py-2 text-left shadow-sm hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary active:cursor-grabbing"
+      className="w-full cursor-grab rounded-[10px] border border-border bg-card px-3 py-2.5 text-left shadow-sm hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary active:cursor-grabbing"
     >
       {(card.priority || card.due_at || (tickets ?? []).length > 0) && (
       <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
