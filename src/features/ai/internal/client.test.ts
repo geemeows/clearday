@@ -97,6 +97,47 @@ describe("askAi", () => {
     expect(body.model).toBe("gpt-4o-mini");
   });
 
+  it("honors fallbackThresholdPct from settings (50% trigger)", async () => {
+    // 13/25 = 52% — past a 50% threshold, well below the legacy 80%.
+    const usage = fakeUsageStore({ spend: 13 });
+    const fetchMock = okFetch("OK", "gpt-4o-mini");
+    const result = await askAi(
+      { messages: [{ role: "user", content: "hi" }] },
+      {
+        settings: {
+          ...baseSettings,
+          defaultModel: "gpt-4o",
+          fallbackModel: "gpt-4o-mini",
+          fallbackThresholdPct: 50,
+        },
+        usageStore: usage,
+        fetch: fetchMock,
+      },
+    );
+    expect(result.usedFallback).toBe(true);
+    expect(result.model).toBe("gpt-4o-mini");
+  });
+
+  it("never swaps when fallbackThresholdPct is null (Never)", async () => {
+    const usage = fakeUsageStore({ spend: 22 });
+    const fetchMock = okFetch("OK", "gpt-4o");
+    const result = await askAi(
+      { messages: [{ role: "user", content: "hi" }] },
+      {
+        settings: {
+          ...baseSettings,
+          defaultModel: "gpt-4o",
+          fallbackModel: "gpt-4o-mini",
+          fallbackThresholdPct: null,
+        },
+        usageStore: usage,
+        fetch: fetchMock,
+      },
+    );
+    expect(result.usedFallback).toBe(false);
+    expect(result.model).toBe("gpt-4o");
+  });
+
   it("refuses with budget_reached when ≥100% of budget is spent", async () => {
     const usage = fakeUsageStore({ spend: 30 });
     const fetchMock = okFetch();

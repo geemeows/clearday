@@ -30,6 +30,12 @@ export type AiCallSettings = {
   defaultModel: string;
   baseUrl?: string;
   fallbackModel: string | null;
+  /**
+   * Percent of `monthlyBudgetUsd` at which the meter swaps to
+   * `fallbackModel`. `null` disables the swap; `undefined` (older callers)
+   * defaults to the legacy 80% trigger.
+   */
+  fallbackThresholdPct?: number | null;
   monthlyBudgetUsd: number;
   privacyMode: boolean;
   redactPatterns: string[];
@@ -90,6 +96,7 @@ export async function askAi(
     fallback: s.fallbackModel,
     monthBudget: s.monthlyBudgetUsd,
     monthSpent: spent,
+    fallbackThresholdPct: s.fallbackThresholdPct,
   });
   if (decision.refused) {
     throw new AiCallRefused(

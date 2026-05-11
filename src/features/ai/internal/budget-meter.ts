@@ -1,10 +1,13 @@
 // AI budget meter. Two responsibilities:
 //
-// 1. `decideModel({ requested, fallback, monthBudget, monthSpent })` — pure
-//    function that returns which model to actually call given the current
-//    monthly spend. Below 80%: requested. ≥80% and <100% with a fallback
-//    configured: fallback. ≥100%: refused. With no budget configured
-//    (monthBudget <= 0): always run requested, never refuse.
+// 1. `decideModel({ requested, fallback, monthBudget, monthSpent,
+//    fallbackThresholdPct })` — pure function that returns which model to
+//    actually call given the current monthly spend. Below the fallback
+//    threshold: requested. ≥threshold and <100% with a fallback configured:
+//    fallback. ≥100%: refused. With no budget configured (monthBudget <= 0):
+//    always run requested, never refuse. `fallbackThresholdPct` is the
+//    user-configurable trigger (50/70/80/90); `null` means "never switch"
+//    and `undefined` defaults to 80% for back-compat.
 //
 // 2. `recordUsage(...)` and `monthlySpend(...)` — store-shaped operations
 //    against `public.ai_usage`. Cost is computed from a small built-in
@@ -19,6 +22,12 @@ export type DecideArgs = {
   fallback: string | null;
   monthBudget: number;
   monthSpent: number;
+  /**
+   * User-configured percent of `monthBudget` at which to swap to `fallback`.
+   * `null` disables the swap entirely; `undefined` defaults to the legacy
+   * 80% trigger so existing callers keep working.
+   */
+  fallbackThresholdPct?: number | null;
 };
 
 export type Decision = {
@@ -40,7 +49,18 @@ export function decideModel(args: DecideArgs): Decision {
   if (monthBudget > 0 && ratio >= REFUSE_THRESHOLD) {
     return { model: requested, usedFallback: false, refused: true, ratio };
   }
-  if (monthBudget > 0 && ratio >= FALLBACK_THRESHOLD && fallback) {
+  const threshold =
+    args.fallbackThresholdPct === undefined
+      ? FALLBACK_THRESHOLD
+      : args.fallbackThresholdPct === null
+        ? null
+        : args.fallbackThresholdPct / 100;
+  if (
+    monthBudget > 0 &&
+    threshold !== null &&
+    ratio >= threshold &&
+    fallback
+  ) {
     return { model: fallback, usedFallback: true, refused: false, ratio };
   }
   return { model: requested, usedFallback: false, refused: false, ratio };

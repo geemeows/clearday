@@ -56,6 +56,43 @@ describe("decideModel", () => {
       ratio: 0,
     });
   });
+
+  it("honors a custom fallbackThresholdPct=50", () => {
+    // At 50% spent the meter should swap; at 49% it should not.
+    const at50 = decideModel({
+      ...base,
+      monthSpent: 12.5,
+      fallbackThresholdPct: 50,
+    });
+    expect(at50.model).toBe("gpt-4o-mini");
+    expect(at50.usedFallback).toBe(true);
+    const at49 = decideModel({
+      ...base,
+      monthSpent: 12.25,
+      fallbackThresholdPct: 50,
+    });
+    expect(at49.model).toBe("gpt-4o");
+    expect(at49.usedFallback).toBe(false);
+  });
+
+  it("never falls back when fallbackThresholdPct is null", () => {
+    const d = decideModel({
+      ...base,
+      monthSpent: 20, // 80% — would trigger the default
+      fallbackThresholdPct: null,
+    });
+    expect(d.model).toBe("gpt-4o");
+    expect(d.usedFallback).toBe(false);
+  });
+
+  it("still refuses at 100% even when fallbackThresholdPct is null", () => {
+    const d = decideModel({
+      ...base,
+      monthSpent: 25,
+      fallbackThresholdPct: null,
+    });
+    expect(d.refused).toBe(true);
+  });
 });
 
 describe("computeCost", () => {

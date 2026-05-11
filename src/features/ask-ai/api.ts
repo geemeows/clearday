@@ -167,6 +167,7 @@ async function aiSettingsFromRow(row: AiSettingsRow | null, keySecret: string) {
     defaultModel: row.model,
     baseUrl: row.base_url ?? undefined,
     fallbackModel: row.fallback_model ?? null,
+    fallbackThresholdPct: row.fallback_threshold_pct ?? null,
     monthlyBudgetUsd: Number(row.monthly_budget_usd ?? 25),
     privacyMode: !!row.privacy_mode,
     redactPatterns: row.redact_patterns ?? [],
