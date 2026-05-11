@@ -1,5 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { ArrowDown, ArrowUp, ChevronDown, Plus, Target, Trash2 } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  ChevronDown,
+  GripVertical,
+  Plus,
+  Target,
+  Trash2,
+} from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "#/components/coss/button";
 import { CareerSyncControls } from "#/features/career/components/CareerSyncControls";
@@ -849,6 +857,10 @@ function CompetencyRow({
       className="cursor-grab rounded-md border border-border bg-background px-3 py-2 active:cursor-grabbing"
     >
       <div className="flex items-center gap-2">
+        <GripVertical
+          aria-hidden="true"
+          className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60"
+        />
         <input
           type="text"
           aria-label={`Rename competency ${competency.name}`}
@@ -1069,6 +1081,10 @@ function CriterionRow({
       className="cursor-grab rounded-md border border-border bg-card px-2.5 py-1.5 active:cursor-grabbing"
     >
       <div className="flex items-center gap-2">
+        <GripVertical
+          aria-hidden="true"
+          className="h-3 w-3 shrink-0 text-muted-foreground/60"
+        />
         <input
           type="text"
           aria-label={`Rename criterion ${criterion.name}`}
@@ -1331,6 +1347,10 @@ function IndicatorRow({
       className="cursor-grab rounded-md border border-border bg-background px-2 py-1.5 active:cursor-grabbing"
     >
       <div className="flex items-center gap-2">
+        <GripVertical
+          aria-hidden="true"
+          className="h-3 w-3 shrink-0 text-muted-foreground/60"
+        />
         <input
           type="text"
           aria-label={`Code for ${label}`}
@@ -1618,6 +1638,10 @@ function EvidenceRow({
       className="cursor-grab rounded-md border border-border bg-card px-2 py-1.5 active:cursor-grabbing"
     >
       <div className="flex items-center gap-2">
+        <GripVertical
+          aria-hidden="true"
+          className="h-3 w-3 shrink-0 text-muted-foreground/60"
+        />
         <input
           type="text"
           aria-label={`Title for ${evidence.title}`}
