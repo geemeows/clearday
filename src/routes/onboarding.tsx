@@ -1,5 +1,5 @@
 import { Link, createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
-import { Check } from "lucide-react";
+import { Check, Info } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "#/components/coss/button";
 import { SettingsPanel } from "#/components/ui/SettingsPanel";
@@ -795,10 +795,8 @@ function WelcomeStep({ signedInEmail }: { signedInEmail: string }) {
         <SummaryCell label="Supabase project" value="clearday-prod.supabase.co" mono />
         <SummaryCell label="Allowed email" value={signedInEmail} mono />
       </div>
-      <div className="mt-6 flex items-start gap-2.5 rounded-md border border-primary/20 bg-primary/5 px-4 py-3.5 text-[13px] leading-relaxed text-foreground/90">
-        <span className="mt-0.5 inline-flex size-[18px] flex-shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
-          i
-        </span>
+      <div className="mt-6 flex items-start gap-2.5 rounded-md border border-primary/20 px-4 py-3.5 text-[13px] leading-[1.5] text-foreground/90" style={{ background: "var(--brand-blue-tint)" }}>
+        <Info aria-hidden className="mt-px size-[18px] flex-shrink-0 text-primary" strokeWidth={1.8} />
         <div>
           <b className="text-foreground">Tokens stay on this Worker.</b> Every provider you connect next stores its refresh token in <i>your</i> Supabase. Clearday-the-project never sees them.
         </div>
