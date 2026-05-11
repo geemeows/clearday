@@ -1099,6 +1099,15 @@ function KanbanColumn({
           </li>
         ))}
 
+        {sorted.length === 0 && !composing && (
+          <li
+            aria-hidden="true"
+            className="px-2 py-4 text-center text-[11px] text-muted-foreground/70"
+          >
+            Empty · drop cards here
+          </li>
+        )}
+
         {composing && (
           <li>
             <div className="rounded-md border border-primary/50 bg-background p-2 shadow-sm">

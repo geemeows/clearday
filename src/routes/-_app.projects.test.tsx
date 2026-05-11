@@ -203,6 +203,28 @@ describe("ProjectBoardView", () => {
     expect(within(done).getByText("Card B")).toBeTruthy();
   });
 
+  it("renders the empty-column hint when a column has no cards", () => {
+    const cols = [
+      column({ id: "c1", name: "Backlog", order: 0 }),
+      column({ id: "c2", name: "Done", order: 1 }),
+    ];
+    const cards = [card({ id: "k1", column_id: "c2", title: "Shipped", order: 0 })];
+    render(
+      <ProjectBoardView
+        project={project()}
+        columns={cols}
+        cards={cards}
+        loading={false}
+        error={null}
+        onAddCard={noop}
+      />,
+    );
+    const backlog = screen.getByRole("article", { name: "Backlog" });
+    const done = screen.getByRole("article", { name: "Done" });
+    expect(within(backlog).getByText("Empty · drop cards here")).toBeTruthy();
+    expect(within(done).queryByText("Empty · drop cards here")).toBeNull();
+  });
+
   it("renders cards in dense order sequence within a column", () => {
     const cards = [
       card({ id: "k2", column_id: "col1", title: "Second", order: 1 }),
