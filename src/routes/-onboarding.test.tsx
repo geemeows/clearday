@@ -195,6 +195,7 @@ describe("OnboardingFlow", () => {
     onFinish: vi.fn(),
     complete: vi.fn(async () => ({ ok: true as const })),
     loader: vi.fn(async () => ({ sources: [] as never[] })),
+    saveAiSettings: vi.fn(async () => ({ ok: true as const })),
   });
 
   it("renders the 5-step stepper rail and Skip link", async () => {
@@ -211,20 +212,90 @@ describe("OnboardingFlow", () => {
     renderInRouter(<OnboardingFlow {...baseProps()} />);
     await screen.findByRole("heading", { name: /welcome to your devy/i });
 
-    for (let i = 0; i < 4; i++) {
-      fireEvent.click(screen.getByRole("button", { name: /continue/i }));
-    }
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    await screen.findByRole("heading", { name: /connect your sources/i });
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    await screen.findByRole("heading", { name: /pick your ai provider/i });
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    await screen.findByRole("heading", { name: /where should devy tap you/i });
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
     await screen.findByRole("heading", { name: /you're all set/i });
     expect(screen.getByRole("button", { name: /open devy/i })).toBeTruthy();
+  });
+
+  it("persists AI provider + api key via saveAiSettings when leaving step 3", async () => {
+    const saveAiSettings = vi.fn(async () => ({ ok: true as const }));
+    const { container } = renderInRouter(
+      <OnboardingFlow {...baseProps()} saveAiSettings={saveAiSettings} />,
+    );
+    await screen.findByRole("heading", { name: /welcome to your devy/i });
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    await screen.findByRole("heading", { name: /pick your ai provider/i });
+    const openaiTile = container.querySelector('[data-provider="openai"]');
+    if (!openaiTile) throw new Error("openai tile not found");
+    fireEvent.click(openaiTile);
+    fireEvent.change(screen.getByLabelText(/api key/i), {
+      target: { value: "sk-test-123" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    await waitFor(() => expect(saveAiSettings).toHaveBeenCalledTimes(1));
+    expect(saveAiSettings).toHaveBeenCalledWith({
+      provider: "openai",
+      default_model: "gpt-4o-mini",
+      api_key: "sk-test-123",
+      ai_disabled: false,
+    });
+  });
+
+  it("skips the AI settings save when 'Skip for now' is selected", async () => {
+    const props = baseProps();
+    const { container } = renderInRouter(<OnboardingFlow {...props} />);
+    await screen.findByRole("heading", { name: /welcome to your devy/i });
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    await screen.findByRole("heading", { name: /pick your ai provider/i });
+    const skipTile = container.querySelector('[data-provider="skip"]');
+    if (!skipTile) throw new Error("skip tile not found");
+    fireEvent.click(skipTile);
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    await screen.findByRole("heading", { name: /where should devy tap you/i });
+    expect(props.saveAiSettings).not.toHaveBeenCalled();
+  });
+
+  it("surfaces the save error and stays on the AI step when saveAiSettings fails", async () => {
+    const saveAiSettings = vi.fn(async () => ({
+      ok: false as const,
+      error: "encrypt failed",
+    }));
+    renderInRouter(
+      <OnboardingFlow {...baseProps()} saveAiSettings={saveAiSettings} />,
+    );
+    await screen.findByRole("heading", { name: /welcome to your devy/i });
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    await screen.findByRole("heading", { name: /pick your ai provider/i });
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    await waitFor(() =>
+      expect(screen.getByText(/encrypt failed/i)).toBeTruthy(),
+    );
+    // Still on the AI provider step.
+    expect(
+      screen.getByRole("heading", { name: /pick your ai provider/i }),
+    ).toBeTruthy();
   });
 
   it("Open Devy on the final step calls complete + onFinish", async () => {
     const props = baseProps();
     renderInRouter(<OnboardingFlow {...props} />);
     await screen.findByRole("heading", { name: /welcome to your devy/i });
-    for (let i = 0; i < 4; i++) {
-      fireEvent.click(screen.getByRole("button", { name: /continue/i }));
-    }
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    await screen.findByRole("heading", { name: /connect your sources/i });
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    await screen.findByRole("heading", { name: /pick your ai provider/i });
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    await screen.findByRole("heading", { name: /where should devy tap you/i });
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
     fireEvent.click(await screen.findByRole("button", { name: /open devy/i }));
     await waitFor(() => expect(props.complete).toHaveBeenCalledTimes(1));
     expect(props.onFinish).toHaveBeenCalledTimes(1);

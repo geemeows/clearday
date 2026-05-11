@@ -56,6 +56,13 @@ function OnboardingPage() {
 
 export type CompleteFn = () => Promise<{ ok: true }>;
 
+export type SaveAiSettingsFn = (body: {
+  provider: string;
+  default_model: string;
+  api_key?: string;
+  ai_disabled?: boolean;
+}) => Promise<{ ok: boolean; error?: string }>;
+
 type ProviderId = "github" | "slack" | "google";
 
 type ProviderCardSpec = {
@@ -508,6 +515,7 @@ export function OnboardingFlow({
   connectUrl,
   openUrl,
   signedInEmail,
+  saveAiSettings,
 }: {
   onFinish: () => void;
   complete?: CompleteFn;
@@ -515,11 +523,13 @@ export function OnboardingFlow({
   connectUrl?: ConnectUrlFn;
   openUrl?: (url: string) => void;
   signedInEmail?: string | null;
+  saveAiSettings?: SaveAiSettingsFn;
 }) {
   const [step, setStep] = useState(0);
   const [sources, setSources] = useState<ApiSource[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [aiProvider, setAiProvider] = useState<AiProviderId>("gemini");
+  const [apiKey, setApiKey] = useState("");
   const [alertSlack, setAlertSlack] = useState(true);
   const [alertPush, setAlertPush] = useState(false);
   const [threshold, setThreshold] = useState<number>(10);
@@ -595,8 +605,49 @@ export function OnboardingFlow({
     [connect, openIt],
   );
 
+  const saveAi = useMemo<SaveAiSettingsFn>(
+    () =>
+      saveAiSettings ??
+      (async (body) => {
+        try {
+          await apiFetch("/api/ai/settings", {
+            method: "PUT",
+            body: JSON.stringify(body),
+          });
+          return { ok: true };
+        } catch (e) {
+          return {
+            ok: false,
+            error: e instanceof Error ? e.message : "save failed",
+          };
+        }
+      }),
+    [saveAiSettings],
+  );
+
   const isLast = step === STEPS.length - 1;
   const goNext = useCallback(async () => {
+    if (step === 2 && aiProvider !== "skip") {
+      const tile = AI_PROVIDER_TILES.find((t) => t.id === aiProvider);
+      if (tile) {
+        setBusy(true);
+        try {
+          const out = await saveAi({
+            provider: tile.id,
+            default_model: tile.model,
+            api_key: apiKey.trim() || undefined,
+            ai_disabled: false,
+          });
+          if (!out.ok) {
+            setError(out.error ?? "could not save AI settings");
+            return;
+          }
+          setError(null);
+        } finally {
+          setBusy(false);
+        }
+      }
+    }
     if (!isLast) {
       setStep((s) => s + 1);
       if (typeof window !== "undefined") window.scrollTo({ top: 0 });
@@ -609,7 +660,7 @@ export function OnboardingFlow({
     } finally {
       setBusy(false);
     }
-  }, [isLast, completeFn, onFinish]);
+  }, [isLast, completeFn, onFinish, step, aiProvider, apiKey, saveAi]);
 
   const goBack = useCallback(() => {
     setStep((s) => Math.max(0, s - 1));
@@ -714,7 +765,12 @@ export function OnboardingFlow({
             <IntegrationsStep isConnected={isConnected} onConnect={onConnect} />
           )}
           {step === 2 && (
-            <AiProviderStep selected={aiProvider} onSelect={setAiProvider} />
+            <AiProviderStep
+              selected={aiProvider}
+              onSelect={setAiProvider}
+              apiKey={apiKey}
+              onApiKey={setApiKey}
+            />
           )}
           {step === 3 && (
             <AlertsStep
@@ -903,9 +959,13 @@ function IntegrationsStep({
 function AiProviderStep({
   selected,
   onSelect,
+  apiKey,
+  onApiKey,
 }: {
   selected: AiProviderId;
   onSelect: (id: AiProviderId) => void;
+  apiKey: string;
+  onApiKey: (key: string) => void;
 }) {
   return (
     <div>
@@ -959,10 +1019,13 @@ function AiProviderStep({
             type="password"
             placeholder="sk-… / AIza… / gsk_…"
             autoComplete="off"
+            aria-label="API key"
+            value={apiKey}
+            onChange={(e) => onApiKey(e.target.value)}
             className="h-[38px] w-full rounded-md border border-input bg-background px-3 font-mono text-[13.5px] text-foreground outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/24"
           />
           <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-            Persisted in the AI settings tab — final wiring happens there.
+            Saved when you click Continue. You can change it later in Settings → AI provider.
           </p>
         </div>
       )}
