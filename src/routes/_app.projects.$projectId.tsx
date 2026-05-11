@@ -1304,6 +1304,25 @@ function CardChip({
       <span className="line-clamp-2 block text-[13px] font-medium leading-[1.35] text-foreground">
         {card.title}
       </span>
+      {card.tags.length > 0 && (
+        <div
+          data-slot="card-labels"
+          className="mt-2 flex flex-wrap items-center gap-1"
+        >
+          {card.tags.map((label) => (
+            <span
+              key={label}
+              className="inline-flex items-center rounded-[4px] px-1.5 py-px font-mono font-medium text-[9px]"
+              style={{
+                background: "var(--surface-soft)",
+                color: "var(--muted-foreground)",
+              }}
+            >
+              {label}
+            </span>
+          ))}
+        </div>
+      )}
     </button>
   );
 }

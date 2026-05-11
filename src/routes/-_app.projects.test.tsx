@@ -629,6 +629,39 @@ describe("ProjectBoardView", () => {
     expect(cardButton.children.length).toBe(1);
   });
 
+  it("renders card.tags as mono label pills below the title", () => {
+    render(
+      <ProjectBoardView
+        project={project()}
+        columns={[column()]}
+        cards={[
+          card({
+            id: "k1",
+            column_id: "col1",
+            title: "Labeled card",
+            tags: ["api", "auth"],
+            order: 0,
+          }),
+        ]}
+        loading={false}
+        error={null}
+        onAddCard={() => {}}
+      />,
+    );
+    const cardButton = screen.getByRole("button", { name: "Labeled card" });
+    const labelsRow = cardButton.querySelector('[data-slot="card-labels"]');
+    expect(labelsRow).not.toBeNull();
+    const labels = labelsRow!.querySelectorAll("span");
+    expect(labels.length).toBe(2);
+    expect(labels[0].textContent).toBe("api");
+    expect(labels[1].textContent).toBe("auth");
+    expect((labels[0] as HTMLElement).className).toContain("font-mono");
+    expect((labels[0] as HTMLElement).className).toContain("text-[9px]");
+    expect((labels[0] as HTMLElement).style.background).toBe(
+      "var(--surface-soft)",
+    );
+  });
+
   it("dueRelative returns today/tomorrow/null based on local day diff", () => {
     const now = new Date("2026-05-11T10:00:00");
     expect(dueRelative(new Date("2026-05-11T23:00:00").toISOString(), now)).toBe("today");
