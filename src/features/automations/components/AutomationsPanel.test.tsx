@@ -745,3 +745,67 @@ describe("AutomationsPanel inline failure surfacing", () => {
     expect(screen.queryByLabelText(/^Last failure for/)).toBeNull();
   });
 });
+
+describe("AutomationsPanel row chips", () => {
+  it("renders a Dry-run chip on rows persisted with dry_run", async () => {
+    const mixed: Automation[] = [
+      automation({ id: "a-1", name: "Snooze deps" }),
+      { ...automation({ id: "a-2", name: "Dry one" }), dry_run: true },
+    ];
+    renderPanel({ loader: vi.fn(async () => ({ automations: mixed })) });
+    await screen.findByText("Dry one");
+    const chip = screen.getByLabelText("Dry one dry-run");
+    expect(chip.textContent).toBe("Dry-run");
+    expect(screen.queryByLabelText("Snooze deps dry-run")).toBeNull();
+  });
+
+  it("renders a Deferred chip when an action's capability isn't wired", async () => {
+    const deferredList: Automation[] = [
+      automation({
+        id: "a-1",
+        name: "Ticket mover",
+        actions: [{ type: "transition_ticket", to_status: "in_review" }],
+      }),
+      automation({ id: "a-2", name: "Plain tagger" }),
+    ];
+    renderPanel({
+      loader: vi.fn(async () => ({ automations: deferredList })),
+    });
+    await screen.findByText("Ticket mover");
+    const chips = screen.getAllByLabelText(
+      "Includes a not-yet-wired capability",
+    );
+    expect(chips.length).toBe(1);
+    expect(chips[0]?.textContent).toBe("Deferred");
+  });
+
+  it("renders a Fail chip on the row with the latest failure", async () => {
+    renderPanel({
+      latestFailuresLoader: vi.fn(async () => ({
+        failures: [failureRow({ automation_id: "a-3" })],
+      })),
+    });
+    await screen.findByLabelText("Last failure for Tag dependabot PRs");
+    const chips = screen.getAllByLabelText("Last run failed");
+    expect(chips.length).toBe(1);
+    expect(chips[0]?.textContent).toBe("Fail");
+  });
+
+  it("status dot reflects fail > dry > ok precedence", async () => {
+    const mixed: Automation[] = [
+      automation({ id: "a-1", name: "Healthy" }),
+      { ...automation({ id: "a-2", name: "Dryish" }), dry_run: true },
+      automation({ id: "a-3", name: "Broken" }),
+    ];
+    renderPanel({
+      loader: vi.fn(async () => ({ automations: mixed })),
+      latestFailuresLoader: vi.fn(async () => ({
+        failures: [failureRow({ automation_id: "a-3" })],
+      })),
+    });
+    await screen.findByLabelText("Last failure for Broken");
+    expect(screen.getAllByLabelText("Last run ok").length).toBe(1);
+    expect(screen.getAllByLabelText("Last run dry").length).toBe(1);
+    expect(screen.getAllByLabelText("Last run fail").length).toBe(1);
+  });
+});

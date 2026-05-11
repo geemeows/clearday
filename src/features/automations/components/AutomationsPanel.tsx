@@ -810,6 +810,28 @@ function AutomationRow({
   onDelete: () => void;
   onViewRuns: () => void;
 }) {
+  const failed = latestFailure !== null;
+  const dryRun = automation.dry_run === true;
+  const deferred = automation.actions.some(
+    (a) => ACTIONS[a.type]?.kind === "deferred",
+  );
+  const dotStatus: "failed" | "dry" | "succeeded" = failed
+    ? "failed"
+    : dryRun
+      ? "dry"
+      : "succeeded";
+  const dotLabel =
+    dotStatus === "failed"
+      ? "fail"
+      : dotStatus === "dry"
+        ? "dry"
+        : "ok";
+  const dotClass =
+    dotStatus === "failed"
+      ? "bg-destructive"
+      : dotStatus === "dry"
+        ? "bg-[var(--warn)]"
+        : "bg-[var(--good)]";
   return (
     <div className="flex items-center gap-3 rounded border border-border bg-background p-3">
       <label className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -823,7 +845,40 @@ function AutomationRow({
         Enabled
       </label>
       <div className="min-w-0 flex-1">
-        <p className="truncate font-medium text-sm">{automation.name}</p>
+        <div className="flex items-center gap-2">
+          <span
+            aria-label={`Last run ${dotLabel}`}
+            role="status"
+            title={dotLabel}
+            className={`inline-block size-[7px] shrink-0 rounded-full ${dotClass}`}
+          />
+          <p className="truncate font-medium text-sm">{automation.name}</p>
+          {dryRun && (
+            <span
+              aria-label={`${automation.name} dry-run`}
+              className="rounded bg-[var(--warn-soft)] px-1.5 py-px font-mono text-[9px] tracking-[0.04em] text-[var(--warn)] uppercase"
+            >
+              Dry-run
+            </span>
+          )}
+          {deferred && (
+            <span
+              aria-label="Includes a not-yet-wired capability"
+              title="Includes a not-yet-wired capability"
+              className="rounded bg-secondary px-1.5 py-px font-mono text-[9px] tracking-[0.04em] text-muted-foreground uppercase"
+            >
+              Deferred
+            </span>
+          )}
+          {failed && (
+            <span
+              aria-label="Last run failed"
+              className="rounded bg-destructive/10 px-1.5 py-px font-mono text-[9px] tracking-[0.04em] text-destructive uppercase"
+            >
+              Fail
+            </span>
+          )}
+        </div>
         <p className="truncate font-mono text-[10px] text-muted-foreground">
           {automation.trigger_kind} · {automation.predicates.length} predicate
           {automation.predicates.length === 1 ? "" : "s"} ·{" "}
