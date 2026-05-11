@@ -319,7 +319,6 @@ export function CareerLevelView({
     null,
   );
   const [error, setError] = useState<string | null>(null);
-  const [view, setView] = useState<"tree" | "wheel">("tree");
   const [shareOpen, setShareOpen] = useState(false);
   const [sheetId, setSheetId] = useState<string | null>(level.sheet_id);
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(
@@ -421,7 +420,7 @@ export function CareerLevelView({
   };
 
   return (
-    <section className="mx-auto max-w-4xl p-8">
+    <section className="mx-auto max-w-7xl p-8">
       <header className="mb-8 flex items-center gap-3">
         <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
           <Target className="h-5 w-5 text-primary" />
@@ -476,34 +475,7 @@ export function CareerLevelView({
 
       <LevelHeader level={level} client={client} />
 
-      <div
-        role="tablist"
-        aria-label="Level view"
-        className="mb-4 inline-flex rounded-md border border-border bg-background p-0.5 text-sm"
-      >
-        <button
-          type="button"
-          role="tab"
-          aria-selected={view === "tree"}
-          onClick={() => setView("tree")}
-          className={`rounded px-3 py-1 text-sm ${view === "tree" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
-        >
-          Tree
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={view === "wheel"}
-          onClick={() => setView("wheel")}
-          className={`rounded px-3 py-1 text-sm ${view === "wheel" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
-        >
-          Wheel
-        </button>
-      </div>
-
-      {view === "wheel" ? (
-        <CareerWheel level={level} client={client} />
-      ) : (
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,420px)]">
         <section
           aria-label="Competency tree"
           className="rounded-xl border border-border bg-card p-6 shadow-sm"
@@ -544,7 +516,11 @@ export function CareerLevelView({
 
           <AddCompetencyForm onAdd={handleAdd} />
         </section>
-      )}
+
+        <aside aria-label="Career wheel" className="lg:sticky lg:top-8 lg:self-start">
+          <CareerWheel level={level} client={client} />
+        </aside>
+      </div>
     </section>
   );
 }

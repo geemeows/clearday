@@ -563,7 +563,7 @@ describe("CareerLevelView", () => {
     expect(screen.getByText("Staff Engineer")).toBeTruthy();
   });
 
-  it("toggles between the tree and wheel views", async () => {
+  it("renders the tree and wheel side-by-side", async () => {
     const { client } = makeFakeClient([
       competency({ id: "c1", name: "Craft" }),
     ]);
@@ -571,24 +571,20 @@ describe("CareerLevelView", () => {
     await waitFor(() => {
       expect(screen.getByDisplayValue("Craft")).toBeTruthy();
     });
-    expect(screen.queryByRole("img", { name: /career wheel/i })).toBeNull();
-    fireEvent.click(screen.getByRole("tab", { name: /wheel/i }));
+    // Both panels are present at once — no view toggle in this slice.
     await waitFor(() => {
       expect(screen.getByRole("img", { name: /career wheel/i })).toBeTruthy();
     });
-    // Tree is hidden when wheel is active.
-    expect(screen.queryByDisplayValue("Craft")).toBeNull();
-    fireEvent.click(screen.getByRole("tab", { name: /tree/i }));
-    await waitFor(() => {
-      expect(screen.getByDisplayValue("Craft")).toBeTruthy();
-    });
+    expect(screen.getByDisplayValue("Craft")).toBeTruthy();
+    expect(screen.queryByRole("tab", { name: /wheel/i })).toBeNull();
+    expect(screen.queryByRole("tab", { name: /tree/i })).toBeNull();
   });
 
   it("shows an empty competency tree placeholder", async () => {
     const { client } = makeFakeClient();
     render(<CareerLevelView level={level()} client={client} />);
     await waitFor(() => {
-      expect(screen.getByText(/no competencies yet/i)).toBeTruthy();
+      expect(screen.getByText("No competencies yet.")).toBeTruthy();
     });
   });
 
@@ -608,7 +604,7 @@ describe("CareerLevelView", () => {
     const { client, store } = makeFakeClient();
     render(<CareerLevelView level={level()} client={client} />);
     await waitFor(() =>
-      expect(screen.getByText(/no competencies yet/i)).toBeTruthy(),
+      expect(screen.getByText("No competencies yet.")).toBeTruthy(),
     );
     const input = screen.getByLabelText(
       "New competency name",
