@@ -1179,7 +1179,23 @@ function CardChip({
         {card.priority && (
           <span
             data-priority={card.priority}
-            className="inline-block rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] uppercase text-muted-foreground"
+            className="inline-flex items-center rounded-md px-1.5 py-px text-[9px] font-medium leading-[1.4]"
+            style={
+              card.priority === "P1"
+                ? {
+                    background: "var(--danger-soft)",
+                    color: "var(--destructive)",
+                  }
+                : card.priority === "P2"
+                  ? {
+                      background: "var(--warn-soft)",
+                      color: "var(--warn)",
+                    }
+                  : {
+                      background: "var(--secondary)",
+                      color: "var(--muted-foreground)",
+                    }
+            }
           >
             {card.priority}
           </span>

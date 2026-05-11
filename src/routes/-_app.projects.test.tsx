@@ -366,6 +366,32 @@ describe("ProjectBoardView", () => {
     await waitFor(() => expect(onDeleteCard).toHaveBeenCalledWith("card1"));
     expect(screen.queryByRole("dialog")).toBeNull();
   });
+  it("color-codes the priority chip per design (P1 → danger, P2 → warn, P3 → muted)", () => {
+    const cards = [
+      card({ id: "k1", column_id: "col1", title: "Urgent", priority: "P1", order: 0 }),
+      card({ id: "k2", column_id: "col1", title: "Soon", priority: "P2", order: 1 }),
+      card({ id: "k3", column_id: "col1", title: "Whenever", priority: "P3", order: 2 }),
+    ];
+    render(
+      <ProjectBoardView
+        project={project()}
+        columns={[column()]}
+        cards={cards}
+        loading={false}
+        error={null}
+        onAddCard={() => {}}
+      />,
+    );
+    const p1 = screen.getByText("P1") as HTMLElement;
+    const p2 = screen.getByText("P2") as HTMLElement;
+    const p3 = screen.getByText("P3") as HTMLElement;
+    expect(p1.style.background).toContain("--danger-soft");
+    expect(p1.style.color).toContain("--destructive");
+    expect(p2.style.background).toContain("--warn-soft");
+    expect(p2.style.color).toContain("--warn");
+    expect(p3.style.background).toContain("--secondary");
+    expect(p3.style.color).toContain("--muted-foreground");
+  });
 });
 
 // ─── Drag-and-drop + keyboard moves ─────────────────────────────────────────
