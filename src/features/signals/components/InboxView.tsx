@@ -203,12 +203,17 @@ export function InboxView({
                     key={f.id}
                     aria-pressed={active}
                     onClick={() => onFilterChange(f.id)}
-                    className="inline-flex items-center gap-1.5 rounded-full px-3 py-[5px] font-medium leading-tight transition-colors"
+                    className="inline-flex items-center gap-[5px] rounded-[var(--radius-md)] font-medium leading-tight transition-colors"
                     style={{
-                      fontSize: 13,
-                      background: active ? "var(--ink)" : "var(--surface-soft)",
-                      color: active ? "var(--canvas)" : "var(--ink)",
-                      border: "1px solid transparent",
+                      fontSize: 12,
+                      padding: "3px 10px",
+                      background: active
+                        ? "var(--primary)"
+                        : "var(--secondary)",
+                      color: active
+                        ? "var(--primary-foreground)"
+                        : "var(--secondary-foreground)",
+                      border: active ? "none" : "1px solid var(--border)",
                     }}
                   >
                     {f.label}
@@ -323,12 +328,17 @@ export function InboxView({
                   key={f.id}
                   aria-pressed={active}
                   onClick={() => onFilterChange(f.id)}
-                  className="inline-flex items-center gap-1.5 rounded-full px-3 py-[5px] font-medium leading-tight transition-colors"
+                  className="inline-flex items-center gap-[5px] rounded-[var(--radius-md)] font-medium leading-tight transition-colors"
                   style={{
-                    fontSize: 13,
-                    background: active ? "var(--ink)" : "var(--surface-soft)",
-                    color: active ? "var(--canvas)" : "var(--ink)",
-                    border: "1px solid transparent",
+                    fontSize: 12,
+                    padding: "3px 10px",
+                    background: active
+                      ? "var(--primary)"
+                      : "var(--secondary)",
+                    color: active
+                      ? "var(--primary-foreground)"
+                      : "var(--secondary-foreground)",
+                    border: active ? "none" : "1px solid var(--border)",
                   }}
                 >
                   {f.label}
@@ -336,7 +346,7 @@ export function InboxView({
                     <span
                       data-slot="filter-count"
                       className="tabular-nums"
-                      style={{ fontSize: 11, opacity: 0.6 }}
+                      style={{ fontSize: 10.5, opacity: 0.7 }}
                     >
                       {counts[f.id]}
                     </span>
