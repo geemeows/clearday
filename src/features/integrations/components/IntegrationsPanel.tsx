@@ -20,6 +20,8 @@ import { Button } from "#/components/coss/button";
 import { Input } from "#/components/coss/input";
 import { SettingsPanel } from "#/components/ui/SettingsPanel";
 import type { ProviderAccountStatus } from "#/features/integrations/provider-account-status";
+import type { WeekStart } from "#/features/settings/week-start/api";
+import { useWeekStart } from "#/features/settings/week-start/use-week-start";
 import {
   SourceGlyph,
   type SourceKind,
@@ -99,9 +101,11 @@ const PROVIDERS: ReadonlyArray<ProviderDef> = [
 
 const DEFAULT_SLACK_CHANNELS = ["#eng-platform", "#oncall", "#design-review"];
 
-const WEEK_START_KEY = "devy:weekStart";
-
-type WeekStart = "sunday" | "monday";
+const WEEK_START_OPTIONS: ReadonlyArray<{ id: WeekStart; label: string }> = [
+  { id: "sun", label: "Sunday" },
+  { id: "mon", label: "Monday" },
+  { id: "sat", label: "Saturday" },
+];
 
 export type AccountRow = {
   id: string;
@@ -117,7 +121,6 @@ export type AccountRow = {
 export type IntegrationsPanelProps = {
   sourcesLoader?: () => Promise<SourcesPayload>;
   initialAllowlist?: string[];
-  initialWeekStart?: WeekStart;
   now?: number;
   connectUrl?: (
     provider: string,
@@ -132,7 +135,6 @@ type PanelData = { accountsByProvider: Record<string, AccountRow[]> };
 export function IntegrationsPanel({
   sourcesLoader,
   initialAllowlist,
-  initialWeekStart,
   now,
   connectUrl,
   removeAccount,
@@ -145,9 +147,7 @@ export function IntegrationsPanel({
   const [busyAccount, setBusyAccount] = useState<string | null>(null);
   const [busyProvider, setBusyProvider] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [weekStart, setWeekStart] = useState<WeekStart>(
-    () => initialWeekStart ?? readWeekStart(),
-  );
+  const { weekStart, setWeekStart } = useWeekStart();
 
   const load = useMemo(
     () =>
@@ -286,11 +286,6 @@ export function IntegrationsPanel({
     setChannels((prev) => prev.filter((c) => c !== name));
   };
 
-  const onWeekStartChange = (next: WeekStart) => {
-    setWeekStart(next);
-    persistWeekStart(next);
-  };
-
   return (
     <SettingsPanel
       title="Integrations"
@@ -384,7 +379,7 @@ export function IntegrationsPanel({
               {provider.providerKey === "google" ? (
                 <CalendarProviderSettings
                   weekStart={weekStart}
-                  onChange={onWeekStartChange}
+                  onChange={setWeekStart}
                 />
               ) : null}
             </li>
@@ -555,66 +550,36 @@ function CalendarProviderSettings({
 }) {
   return (
     <section className="border-border border-t px-4 py-3">
-      <h3 className="font-semibold text-sm tracking-tight">Week start</h3>
+      <h3 className="font-semibold text-sm tracking-tight">Week starts on</h3>
       <p className="mt-1 text-muted-foreground text-xs">
-        First day of the week in the Calendar view. Applies to all your
-        connected calendars.
+        Affects the week view on the Calendar page and weekly stats.
       </p>
       <div
         role="radiogroup"
         aria-label="Week start"
         className="mt-2 inline-flex rounded-md border border-border bg-background p-0.5"
       >
-        {(["sunday", "monday"] as const).map((day) => (
+        {WEEK_START_OPTIONS.map((opt) => (
           // biome-ignore lint/a11y/useSemanticElements: deliberate button-with-role=radio pattern; keeps coss styling and avoids <input type="radio"> form semantics. role="radiogroup" wraps for keyboard semantics.
           <button
-            key={day}
+            key={opt.id}
             type="button"
             role="radio"
-            aria-checked={weekStart === day}
-            onClick={() => onChange(day)}
+            aria-checked={weekStart === opt.id}
+            onClick={() => onChange(opt.id)}
             className={cn(
-              "rounded-sm px-3 py-1 text-xs capitalize",
-              weekStart === day
+              "rounded-sm px-3 py-1 text-xs",
+              weekStart === opt.id
                 ? "bg-muted font-medium text-foreground"
                 : "text-muted-foreground hover:text-foreground",
             )}
           >
-            {day}
+            {opt.label}
           </button>
         ))}
       </div>
     </section>
   );
-}
-
-function readWeekStart(): WeekStart {
-  if (typeof window === "undefined") return "monday";
-  try {
-    const v = window.localStorage.getItem(WEEK_START_KEY);
-    return v === "sunday" ? "sunday" : "monday";
-  } catch {
-    return "monday";
-  }
-}
-
-function persistWeekStart(value: WeekStart): void {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(WEEK_START_KEY, value);
-  } catch {
-    // localStorage may be unavailable (private mode); the dispatch below
-    // still gives in-memory listeners a chance to react.
-  }
-  try {
-    window.dispatchEvent(
-      new CustomEvent("devy:weekStartChanged", {
-        detail: { weekStart: value },
-      }),
-    );
-  } catch {
-    // CustomEvent isn't available (very old runtimes). Silently skip.
-  }
 }
 
 function accountCountLabel(n: number): string {

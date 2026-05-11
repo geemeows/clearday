@@ -9,6 +9,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { IntegrationsPanel } from "#/features/integrations/components/IntegrationsPanel";
 import type { ProviderAccountStatus } from "#/features/integrations/provider-account-status";
 
+// useWeekStart calls apiFetch("/api/week-start") on mount. The panel itself
+// only falls back to apiFetch when sourcesLoader / connectUrl / removeAccount
+// aren't supplied — every test below injects those, so mocking apiFetch
+// globally is safe here.
+vi.mock("#/lib/api-client", () => ({
+  apiFetch: vi.fn(() => new Promise(() => {})),
+}));
+
 const NOW = Date.parse("2026-05-05T12:00:00Z");
 
 type ApiSource = {
@@ -308,32 +316,31 @@ describe("IntegrationsPanel", () => {
     expect(within(list).getByText("#design-review")).toBeTruthy();
   });
 
-  it("week-start setting renders inside the Calendar card and persists to localStorage + dispatches devy:weekStartChanged", () => {
+  it("week-start picker renders inside the Calendar card with Sun/Mon/Sat and writes through to localStorage + dispatches devy:weekStartChanged", () => {
     const loader = loaderWith([]);
     const handler = vi.fn();
     window.addEventListener("devy:weekStartChanged", handler as EventListener);
 
-    render(
-      <IntegrationsPanel
-        sourcesLoader={loader}
-        initialWeekStart="monday"
-        now={NOW}
-      />,
-    );
+    render(<IntegrationsPanel sourcesLoader={loader} now={NOW} />);
     const calendar = screen.getByRole("listitem", {
       name: "Google Calendar integration",
     });
     const group = within(calendar).getByRole("radiogroup", {
       name: "Week start",
     });
-    const sunday = within(group).getByRole("radio", { name: /sunday/i });
-    fireEvent.click(sunday);
-    expect(window.localStorage.getItem("devy:weekStart")).toBe("sunday");
+    expect(within(group).getByRole("radio", { name: /sunday/i })).toBeTruthy();
+    expect(within(group).getByRole("radio", { name: /monday/i })).toBeTruthy();
+    expect(
+      within(group).getByRole("radio", { name: /saturday/i }),
+    ).toBeTruthy();
+
+    fireEvent.click(within(group).getByRole("radio", { name: /sunday/i }));
+    expect(window.localStorage.getItem("devy.weekStart")).toBe("sun");
     expect(handler).toHaveBeenCalled();
-    const evt = handler.mock.calls[0]?.[0] as CustomEvent<{
+    const evt = handler.mock.calls.at(-1)?.[0] as CustomEvent<{
       weekStart: string;
     }>;
-    expect(evt.detail.weekStart).toBe("sunday");
+    expect(evt.detail.weekStart).toBe("sun");
 
     window.removeEventListener(
       "devy:weekStartChanged",
