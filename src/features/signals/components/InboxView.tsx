@@ -1,6 +1,5 @@
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { useMemo } from "react";
-import { StatusBadge } from "#/components/ui/StatusBadge";
 import {
   InboxPreviewRow,
   InboxPreviewRowSkeleton,
@@ -371,6 +370,62 @@ export function InboxView({
   );
 }
 
+type RowChipTone = "default" | "success" | "warning" | "danger";
+
+const ROW_CHIP_STYLE: Record<RowChipTone, CSSProperties> = {
+  default: {
+    background: "var(--surface-strong)",
+    color: "var(--foreground)",
+    border: "1px solid var(--hairline-soft)",
+  },
+  success: {
+    background: "var(--good-soft)",
+    color: "var(--good)",
+    border: "1px solid transparent",
+  },
+  warning: {
+    background: "var(--warn-soft)",
+    color: "var(--warn)",
+    border: "1px solid transparent",
+  },
+  danger: {
+    background: "var(--danger-soft)",
+    color: "var(--destructive)",
+    border: "1px solid transparent",
+  },
+};
+
+// Inbox-row chip matching the design's .badge token (tokens.css): 11px / 600 /
+// title-case / 1px 7px / radius-sm. Distinct from StatusBadge (uppercase,
+// rounded-full) which is used elsewhere in the app.
+function RowChip({
+  tone,
+  title,
+  children,
+}: {
+  tone: RowChipTone;
+  title?: string;
+  children: ReactNode;
+}) {
+  return (
+    <span
+      data-slot="row-chip"
+      data-tone={tone}
+      title={title}
+      className="inline-flex shrink-0 items-center gap-1 rounded-md px-[7px] font-semibold"
+      style={{
+        fontSize: 11,
+        lineHeight: 1.4,
+        paddingTop: 1,
+        paddingBottom: 1,
+        ...ROW_CHIP_STYLE[tone],
+      }}
+    >
+      {children}
+    </span>
+  );
+}
+
 export function InboxRow({
   signal,
   selected,
@@ -390,25 +445,19 @@ export function InboxRow({
   const isAutoRule = signal.payload?.badge === "auto-rule";
   const chips = (
     <>
-      {severity === "ci_fail" && (
-        <StatusBadge tone="danger">CI FAIL</StatusBadge>
-      )}
-      {severity === "conflict" && (
-        <StatusBadge tone="warning">CONFLICT</StatusBadge>
-      )}
-      {isAutoRule && <StatusBadge tone="muted">RULE</StatusBadge>}
-      {replied && <StatusBadge tone="success">Replied</StatusBadge>}
-      {signal.priority === "high" && (
-        <StatusBadge tone="danger">High</StatusBadge>
-      )}
-      {signal.priority === "low" && <StatusBadge tone="muted">Low</StatusBadge>}
+      {severity === "ci_fail" && <RowChip tone="danger">CI fail</RowChip>}
+      {severity === "conflict" && <RowChip tone="warning">Conflict</RowChip>}
+      {isAutoRule && <RowChip tone="default">Rule</RowChip>}
+      {replied && <RowChip tone="success">Replied</RowChip>}
+      {signal.priority === "high" && <RowChip tone="danger">High</RowChip>}
+      {signal.priority === "low" && <RowChip tone="default">Low</RowChip>}
       {snoozed && (
-        <StatusBadge
+        <RowChip
           tone="warning"
           title={`Returns at ${formatSnoozeReturn(signal.snoozed_until)}`}
         >
           Snoozed · returns {formatSnoozeReturn(signal.snoozed_until)}
-        </StatusBadge>
+        </RowChip>
       )}
     </>
   );

@@ -179,7 +179,7 @@ describe("InboxView", () => {
         onDismiss={() => {}}
       />,
     );
-    expect(screen.getByText("CI FAIL")).toBeTruthy();
+    expect(screen.getByText("CI fail")).toBeTruthy();
   });
 
   it("renders CONFLICT severity chip when payload signals it", () => {
@@ -197,7 +197,7 @@ describe("InboxView", () => {
         onDismiss={() => {}}
       />,
     );
-    expect(screen.getByText("CONFLICT")).toBeTruthy();
+    expect(screen.getByText("Conflict")).toBeTruthy();
   });
 
   it("renders RULE chip when signal.payload.badge === 'auto-rule'", () => {
@@ -215,7 +215,7 @@ describe("InboxView", () => {
         onDismiss={() => {}}
       />,
     );
-    expect(screen.getByText("RULE")).toBeTruthy();
+    expect(screen.getByText("Rule")).toBeTruthy();
   });
 
   it("marks the selected row with a Rausch left-border accent (data-selected)", () => {
