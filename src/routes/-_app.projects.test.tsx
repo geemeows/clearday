@@ -11,7 +11,10 @@ import type {
   StoredColumn,
   StoredProject,
 } from "#/features/projects/store";
-import { ProjectBoardView } from "#/routes/_app.projects.$projectId";
+import {
+  dueRelative,
+  ProjectBoardView,
+} from "#/routes/_app.projects.$projectId";
 import { OnboardingView } from "#/routes/_app.projects.index";
 
 // ─── helpers ────────────────────────────────────────────────────────────────
@@ -391,6 +394,48 @@ describe("ProjectBoardView", () => {
     expect(p2.style.color).toContain("--warn");
     expect(p3.style.background).toContain("--secondary");
     expect(p3.style.color).toContain("--muted-foreground");
+  });
+
+  it("renders DUE TODAY / TOMORROW chips per design for today/tomorrow due_at", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-11T10:00:00Z"));
+    try {
+      const today = new Date("2026-05-11T15:00:00Z").toISOString();
+      const tomorrow = new Date("2026-05-12T15:00:00Z").toISOString();
+      const later = new Date("2026-05-20T15:00:00Z").toISOString();
+      render(
+        <ProjectBoardView
+          project={project()}
+          columns={[column()]}
+          cards={[
+            card({ id: "k1", column_id: "col1", title: "Today", due_at: today, order: 0 }),
+            card({ id: "k2", column_id: "col1", title: "Tomorrow", due_at: tomorrow, order: 1 }),
+            card({ id: "k3", column_id: "col1", title: "Later", due_at: later, order: 2 }),
+          ]}
+          loading={false}
+          error={null}
+          onAddCard={() => {}}
+        />,
+      );
+      const todayChip = screen.getByText("DUE TODAY") as HTMLElement;
+      const tomorrowChip = screen.getByText("TOMORROW") as HTMLElement;
+      expect(todayChip.style.background).toContain("--primary-disabled");
+      expect(todayChip.style.color).toContain("--primary-active");
+      expect(tomorrowChip.style.background).toContain("--secondary");
+      expect(tomorrowChip.style.color).toContain("--muted-foreground");
+      expect(screen.queryByText("DUE TODAY")).toBeTruthy();
+      expect(screen.getByText("2026-05-20")).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("dueRelative returns today/tomorrow/null based on local day diff", () => {
+    const now = new Date("2026-05-11T10:00:00");
+    expect(dueRelative(new Date("2026-05-11T23:00:00").toISOString(), now)).toBe("today");
+    expect(dueRelative(new Date("2026-05-12T01:00:00").toISOString(), now)).toBe("tomorrow");
+    expect(dueRelative(new Date("2026-05-13T10:00:00").toISOString(), now)).toBeNull();
+    expect(dueRelative("not-a-date", now)).toBeNull();
   });
 });
 

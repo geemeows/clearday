@@ -1143,6 +1143,22 @@ function KanbanColumn({
   );
 }
 
+export function dueRelative(
+  dueAt: string,
+  now: Date,
+): "today" | "tomorrow" | null {
+  const due = new Date(dueAt);
+  if (Number.isNaN(due.getTime())) return null;
+  const startOfDay = (d: Date) =>
+    new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const diffDays = Math.round(
+    (startOfDay(due) - startOfDay(now)) / (24 * 60 * 60 * 1000),
+  );
+  if (diffDays === 0) return "today";
+  if (diffDays === 1) return "tomorrow";
+  return null;
+}
+
 function CardChip({
   card,
   tickets,
@@ -1200,12 +1216,44 @@ function CardChip({
             {card.priority}
           </span>
         )}
-        {card.due_at && (
-          <span className="inline-flex items-center gap-0.5 rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
-            <Calendar className="h-2.5 w-2.5" />
-            {card.due_at.slice(0, 10)}
-          </span>
-        )}
+        {card.due_at &&
+          (() => {
+            const rel = dueRelative(card.due_at, new Date());
+            if (rel === "today") {
+              return (
+                <span
+                  data-due="today"
+                  className="inline-flex items-center rounded-md px-1.5 py-px font-medium text-[9px] leading-[1.4]"
+                  style={{
+                    background: "var(--primary-disabled)",
+                    color: "var(--primary-active)",
+                  }}
+                >
+                  DUE TODAY
+                </span>
+              );
+            }
+            if (rel === "tomorrow") {
+              return (
+                <span
+                  data-due="tomorrow"
+                  className="inline-flex items-center rounded-md px-1.5 py-px font-medium text-[9px] leading-[1.4]"
+                  style={{
+                    background: "var(--secondary)",
+                    color: "var(--muted-foreground)",
+                  }}
+                >
+                  TOMORROW
+                </span>
+              );
+            }
+            return (
+              <span className="inline-flex items-center gap-0.5 rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                <Calendar className="h-2.5 w-2.5" />
+                {card.due_at.slice(0, 10)}
+              </span>
+            );
+          })()}
         {(tickets ?? []).map((t) => (
           <span
             key={t.id}
