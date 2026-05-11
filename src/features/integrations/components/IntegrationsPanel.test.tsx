@@ -348,6 +348,30 @@ describe("IntegrationsPanel", () => {
     );
   });
 
+  it("renders the total-account counter strip across providers", async () => {
+    const loader = loaderWith([GITHUB_ACCT, GITHUB_WORK, SLACK_ACCT]);
+    render(<IntegrationsPanel sourcesLoader={loader} now={NOW} />);
+    await waitFor(() => {
+      expect(
+        screen.getByLabelText("Accounts summary").textContent,
+      ).toMatch(/3 accounts across 4 providers/);
+    });
+  });
+
+  it("renders the provider scopes in mono next to the account context", async () => {
+    const loader = loaderWith([GITHUB_ACCT]);
+    render(<IntegrationsPanel sourcesLoader={loader} now={NOW} />);
+    await waitFor(() => {
+      expect(
+        screen.getByRole("listitem", { name: "GitHub account @alice" }),
+      ).toBeTruthy();
+    });
+    const row = screen.getByRole("listitem", {
+      name: "GitHub account @alice",
+    });
+    expect(within(row).getByText("repo, read:user, read:org")).toBeTruthy();
+  });
+
   it("Reauthorize surfaces an error when connectUrl fails", async () => {
     const loader = loaderWith([GITHUB_ACCT]);
     const connectUrl = vi.fn(async () => ({

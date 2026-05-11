@@ -224,6 +224,10 @@ export function IntegrationsPanel({
 
   const accountsByProvider = data?.accountsByProvider ?? {};
   const error = actionError ?? (loadError ? loadError.message : null);
+  const totalAccounts = Object.values(accountsByProvider).reduce(
+    (sum, list) => sum + list.length,
+    0,
+  );
 
   const onAddAccount = async (providerKey: string) => {
     setBusyProvider(providerKey);
@@ -294,6 +298,13 @@ export function IntegrationsPanel({
       busy={busy && !data}
       className="space-y-4"
     >
+      <div
+        aria-label="Accounts summary"
+        className="flex items-center justify-end text-muted-foreground text-xs"
+      >
+        {totalAccounts} {totalAccounts === 1 ? "account" : "accounts"} across{" "}
+        {PROVIDERS.length} providers
+      </div>
       <ul aria-label="Integration providers" className="space-y-4">
         {PROVIDERS.map((provider) => {
           const accounts = accountsByProvider[provider.id] ?? [];
@@ -440,6 +451,11 @@ function AccountRowItem({
           {account.context ? (
             <span className="text-[11px] text-muted-foreground">
               · {account.context}
+            </span>
+          ) : null}
+          {provider.scopes ? (
+            <span className="font-mono text-[10px] text-muted-foreground/70">
+              {provider.scopes}
             </span>
           ) : null}
         </div>
