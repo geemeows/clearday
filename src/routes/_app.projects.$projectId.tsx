@@ -1043,7 +1043,7 @@ function KanbanColumn({
     <article
       aria-label={column.name}
       data-drag-over={isDragOver ? "true" : undefined}
-      className="flex w-64 shrink-0 flex-col rounded-lg border border-border bg-card transition-colors"
+      className="flex w-64 shrink-0 flex-col rounded-lg border border-transparent bg-muted transition-colors"
       style={
         isDragOver
           ? {

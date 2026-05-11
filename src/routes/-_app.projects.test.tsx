@@ -225,6 +225,23 @@ describe("ProjectBoardView", () => {
     expect(within(done).queryByText("Empty · drop cards here")).toBeNull();
   });
 
+  it("renders the column resting surface on --surface-soft with a transparent border", () => {
+    render(
+      <ProjectBoardView
+        project={project()}
+        columns={[column()]}
+        cards={[]}
+        loading={false}
+        error={null}
+        onAddCard={noop}
+      />,
+    );
+    const col = screen.getByRole("article", { name: "Backlog" });
+    expect(col.className).toContain("bg-muted");
+    expect(col.className).toContain("border-transparent");
+    expect(col.className).not.toContain("bg-card");
+  });
+
   it("highlights the column with a dashed primary border while dragged over", () => {
     render(
       <ProjectBoardView
