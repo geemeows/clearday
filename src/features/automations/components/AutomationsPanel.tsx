@@ -879,12 +879,18 @@ function AutomationRow({
             </span>
           )}
         </div>
-        <p className="truncate font-mono text-[10px] text-muted-foreground">
-          {automation.trigger_kind} · {automation.predicates.length} predicate
-          {automation.predicates.length === 1 ? "" : "s"} ·{" "}
-          {automation.actions.length} action
-          {automation.actions.length === 1 ? "" : "s"}
-        </p>
+        <div className="mt-0.5 flex items-center gap-1.5">
+          <span className="rounded bg-secondary px-1.5 py-px font-mono text-[9.5px] tracking-[0.04em] text-muted-foreground uppercase">
+            {TRIGGERS[automation.trigger_kind]?.label ?? automation.trigger_kind}
+          </span>
+          <span className="font-mono text-[10px] text-muted-foreground">→</span>
+          <span className="truncate font-mono text-[10.5px] text-foreground">
+            {automation.actions.length === 1
+              ? (ACTIONS[automation.actions[0]!.type]?.label ??
+                automation.actions[0]!.type)
+              : `${automation.actions.length} actions`}
+          </span>
+        </div>
         {latestFailure && (
           <p
             aria-label={`Last failure for ${automation.name}`}

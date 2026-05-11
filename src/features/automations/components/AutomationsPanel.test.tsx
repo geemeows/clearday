@@ -791,6 +791,31 @@ describe("AutomationsPanel row chips", () => {
     expect(chips[0]?.textContent).toBe("Fail");
   });
 
+  it("renders the trigger label chip and action label on each row", async () => {
+    const list: Automation[] = [
+      automation({
+        id: "a-1",
+        name: "Solo action",
+        trigger_kind: "signal_ingested",
+        actions: [{ type: "tag", tag: "ship" }],
+      }),
+      automation({
+        id: "a-2",
+        name: "Multi action",
+        trigger_kind: "signal_ingested",
+        actions: [
+          { type: "tag", tag: "ship" },
+          { type: "snooze", minutes: 30 },
+        ],
+      }),
+    ];
+    renderPanel({ loader: vi.fn(async () => ({ automations: list })) });
+    await screen.findByText("Solo action");
+    expect(screen.getAllByText("Signal ingested").length).toBe(2);
+    expect(screen.getByText("Tag")).toBeTruthy();
+    expect(screen.getByText("2 actions")).toBeTruthy();
+  });
+
   it("status dot reflects fail > dry > ok precedence", async () => {
     const mixed: Automation[] = [
       automation({ id: "a-1", name: "Healthy" }),
