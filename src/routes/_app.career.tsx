@@ -585,15 +585,21 @@ export function LevelSwitcher({
         aria-expanded={open}
         aria-label="Switch level"
         onClick={() => setOpen((o) => !o)}
-        className="inline-flex items-center gap-2 rounded-md border border-border bg-card px-3 py-1 text-foreground hover:bg-muted"
+        className="inline-flex items-center gap-2 rounded-md border border-border bg-card py-[5px] pr-2.5 pl-3 text-foreground hover:bg-muted"
       >
-        <span className="font-semibold text-xl tracking-tight">
+        <span className="font-bold text-lg leading-none tracking-tight">
           {active.title}
         </span>
-        <span className="rounded-full bg-emerald-100 px-1.5 py-0.5 font-bold text-[10px] text-emerald-700 uppercase tracking-wider dark:bg-emerald-950 dark:text-emerald-300">
+        <span
+          className="rounded-full px-[7px] py-px font-bold text-[10px] uppercase tracking-wider"
+          style={{
+            background: "var(--good-soft)",
+            color: "var(--good)",
+          }}
+        >
           Active
         </span>
-        <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+        <ChevronDown className="h-[13px] w-[13px] text-muted-foreground" />
       </button>
       {open && (
         <div
@@ -604,7 +610,10 @@ export function LevelSwitcher({
           <p className="px-2.5 pt-2 pb-1 font-medium text-muted-foreground text-xs uppercase tracking-wide">
             Active
           </p>
-          <div className="rounded bg-primary/5 px-2.5 py-1.5">
+          <div
+            className="rounded px-2.5 py-1.5"
+            style={{ background: "var(--accent-tint)" }}
+          >
             <div className="font-semibold text-foreground text-sm">
               {active.title}
             </div>
