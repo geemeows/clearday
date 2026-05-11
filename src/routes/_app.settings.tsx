@@ -722,6 +722,7 @@ type AiModelOption = {
   id: string;
   label: string;
   tier: string;
+  cost: string;
 };
 
 const AI_PROVIDERS: Array<{
@@ -735,16 +736,23 @@ const AI_PROVIDERS: Array<{
     label: "Anthropic",
     needsKey: true,
     models: [
-      { id: "claude-sonnet-4-6", label: "Claude Sonnet 4.6", tier: "smartest" },
+      {
+        id: "claude-sonnet-4-6",
+        label: "Claude Sonnet 4.6",
+        tier: "smartest",
+        cost: "$3 / $15 per Mtok",
+      },
       {
         id: "claude-opus-4-7",
         label: "Claude Opus 4.7",
         tier: "best reasoning",
+        cost: "$15 / $75 per Mtok",
       },
       {
         id: "claude-haiku-4-5",
         label: "Claude Haiku 4.5",
         tier: "fast & cheap",
+        cost: "$1 / $5 per Mtok",
       },
     ],
   },
@@ -753,8 +761,18 @@ const AI_PROVIDERS: Array<{
     label: "OpenAI",
     needsKey: true,
     models: [
-      { id: "gpt-4o", label: "GPT-4o", tier: "balanced" },
-      { id: "gpt-4o-mini", label: "GPT-4o mini", tier: "fast & cheap" },
+      {
+        id: "gpt-4o",
+        label: "GPT-4o",
+        tier: "balanced",
+        cost: "$2.50 / $10 per Mtok",
+      },
+      {
+        id: "gpt-4o-mini",
+        label: "GPT-4o mini",
+        tier: "fast & cheap",
+        cost: "$0.15 / $0.60 per Mtok",
+      },
     ],
   },
   {
@@ -764,8 +782,18 @@ const AI_PROVIDERS: Array<{
     label: "Google",
     needsKey: true,
     models: [
-      { id: "gemini-1.5-pro", label: "Gemini 1.5 Pro", tier: "smartest" },
-      { id: "gemini-1.5-flash", label: "Gemini 1.5 Flash", tier: "fast" },
+      {
+        id: "gemini-1.5-pro",
+        label: "Gemini 1.5 Pro",
+        tier: "smartest",
+        cost: "$1.25 / $5 per Mtok",
+      },
+      {
+        id: "gemini-1.5-flash",
+        label: "Gemini 1.5 Flash",
+        tier: "fast",
+        cost: "$0.075 / $0.30 per Mtok",
+      },
     ],
   },
   {
@@ -777,8 +805,14 @@ const AI_PROVIDERS: Array<{
         id: "llama-3.1-70b-versatile",
         label: "Llama 3.1 70B",
         tier: "balanced",
+        cost: "$0.59 / $0.79 per Mtok",
       },
-      { id: "llama-3.1-8b-instant", label: "Llama 3.1 8B", tier: "fastest" },
+      {
+        id: "llama-3.1-8b-instant",
+        label: "Llama 3.1 8B",
+        tier: "fastest",
+        cost: "$0.05 / $0.08 per Mtok",
+      },
     ],
   },
   {
@@ -790,11 +824,13 @@ const AI_PROVIDERS: Array<{
         id: "anthropic/claude-sonnet-4-6",
         label: "Claude Sonnet 4.6 (via OpenRouter)",
         tier: "smartest",
+        cost: "$3 / $15 per Mtok",
       },
       {
         id: "openai/gpt-4o-mini",
         label: "GPT-4o mini (via OpenRouter)",
         tier: "fast & cheap",
+        cost: "$0.15 / $0.60 per Mtok",
       },
     ],
   },
@@ -1059,6 +1095,13 @@ export function AiProviderPanel({
       ? 80
       : view.fallback_threshold_pct;
 
+  const primaryModelMeta = activeProviderDef?.models.find(
+    (m) => m.id === draftModel,
+  );
+  const fallbackModelMeta = activeProviderDef?.models.find(
+    (m) => m.id === view?.fallback_model,
+  );
+
   return (
     <SettingsPanel
       title="AI provider"
@@ -1136,6 +1179,15 @@ export function AiProviderPanel({
                 disabled={isBusy || !activeProvider}
               />
             )}
+            <span className="mt-1 block text-muted-foreground text-[11px]">
+              Used for daily briefing, smart routing, and inbox triage.
+              {primaryModelMeta && (
+                <>
+                  {" "}
+                  <span className="font-mono">{primaryModelMeta.cost}</span>
+                </>
+              )}
+            </span>
           </label>
 
           <label className="block text-sm">
@@ -1166,9 +1218,15 @@ export function AiProviderPanel({
                 disabled={isBusy || !activeProvider}
               />
             )}
-            <span className="mt-1 block text-muted-foreground text-xs">
+            <span className="mt-1 block text-muted-foreground text-[11px]">
               Used after the budget switch-over threshold — and on
               rate-limit retries.
+              {fallbackModelMeta && (
+                <>
+                  {" "}
+                  <span className="font-mono">{fallbackModelMeta.cost}</span>
+                </>
+              )}
             </span>
           </label>
 

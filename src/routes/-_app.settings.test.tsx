@@ -348,6 +348,22 @@ describe("AiProviderPanel", () => {
     );
   });
 
+  it("renders per-model cost lines next to the primary and fallback selects", async () => {
+    const loader = vi.fn(async () => ({
+      provider: "openai" as const,
+      default_model: "gpt-4o",
+      base_url: null,
+      has_api_key: true,
+      last_validated_at: null,
+      fallback_model: "gpt-4o-mini",
+      fallback_threshold_pct: 80,
+    }));
+    render(<AiProviderPanel loader={loader} />);
+    await screen.findByLabelText(/primary model/i);
+    expect(screen.getByText(/\$2\.50 \/ \$10 per Mtok/)).toBeTruthy();
+    expect(screen.getByText(/\$0\.15 \/ \$0\.60 per Mtok/)).toBeTruthy();
+  });
+
   it("persists fallback_threshold_pct selection through the saver", async () => {
     const baseView = {
       provider: "openai" as const,
