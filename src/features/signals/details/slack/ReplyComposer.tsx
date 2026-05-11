@@ -157,10 +157,7 @@ export function SlackReplyComposer({
       className="space-y-2 rounded-md border border-border bg-muted/40 p-3"
     >
       {account?.handle ? (
-        <p
-          aria-label="Sending account"
-          className="text-[11px] text-muted-foreground"
-        >
+        <p className="text-[11px] text-muted-foreground">
           From: {account.handle}
           {account.workspace ? ` · ${account.workspace}` : ""}
         </p>

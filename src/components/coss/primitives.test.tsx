@@ -130,7 +130,9 @@ describe("coss Switch", () => {
   it("renders a spinner inside the thumb when loading", () => {
     render(<Switch aria-label="notify" loading />);
     const thumb = document.querySelector("[data-slot='switch-thumb']");
-    expect(thumb?.querySelector("[data-slot='switch-thumb-spinner']")).toBeTruthy();
+    expect(
+      thumb?.querySelector("[data-slot='switch-thumb-spinner']"),
+    ).toBeTruthy();
   });
 
   it("rejects interaction while loading and preserves the checked value", () => {

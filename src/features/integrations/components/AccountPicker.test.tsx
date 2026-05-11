@@ -1,11 +1,10 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import {
-  AccountPicker,
-  type AccountPickerOption,
-} from "./AccountPicker";
+import { AccountPicker, type AccountPickerOption } from "./AccountPicker";
 
-function opt(o: Partial<AccountPickerOption> & { id: string }): AccountPickerOption {
+function opt(
+  o: Partial<AccountPickerOption> & { id: string },
+): AccountPickerOption {
   return {
     id: o.id,
     handle: o.handle ?? o.id,

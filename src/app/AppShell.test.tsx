@@ -5,17 +5,23 @@ import {
   createRouter,
   RouterProvider,
 } from "@tanstack/react-router";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AppShell } from "#/app/AppShell";
 import { OPEN_CMDK_EVENT } from "#/app/NavigationSidebar";
 import {
+  type CardWithProject,
   createCard,
   listAllCards,
   listCards,
   listColumns,
   listProjects,
-  type CardWithProject,
   type StoredCard,
   type StoredColumn,
   type StoredProject,

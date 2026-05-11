@@ -1,9 +1,5 @@
 import { Skeleton } from "#/components/ui/skeleton";
-import {
-  Markdown,
-  type PrIssueComment,
-  type PrReviewComment,
-} from "./_shared";
+import { Markdown, type PrIssueComment, type PrReviewComment } from "./_shared";
 
 type PrCommentEntry =
   | { kind: "issue"; data: PrIssueComment }

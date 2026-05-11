@@ -14,9 +14,7 @@ describe("LoadingPlaceholder", () => {
   });
 
   it("forwards className", () => {
-    const { container } = render(
-      <LoadingPlaceholder className="extra-pad" />,
-    );
+    const { container } = render(<LoadingPlaceholder className="extra-pad" />);
     const el = container.querySelector(
       '[data-slot="loading-placeholder"]',
     ) as HTMLElement;

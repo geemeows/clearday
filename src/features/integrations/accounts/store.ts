@@ -185,7 +185,9 @@ export async function removeAccount(
   if (error) throw new Error(`removeAccount delete failed: ${error.message}`);
   let promoted: Account | null = null;
   if (target.primary) {
-    const remaining = await listAccounts(client, { providerId: target.provider });
+    const remaining = await listAccounts(client, {
+      providerId: target.provider,
+    });
     const next = remaining[0];
     if (next) {
       await promotePrimary(client, next.id);

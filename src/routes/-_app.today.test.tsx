@@ -15,8 +15,9 @@ import {
 import type { ReactElement } from "react";
 import { describe, expect, it, vi } from "vitest";
 import type { BriefingResult } from "#/features/briefing/morning-briefing";
-import { UpcomingEventsCard } from "#/features/signals/components/UpcomingEventsCard";
 import { toMeetingEvents } from "#/features/calendar/events";
+import type { DueCard } from "#/features/projects/store";
+import { UpcomingEventsCard } from "#/features/signals/components/UpcomingEventsCard";
 import { PulseCard } from "#/features/today/PulseCard";
 import {
   BriefingCard,
@@ -28,7 +29,6 @@ import {
   TodaySchedule,
   TodayView,
 } from "#/routes/_app.today";
-import type { DueCard } from "#/features/projects/store";
 import type { StoredSignal } from "#/shared/signal";
 
 const meetingSignal = (id = "m1"): StoredSignal => ({
@@ -574,8 +574,12 @@ describe("DueTodayCard", () => {
   it("renders an Open link pointing to the project board with the card param", async () => {
     const loader = vi.fn(async () => [makeDueCard()]);
     await renderWithProjectRouter(<DueTodayCard now={now} loader={loader} />);
-    await waitFor(() => screen.getByRole("link", { name: /open card Ship the feature/i }));
-    const link = screen.getByRole("link", { name: /open card Ship the feature/i });
+    await waitFor(() =>
+      screen.getByRole("link", { name: /open card Ship the feature/i }),
+    );
+    const link = screen.getByRole("link", {
+      name: /open card Ship the feature/i,
+    });
     const href = link.getAttribute("href") ?? "";
     expect(href).toContain("/projects/p1");
     expect(href).toContain("card=card1");

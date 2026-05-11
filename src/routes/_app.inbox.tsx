@@ -10,41 +10,6 @@ import {
   signalKindLabel,
 } from "#/features/integrations/display";
 import {
-  InboxRow,
-  InboxView as BaseInboxView,
-  type RenderDetailArgs,
-  type StoredSignal,
-} from "#/features/signals/components/InboxView";
-import { SourceGlyph } from "#/features/signals/components/SourceGlyph";
-import { SignalDetail } from "#/features/signals/details";
-import {
-  AttendeeStack,
-  type MeetingAttendee,
-} from "#/features/signals/details/meeting/Attendees";
-import { MeetingDetail } from "#/features/signals/details/meeting";
-import { PRDetail } from "#/features/signals/details/pr";
-import { PrComments } from "#/features/signals/details/pr/Comments";
-import { PrDescription } from "#/features/signals/details/pr/Description";
-import { PrDiffViewer } from "#/features/signals/details/pr/DiffViewer";
-import { PrReviewActions } from "#/features/signals/details/pr/ReviewActions";
-import { PrReviewSubmitPanel } from "#/features/signals/details/pr/ReviewComposer";
-import {
-  type PrLiveState,
-  parsePatch,
-  reviewDraftKey,
-} from "#/features/signals/details/pr/_shared";
-import { SlackDetail } from "#/features/signals/details/slack";
-import { SlackReplyComposer } from "#/features/signals/details/slack/ReplyComposer";
-import { SlackThreadContext } from "#/features/signals/details/slack/ThreadContext";
-import { TaskDetail } from "#/features/signals/details/task";
-import { type Filter, kindGroup, relAgo } from "#/features/signals/display";
-import type {
-  SourceProvider,
-  SourceSelection,
-} from "#/features/signals/components/SourceFilter";
-import type { SourceStatus } from "#/features/signals/server/api";
-import type { SignalProvider } from "#/shared/signal";
-import {
   createCard,
   getLinkForSignal,
   linkSignalToCard,
@@ -54,11 +19,46 @@ import {
   type StoredCardSignal,
   type StoredProject,
 } from "#/features/projects/store";
-import { supabase } from "#/lib/supabase";
-import type { SupabaseLike } from "#/shared/db";
+import {
+  InboxView as BaseInboxView,
+  InboxRow,
+  type RenderDetailArgs,
+  type StoredSignal,
+} from "#/features/signals/components/InboxView";
+import type {
+  SourceProvider,
+  SourceSelection,
+} from "#/features/signals/components/SourceFilter";
+import { SourceGlyph } from "#/features/signals/components/SourceGlyph";
+import { SignalDetail } from "#/features/signals/details";
+import { MeetingDetail } from "#/features/signals/details/meeting";
+import {
+  AttendeeStack,
+  type MeetingAttendee,
+} from "#/features/signals/details/meeting/Attendees";
+import { PRDetail } from "#/features/signals/details/pr";
+import {
+  type PrLiveState,
+  parsePatch,
+  reviewDraftKey,
+} from "#/features/signals/details/pr/_shared";
+import { PrComments } from "#/features/signals/details/pr/Comments";
+import { PrDescription } from "#/features/signals/details/pr/Description";
+import { PrDiffViewer } from "#/features/signals/details/pr/DiffViewer";
+import { PrReviewActions } from "#/features/signals/details/pr/ReviewActions";
+import { PrReviewSubmitPanel } from "#/features/signals/details/pr/ReviewComposer";
+import { SlackDetail } from "#/features/signals/details/slack";
+import { SlackReplyComposer } from "#/features/signals/details/slack/ReplyComposer";
+import { SlackThreadContext } from "#/features/signals/details/slack/ThreadContext";
+import { TaskDetail } from "#/features/signals/details/task";
+import { type Filter, kindGroup, relAgo } from "#/features/signals/display";
+import type { SourceStatus } from "#/features/signals/server/api";
 import { filterMeetingsToToday } from "#/features/signals/views/today";
 import { useAutoRefresh } from "#/hooks/use-auto-refresh";
 import { apiFetch } from "#/lib/api-client";
+import { supabase } from "#/lib/supabase";
+import type { SupabaseLike } from "#/shared/db";
+import type { SignalProvider } from "#/shared/signal";
 
 export {
   InboxRow,
@@ -147,9 +147,9 @@ function InboxPage() {
       const params = new URLSearchParams({ filter: "all" });
       if (source.provider) params.set("provider", source.provider);
       if (source.accountId) params.set("account_id", source.accountId);
-      const body = (await apiFetch(
-        `/api/signals?${params.toString()}`,
-      )) as { signals: StoredSignal[] };
+      const body = (await apiFetch(`/api/signals?${params.toString()}`)) as {
+        signals: StoredSignal[];
+      };
       setSignals(body.signals);
       setError(null);
     } catch (e) {
@@ -311,7 +311,6 @@ export function InboxDetailPane({
   // briefly show the previous PR's merged state. Biome can't see that
   // signalId is the trigger (the body doesn't read it), but we need the
   // effect to refire on selection change.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: signalId is the reset trigger
   useEffect(() => {
     setLiveState(null);
     setShowPicker(false);
@@ -495,12 +494,14 @@ export function InboxDetailPane({
           Dismiss
         </button>
         {/* Send to project / Open card */}
-        {linkState !== "loading" && (
-          typeof linkState === "object" && linkState !== null ? (
+        {linkState !== "loading" &&
+          (typeof linkState === "object" && linkState !== null ? (
             <button
               type="button"
               data-slot="open-card"
-              onClick={() => onOpenCard?.(linkState.projectId, linkState.cardId)}
+              onClick={() =>
+                onOpenCard?.(linkState.projectId, linkState.cardId)
+              }
               className="inline-flex items-center gap-1 rounded-md hover:bg-(--surface-soft)"
               style={{
                 height: 32,
@@ -570,8 +571,7 @@ export function InboxDetailPane({
                 </div>
               )}
             </div>
-          )
-        )}
+          ))}
         <span className="flex-1" />
         {/* MeetingDetail carries its own Join meeting / Open invite buttons. */}
         {signal.url && group !== "meeting" && (

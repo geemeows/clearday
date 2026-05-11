@@ -53,6 +53,10 @@ type ProviderDef = {
   description: string;
   scopes: string;
   isMock?: boolean;
+  // Optional notice shown beneath the provider description — used when a
+  // newly-shipped feature widens scopes and existing connected users will
+  // need to re-consent on the next refresh.
+  reconsentNotice?: string;
 };
 
 const PROVIDERS: ReadonlyArray<ProviderDef> = [
@@ -78,7 +82,9 @@ const PROVIDERS: ReadonlyArray<ProviderDef> = [
     kind: "cal",
     label: "Google Calendar",
     description: "Today's meetings and conflict detection",
-    scopes: "calendar.readonly, calendar.events",
+    scopes: "calendar.readonly, calendar.events, spreadsheets, drive.file",
+    reconsentNotice:
+      "Already connected before May 2026? You'll be asked to re-grant Google access on the next sync — Career → Google Sheet needs the new Sheets + Drive scopes.",
   },
   {
     id: "linear",
@@ -180,7 +186,12 @@ export function IntegrationsPanel({
     [openUrl],
   );
 
-  const { data, error: loadError, busy, reload } = useAsyncPanel<PanelData>({
+  const {
+    data,
+    error: loadError,
+    busy,
+    reload,
+  } = useAsyncPanel<PanelData>({
     load: async () => {
       const body = await load();
       const accountsByProvider: Record<string, AccountRow[]> = {};
@@ -288,10 +299,7 @@ export function IntegrationsPanel({
       busy={busy && !data}
       className="space-y-4"
     >
-      <ul
-        aria-label="Integration providers"
-        className="space-y-4"
-      >
+      <ul aria-label="Integration providers" className="space-y-4">
         {PROVIDERS.map((provider) => {
           const accounts = accountsByProvider[provider.id] ?? [];
           const isProviderBusy = busyProvider === provider.providerKey;
@@ -305,7 +313,9 @@ export function IntegrationsPanel({
                 <SourceGlyph source={provider.kind} size={28} />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <span className="font-medium text-sm">{provider.label}</span>
+                    <span className="font-medium text-sm">
+                      {provider.label}
+                    </span>
                     <span className="text-[11px] text-muted-foreground">
                       {accountCountLabel(accounts.length)}
                     </span>
@@ -318,6 +328,14 @@ export function IntegrationsPanel({
                   <p className="mt-0.5 text-muted-foreground text-xs">
                     {provider.description}
                   </p>
+                  {provider.reconsentNotice ? (
+                    <p
+                      role="note"
+                      className="mt-1 rounded-sm border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-[11px] text-amber-700 dark:text-amber-300"
+                    >
+                      {provider.reconsentNotice}
+                    </p>
+                  ) : null}
                 </div>
                 <Button
                   type="button"
@@ -548,6 +566,7 @@ function CalendarProviderSettings({
         className="mt-2 inline-flex rounded-md border border-border bg-background p-0.5"
       >
         {(["sunday", "monday"] as const).map((day) => (
+          // biome-ignore lint/a11y/useSemanticElements: deliberate button-with-role=radio pattern; keeps coss styling and avoids <input type="radio"> form semantics. role="radiogroup" wraps for keyboard semantics.
           <button
             key={day}
             type="button"
@@ -589,7 +608,9 @@ function persistWeekStart(value: WeekStart): void {
   }
   try {
     window.dispatchEvent(
-      new CustomEvent("devy:weekStartChanged", { detail: { weekStart: value } }),
+      new CustomEvent("devy:weekStartChanged", {
+        detail: { weekStart: value },
+      }),
     );
   } catch {
     // CustomEvent isn't available (very old runtimes). Silently skip.

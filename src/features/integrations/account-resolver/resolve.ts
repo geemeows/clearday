@@ -76,9 +76,8 @@ export function resolve(args: ResolveArgs): ResolveResult {
     args.originatingSignal &&
     args.originatingSignal.provider === args.providerId &&
     args.originatingSignal.account_id
-      ? forProvider.find(
-          (a) => a.id === args.originatingSignal?.account_id,
-        ) ?? null
+      ? (forProvider.find((a) => a.id === args.originatingSignal?.account_id) ??
+        null)
       : null;
   if (fromSignal) return { mode: "single", accounts: [fromSignal] };
 

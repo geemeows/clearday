@@ -40,7 +40,7 @@ describe("SourceFilter", () => {
     // One chip per provider (data-provider on the chip body); the GitHub
     // provider has 2 accounts but still one chip.
     const chips = container.querySelectorAll(
-      'button[data-provider]:not([data-slot])',
+      "button[data-provider]:not([data-slot])",
     );
     expect(chips).toHaveLength(2);
   });
@@ -145,9 +145,7 @@ describe("SourceFilter", () => {
     fireEvent.click(
       screen.getByRole("button", { name: /Pick a GitHub account/ }),
     );
-    fireEvent.click(
-      screen.getByRole("menuitem", { name: /alice@acme/ }),
-    );
+    fireEvent.click(screen.getByRole("menuitem", { name: /alice@acme/ }));
     expect(onChange).toHaveBeenCalledWith({
       provider: "github",
       accountId: "g-work",

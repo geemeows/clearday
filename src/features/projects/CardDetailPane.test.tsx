@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { CardDetailPane } from "#/features/projects/CardDetailPane";
 import type { StoredCard, StoredColumn } from "#/features/projects/store";
@@ -49,7 +49,8 @@ describe("CardDetailPane rendering", () => {
       />,
     );
     expect(
-      (screen.getByRole("textbox", { name: "Card title" }) as HTMLInputElement).value,
+      (screen.getByRole("textbox", { name: "Card title" }) as HTMLInputElement)
+        .value,
     ).toBe("Fix the bug");
   });
 
@@ -64,7 +65,11 @@ describe("CardDetailPane rendering", () => {
       />,
     );
     expect(
-      (screen.getByRole("textbox", { name: "Card body" }) as HTMLTextAreaElement).value,
+      (
+        screen.getByRole("textbox", {
+          name: "Card body",
+        }) as HTMLTextAreaElement
+      ).value,
     ).toBe("Some details here");
   });
 
@@ -78,8 +83,12 @@ describe("CardDetailPane rendering", () => {
         onClose={vi.fn()}
       />,
     );
-    expect(screen.getByRole("button", { name: "Remove tag frontend" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Remove tag urgent" })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Remove tag frontend" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Remove tag urgent" }),
+    ).toBeTruthy();
   });
 
   it("renders priority select with current value", () => {
@@ -93,7 +102,11 @@ describe("CardDetailPane rendering", () => {
       />,
     );
     expect(
-      (screen.getByRole("combobox", { name: "Priority" }) as unknown as HTMLSelectElement).value,
+      (
+        screen.getByRole("combobox", {
+          name: "Priority",
+        }) as unknown as HTMLSelectElement
+      ).value,
     ).toBe("p1");
   });
 
@@ -143,7 +156,9 @@ describe("CardDetailPane title", () => {
         onClose={vi.fn()}
       />,
     );
-    const input = screen.getByRole("textbox", { name: "Card title" }) as HTMLInputElement;
+    const input = screen.getByRole("textbox", {
+      name: "Card title",
+    }) as HTMLInputElement;
     fireEvent.change(input, { target: { value: "   " } });
     fireEvent.blur(input);
     expect(onChange).not.toHaveBeenCalled();
@@ -283,7 +298,9 @@ describe("CardDetailPane due date", () => {
       target: { value: "2026-07-04" },
     });
     expect(onChange).toHaveBeenCalledWith(
-      expect.objectContaining({ due_at: expect.stringContaining("2026-07-04") }),
+      expect.objectContaining({
+        due_at: expect.stringContaining("2026-07-04"),
+      }),
     );
   });
 
@@ -298,7 +315,9 @@ describe("CardDetailPane due date", () => {
         onClose={vi.fn()}
       />,
     );
-    fireEvent.change(screen.getByLabelText("Due date"), { target: { value: "" } });
+    fireEvent.change(screen.getByLabelText("Due date"), {
+      target: { value: "" },
+    });
     expect(onChange).toHaveBeenCalledWith({ due_at: null });
   });
 });
@@ -458,7 +477,9 @@ describe("CardDetailPane close", () => {
 
 import type { StoredCardTicket } from "#/features/projects/store";
 
-function makeTicket(overrides: Partial<StoredCardTicket> = {}): StoredCardTicket {
+function makeTicket(
+  overrides: Partial<StoredCardTicket> = {},
+): StoredCardTicket {
   return {
     id: "tk1",
     card_id: "card1",
@@ -516,7 +537,9 @@ describe("CardDetailPane linked tickets", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Link" }));
     await waitFor(() =>
-      expect(onLinkGithub).toHaveBeenCalledWith("https://github.com/o/r/pull/3"),
+      expect(onLinkGithub).toHaveBeenCalledWith(
+        "https://github.com/o/r/pull/3",
+      ),
     );
   });
 
@@ -537,7 +560,9 @@ describe("CardDetailPane linked tickets", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Link" }));
     await waitFor(() =>
-      expect(screen.getByRole("alert").textContent).toContain("not a GitHub URL"),
+      expect(screen.getByRole("alert").textContent).toContain(
+        "not a GitHub URL",
+      ),
     );
   });
 
@@ -564,9 +589,7 @@ describe("CardDetailPane linked tickets", () => {
       <CardDetailPane
         card={makeCard()}
         columns={columns}
-        tickets={[
-          makeTicket({ status: null, last_seen_at: null }),
-        ]}
+        tickets={[makeTicket({ status: null, last_seen_at: null })]}
         onChange={vi.fn()}
         onDelete={vi.fn()}
         onClose={vi.fn()}
@@ -593,7 +616,9 @@ describe("CardDetailPane linked tickets", () => {
         onRefreshTicket={onRefreshTicket}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: "Refresh octo/repo#1" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Refresh octo/repo#1" }),
+    );
     expect(onRefreshTicket).toHaveBeenCalledWith("tk1");
   });
 

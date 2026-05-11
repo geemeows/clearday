@@ -85,7 +85,7 @@ describe("Settings hub layout", () => {
     });
   });
 
-  it("renders five sub-sidebar tabs", async () => {
+  it("renders six sub-sidebar tabs", async () => {
     await renderSettings("/settings/integrations");
     const nav = await screen.findByRole("navigation", {
       name: /settings sections/i,
@@ -96,6 +96,7 @@ describe("Settings hub layout", () => {
       "AI provider",
       "Self-host",
       "Profile",
+      "Career",
     ]) {
       expect(within(nav).getByRole("link", { name: label })).toBeTruthy();
     }

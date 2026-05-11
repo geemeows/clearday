@@ -7,6 +7,17 @@ import {
 } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import {
+  createCard,
+  getLinkForSignal,
+  linkSignalToCard,
+  listCards,
+  listColumns,
+  listProjects,
+  type StoredCardSignal,
+  type StoredColumn,
+  type StoredProject,
+} from "#/features/projects/store";
+import {
   AttendeeStack,
   InboxDetailPane,
   InboxView,
@@ -21,17 +32,6 @@ import {
   SlackReplyComposer,
   SlackThreadContext,
 } from "#/routes/_app.inbox";
-import {
-  createCard,
-  getLinkForSignal,
-  linkSignalToCard,
-  listCards,
-  listColumns,
-  listProjects,
-  type StoredCardSignal,
-  type StoredColumn,
-  type StoredProject,
-} from "#/features/projects/store";
 import type { Signal } from "#/shared/signal";
 
 // Supabase client is not exercised in component tests — store functions are
@@ -1938,7 +1938,11 @@ describe("InboxDetailPane — Send to project", () => {
   it("shows Send to project button when signal is not linked", async () => {
     vi.mocked(getLinkForSignal).mockResolvedValue(null);
     render(
-      <InboxDetailPane signal={sig()} onClose={() => {}} onDismiss={() => {}} />,
+      <InboxDetailPane
+        signal={sig()}
+        onClose={() => {}}
+        onDismiss={() => {}}
+      />,
     );
     const btn = await screen.findByRole("button", {
       name: /send to project/i,
@@ -1957,7 +1961,11 @@ describe("InboxDetailPane — Send to project", () => {
     });
     vi.mocked(listProjects).mockResolvedValue([project]);
     render(
-      <InboxDetailPane signal={sig()} onClose={() => {}} onDismiss={() => {}} />,
+      <InboxDetailPane
+        signal={sig()}
+        onClose={() => {}}
+        onDismiss={() => {}}
+      />,
     );
     const btn = await screen.findByRole("button", { name: /open card/i });
     expect(btn.textContent).toContain("Backend");
@@ -1991,7 +1999,11 @@ describe("InboxDetailPane — Send to project", () => {
     vi.mocked(getLinkForSignal).mockResolvedValue(null);
     vi.mocked(listProjects).mockResolvedValue([project]);
     render(
-      <InboxDetailPane signal={sig()} onClose={() => {}} onDismiss={() => {}} />,
+      <InboxDetailPane
+        signal={sig()}
+        onClose={() => {}}
+        onDismiss={() => {}}
+      />,
     );
     const btn = await screen.findByRole("button", { name: /send to project/i });
     fireEvent.click(btn);
@@ -2006,7 +2018,11 @@ describe("InboxDetailPane — Send to project", () => {
     vi.mocked(createCard).mockResolvedValue(undefined);
     vi.mocked(linkSignalToCard).mockResolvedValue(undefined);
     render(
-      <InboxDetailPane signal={sig()} onClose={() => {}} onDismiss={() => {}} />,
+      <InboxDetailPane
+        signal={sig()}
+        onClose={() => {}}
+        onDismiss={() => {}}
+      />,
     );
     const sendBtn = await screen.findByRole("button", {
       name: /send to project/i,

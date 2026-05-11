@@ -27,15 +27,13 @@ describe("SlackReplyComposer", () => {
         submit={async () => ({ ok: true })}
       />,
     );
-    expect(screen.getByLabelText("Sending account").textContent).toBe(
-      "From: @kovacs.dev · Acme",
-    );
+    expect(screen.getByText("From: @kovacs.dev · Acme")).toBeTruthy();
   });
 
   it("omits the From indicator when no account is provided", () => {
     render(
       <SlackReplyComposer channel="C123" submit={async () => ({ ok: true })} />,
     );
-    expect(screen.queryByLabelText("Sending account")).toBeNull();
+    expect(screen.queryByText(/^From: /)).toBeNull();
   });
 });

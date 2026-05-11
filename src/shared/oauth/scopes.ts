@@ -37,7 +37,17 @@ export const AUTHORIZE_PROVIDERS: Record<
   },
   google: {
     authorizeUrl: "https://accounts.google.com/o/oauth2/v2/auth",
-    scopes: ["openid", "https://www.googleapis.com/auth/calendar.events"],
+    // `spreadsheets` + `drive.file` were added for the Career → Google Sheet
+    // sync (issue #134). `drive.file` is the non-sensitive Drive scope — the
+    // app can only read/write files it created itself, which is exactly what
+    // the sync route needs (creates one spreadsheet per level on first sync,
+    // then rewrites Report/Wheel tabs on subsequent syncs).
+    scopes: [
+      "openid",
+      "https://www.googleapis.com/auth/calendar.events",
+      "https://www.googleapis.com/auth/spreadsheets",
+      "https://www.googleapis.com/auth/drive.file",
+    ],
     scopeSeparator: " ",
     scopeParam: "scope",
     // `access_type=offline` + `prompt=consent` together force Google to issue

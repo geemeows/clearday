@@ -1,0 +1,866 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`renderSheet > emits a RADAR chart spec covering competency rows 1`] = `
+{
+  "basicChart": {
+    "chartType": "RADAR",
+    "domains": [
+      {
+        "domain": {
+          "sourceRange": {
+            "sources": [
+              {
+                "endColumnIndex": 1,
+                "endRowIndex": 3,
+                "sheetId": 1,
+                "startColumnIndex": 0,
+                "startRowIndex": 0,
+              },
+            ],
+          },
+        },
+      },
+    ],
+    "headerCount": 1,
+    "legendPosition": "RIGHT_LEGEND",
+    "series": [
+      {
+        "series": {
+          "sourceRange": {
+            "sources": [
+              {
+                "endColumnIndex": 2,
+                "endRowIndex": 3,
+                "sheetId": 1,
+                "startColumnIndex": 1,
+                "startRowIndex": 0,
+              },
+            ],
+          },
+        },
+      },
+      {
+        "series": {
+          "sourceRange": {
+            "sources": [
+              {
+                "endColumnIndex": 3,
+                "endRowIndex": 3,
+                "sheetId": 1,
+                "startColumnIndex": 2,
+                "startRowIndex": 0,
+              },
+            ],
+          },
+        },
+      },
+    ],
+  },
+  "title": "L4 — Wheel",
+}
+`;
+
+exports[`renderSheet > snapshots a large header (multiple KV rows) 1`] = `
+{
+  "chartSpec": {
+    "basicChart": {
+      "chartType": "RADAR",
+      "domains": [
+        {
+          "domain": {
+            "sourceRange": {
+              "sources": [
+                {
+                  "endColumnIndex": 1,
+                  "endRowIndex": 1,
+                  "sheetId": 1,
+                  "startColumnIndex": 0,
+                  "startRowIndex": 0,
+                },
+              ],
+            },
+          },
+        },
+      ],
+      "headerCount": 1,
+      "legendPosition": "RIGHT_LEGEND",
+      "series": [
+        {
+          "series": {
+            "sourceRange": {
+              "sources": [
+                {
+                  "endColumnIndex": 2,
+                  "endRowIndex": 1,
+                  "sheetId": 1,
+                  "startColumnIndex": 1,
+                  "startRowIndex": 0,
+                },
+              ],
+            },
+          },
+        },
+        {
+          "series": {
+            "sourceRange": {
+              "sources": [
+                {
+                  "endColumnIndex": 3,
+                  "endRowIndex": 1,
+                  "sheetId": 1,
+                  "startColumnIndex": 2,
+                  "startRowIndex": 0,
+                },
+              ],
+            },
+          },
+        },
+      ],
+    },
+    "title": "L4 — Wheel",
+  },
+  "reportBatchUpdate": {
+    "requests": [
+      {
+        "updateCells": {
+          "fields": "userEnteredValue,userEnteredFormat,textFormatRuns",
+          "rows": [
+            {
+              "values": [
+                {
+                  "userEnteredFormat": {
+                    "horizontalAlignment": "CENTER",
+                    "textFormat": {
+                      "bold": true,
+                    },
+                  },
+                  "userEnteredValue": {
+                    "stringValue": "L4",
+                  },
+                },
+              ],
+            },
+            {
+              "values": [
+                {
+                  "userEnteredFormat": {
+                    "textFormat": {
+                      "bold": true,
+                    },
+                  },
+                  "userEnteredValue": {
+                    "stringValue": "Role",
+                  },
+                },
+                {
+                  "userEnteredValue": {
+                    "stringValue": "Senior Engineer",
+                  },
+                },
+              ],
+            },
+            {
+              "values": [
+                {
+                  "userEnteredFormat": {
+                    "textFormat": {
+                      "bold": true,
+                    },
+                  },
+                  "userEnteredValue": {
+                    "stringValue": "Employer",
+                  },
+                },
+                {
+                  "userEnteredValue": {
+                    "stringValue": "Acme",
+                  },
+                },
+              ],
+            },
+            {
+              "values": [
+                {
+                  "userEnteredFormat": {
+                    "textFormat": {
+                      "bold": true,
+                    },
+                  },
+                  "userEnteredValue": {
+                    "stringValue": "Date",
+                  },
+                },
+                {
+                  "userEnteredValue": {
+                    "stringValue": "2026-05-10",
+                  },
+                },
+              ],
+            },
+            {
+              "values": [
+                {
+                  "userEnteredFormat": {
+                    "textFormat": {
+                      "bold": true,
+                    },
+                  },
+                  "userEnteredValue": {
+                    "stringValue": "Manager",
+                  },
+                },
+                {
+                  "userEnteredValue": {
+                    "stringValue": "Alex",
+                  },
+                },
+              ],
+            },
+            {
+              "values": [
+                {
+                  "userEnteredFormat": {
+                    "textFormat": {
+                      "bold": true,
+                    },
+                  },
+                  "userEnteredValue": {
+                    "stringValue": "Scale",
+                  },
+                },
+                {
+                  "userEnteredValue": {
+                    "stringValue": "1 = Beginner",
+                  },
+                },
+                {
+                  "userEnteredValue": {
+                    "stringValue": "2 = Developing",
+                  },
+                },
+                {
+                  "userEnteredValue": {
+                    "stringValue": "3 = Proficient",
+                  },
+                },
+                {
+                  "userEnteredValue": {
+                    "stringValue": "4 = Expert",
+                  },
+                },
+              ],
+            },
+            {
+              "values": [],
+            },
+          ],
+          "start": {
+            "columnIndex": 0,
+            "rowIndex": 0,
+            "sheetId": 0,
+          },
+        },
+      },
+      {
+        "mergeCells": {
+          "mergeType": "MERGE_ALL",
+          "range": {
+            "endColumnIndex": 5,
+            "endRowIndex": 1,
+            "sheetId": 0,
+            "startColumnIndex": 0,
+            "startRowIndex": 0,
+          },
+        },
+      },
+    ],
+  },
+  "wheelBatchUpdate": {
+    "requests": [
+      {
+        "updateCells": {
+          "fields": "userEnteredValue,userEnteredFormat",
+          "rows": [
+            {
+              "values": [
+                {
+                  "userEnteredFormat": {
+                    "textFormat": {
+                      "bold": true,
+                    },
+                  },
+                  "userEnteredValue": {
+                    "stringValue": "Competency",
+                  },
+                },
+                {
+                  "userEnteredFormat": {
+                    "textFormat": {
+                      "bold": true,
+                    },
+                  },
+                  "userEnteredValue": {
+                    "stringValue": "Current",
+                  },
+                },
+                {
+                  "userEnteredFormat": {
+                    "textFormat": {
+                      "bold": true,
+                    },
+                  },
+                  "userEnteredValue": {
+                    "stringValue": "Target",
+                  },
+                },
+              ],
+            },
+          ],
+          "start": {
+            "columnIndex": 0,
+            "rowIndex": 0,
+            "sheetId": 1,
+          },
+        },
+      },
+    ],
+  },
+}
+`;
+
+exports[`renderSheet > snapshots a small one-competency tree 1`] = `
+{
+  "chartSpec": {
+    "basicChart": {
+      "chartType": "RADAR",
+      "domains": [
+        {
+          "domain": {
+            "sourceRange": {
+              "sources": [
+                {
+                  "endColumnIndex": 1,
+                  "endRowIndex": 2,
+                  "sheetId": 1,
+                  "startColumnIndex": 0,
+                  "startRowIndex": 0,
+                },
+              ],
+            },
+          },
+        },
+      ],
+      "headerCount": 1,
+      "legendPosition": "RIGHT_LEGEND",
+      "series": [
+        {
+          "series": {
+            "sourceRange": {
+              "sources": [
+                {
+                  "endColumnIndex": 2,
+                  "endRowIndex": 2,
+                  "sheetId": 1,
+                  "startColumnIndex": 1,
+                  "startRowIndex": 0,
+                },
+              ],
+            },
+          },
+        },
+        {
+          "series": {
+            "sourceRange": {
+              "sources": [
+                {
+                  "endColumnIndex": 3,
+                  "endRowIndex": 2,
+                  "sheetId": 1,
+                  "startColumnIndex": 2,
+                  "startRowIndex": 0,
+                },
+              ],
+            },
+          },
+        },
+      ],
+    },
+    "title": "L4 — Wheel",
+  },
+  "reportBatchUpdate": {
+    "requests": [
+      {
+        "updateCells": {
+          "fields": "userEnteredValue,userEnteredFormat,textFormatRuns",
+          "rows": [
+            {
+              "values": [
+                {
+                  "userEnteredFormat": {
+                    "horizontalAlignment": "CENTER",
+                    "textFormat": {
+                      "bold": true,
+                    },
+                  },
+                  "userEnteredValue": {
+                    "stringValue": "L4",
+                  },
+                },
+              ],
+            },
+            {
+              "values": [
+                {
+                  "userEnteredFormat": {
+                    "textFormat": {
+                      "bold": true,
+                    },
+                  },
+                  "userEnteredValue": {
+                    "stringValue": "Scale",
+                  },
+                },
+                {
+                  "userEnteredValue": {
+                    "stringValue": "1 = Beginner",
+                  },
+                },
+                {
+                  "userEnteredValue": {
+                    "stringValue": "2 = Developing",
+                  },
+                },
+                {
+                  "userEnteredValue": {
+                    "stringValue": "3 = Proficient",
+                  },
+                },
+                {
+                  "userEnteredValue": {
+                    "stringValue": "4 = Expert",
+                  },
+                },
+              ],
+            },
+            {
+              "values": [],
+            },
+            {
+              "values": [
+                {
+                  "userEnteredFormat": {
+                    "horizontalAlignment": "CENTER",
+                    "textFormat": {
+                      "bold": true,
+                    },
+                  },
+                  "userEnteredValue": {
+                    "stringValue": "Engineering",
+                  },
+                },
+              ],
+            },
+            {
+              "values": [
+                {
+                  "userEnteredFormat": {
+                    "textFormat": {
+                      "bold": true,
+                    },
+                  },
+                  "userEnteredValue": {
+                    "stringValue": "A. Code quality",
+                  },
+                },
+                {
+                  "userEnteredValue": {
+                    "stringValue": "",
+                  },
+                },
+                {
+                  "userEnteredValue": {
+                    "stringValue": "",
+                  },
+                },
+                {
+                  "userEnteredValue": {
+                    "stringValue": "",
+                  },
+                },
+                {
+                  "userEnteredFormat": {
+                    "horizontalAlignment": "RIGHT",
+                    "textFormat": {
+                      "bold": true,
+                    },
+                  },
+                  "userEnteredValue": {
+                    "stringValue": "Target 3",
+                  },
+                },
+              ],
+            },
+            {
+              "values": [
+                {
+                  "userEnteredValue": {
+                    "stringValue": "1",
+                  },
+                },
+                {
+                  "userEnteredValue": {
+                    "stringValue": "writes tests",
+                  },
+                },
+                {
+                  "userEnteredFormat": {
+                    "horizontalAlignment": "CENTER",
+                  },
+                  "userEnteredValue": {
+                    "numberValue": 2,
+                  },
+                },
+                {
+                  "userEnteredValue": {
+                    "stringValue": "",
+                  },
+                },
+                {
+                  "userEnteredValue": {
+                    "stringValue": "",
+                  },
+                },
+              ],
+            },
+            {
+              "values": [
+                {
+                  "userEnteredValue": {
+                    "stringValue": "2",
+                  },
+                },
+                {
+                  "userEnteredValue": {
+                    "stringValue": "reviews code",
+                  },
+                },
+                {
+                  "userEnteredFormat": {
+                    "horizontalAlignment": "CENTER",
+                  },
+                  "userEnteredValue": {
+                    "numberValue": 3,
+                  },
+                },
+                {
+                  "userEnteredValue": {
+                    "stringValue": "",
+                  },
+                },
+                {
+                  "userEnteredValue": {
+                    "stringValue": "",
+                  },
+                },
+              ],
+            },
+            {
+              "values": [],
+            },
+          ],
+          "start": {
+            "columnIndex": 0,
+            "rowIndex": 0,
+            "sheetId": 0,
+          },
+        },
+      },
+      {
+        "mergeCells": {
+          "mergeType": "MERGE_ALL",
+          "range": {
+            "endColumnIndex": 5,
+            "endRowIndex": 1,
+            "sheetId": 0,
+            "startColumnIndex": 0,
+            "startRowIndex": 0,
+          },
+        },
+      },
+      {
+        "mergeCells": {
+          "mergeType": "MERGE_ALL",
+          "range": {
+            "endColumnIndex": 5,
+            "endRowIndex": 4,
+            "sheetId": 0,
+            "startColumnIndex": 0,
+            "startRowIndex": 3,
+          },
+        },
+      },
+    ],
+  },
+  "wheelBatchUpdate": {
+    "requests": [
+      {
+        "updateCells": {
+          "fields": "userEnteredValue,userEnteredFormat",
+          "rows": [
+            {
+              "values": [
+                {
+                  "userEnteredFormat": {
+                    "textFormat": {
+                      "bold": true,
+                    },
+                  },
+                  "userEnteredValue": {
+                    "stringValue": "Competency",
+                  },
+                },
+                {
+                  "userEnteredFormat": {
+                    "textFormat": {
+                      "bold": true,
+                    },
+                  },
+                  "userEnteredValue": {
+                    "stringValue": "Current",
+                  },
+                },
+                {
+                  "userEnteredFormat": {
+                    "textFormat": {
+                      "bold": true,
+                    },
+                  },
+                  "userEnteredValue": {
+                    "stringValue": "Target",
+                  },
+                },
+              ],
+            },
+            {
+              "values": [
+                {
+                  "userEnteredValue": {
+                    "stringValue": "Engineering",
+                  },
+                },
+                {
+                  "userEnteredValue": {
+                    "numberValue": 2.5,
+                  },
+                },
+                {
+                  "userEnteredValue": {
+                    "numberValue": 3,
+                  },
+                },
+              ],
+            },
+          ],
+          "start": {
+            "columnIndex": 0,
+            "rowIndex": 0,
+            "sheetId": 1,
+          },
+        },
+      },
+    ],
+  },
+}
+`;
+
+exports[`renderSheet > snapshots an empty header (no header rows between top bar and legend) 1`] = `
+{
+  "chartSpec": {
+    "basicChart": {
+      "chartType": "RADAR",
+      "domains": [
+        {
+          "domain": {
+            "sourceRange": {
+              "sources": [
+                {
+                  "endColumnIndex": 1,
+                  "endRowIndex": 1,
+                  "sheetId": 1,
+                  "startColumnIndex": 0,
+                  "startRowIndex": 0,
+                },
+              ],
+            },
+          },
+        },
+      ],
+      "headerCount": 1,
+      "legendPosition": "RIGHT_LEGEND",
+      "series": [
+        {
+          "series": {
+            "sourceRange": {
+              "sources": [
+                {
+                  "endColumnIndex": 2,
+                  "endRowIndex": 1,
+                  "sheetId": 1,
+                  "startColumnIndex": 1,
+                  "startRowIndex": 0,
+                },
+              ],
+            },
+          },
+        },
+        {
+          "series": {
+            "sourceRange": {
+              "sources": [
+                {
+                  "endColumnIndex": 3,
+                  "endRowIndex": 1,
+                  "sheetId": 1,
+                  "startColumnIndex": 2,
+                  "startRowIndex": 0,
+                },
+              ],
+            },
+          },
+        },
+      ],
+    },
+    "title": "L4 — Wheel",
+  },
+  "reportBatchUpdate": {
+    "requests": [
+      {
+        "updateCells": {
+          "fields": "userEnteredValue,userEnteredFormat,textFormatRuns",
+          "rows": [
+            {
+              "values": [
+                {
+                  "userEnteredFormat": {
+                    "horizontalAlignment": "CENTER",
+                    "textFormat": {
+                      "bold": true,
+                    },
+                  },
+                  "userEnteredValue": {
+                    "stringValue": "L4",
+                  },
+                },
+              ],
+            },
+            {
+              "values": [
+                {
+                  "userEnteredFormat": {
+                    "textFormat": {
+                      "bold": true,
+                    },
+                  },
+                  "userEnteredValue": {
+                    "stringValue": "Scale",
+                  },
+                },
+                {
+                  "userEnteredValue": {
+                    "stringValue": "1 = Beginner",
+                  },
+                },
+                {
+                  "userEnteredValue": {
+                    "stringValue": "2 = Developing",
+                  },
+                },
+                {
+                  "userEnteredValue": {
+                    "stringValue": "3 = Proficient",
+                  },
+                },
+                {
+                  "userEnteredValue": {
+                    "stringValue": "4 = Expert",
+                  },
+                },
+              ],
+            },
+            {
+              "values": [],
+            },
+          ],
+          "start": {
+            "columnIndex": 0,
+            "rowIndex": 0,
+            "sheetId": 0,
+          },
+        },
+      },
+      {
+        "mergeCells": {
+          "mergeType": "MERGE_ALL",
+          "range": {
+            "endColumnIndex": 5,
+            "endRowIndex": 1,
+            "sheetId": 0,
+            "startColumnIndex": 0,
+            "startRowIndex": 0,
+          },
+        },
+      },
+    ],
+  },
+  "wheelBatchUpdate": {
+    "requests": [
+      {
+        "updateCells": {
+          "fields": "userEnteredValue,userEnteredFormat",
+          "rows": [
+            {
+              "values": [
+                {
+                  "userEnteredFormat": {
+                    "textFormat": {
+                      "bold": true,
+                    },
+                  },
+                  "userEnteredValue": {
+                    "stringValue": "Competency",
+                  },
+                },
+                {
+                  "userEnteredFormat": {
+                    "textFormat": {
+                      "bold": true,
+                    },
+                  },
+                  "userEnteredValue": {
+                    "stringValue": "Current",
+                  },
+                },
+                {
+                  "userEnteredFormat": {
+                    "textFormat": {
+                      "bold": true,
+                    },
+                  },
+                  "userEnteredValue": {
+                    "stringValue": "Target",
+                  },
+                },
+              ],
+            },
+          ],
+          "start": {
+            "columnIndex": 0,
+            "rowIndex": 0,
+            "sheetId": 1,
+          },
+        },
+      },
+    ],
+  },
+}
+`;

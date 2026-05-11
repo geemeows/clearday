@@ -213,7 +213,7 @@ describe("startFocusSession", () => {
     const { fn } = recordingFetch((url, init) => {
       if (url.includes("calendar/v3")) return jsonResponse(200, { id: "e" });
       const auth = String(
-        (init.headers as Record<string, string>)["authorization"] ?? "",
+        (init.headers as Record<string, string>).authorization ?? "",
       );
       const token = auth.replace(/^Bearer /, "");
       slackCallsByToken[token] = slackCallsByToken[token] ?? [];
@@ -259,7 +259,7 @@ describe("startFocusSession", () => {
     const { fn } = recordingFetch((url, init) => {
       if (url.includes("calendar/v3")) return jsonResponse(200, { id: "e" });
       const auth = String(
-        (init.headers as Record<string, string>)["authorization"] ?? "",
+        (init.headers as Record<string, string>).authorization ?? "",
       );
       if (auth === "Bearer tok-bad") {
         return jsonResponse(200, { ok: false, error: "token_expired" });
@@ -295,9 +295,7 @@ describe("startFocusSession", () => {
 
 describe("endFocusSession (#120)", () => {
   it("clears DND + status symmetrically across all Slack accounts", async () => {
-    const { fn, calls } = recordingFetch(() =>
-      jsonResponse(200, { ok: true }),
-    );
+    const { fn, calls } = recordingFetch(() => jsonResponse(200, { ok: true }));
     const result = await endFocusSession({
       tokens: {
         slack: [
@@ -315,7 +313,9 @@ describe("endFocusSession (#120)", () => {
     }
     // dnd.endDnd called per account; profile.set with empty status per account.
     const dndCalls = calls.filter((c) => c.url.endsWith("dnd.endDnd"));
-    const statusCalls = calls.filter((c) => c.url.endsWith("users.profile.set"));
+    const statusCalls = calls.filter((c) =>
+      c.url.endsWith("users.profile.set"),
+    );
     expect(dndCalls).toHaveLength(2);
     expect(statusCalls).toHaveLength(2);
     const cleared = JSON.parse(statusCalls[0].init.body as string);
@@ -327,7 +327,7 @@ describe("endFocusSession (#120)", () => {
   it("partial failure on end records per-account auth_failed and continues", async () => {
     const { fn } = recordingFetch((_url, init) => {
       const auth = String(
-        (init.headers as Record<string, string>)["authorization"] ?? "",
+        (init.headers as Record<string, string>).authorization ?? "",
       );
       if (auth === "Bearer tok-bad") {
         return jsonResponse(200, { ok: false, error: "invalid_auth" });

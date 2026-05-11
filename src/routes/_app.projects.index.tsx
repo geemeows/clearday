@@ -57,7 +57,7 @@ function ProjectsIndexPage() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode]);
+  }, [mode, router.navigate]);
 
   const handleCreate = async (name: string, columns: string[]) => {
     const projectId = crypto.randomUUID();
@@ -156,8 +156,7 @@ export function OnboardingView({
         </div>
       </header>
 
-      <div
-        role="region"
+      <section
         aria-label="Create project"
         className="rounded-xl border border-border bg-card p-6 shadow-sm"
       >
@@ -189,10 +188,9 @@ export function OnboardingView({
           </div>
 
           <div className="space-y-3">
-            <div
-              role="group"
+            <fieldset
               aria-label="Column layout"
-              className="flex gap-2"
+              className="flex gap-2 border-0 p-0"
             >
               <button
                 type="button"
@@ -218,7 +216,7 @@ export function OnboardingView({
               >
                 Custom columns
               </button>
-            </div>
+            </fieldset>
 
             {columnMode === "template" ? (
               <div className="flex items-center gap-3 rounded-md bg-muted/50 px-3 py-2.5 text-muted-foreground text-xs">
@@ -233,17 +231,13 @@ export function OnboardingView({
                 ))}
               </div>
             ) : (
-              <div
-                role="list"
+              <ul
                 aria-label="Custom columns"
-                className="space-y-1.5"
+                className="list-none space-y-1.5 p-0"
               >
                 {customColumns.map((col, i) => (
-                  <div
-                    key={i}
-                    role="listitem"
-                    className="flex items-center gap-2"
-                  >
+                  // biome-ignore lint/suspicious/noArrayIndexKey: customColumns is a string[] with no stable per-row id; using index here means deleting a middle row will shift focus, which is acceptable for this small inline editor.
+                  <li key={i} className="flex items-center gap-2">
                     <input
                       type="text"
                       value={col}
@@ -262,16 +256,18 @@ export function OnboardingView({
                     >
                       <X className="h-3.5 w-3.5" />
                     </button>
-                  </div>
+                  </li>
                 ))}
-                <button
-                  type="button"
-                  onClick={addCustomColumn}
-                  className="mt-1 text-muted-foreground text-xs hover:text-foreground"
-                >
-                  + Add column
-                </button>
-              </div>
+                <li>
+                  <button
+                    type="button"
+                    onClick={addCustomColumn}
+                    className="mt-1 text-muted-foreground text-xs hover:text-foreground"
+                  >
+                    + Add column
+                  </button>
+                </li>
+              </ul>
             )}
           </div>
 
@@ -283,7 +279,7 @@ export function OnboardingView({
             {submitting ? "Creating…" : "Create project"}
           </Button>
         </form>
-      </div>
+      </section>
     </section>
   );
 }

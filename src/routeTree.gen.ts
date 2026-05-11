@@ -23,10 +23,12 @@ import { Route as AppCalendarRouteImport } from './routes/_app.calendar'
 import { Route as AppAutomationsRouteImport } from './routes/_app.automations'
 import { Route as AppSettingsIndexRouteImport } from './routes/_app.settings.index'
 import { Route as AppProjectsIndexRouteImport } from './routes/_app.projects.index'
+import { Route as ShareCareerTokenRouteImport } from './routes/share.career.$token'
 import { Route as AppSettingsSelfhostRouteImport } from './routes/_app.settings.selfhost'
 import { Route as AppSettingsProfileRouteImport } from './routes/_app.settings.profile'
 import { Route as AppSettingsNotificationsRouteImport } from './routes/_app.settings.notifications'
 import { Route as AppSettingsIntegrationsRouteImport } from './routes/_app.settings.integrations'
+import { Route as AppSettingsCareerRouteImport } from './routes/_app.settings.career'
 import { Route as AppSettingsAiRouteImport } from './routes/_app.settings.ai'
 import { Route as AppProjectsProjectIdRouteImport } from './routes/_app.projects.$projectId'
 
@@ -99,6 +101,11 @@ const AppProjectsIndexRoute = AppProjectsIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AppProjectsRoute,
 } as any)
+const ShareCareerTokenRoute = ShareCareerTokenRouteImport.update({
+  id: '/share/career/$token',
+  path: '/share/career/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AppSettingsSelfhostRoute = AppSettingsSelfhostRouteImport.update({
   id: '/selfhost',
   path: '/selfhost',
@@ -118,6 +125,11 @@ const AppSettingsNotificationsRoute =
 const AppSettingsIntegrationsRoute = AppSettingsIntegrationsRouteImport.update({
   id: '/integrations',
   path: '/integrations',
+  getParentRoute: () => AppSettingsRoute,
+} as any)
+const AppSettingsCareerRoute = AppSettingsCareerRouteImport.update({
+  id: '/career',
+  path: '/career',
   getParentRoute: () => AppSettingsRoute,
 } as any)
 const AppSettingsAiRoute = AppSettingsAiRouteImport.update({
@@ -145,10 +157,12 @@ export interface FileRoutesByFullPath {
   '/auth/callback': typeof AuthCallbackRoute
   '/projects/$projectId': typeof AppProjectsProjectIdRoute
   '/settings/ai': typeof AppSettingsAiRoute
+  '/settings/career': typeof AppSettingsCareerRoute
   '/settings/integrations': typeof AppSettingsIntegrationsRoute
   '/settings/notifications': typeof AppSettingsNotificationsRoute
   '/settings/profile': typeof AppSettingsProfileRoute
   '/settings/selfhost': typeof AppSettingsSelfhostRoute
+  '/share/career/$token': typeof ShareCareerTokenRoute
   '/projects/': typeof AppProjectsIndexRoute
   '/settings/': typeof AppSettingsIndexRoute
 }
@@ -164,10 +178,12 @@ export interface FileRoutesByTo {
   '/auth/callback': typeof AuthCallbackRoute
   '/projects/$projectId': typeof AppProjectsProjectIdRoute
   '/settings/ai': typeof AppSettingsAiRoute
+  '/settings/career': typeof AppSettingsCareerRoute
   '/settings/integrations': typeof AppSettingsIntegrationsRoute
   '/settings/notifications': typeof AppSettingsNotificationsRoute
   '/settings/profile': typeof AppSettingsProfileRoute
   '/settings/selfhost': typeof AppSettingsSelfhostRoute
+  '/share/career/$token': typeof ShareCareerTokenRoute
   '/projects': typeof AppProjectsIndexRoute
   '/settings': typeof AppSettingsIndexRoute
 }
@@ -187,10 +203,12 @@ export interface FileRoutesById {
   '/auth/callback': typeof AuthCallbackRoute
   '/_app/projects/$projectId': typeof AppProjectsProjectIdRoute
   '/_app/settings/ai': typeof AppSettingsAiRoute
+  '/_app/settings/career': typeof AppSettingsCareerRoute
   '/_app/settings/integrations': typeof AppSettingsIntegrationsRoute
   '/_app/settings/notifications': typeof AppSettingsNotificationsRoute
   '/_app/settings/profile': typeof AppSettingsProfileRoute
   '/_app/settings/selfhost': typeof AppSettingsSelfhostRoute
+  '/share/career/$token': typeof ShareCareerTokenRoute
   '/_app/projects/': typeof AppProjectsIndexRoute
   '/_app/settings/': typeof AppSettingsIndexRoute
 }
@@ -210,10 +228,12 @@ export interface FileRouteTypes {
     | '/auth/callback'
     | '/projects/$projectId'
     | '/settings/ai'
+    | '/settings/career'
     | '/settings/integrations'
     | '/settings/notifications'
     | '/settings/profile'
     | '/settings/selfhost'
+    | '/share/career/$token'
     | '/projects/'
     | '/settings/'
   fileRoutesByTo: FileRoutesByTo
@@ -229,10 +249,12 @@ export interface FileRouteTypes {
     | '/auth/callback'
     | '/projects/$projectId'
     | '/settings/ai'
+    | '/settings/career'
     | '/settings/integrations'
     | '/settings/notifications'
     | '/settings/profile'
     | '/settings/selfhost'
+    | '/share/career/$token'
     | '/projects'
     | '/settings'
   id:
@@ -251,10 +273,12 @@ export interface FileRouteTypes {
     | '/auth/callback'
     | '/_app/projects/$projectId'
     | '/_app/settings/ai'
+    | '/_app/settings/career'
     | '/_app/settings/integrations'
     | '/_app/settings/notifications'
     | '/_app/settings/profile'
     | '/_app/settings/selfhost'
+    | '/share/career/$token'
     | '/_app/projects/'
     | '/_app/settings/'
   fileRoutesById: FileRoutesById
@@ -265,6 +289,7 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   OnboardingRoute: typeof OnboardingRoute
   AuthCallbackRoute: typeof AuthCallbackRoute
+  ShareCareerTokenRoute: typeof ShareCareerTokenRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -367,6 +392,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppProjectsIndexRouteImport
       parentRoute: typeof AppProjectsRoute
     }
+    '/share/career/$token': {
+      id: '/share/career/$token'
+      path: '/share/career/$token'
+      fullPath: '/share/career/$token'
+      preLoaderRoute: typeof ShareCareerTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_app/settings/selfhost': {
       id: '/_app/settings/selfhost'
       path: '/selfhost'
@@ -393,6 +425,13 @@ declare module '@tanstack/react-router' {
       path: '/integrations'
       fullPath: '/settings/integrations'
       preLoaderRoute: typeof AppSettingsIntegrationsRouteImport
+      parentRoute: typeof AppSettingsRoute
+    }
+    '/_app/settings/career': {
+      id: '/_app/settings/career'
+      path: '/career'
+      fullPath: '/settings/career'
+      preLoaderRoute: typeof AppSettingsCareerRouteImport
       parentRoute: typeof AppSettingsRoute
     }
     '/_app/settings/ai': {
@@ -428,6 +467,7 @@ const AppProjectsRouteWithChildren = AppProjectsRoute._addFileChildren(
 
 interface AppSettingsRouteChildren {
   AppSettingsAiRoute: typeof AppSettingsAiRoute
+  AppSettingsCareerRoute: typeof AppSettingsCareerRoute
   AppSettingsIntegrationsRoute: typeof AppSettingsIntegrationsRoute
   AppSettingsNotificationsRoute: typeof AppSettingsNotificationsRoute
   AppSettingsProfileRoute: typeof AppSettingsProfileRoute
@@ -437,6 +477,7 @@ interface AppSettingsRouteChildren {
 
 const AppSettingsRouteChildren: AppSettingsRouteChildren = {
   AppSettingsAiRoute: AppSettingsAiRoute,
+  AppSettingsCareerRoute: AppSettingsCareerRoute,
   AppSettingsIntegrationsRoute: AppSettingsIntegrationsRoute,
   AppSettingsNotificationsRoute: AppSettingsNotificationsRoute,
   AppSettingsProfileRoute: AppSettingsProfileRoute,
@@ -476,6 +517,7 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   OnboardingRoute: OnboardingRoute,
   AuthCallbackRoute: AuthCallbackRoute,
+  ShareCareerTokenRoute: ShareCareerTokenRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

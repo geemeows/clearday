@@ -82,8 +82,7 @@ function makeClient(): { client: SupabaseLike; rows: Row[] } {
             let existing: Row | undefined;
             if (conflictKey === "provider,account_id") {
               existing = rows.find(
-                (r) =>
-                  r.provider === provider && r.account_id === accountId,
+                (r) => r.provider === provider && r.account_id === accountId,
               );
             } else if (conflictKey === "id") {
               existing = rows.find((r) => r.id === (v.id as string));

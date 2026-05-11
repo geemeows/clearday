@@ -161,14 +161,14 @@ describe("pollSlackSignals", () => {
       }
       if (url.includes("conversations.history")) {
         const m = url.match(/channel=([^&]+)/);
-        const ch = m ? decodeURIComponent(m[1]!) : "";
+        const ch = m?.[1] ? decodeURIComponent(m[1]) : "";
         return jsonResponse({ ok: true, messages: fx.history?.[ch] ?? [] });
       }
       if (url.includes("conversations.replies")) {
         const m = url.match(/channel=([^&]+)/);
         const ts = url.match(/ts=([^&]+)/);
-        const key = `${m ? decodeURIComponent(m[1]!) : ""}:${
-          ts ? decodeURIComponent(ts[1]!) : ""
+        const key = `${m?.[1] ? decodeURIComponent(m[1]) : ""}:${
+          ts?.[1] ? decodeURIComponent(ts[1]) : ""
         }`;
         return jsonResponse({ ok: true, messages: fx.replies?.[key] ?? [] });
       }
@@ -709,7 +709,7 @@ describe("pollSlackSignals", () => {
       }
       if (url.includes("users.info")) {
         const m = url.match(/user=([^&]+)/);
-        const id = m ? decodeURIComponent(m[1]!) : "";
+        const id = m?.[1] ? decodeURIComponent(m[1]) : "";
         const name = id === "U001SELF" ? "geemeows" : "Other Person";
         return jsonResponse({
           ok: true,

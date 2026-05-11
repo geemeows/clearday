@@ -6,6 +6,11 @@ import {
   InboxPreviewRowSkeleton,
 } from "#/features/signals/components/InboxPreviewRow";
 import {
+  SourceFilter,
+  type SourceProvider,
+  type SourceSelection,
+} from "#/features/signals/components/SourceFilter";
+import {
   computeFilterCounts,
   type Filter,
   filterToGroup,
@@ -13,11 +18,6 @@ import {
   kindGroup,
   severityOf,
 } from "#/features/signals/display";
-import {
-  SourceFilter,
-  type SourceProvider,
-  type SourceSelection,
-} from "#/features/signals/components/SourceFilter";
 import { cn } from "#/lib/cn";
 import type { Signal } from "#/shared/signal";
 
@@ -383,9 +383,7 @@ export function InboxRow({
       {signal.priority === "high" && (
         <StatusBadge tone="danger">High</StatusBadge>
       )}
-      {signal.priority === "low" && (
-        <StatusBadge tone="muted">Low</StatusBadge>
-      )}
+      {signal.priority === "low" && <StatusBadge tone="muted">Low</StatusBadge>}
       {snoozed && (
         <StatusBadge
           tone="warning"

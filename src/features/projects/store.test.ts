@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  type CardWithProject,
   createCard,
   createColumn,
   createProject,
+  type DueCard,
   deleteCard,
   deleteColumn,
   getLinkForSignal,
@@ -17,28 +19,28 @@ import {
   listTicketsForCard,
   listTicketsForCards,
   markTicketStale,
-  unlinkSignal,
-  unlinkTicket,
-  updateTicketMeta,
-  type CardWithProject,
-  type DueCard,
   type StoredCard,
   type StoredCardSignal,
   type StoredCardTicket,
   type StoredColumn,
   type StoredProject,
+  unlinkSignal,
+  unlinkTicket,
   updateCard,
   updateColumn,
+  updateTicketMeta,
 } from "#/features/projects/store";
 import type { SupabaseLike } from "#/shared/db";
 
-function makeClient(overrides: {
-  upsertResult?: { error: { message: string } | null };
-  listData?: Record<string, unknown>[];
-  listError?: { message: string } | null;
-  updateResult?: { error: { message: string } | null };
-  deleteResult?: { error: { message: string } | null };
-} = {}): {
+function makeClient(
+  overrides: {
+    upsertResult?: { error: { message: string } | null };
+    listData?: Record<string, unknown>[];
+    listError?: { message: string } | null;
+    updateResult?: { error: { message: string } | null };
+    deleteResult?: { error: { message: string } | null };
+  } = {},
+): {
   client: SupabaseLike;
   spies: {
     upsert: ReturnType<typeof vi.fn>;
@@ -105,8 +107,12 @@ describe("createProject", () => {
   });
 
   it("throws when upsert fails", async () => {
-    const { client } = makeClient({ upsertResult: { error: { message: "oops" } } });
-    await expect(createProject(client, { id: "p1", name: "X" })).rejects.toThrow("oops");
+    const { client } = makeClient({
+      upsertResult: { error: { message: "oops" } },
+    });
+    await expect(
+      createProject(client, { id: "p1", name: "X" }),
+    ).rejects.toThrow("oops");
   });
 });
 
@@ -152,7 +158,9 @@ describe("createColumn", () => {
   });
 
   it("throws when upsert fails", async () => {
-    const { client } = makeClient({ upsertResult: { error: { message: "err" } } });
+    const { client } = makeClient({
+      upsertResult: { error: { message: "err" } },
+    });
     await expect(
       createColumn(client, { id: "c1", project_id: "p1", name: "X", order: 0 }),
     ).rejects.toThrow("err");
@@ -204,7 +212,9 @@ describe("createCard", () => {
   });
 
   it("throws when upsert fails", async () => {
-    const { client } = makeClient({ upsertResult: { error: { message: "bad" } } });
+    const { client } = makeClient({
+      upsertResult: { error: { message: "bad" } },
+    });
     await expect(
       createCard(client, {
         id: "c1",
@@ -241,7 +251,11 @@ describe("updateCard", () => {
 
   it("supports clearing fields with null", async () => {
     const { client, spies } = makeClient();
-    await updateCard(client, "card1", { priority: null, due_at: null, body: null });
+    await updateCard(client, "card1", {
+      priority: null,
+      due_at: null,
+      body: null,
+    });
     expect(spies.update).toHaveBeenCalledWith({
       priority: null,
       due_at: null,
@@ -250,8 +264,12 @@ describe("updateCard", () => {
   });
 
   it("throws when update fails", async () => {
-    const { client } = makeClient({ updateResult: { error: { message: "nope" } } });
-    await expect(updateCard(client, "c1", { title: "x" })).rejects.toThrow("nope");
+    const { client } = makeClient({
+      updateResult: { error: { message: "nope" } },
+    });
+    await expect(updateCard(client, "c1", { title: "x" })).rejects.toThrow(
+      "nope",
+    );
   });
 });
 
@@ -264,7 +282,9 @@ describe("deleteCard", () => {
   });
 
   it("throws when delete fails", async () => {
-    const { client } = makeClient({ deleteResult: { error: { message: "boom" } } });
+    const { client } = makeClient({
+      deleteResult: { error: { message: "boom" } },
+    });
     await expect(deleteCard(client, "c1")).rejects.toThrow("boom");
   });
 });
@@ -273,7 +293,10 @@ describe("updateColumn", () => {
   it("updates the row by id with patch fields", async () => {
     const { client, spies } = makeClient();
     await updateColumn(client, "col1", { name: "Renamed", wip_limit: 5 });
-    expect(spies.update).toHaveBeenCalledWith({ name: "Renamed", wip_limit: 5 });
+    expect(spies.update).toHaveBeenCalledWith({
+      name: "Renamed",
+      wip_limit: 5,
+    });
     expect(spies.updateEq).toHaveBeenCalledWith("id", "col1");
   });
 
@@ -284,8 +307,12 @@ describe("updateColumn", () => {
   });
 
   it("throws when update fails", async () => {
-    const { client } = makeClient({ updateResult: { error: { message: "col err" } } });
-    await expect(updateColumn(client, "col1", { name: "x" })).rejects.toThrow("col err");
+    const { client } = makeClient({
+      updateResult: { error: { message: "col err" } },
+    });
+    await expect(updateColumn(client, "col1", { name: "x" })).rejects.toThrow(
+      "col err",
+    );
   });
 });
 
@@ -298,7 +325,9 @@ describe("deleteColumn", () => {
   });
 
   it("throws when delete fails", async () => {
-    const { client } = makeClient({ deleteResult: { error: { message: "del err" } } });
+    const { client } = makeClient({
+      deleteResult: { error: { message: "del err" } },
+    });
     await expect(deleteColumn(client, "col1")).rejects.toThrow("del err");
   });
 });
@@ -337,7 +366,10 @@ function makeDueTodayClient({
   cards = [] as StoredCard[],
   cardError = null as { message: string } | null,
 } = {}) {
-  const makeChain = (limitData: Record<string, unknown>[], limitError: { message: string } | null) => {
+  const makeChain = (
+    limitData: Record<string, unknown>[],
+    limitError: { message: string } | null,
+  ) => {
     const chain: {
       is: ReturnType<typeof vi.fn>;
       in: ReturnType<typeof vi.fn>;
@@ -421,7 +453,9 @@ describe("listCardsDueOn", () => {
   it("queries with gte(dayStart) and lt(dayEnd) for the given date", async () => {
     // 2026-05-09 local — bounds are midnight local → midnight local next day
     const date = new Date(2026, 4, 9); // May 9 local
-    const { client, cardChain } = makeDueTodayClient({ projects: [baseProject] });
+    const { client, cardChain } = makeDueTodayClient({
+      projects: [baseProject],
+    });
     await listCardsDueOn(client, date);
     const expectedStart = new Date(2026, 4, 9, 0, 0, 0, 0).toISOString();
     const expectedEnd = new Date(2026, 4, 10, 0, 0, 0, 0).toISOString();
@@ -430,7 +464,9 @@ describe("listCardsDueOn", () => {
   });
 
   it("filters by non-archived project IDs", async () => {
-    const { client, cardChain } = makeDueTodayClient({ projects: [baseProject] });
+    const { client, cardChain } = makeDueTodayClient({
+      projects: [baseProject],
+    });
     await listCardsDueOn(client, new Date(2026, 4, 9));
     expect(cardChain.in).toHaveBeenCalledWith("project_id", ["p1"]);
   });
@@ -440,11 +476,16 @@ describe("listCardsDueOn", () => {
       projects: [baseProject],
       cardError: { message: "db error" },
     });
-    await expect(listCardsDueOn(client, new Date(2026, 4, 9))).rejects.toThrow("db error");
+    await expect(listCardsDueOn(client, new Date(2026, 4, 9))).rejects.toThrow(
+      "db error",
+    );
   });
 
   it("returns empty array when no cards match the date", async () => {
-    const { client } = makeDueTodayClient({ projects: [baseProject], cards: [] });
+    const { client } = makeDueTodayClient({
+      projects: [baseProject],
+      cards: [],
+    });
     const result = await listCardsDueOn(client, new Date(2026, 4, 9));
     expect(result).toEqual([]);
   });
@@ -484,7 +525,10 @@ describe("listAllCards", () => {
   });
 
   it("returns empty array when project has no cards", async () => {
-    const { client } = makeDueTodayClient({ projects: [baseProject], cards: [] });
+    const { client } = makeDueTodayClient({
+      projects: [baseProject],
+      cards: [],
+    });
     const result = await listAllCards(client);
     expect(result).toEqual([]);
   });
@@ -512,8 +556,12 @@ describe("linkSignalToCard", () => {
   });
 
   it("throws when upsert fails", async () => {
-    const { client } = makeClient({ upsertResult: { error: { message: "db error" } } });
-    await expect(linkSignalToCard(client, "sig1", "card1", "p1")).rejects.toThrow("db error");
+    const { client } = makeClient({
+      upsertResult: { error: { message: "db error" } },
+    });
+    await expect(
+      linkSignalToCard(client, "sig1", "card1", "p1"),
+    ).rejects.toThrow("db error");
   });
 
   it("re-linking to a different card reuses the same upsert (move semantics)", async () => {
@@ -545,7 +593,9 @@ describe("unlinkSignal", () => {
   });
 
   it("throws when delete fails", async () => {
-    const { client } = makeClient({ deleteResult: { error: { message: "del fail" } } });
+    const { client } = makeClient({
+      deleteResult: { error: { message: "del fail" } },
+    });
     await expect(unlinkSignal(client, "sig1")).rejects.toThrow("del fail");
   });
 });
@@ -565,7 +615,9 @@ describe("getLinkForSignal", () => {
 
   it("throws when query fails", async () => {
     const { client } = makeClient({ listError: { message: "query fail" } });
-    await expect(getLinkForSignal(client, "sig1")).rejects.toThrow("query fail");
+    await expect(getLinkForSignal(client, "sig1")).rejects.toThrow(
+      "query fail",
+    );
   });
 });
 
@@ -598,7 +650,9 @@ describe("listSignalsForCard", () => {
 
   it("throws when query fails", async () => {
     const { client } = makeClient({ listError: { message: "list fail" } });
-    await expect(listSignalsForCard(client, "card1")).rejects.toThrow("list fail");
+    await expect(listSignalsForCard(client, "card1")).rejects.toThrow(
+      "list fail",
+    );
   });
 });
 

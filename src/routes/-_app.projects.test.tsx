@@ -1,8 +1,18 @@
-import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { OnboardingView } from "#/routes/_app.projects.index";
+import type {
+  StoredCard,
+  StoredColumn,
+  StoredProject,
+} from "#/features/projects/store";
 import { ProjectBoardView } from "#/routes/_app.projects.$projectId";
-import type { StoredCard, StoredColumn, StoredProject } from "#/features/projects/store";
+import { OnboardingView } from "#/routes/_app.projects.index";
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -49,7 +59,9 @@ describe("OnboardingView", () => {
   it("renders the project name input and create button", () => {
     render(<OnboardingView onCreateProject={vi.fn()} />);
     expect(screen.getByLabelText("Project name")).toBeTruthy();
-    expect(screen.getByRole("button", { name: /create project/i })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: /create project/i }),
+    ).toBeTruthy();
   });
 
   it("shows the four default template columns in template mode", () => {
@@ -68,10 +80,12 @@ describe("OnboardingView", () => {
     fireEvent.change(input, { target: { value: "  Backend refactor  " } });
     fireEvent.click(screen.getByRole("button", { name: /create project/i }));
     await waitFor(() =>
-      expect(onCreateProject).toHaveBeenCalledWith(
-        "Backend refactor",
-        ["Backlog", "In progress", "In review", "Done"],
-      ),
+      expect(onCreateProject).toHaveBeenCalledWith("Backend refactor", [
+        "Backlog",
+        "In progress",
+        "In review",
+        "Done",
+      ]),
     );
   });
 
@@ -92,9 +106,13 @@ describe("OnboardingView", () => {
   it("adding a custom column appends an input", () => {
     render(<OnboardingView onCreateProject={vi.fn()} />);
     fireEvent.click(screen.getByRole("button", { name: /custom columns/i }));
-    const before = screen.getAllByRole("textbox", { name: /column \d+ name/i }).length;
+    const before = screen.getAllByRole("textbox", {
+      name: /column \d+ name/i,
+    }).length;
     fireEvent.click(screen.getByText(/\+ add column/i));
-    const after = screen.getAllByRole("textbox", { name: /column \d+ name/i }).length;
+    const after = screen.getAllByRole("textbox", {
+      name: /column \d+ name/i,
+    }).length;
     expect(after).toBe(before + 1);
   });
 
@@ -110,10 +128,11 @@ describe("OnboardingView", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /create project/i }));
     await waitFor(() =>
-      expect(onCreateProject).toHaveBeenCalledWith(
-        "My first project",
-        ["Idea", "Building", "Shipped"],
-      ),
+      expect(onCreateProject).toHaveBeenCalledWith("My first project", [
+        "Idea",
+        "Building",
+        "Shipped",
+      ]),
     );
   });
 });
@@ -214,7 +233,9 @@ describe("ProjectBoardView", () => {
         onAddCard={onAddCard}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: /add card to backlog/i }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /add card to backlog/i }),
+    );
     const input = screen.getByRole("textbox", { name: /new card title/i });
     fireEvent.change(input, { target: { value: "Fix the bug" } });
     fireEvent.click(screen.getByRole("button", { name: /^add$/i }));
@@ -265,7 +286,9 @@ describe("ProjectBoardView", () => {
     fireEvent.click(screen.getByRole("button", { name: /add card/i }));
     const input = screen.getByRole("textbox", { name: /new card title/i });
     fireEvent.keyDown(input, { key: "Escape" });
-    expect(screen.queryByRole("textbox", { name: /new card title/i })).toBeNull();
+    expect(
+      screen.queryByRole("textbox", { name: /new card title/i }),
+    ).toBeNull();
   });
 
   it("clicking a card opens the detail pane", () => {
@@ -373,7 +396,9 @@ describe("ProjectBoardView — drag-and-drop", () => {
     // dragStart sets the dragged card id in the shared ref
     fireEvent.dragStart(cardAButton);
     // dragEnter on Card B's li marks it as the drop target
-    const cardBLi = screen.getByRole("button", { name: "Card B" }).closest("li")!;
+    const cardBLi = screen
+      .getByRole("button", { name: "Card B" })
+      .closest("li") as HTMLElement;
     fireEvent.dragEnter(cardBLi);
     // drop on the column article triggers the move
     fireEvent.drop(screen.getByRole("article", { name: "Backlog" }));
@@ -405,7 +430,9 @@ describe("ProjectBoardView — drag-and-drop", () => {
 
     const cardAButton = screen.getByRole("button", { name: "Card A" });
     fireEvent.dragStart(cardAButton);
-    const cardBLi = screen.getByRole("button", { name: "Card B" }).closest("li")!;
+    const cardBLi = screen
+      .getByRole("button", { name: "Card B" })
+      .closest("li") as HTMLElement;
     fireEvent.dragEnter(cardBLi);
     fireEvent.drop(screen.getByRole("article", { name: "Done" }));
 
@@ -462,7 +489,7 @@ describe("ProjectBoardView — drag-and-drop", () => {
     const cardAButton = screen.getByRole("button", { name: "Card A" });
     fireEvent.dragStart(cardAButton);
     // Hover over own li — should be ignored
-    const cardALi = cardAButton.closest("li")!;
+    const cardALi = cardAButton.closest("li") as HTMLElement;
     fireEvent.dragEnter(cardALi);
     // Drop without hovering over any other card → afterId falls back to last card (k2)
     fireEvent.drop(screen.getByRole("article", { name: "Backlog" }));
@@ -537,7 +564,9 @@ describe("ProjectBoardView — keyboard ←/→ moves", () => {
   it("ArrowLeft on the first column is a no-op (clamps)", () => {
     const onMoveCard = vi.fn();
     const cols = [column({ id: "c1", name: "Backlog", order: 0 })];
-    const cards = [card({ id: "k1", column_id: "c1", title: "Card A", order: 0 })];
+    const cards = [
+      card({ id: "k1", column_id: "c1", title: "Card A", order: 0 }),
+    ];
     render(
       <ProjectBoardView
         project={project()}
@@ -560,7 +589,9 @@ describe("ProjectBoardView — keyboard ←/→ moves", () => {
   it("ArrowRight on the last column is a no-op (clamps)", () => {
     const onMoveCard = vi.fn();
     const cols = [column({ id: "c1", name: "Backlog", order: 0 })];
-    const cards = [card({ id: "k1", column_id: "c1", title: "Card A", order: 0 })];
+    const cards = [
+      card({ id: "k1", column_id: "c1", title: "Card A", order: 0 }),
+    ];
     render(
       <ProjectBoardView
         project={project()}
@@ -590,7 +621,10 @@ describe("ProjectBoardView — column settings", () => {
     cols: StoredColumn[],
     cards: StoredCard[],
     handlers: {
-      onUpdateColumn?: (id: string, patch: { name?: string; wip_limit?: number | null; order?: number }) => void;
+      onUpdateColumn?: (
+        id: string,
+        patch: { name?: string; wip_limit?: number | null; order?: number },
+      ) => void;
       onDeleteColumn?: (id: string) => void;
       onAddColumn?: (name: string) => void;
       onReorderColumns?: (movedId: string, afterId: string | null) => void;
@@ -612,14 +646,20 @@ describe("ProjectBoardView — column settings", () => {
   it("opens the column settings panel when the settings button is clicked", () => {
     renderWithCols([column()], []);
     fireEvent.click(screen.getByRole("button", { name: /column settings/i }));
-    expect(screen.getByRole("dialog", { name: "Column settings" })).toBeTruthy();
+    expect(
+      screen.getByRole("dialog", { name: "Column settings" }),
+    ).toBeTruthy();
   });
 
   it("closes the settings panel when Close is clicked", () => {
     renderWithCols([column()], []);
     fireEvent.click(screen.getByRole("button", { name: /column settings/i }));
-    fireEvent.click(screen.getByRole("button", { name: /close column settings/i }));
-    expect(screen.queryByRole("dialog", { name: "Column settings" })).toBeNull();
+    fireEvent.click(
+      screen.getByRole("button", { name: /close column settings/i }),
+    );
+    expect(
+      screen.queryByRole("dialog", { name: "Column settings" }),
+    ).toBeNull();
   });
 
   it("shows rename input for each column", () => {
@@ -629,15 +669,23 @@ describe("ProjectBoardView — column settings", () => {
     ];
     renderWithCols(cols, []);
     fireEvent.click(screen.getByRole("button", { name: /column settings/i }));
-    expect(screen.getByRole("textbox", { name: /rename column backlog/i })).toBeTruthy();
-    expect(screen.getByRole("textbox", { name: /rename column done/i })).toBeTruthy();
+    expect(
+      screen.getByRole("textbox", { name: /rename column backlog/i }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("textbox", { name: /rename column done/i }),
+    ).toBeTruthy();
   });
 
   it("calls onUpdateColumn with new name on blur", async () => {
     const onUpdateColumn = vi.fn();
-    renderWithCols([column({ id: "c1", name: "Backlog" })], [], { onUpdateColumn });
+    renderWithCols([column({ id: "c1", name: "Backlog" })], [], {
+      onUpdateColumn,
+    });
     fireEvent.click(screen.getByRole("button", { name: /column settings/i }));
-    const input = screen.getByRole("textbox", { name: /rename column backlog/i });
+    const input = screen.getByRole("textbox", {
+      name: /rename column backlog/i,
+    });
     fireEvent.change(input, { target: { value: "Sprint" } });
     fireEvent.blur(input);
     await waitFor(() =>
@@ -684,8 +732,12 @@ describe("ProjectBoardView — column settings", () => {
     const cards = [card({ id: "k1", column_id: "c1" })];
     renderWithCols(cols, cards);
     fireEvent.click(screen.getByRole("button", { name: /column settings/i }));
-    fireEvent.click(screen.getByRole("button", { name: /delete column backlog/i }));
-    expect(screen.getByRole("button", { name: /confirm delete backlog/i })).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("button", { name: /delete column backlog/i }),
+    );
+    expect(
+      screen.getByRole("button", { name: /confirm delete backlog/i }),
+    ).toBeTruthy();
   });
 
   it("calls onDeleteColumn after confirming delete", async () => {
@@ -696,8 +748,12 @@ describe("ProjectBoardView — column settings", () => {
     ];
     renderWithCols(cols, [], { onDeleteColumn });
     fireEvent.click(screen.getByRole("button", { name: /column settings/i }));
-    fireEvent.click(screen.getByRole("button", { name: /delete column backlog/i }));
-    fireEvent.click(screen.getByRole("button", { name: /confirm delete backlog/i }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /delete column backlog/i }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: /confirm delete backlog/i }),
+    );
     await waitFor(() => expect(onDeleteColumn).toHaveBeenCalledWith("c1"));
   });
 
@@ -705,16 +761,21 @@ describe("ProjectBoardView — column settings", () => {
     const onAddColumn = vi.fn();
     renderWithCols([column()], [], { onAddColumn });
     fireEvent.click(screen.getByRole("button", { name: /column settings/i }));
-    fireEvent.change(screen.getByRole("textbox", { name: /new column name/i }), {
-      target: { value: "Review" },
-    });
+    fireEvent.change(
+      screen.getByRole("textbox", { name: /new column name/i }),
+      {
+        target: { value: "Review" },
+      },
+    );
     fireEvent.click(screen.getByRole("button", { name: /^add column$/i }));
     await waitFor(() => expect(onAddColumn).toHaveBeenCalledWith("Review"));
   });
 
   it("calls onUpdateColumn with wip_limit when the WIP input changes", async () => {
     const onUpdateColumn = vi.fn();
-    renderWithCols([column({ id: "c1", name: "Backlog" })], [], { onUpdateColumn });
+    renderWithCols([column({ id: "c1", name: "Backlog" })], [], {
+      onUpdateColumn,
+    });
     fireEvent.click(screen.getByRole("button", { name: /column settings/i }));
     fireEvent.change(screen.getByRole("spinbutton", { name: /wip limit/i }), {
       target: { value: "3" },

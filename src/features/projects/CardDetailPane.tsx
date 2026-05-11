@@ -19,7 +19,7 @@ export type CardDetailPaneProps = {
   onDelete: () => void;
   onClose: () => void;
   tickets?: StoredCardTicket[];
-  onLinkGithub?: (input: string) => Promise<{ error?: string } | void>;
+  onLinkGithub?: (input: string) => Promise<{ error?: string } | undefined>;
   onUnlinkTicket?: (ticketId: string) => void;
   onRefreshTicket?: (ticketId: string) => void;
 };
@@ -55,7 +55,7 @@ export function CardDetailPane({
     setBody(card.body ?? "");
     setTagDraft("");
     setConfirmingDelete(false);
-  }, [card.id, card.title, card.body]);
+  }, [card.title, card.body]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -123,7 +123,7 @@ export function CardDetailPane({
   useEffect(() => {
     setLinkDraft("");
     setLinkError(null);
-  }, [card.id]);
+  }, []);
 
   const submitLink = async () => {
     const v = linkDraft.trim();
@@ -131,7 +131,7 @@ export function CardDetailPane({
     setLinkSubmitting(true);
     const out = await onLinkGithub(v);
     setLinkSubmitting(false);
-    if (out && out.error) {
+    if (out?.error) {
       setLinkError(out.error);
       return;
     }
@@ -364,18 +364,15 @@ function TicketChip({
   onUnlink?: (id: string) => void;
 }) {
   const isDegraded = ticket.last_seen_at == null;
-  const statusLabel = ticket.status ?? (isDegraded ? "reconnect to refresh" : "");
+  const statusLabel =
+    ticket.status ?? (isDegraded ? "reconnect to refresh" : "");
   return (
     <div
       data-testid={`ticket-chip-${ticket.id}`}
       className="flex flex-wrap items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2 py-1 text-xs"
     >
       <a
-        href={
-          isDegraded
-            ? "/settings/integrations"
-            : ticket.url
-        }
+        href={isDegraded ? "/settings/integrations" : ticket.url}
         target={isDegraded ? "_self" : "_blank"}
         rel="noreferrer"
         className="font-medium text-foreground hover:underline"
@@ -414,8 +411,15 @@ function TicketChip({
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
   return (
+    // biome-ignore lint/a11y/noLabelWithoutControl: this Field wrapper takes the form control via {children}; biome can't see it through props.
     <label className="flex flex-col gap-1.5">
       <span className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
         {label}

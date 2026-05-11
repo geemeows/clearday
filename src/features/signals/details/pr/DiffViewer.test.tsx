@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { PrDiffViewer } from "./DiffViewer";
 import type { PrFilesLoader } from "./_shared";
+import { PrDiffViewer } from "./DiffViewer";
 
 describe("PrDiffViewer smoke", () => {
   it("shows the loading skeleton while files are in flight", () => {
