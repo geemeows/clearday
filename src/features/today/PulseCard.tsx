@@ -120,9 +120,9 @@ function PulseBody({ stats }: { stats: WeekStats }) {
   );
 
   return (
-    <div className="mt-4 grid grid-cols-1 gap-6 md:grid-cols-3">
+    <div className="mt-4 grid grid-cols-1 gap-5 md:grid-cols-3 md:gap-0">
       {/* Donut — signal source mix */}
-      <section className="flex items-center gap-4 md:border-r md:border-border md:pr-6">
+      <section className="flex items-center gap-3.5 md:border-[var(--hairline-soft)] md:border-r md:pr-5">
         <PulseDonut data={donutData} />
         <ul className="flex flex-col gap-1.5 text-xs">
           {donutData.map((d) => (
@@ -143,7 +143,7 @@ function PulseBody({ stats }: { stats: WeekStats }) {
       </section>
 
       {/* Line — review latency */}
-      <section className="md:border-r md:border-border md:px-6">
+      <section className="md:border-[var(--hairline-soft)] md:border-r md:px-5">
         <h3 className="font-mono text-[10px] text-muted-foreground uppercase tracking-wider">
           Review latency
         </h3>
@@ -166,7 +166,7 @@ function PulseBody({ stats }: { stats: WeekStats }) {
       </section>
 
       {/* Bars — shipped */}
-      <section className="md:pl-6">
+      <section className="md:pl-5">
         <h3 className="font-mono text-[10px] text-muted-foreground uppercase tracking-wider">
           Shipped this week
         </h3>
@@ -189,7 +189,7 @@ function PulseBody({ stats }: { stats: WeekStats }) {
             <span
               aria-hidden="true"
               className="inline-block h-2 w-2 rounded-[2px]"
-              style={{ background: "var(--accent)" }}
+              style={{ background: "var(--primary)" }}
             />
             {totalTickets} tickets
           </span>
