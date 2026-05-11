@@ -59,8 +59,15 @@ export function InboxPreviewRow({
               role="img"
               data-slot="unread-count"
               aria-label={`${unreadCount} unread`}
-              className="font-bold tabular-nums"
-              style={{ fontSize: 10, color: "var(--primary)" }}
+              className="inline-flex items-center justify-center rounded-full font-bold tabular-nums"
+              style={{
+                fontSize: 9,
+                lineHeight: 1.4,
+                minWidth: 16,
+                padding: "1px 4px",
+                background: "var(--primary)",
+                color: "var(--primary-foreground)",
+              }}
             >
               {unreadCount}
             </span>
@@ -125,7 +132,7 @@ export function InboxPreviewRowSkeleton({
         }
       >
         <Skeleton className="size-5 rounded-md" />
-        {stackedUnread && <Skeleton className="h-2.5 w-3 rounded-sm" />}
+        {stackedUnread && <Skeleton className="h-3 w-4 rounded-full" />}
       </span>
       <span className="min-w-0">
         <span className="flex items-center gap-1.5" style={{ marginBottom: 6 }}>
