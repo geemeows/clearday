@@ -16,6 +16,7 @@ import {
   listColumns,
   listProjects,
   listSignalsForCard,
+  listSignalsForCards,
   listTicketsForCard,
   listTicketsForCards,
   markTicketStale,
@@ -653,6 +654,21 @@ describe("listSignalsForCard", () => {
     await expect(listSignalsForCard(client, "card1")).rejects.toThrow(
       "list fail",
     );
+  });
+});
+
+describe("listSignalsForCards", () => {
+  it("returns empty when no card ids", async () => {
+    const { client, spies } = makeClient({ listData: [baseCardSignal] });
+    expect(await listSignalsForCards(client, [])).toEqual([]);
+    expect(spies.select).not.toHaveBeenCalled();
+  });
+
+  it("filters by .in(card_id, ids)", async () => {
+    const { client, spies } = makeClient({ listData: [baseCardSignal] });
+    const result = await listSignalsForCards(client, ["card1", "card2"]);
+    expect(result).toEqual([baseCardSignal]);
+    expect(spies.select).toHaveBeenCalled();
   });
 });
 

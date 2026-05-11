@@ -274,6 +274,24 @@ export async function listSignalsForCard(
   return (data ?? []) as StoredCardSignal[];
 }
 
+// Batch version: fetch signal links for many cards in one query. Returns all
+// link rows (including tombstoned). Callers that only want active links should
+// filter on `deleted_at === null && signal_id !== null`.
+export async function listSignalsForCards(
+  client: SupabaseLike,
+  cardIds: string[],
+): Promise<StoredCardSignal[]> {
+  if (cardIds.length === 0) return [];
+  const { data, error } = await client
+    .from("project_card_signals")
+    .select("*")
+    .in("card_id", cardIds)
+    .order("created_at", { ascending: true })
+    .limit(2000);
+  if (error) throw new Error(`list signals for cards failed: ${error.message}`);
+  return (data ?? []) as StoredCardSignal[];
+}
+
 // ─── Ticket links ─────────────────────────────────────────────────────────────
 
 export type StoredCardTicket = {

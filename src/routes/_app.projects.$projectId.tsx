@@ -3,6 +3,7 @@ import {
   Calendar,
   ChevronDown,
   ChevronUp,
+  Link2,
   Plus,
   Settings,
   Trash2,
@@ -34,8 +35,10 @@ import {
   listCards,
   listColumns,
   listProjects,
+  listSignalsForCards,
   listTicketsForCards,
   type StoredCard,
+  type StoredCardSignal,
   type StoredCardTicket,
   type StoredColumn,
   type StoredProject,
@@ -70,6 +73,7 @@ function ProjectBoardPage() {
   const [columns, setColumns] = useState<StoredColumn[]>([]);
   const [cards, setCards] = useState<StoredCard[]>([]);
   const [tickets, setTickets] = useState<StoredCardTicket[]>([]);
+  const [signals, setSignals] = useState<StoredCardSignal[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -89,11 +93,14 @@ function ProjectBoardPage() {
         setColumns(cols);
         setCards(cds);
         setLoading(false);
-        const tks = await listTicketsForCards(
-          client,
-          cds.map((c) => c.id),
-        );
-        if (!cancelled) setTickets(tks);
+        const cardIds = cds.map((c) => c.id);
+        const [tks, sgs] = await Promise.all([
+          listTicketsForCards(client, cardIds),
+          listSignalsForCards(client, cardIds),
+        ]);
+        if (cancelled) return;
+        setTickets(tks);
+        setSignals(sgs);
       })
       .catch((e) => {
         if (cancelled) return;
@@ -416,6 +423,7 @@ function ProjectBoardPage() {
       columns={columns}
       cards={cards}
       tickets={tickets}
+      signals={signals}
       loading={loading}
       error={error}
       initialCardId={initialCardId}
@@ -449,6 +457,7 @@ export function ProjectBoardView({
   columns,
   cards,
   tickets,
+  signals,
   loading,
   error,
   initialCardId,
@@ -471,6 +480,7 @@ export function ProjectBoardView({
   columns: StoredColumn[];
   cards: StoredCard[];
   tickets?: StoredCardTicket[];
+  signals?: StoredCardSignal[];
   loading: boolean;
   error: string | null;
   initialCardId?: string;
@@ -638,6 +648,7 @@ export function ProjectBoardView({
                 allColumns={columns}
                 allCards={cards}
                 tickets={tickets ?? []}
+                signals={signals ?? []}
                 onAddCard={(title) => onAddCard(col.id, title)}
                 onSelectCard={setSelectedCardId}
                 onMoveCard={onMoveCard}
@@ -952,6 +963,7 @@ function KanbanColumn({
   allColumns,
   allCards,
   tickets,
+  signals,
   onAddCard,
   onSelectCard,
   onMoveCard,
@@ -962,6 +974,7 @@ function KanbanColumn({
   allColumns: StoredColumn[];
   allCards: StoredCard[];
   tickets?: StoredCardTicket[];
+  signals?: StoredCardSignal[];
   onAddCard: (title: string) => void;
   onSelectCard: (cardId: string) => void;
   onMoveCard?: (
@@ -1108,6 +1121,14 @@ function KanbanColumn({
             <CardChip
               card={card}
               tickets={(tickets ?? []).filter((t) => t.card_id === card.id)}
+              linkedSignalCount={
+                (signals ?? []).filter(
+                  (s) =>
+                    s.card_id === card.id &&
+                    s.deleted_at == null &&
+                    s.signal_id != null,
+                ).length
+              }
               onClick={() => onSelectCard(card.id)}
               onDragStart={() => {
                 dragCardIdRef.current = card.id;
@@ -1191,12 +1212,14 @@ export function dueRelative(
 function CardChip({
   card,
   tickets,
+  linkedSignalCount = 0,
   onClick,
   onDragStart,
   onKeyboardMove,
 }: {
   card: StoredCard;
   tickets?: StoredCardTicket[];
+  linkedSignalCount?: number;
   onClick: () => void;
   onDragStart?: () => void;
   onKeyboardMove?: (direction: "left" | "right") => void;
@@ -1304,7 +1327,7 @@ function CardChip({
       <span className="line-clamp-2 block text-[13px] font-medium leading-[1.35] text-foreground">
         {card.title}
       </span>
-      {card.tags.length > 0 && (
+      {(card.tags.length > 0 || linkedSignalCount > 0) && (
         <div
           data-slot="card-labels"
           className="mt-2 flex flex-wrap items-center gap-1"
@@ -1321,6 +1344,16 @@ function CardChip({
               {label}
             </span>
           ))}
+          {linkedSignalCount > 0 && (
+            <span
+              data-slot="linked-signals-count"
+              aria-label={`${linkedSignalCount} linked signal${linkedSignalCount === 1 ? "" : "s"}`}
+              className="ml-auto inline-flex items-center gap-1 text-[10px] text-muted-foreground"
+            >
+              <Link2 className="h-[11px] w-[11px]" aria-hidden="true" />
+              {linkedSignalCount}
+            </span>
+          )}
         </div>
       )}
     </button>

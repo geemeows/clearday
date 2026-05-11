@@ -662,6 +662,76 @@ describe("ProjectBoardView", () => {
     );
   });
 
+  it("renders linked-signals count chip from active card_signal links", () => {
+    const baseSignal = {
+      id: "ls1",
+      card_id: "k1",
+      project_id: "p1",
+      signal_id: "s1",
+      deleted_at: null,
+      created_at: "2026-05-11T00:00:00Z",
+    };
+    const signals = [
+      baseSignal,
+      { ...baseSignal, id: "ls2", signal_id: "s2" },
+      // Tombstoned: signal was deleted — should not count.
+      {
+        ...baseSignal,
+        id: "ls3",
+        signal_id: null,
+        deleted_at: "2026-05-12T00:00:00Z",
+      },
+      // Different card — should not count.
+      { ...baseSignal, id: "ls4", card_id: "k2", signal_id: "s4" },
+    ];
+    render(
+      <ProjectBoardView
+        project={project()}
+        columns={[column()]}
+        cards={[
+          card({ id: "k1", column_id: "col1", title: "Linked card", order: 0 }),
+          card({ id: "k2", column_id: "col1", title: "Other card", order: 1 }),
+        ]}
+        signals={signals}
+        loading={false}
+        error={null}
+        onAddCard={() => {}}
+      />,
+    );
+    const linkedButton = screen.getByRole("button", { name: "Linked card" });
+    const chip = linkedButton.querySelector(
+      '[data-slot="linked-signals-count"]',
+    ) as HTMLElement | null;
+    expect(chip).not.toBeNull();
+    expect(chip!.textContent).toContain("2");
+    expect(chip!.getAttribute("aria-label")).toBe("2 linked signals");
+
+    const otherButton = screen.getByRole("button", { name: "Other card" });
+    const otherChip = otherButton.querySelector(
+      '[data-slot="linked-signals-count"]',
+    ) as HTMLElement | null;
+    expect(otherChip).not.toBeNull();
+    expect(otherChip!.getAttribute("aria-label")).toBe("1 linked signal");
+  });
+
+  it("omits the linked-signals chip when no active signal links exist", () => {
+    render(
+      <ProjectBoardView
+        project={project()}
+        columns={[column()]}
+        cards={[card({ id: "k1", column_id: "col1", title: "Bare", order: 0 })]}
+        signals={[]}
+        loading={false}
+        error={null}
+        onAddCard={() => {}}
+      />,
+    );
+    const cardButton = screen.getByRole("button", { name: "Bare" });
+    expect(
+      cardButton.querySelector('[data-slot="linked-signals-count"]'),
+    ).toBeNull();
+  });
+
   it("renders KanbanCard on bg-card with rounded-[10px] geometry", () => {
     render(
       <ProjectBoardView
