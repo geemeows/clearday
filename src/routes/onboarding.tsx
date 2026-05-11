@@ -63,6 +63,11 @@ export type SaveAiSettingsFn = (body: {
   ai_disabled?: boolean;
 }) => Promise<{ ok: boolean; error?: string }>;
 
+export type SaveAlertsFn = (body: {
+  alert_channels: string[];
+  notification_threshold_min: number;
+}) => Promise<{ ok: boolean; error?: string }>;
+
 type ProviderId = "github" | "slack" | "google";
 
 type ProviderCardSpec = {
@@ -516,6 +521,7 @@ export function OnboardingFlow({
   openUrl,
   signedInEmail,
   saveAiSettings,
+  saveAlerts,
 }: {
   onFinish: () => void;
   complete?: CompleteFn;
@@ -524,6 +530,7 @@ export function OnboardingFlow({
   openUrl?: (url: string) => void;
   signedInEmail?: string | null;
   saveAiSettings?: SaveAiSettingsFn;
+  saveAlerts?: SaveAlertsFn;
 }) {
   const [step, setStep] = useState(0);
   const [sources, setSources] = useState<ApiSource[] | null>(null);
@@ -625,6 +632,26 @@ export function OnboardingFlow({
     [saveAiSettings],
   );
 
+  const saveAlertsFn = useMemo<SaveAlertsFn>(
+    () =>
+      saveAlerts ??
+      (async (body) => {
+        try {
+          await apiFetch("/api/preferences", {
+            method: "PUT",
+            body,
+          });
+          return { ok: true };
+        } catch (e) {
+          return {
+            ok: false,
+            error: e instanceof Error ? e.message : "save failed",
+          };
+        }
+      }),
+    [saveAlerts],
+  );
+
   const isLast = step === STEPS.length - 1;
   const goNext = useCallback(async () => {
     if (step === 2 && aiProvider !== "skip") {
@@ -648,6 +675,25 @@ export function OnboardingFlow({
         }
       }
     }
+    if (step === 3) {
+      setBusy(true);
+      try {
+        const channels: string[] = [];
+        if (alertSlack) channels.push("slack_dm");
+        if (alertPush) channels.push("web_push");
+        const out = await saveAlertsFn({
+          alert_channels: channels,
+          notification_threshold_min: threshold,
+        });
+        if (!out.ok) {
+          setError(out.error ?? "could not save alert settings");
+          return;
+        }
+        setError(null);
+      } finally {
+        setBusy(false);
+      }
+    }
     if (!isLast) {
       setStep((s) => s + 1);
       if (typeof window !== "undefined") window.scrollTo({ top: 0 });
@@ -660,7 +706,19 @@ export function OnboardingFlow({
     } finally {
       setBusy(false);
     }
-  }, [isLast, completeFn, onFinish, step, aiProvider, apiKey, saveAi]);
+  }, [
+    isLast,
+    completeFn,
+    onFinish,
+    step,
+    aiProvider,
+    apiKey,
+    saveAi,
+    alertSlack,
+    alertPush,
+    threshold,
+    saveAlertsFn,
+  ]);
 
   const goBack = useCallback(() => {
     setStep((s) => Math.max(0, s - 1));

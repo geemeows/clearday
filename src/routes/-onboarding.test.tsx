@@ -196,6 +196,7 @@ describe("OnboardingFlow", () => {
     complete: vi.fn(async () => ({ ok: true as const })),
     loader: vi.fn(async () => ({ sources: [] as never[] })),
     saveAiSettings: vi.fn(async () => ({ ok: true as const })),
+    saveAlerts: vi.fn(async () => ({ ok: true as const })),
   });
 
   it("renders the 5-step stepper rail and Skip link", async () => {
@@ -282,6 +283,71 @@ describe("OnboardingFlow", () => {
     // Still on the AI provider step.
     expect(
       screen.getByRole("heading", { name: /pick your ai provider/i }),
+    ).toBeTruthy();
+  });
+
+  it("persists alert channels + threshold via saveAlerts when leaving step 4", async () => {
+    const saveAlerts = vi.fn(async () => ({ ok: true as const }));
+    renderInRouter(
+      <OnboardingFlow {...baseProps()} saveAlerts={saveAlerts} />,
+    );
+    await screen.findByRole("heading", { name: /welcome to your devy/i });
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    await screen.findByRole("heading", { name: /pick your ai provider/i });
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    await screen.findByRole("heading", { name: /where should devy tap you/i });
+    // Default state: Slack on, Push off, 10 min.
+    fireEvent.click(screen.getByRole("radio", { name: /^5 min$/i }));
+    fireEvent.click(screen.getByRole("switch", { name: /toggle web push/i }));
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    await waitFor(() => expect(saveAlerts).toHaveBeenCalledTimes(1));
+    expect(saveAlerts).toHaveBeenCalledWith({
+      alert_channels: ["slack_dm", "web_push"],
+      notification_threshold_min: 5,
+    });
+  });
+
+  it("persists an empty alert_channels array when both toggles are off", async () => {
+    const saveAlerts = vi.fn(async () => ({ ok: true as const }));
+    renderInRouter(
+      <OnboardingFlow {...baseProps()} saveAlerts={saveAlerts} />,
+    );
+    await screen.findByRole("heading", { name: /welcome to your devy/i });
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    await screen.findByRole("heading", { name: /pick your ai provider/i });
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    await screen.findByRole("heading", { name: /where should devy tap you/i });
+    fireEvent.click(screen.getByRole("switch", { name: /toggle slack self-dm/i }));
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    await waitFor(() => expect(saveAlerts).toHaveBeenCalledTimes(1));
+    expect(saveAlerts).toHaveBeenCalledWith({
+      alert_channels: [],
+      notification_threshold_min: 10,
+    });
+  });
+
+  it("surfaces the save error and stays on the Alerts step when saveAlerts fails", async () => {
+    const saveAlerts = vi.fn(async () => ({
+      ok: false as const,
+      error: "preferences write failed",
+    }));
+    renderInRouter(
+      <OnboardingFlow {...baseProps()} saveAlerts={saveAlerts} />,
+    );
+    await screen.findByRole("heading", { name: /welcome to your devy/i });
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    await screen.findByRole("heading", { name: /pick your ai provider/i });
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    await screen.findByRole("heading", { name: /where should devy tap you/i });
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    await waitFor(() =>
+      expect(screen.getByText(/preferences write failed/i)).toBeTruthy(),
+    );
+    expect(
+      screen.getByRole("heading", { name: /where should devy tap you/i }),
     ).toBeTruthy();
   });
 

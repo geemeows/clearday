@@ -1028,7 +1028,9 @@ const KNOWN_CHANNELS: AlertChannel[] = [
 ];
 
 const PREFERENCES_COLUMNS =
-  "alert_channels, notification_matrix, quiet_hours_v2, focus_block, focus_defaults";
+  "alert_channels, notification_matrix, quiet_hours_v2, focus_block, focus_defaults, notification_threshold_min";
+
+const KNOWN_THRESHOLDS = [2, 5, 10, 15, 30] as const;
 
 type PreferencesPutBody = {
   alert_channels?: unknown;
@@ -1036,6 +1038,7 @@ type PreferencesPutBody = {
   quiet_hours_v2?: unknown;
   focus_block?: unknown;
   focus_defaults?: unknown;
+  notification_threshold_min?: unknown;
 };
 
 async function loadFullPreferences(service: SupabaseService): Promise<{
@@ -1044,6 +1047,7 @@ async function loadFullPreferences(service: SupabaseService): Promise<{
   quiet_hours_v2: Record<string, unknown>;
   focus_block: Record<string, unknown>;
   focus_defaults: Record<string, unknown>;
+  notification_threshold_min: number;
 }> {
   const { data, error } = await service
     .from("user_preferences")
@@ -1057,6 +1061,7 @@ async function loadFullPreferences(service: SupabaseService): Promise<{
     quiet_hours_v2?: Record<string, unknown>;
     focus_block?: Record<string, unknown>;
     focus_defaults?: Record<string, unknown>;
+    notification_threshold_min?: number;
   };
   return {
     alert_channels: (row.alert_channels ?? []).filter((c) =>
@@ -1066,6 +1071,13 @@ async function loadFullPreferences(service: SupabaseService): Promise<{
     quiet_hours_v2: row.quiet_hours_v2 ?? {},
     focus_block: row.focus_block ?? {},
     focus_defaults: row.focus_defaults ?? {},
+    notification_threshold_min:
+      typeof row.notification_threshold_min === "number" &&
+      (KNOWN_THRESHOLDS as readonly number[]).includes(
+        row.notification_threshold_min,
+      )
+        ? row.notification_threshold_min
+        : 10,
   };
 }
 
@@ -1111,6 +1123,23 @@ async function handlePreferencesPut(
       return json({ error: "focus_defaults must be an object" }, 400);
     }
     patch.focus_defaults = body.focus_defaults;
+  }
+  if (body.notification_threshold_min !== undefined) {
+    if (
+      typeof body.notification_threshold_min !== "number" ||
+      !(KNOWN_THRESHOLDS as readonly number[]).includes(
+        body.notification_threshold_min,
+      )
+    ) {
+      return json(
+        {
+          error:
+            "notification_threshold_min must be one of 2, 5, 10, 15, 30",
+        },
+        400,
+      );
+    }
+    patch.notification_threshold_min = body.notification_threshold_min;
   }
   const { error } = await service
     .from("user_preferences")
