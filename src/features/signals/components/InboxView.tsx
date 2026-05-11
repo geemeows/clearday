@@ -157,14 +157,23 @@ export function InboxView({
           >
             <div className="flex items-baseline">
               <h1
-                className="font-semibold tracking-tight"
-                style={{ fontSize: 21, lineHeight: 1.25, color: "var(--ink)" }}
+                className="font-semibold"
+                style={{
+                  fontSize: 20,
+                  lineHeight: 1.25,
+                  letterSpacing: "-0.2px",
+                  color: "var(--ink)",
+                }}
               >
                 Inbox
               </h1>
               <span
                 className="ml-2.5 font-medium"
-                style={{ fontSize: 13, color: "var(--muted-foreground)" }}
+                style={{
+                  fontSize: 12,
+                  lineHeight: 1.3,
+                  color: "var(--muted-foreground)",
+                }}
               >
                 — unread · — total
               </span>
@@ -267,14 +276,23 @@ export function InboxView({
         >
           <div className="flex items-baseline">
             <h1
-              className="font-semibold tracking-tight"
-              style={{ fontSize: 21, lineHeight: 1.25, color: "var(--ink)" }}
+              className="font-semibold"
+              style={{
+                fontSize: 20,
+                lineHeight: 1.25,
+                letterSpacing: "-0.2px",
+                color: "var(--ink)",
+              }}
             >
               Inbox
             </h1>
             <span
               className="ml-2.5 font-medium"
-              style={{ fontSize: 13, color: "var(--muted-foreground)" }}
+              style={{
+                fontSize: 12,
+                lineHeight: 1.3,
+                color: "var(--muted-foreground)",
+              }}
             >
               {unread} unread · {total} total
             </span>
