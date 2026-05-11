@@ -225,6 +225,32 @@ describe("ProjectBoardView", () => {
     expect(within(done).queryByText("Empty · drop cards here")).toBeNull();
   });
 
+  it("renders the column header on t-title-sm typography with a plain mono card count", () => {
+    const cols = [column({ id: "c1", name: "Backlog", order: 0 })];
+    const cards = [
+      card({ id: "k1", column_id: "c1", title: "A", order: 0 }),
+      card({ id: "k2", column_id: "c1", title: "B", order: 1 }),
+    ];
+    render(
+      <ProjectBoardView
+        project={project()}
+        columns={cols}
+        cards={cards}
+        loading={false}
+        error={null}
+        onAddCard={noop}
+      />,
+    );
+    const name = screen.getByText("Backlog");
+    expect(name.className).toContain("text-[13px]");
+    expect(name.className).toContain("font-semibold");
+    const count = screen.getByText("2");
+    expect(count.className).toContain("font-mono");
+    expect(count.className).toContain("text-[11px]");
+    expect(count.className).not.toContain("rounded-full");
+    expect(count.className).not.toContain("bg-muted");
+  });
+
   it("renders the column resting surface on --surface-soft with a transparent border", () => {
     render(
       <ProjectBoardView

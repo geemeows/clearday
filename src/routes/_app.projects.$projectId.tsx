@@ -1067,14 +1067,14 @@ function KanbanColumn({
     >
       <header className="flex items-center justify-between px-3 py-2.5">
         <div className="flex items-center gap-2">
-          <span className="font-medium text-foreground text-sm">
+          <span className="font-semibold text-[13px] text-foreground leading-[1.3]">
             {column.name}
           </span>
           <span
             className={
               wipOver
                 ? "rounded-full bg-destructive/15 px-1.5 py-0.5 font-mono text-[10px] text-destructive"
-                : "rounded-full bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground"
+                : "font-mono text-[11px] text-muted-foreground"
             }
           >
             {cards.length}
