@@ -983,7 +983,7 @@ describe("CriteriaList", () => {
     );
   });
 
-  it("writes the target on blur and clamps out-of-range values", async () => {
+  it("writes the target when a score dot is clicked", async () => {
     const { client, store } = makeFakeClient(
       [competency({ id: "c1", name: "Craft" })],
       [
@@ -1001,18 +1001,16 @@ describe("CriteriaList", () => {
         client={client}
       />,
     );
-    const target = (await screen.findByLabelText(
-      "Target for Review depth",
-    )) as HTMLInputElement;
-    fireEvent.change(target, { target: { value: "9" } });
-    fireEvent.blur(target);
+    const dot = await screen.findByRole("radio", {
+      name: "Target for Review depth: 4",
+    });
+    fireEvent.click(dot);
     await waitFor(() =>
       expect(store.updateCrit).toHaveBeenCalledWith({ target: 4 }),
     );
-    expect(target.value).toBe("4");
   });
 
-  it("does not write a target on blur when the value is unchanged", async () => {
+  it("does not write a target when the same score dot is re-clicked", async () => {
     const { client, store } = makeFakeClient(
       [competency({ id: "c1", name: "Craft" })],
       [
@@ -1030,10 +1028,10 @@ describe("CriteriaList", () => {
         client={client}
       />,
     );
-    const target = (await screen.findByLabelText(
-      "Target for Review depth",
-    )) as HTMLInputElement;
-    fireEvent.blur(target);
+    const dot = await screen.findByRole("radio", {
+      name: "Target for Review depth: 2",
+    });
+    fireEvent.click(dot);
     expect(store.updateCrit).not.toHaveBeenCalled();
   });
 
@@ -1228,7 +1226,7 @@ describe("IndicatorList", () => {
     );
   });
 
-  it("writes the score on blur and clamps out-of-range values", async () => {
+  it("writes the score when a score dot is clicked", async () => {
     const { client, store } = makeFakeClient(
       [],
       [],
@@ -1247,18 +1245,16 @@ describe("IndicatorList", () => {
         client={client}
       />,
     );
-    const score = (await screen.findByLabelText(
-      "Score for A",
-    )) as HTMLInputElement;
-    fireEvent.change(score, { target: { value: "9" } });
-    fireEvent.blur(score);
+    const dot = await screen.findByRole("radio", {
+      name: "Score for A: 4",
+    });
+    fireEvent.click(dot);
     await waitFor(() =>
       expect(store.updateInd).toHaveBeenCalledWith({ score: 4 }),
     );
-    expect(score.value).toBe("4");
   });
 
-  it("does not write a score on blur when the value is unchanged", async () => {
+  it("does not write a score when the same score dot is re-clicked", async () => {
     const { client, store } = makeFakeClient(
       [],
       [],
@@ -1277,10 +1273,10 @@ describe("IndicatorList", () => {
         client={client}
       />,
     );
-    const score = (await screen.findByLabelText(
-      "Score for A",
-    )) as HTMLInputElement;
-    fireEvent.blur(score);
+    const dot = await screen.findByRole("radio", {
+      name: "Score for A: 2",
+    });
+    fireEvent.click(dot);
     expect(store.updateInd).not.toHaveBeenCalled();
   });
 

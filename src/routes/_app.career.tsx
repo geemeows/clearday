@@ -1053,6 +1053,51 @@ export function CriteriaList({
   );
 }
 
+function ScoreDots({
+  value,
+  max = 4,
+  onChange,
+  label,
+}: {
+  value: number;
+  max?: number;
+  onChange: (next: number) => void;
+  label: string;
+}) {
+  return (
+    <div
+      role="radiogroup"
+      aria-label={label}
+      className="inline-flex items-center gap-1"
+    >
+      {Array.from({ length: max }).map((_, idx) => {
+        const dotValue = idx + 1;
+        const filled = dotValue <= value;
+        return (
+          <button
+            key={dotValue}
+            type="button"
+            role="radio"
+            aria-checked={value === dotValue}
+            aria-label={`${label}: ${dotValue}`}
+            onClick={() => {
+              if (dotValue !== value) onChange(dotValue);
+            }}
+            className={
+              filled
+                ? "h-[11px] w-[11px] rounded-full border border-primary bg-primary p-0 transition-all"
+                : "h-[11px] w-[11px] rounded-full border border-border bg-transparent p-0 transition-all"
+            }
+          />
+        );
+      })}
+      <span className="ml-1.5 min-w-[26px] font-mono text-[11px] text-muted-foreground">
+        {value}/{max}
+      </span>
+    </div>
+  );
+}
+
 function CriterionRow({
   criterion,
   client,
@@ -1071,7 +1116,6 @@ function CriterionRow({
   onDragEnter?: () => void;
 }) {
   const [draft, setDraft] = useState(criterion.name);
-  const [targetDraft, setTargetDraft] = useState(String(criterion.target));
 
   return (
     <li
@@ -1100,27 +1144,10 @@ function CriterionRow({
           }}
           className="min-w-0 flex-1 rounded border border-transparent bg-transparent px-1.5 py-0.5 text-foreground text-sm outline-none focus:border-border focus:bg-muted"
         />
-        <input
-          type="number"
-          aria-label={`Target for ${criterion.name}`}
-          min={1}
-          max={4}
-          step={1}
-          value={targetDraft}
-          onChange={(e) => setTargetDraft(e.target.value)}
-          onBlur={() => {
-            const parsed = Number.parseInt(targetDraft, 10);
-            if (Number.isFinite(parsed)) {
-              const clamped = Math.max(1, Math.min(4, parsed));
-              setTargetDraft(String(clamped));
-              if (clamped !== criterion.target) {
-                onSetTarget(criterion.id, clamped);
-              }
-            } else {
-              setTargetDraft(String(criterion.target));
-            }
-          }}
-          className="w-12 rounded border border-border bg-background px-1.5 py-0.5 text-center text-foreground text-sm outline-none focus:ring-2 focus:ring-primary/50"
+        <ScoreDots
+          value={criterion.target}
+          onChange={(next) => onSetTarget(criterion.id, next)}
+          label={`Target for ${criterion.name}`}
         />
         <button
           type="button"
@@ -1335,7 +1362,6 @@ function IndicatorRow({
   const [codeDraft, setCodeDraft] = useState(indicator.code ?? "");
   const [descDraft, setDescDraft] = useState(indicator.description);
   const [notesDraft, setNotesDraft] = useState(indicator.notes ?? "");
-  const [scoreDraft, setScoreDraft] = useState(String(indicator.score));
 
   const label = indicator.code || indicator.description;
 
@@ -1381,27 +1407,10 @@ function IndicatorRow({
           }}
           className="min-w-0 flex-1 rounded border border-transparent bg-transparent px-1.5 py-0.5 text-foreground text-xs outline-none focus:border-border focus:bg-muted"
         />
-        <input
-          type="number"
-          aria-label={`Score for ${label}`}
-          min={1}
-          max={4}
-          step={1}
-          value={scoreDraft}
-          onChange={(e) => setScoreDraft(e.target.value)}
-          onBlur={() => {
-            const parsed = Number.parseInt(scoreDraft, 10);
-            if (Number.isFinite(parsed)) {
-              const clamped = Math.max(1, Math.min(4, parsed));
-              setScoreDraft(String(clamped));
-              if (clamped !== indicator.score) {
-                onSetScore(indicator.id, clamped);
-              }
-            } else {
-              setScoreDraft(String(indicator.score));
-            }
-          }}
-          className="w-12 rounded border border-border bg-background px-1.5 py-0.5 text-center text-foreground text-xs outline-none focus:ring-2 focus:ring-primary/50"
+        <ScoreDots
+          value={indicator.score}
+          onChange={(next) => onSetScore(indicator.id, next)}
+          label={`Score for ${label}`}
         />
         <button
           type="button"
