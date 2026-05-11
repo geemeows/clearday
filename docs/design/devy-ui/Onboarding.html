@@ -1,0 +1,886 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Set up Devy</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="tokens.css" />
+<style>
+  html, body { height: 100%; }
+  body {
+    background:
+      radial-gradient(60% 50% at 50% -10%, color-mix(in oklab, var(--brand-blue) 7%, transparent) 0%, transparent 60%),
+      var(--canvas);
+    color: var(--ink);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  .ob-shell {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 28px 32px 64px;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* topbar */
+  .ob-top {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 56px;
+  }
+  .ob-brand { display: flex; align-items: center; gap: 10px; }
+  .ob-brand img { width: 26px; height: 26px; }
+  .ob-brand span { font-size: 15px; font-weight: 600; letter-spacing: -0.2px; }
+
+  .ob-skip {
+    color: var(--muted-foreground);
+    font-size: 13px;
+    text-decoration: none;
+  }
+  .ob-skip:hover { color: var(--foreground); }
+
+  /* main grid */
+  .ob-main {
+    display: grid;
+    grid-template-columns: 240px 1fr;
+    gap: 56px;
+    flex: 1;
+    align-items: flex-start;
+  }
+
+  /* stepper rail */
+  .ob-rail { position: sticky; top: 28px; }
+  .ob-rail h4 {
+    font-size: 11px; font-weight: 600; letter-spacing: 0.4px;
+    text-transform: uppercase; color: var(--muted-foreground);
+    margin: 0 0 16px; padding-left: 4px;
+  }
+  .ob-steps { list-style: none; margin: 0; padding: 0; position: relative; }
+  .ob-steps::before {
+    content: ""; position: absolute;
+    left: 13px; top: 14px; bottom: 14px; width: 1px;
+    background: var(--border);
+  }
+  .ob-step {
+    display: flex; align-items: flex-start; gap: 12px;
+    padding: 8px 4px;
+    cursor: pointer;
+    border-radius: var(--radius-md);
+    position: relative;
+    transition: background .12s;
+  }
+  .ob-step:hover { background: var(--surface-soft); }
+  .ob-step .marker {
+    flex-shrink: 0;
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: var(--canvas);
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 600;
+    color: var(--muted-foreground);
+    z-index: 1;
+    transition: all .15s;
+  }
+  .ob-step .meta { display: flex; flex-direction: column; gap: 1px; padding-top: 3px; }
+  .ob-step .name { font-size: 13.5px; font-weight: 500; color: var(--muted-foreground); }
+  .ob-step .desc { font-size: 11.5px; color: var(--muted-soft); }
+
+  .ob-step[data-state="active"] .marker {
+    background: var(--primary); border-color: var(--primary); color: var(--primary-foreground);
+    box-shadow: 0 0 0 4px color-mix(in oklab, var(--primary) 15%, transparent);
+  }
+  .ob-step[data-state="active"] .name { color: var(--foreground); font-weight: 600; }
+  .ob-step[data-state="done"] .marker {
+    background: color-mix(in oklab, var(--good) 16%, var(--canvas));
+    border-color: color-mix(in oklab, var(--good) 32%, transparent);
+    color: var(--good);
+  }
+  .ob-step[data-state="done"] .name { color: var(--foreground); }
+
+  /* right column / step body */
+  .ob-body { min-width: 0; }
+  .ob-step-eyebrow {
+    font-size: 11px; font-weight: 600; letter-spacing: 0.4px;
+    text-transform: uppercase; color: var(--primary);
+    margin-bottom: 8px;
+  }
+  .ob-h1 {
+    font-size: 32px; font-weight: 600; line-height: 1.15; letter-spacing: -0.8px;
+    margin: 0 0 10px;
+  }
+  .ob-sub {
+    font-size: 15px; color: var(--muted-foreground); line-height: 1.55;
+    margin: 0 0 32px;
+    max-width: 580px;
+  }
+
+  /* step pages — only one visible at a time */
+  .step { display: none; animation: stepIn .18s ease-out; }
+  .step[data-active="true"] { display: block; }
+  @keyframes stepIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* nav buttons */
+  .ob-nav {
+    margin-top: 40px;
+    padding-top: 20px;
+    border-top: 1px solid var(--hairline-soft);
+    display: flex; gap: 12px; align-items: center;
+  }
+  .ob-nav .spacer { flex: 1; }
+
+  .btn-cta {
+    display: inline-flex; align-items: center; justify-content: center;
+    gap: 8px;
+    height: 40px; padding: 0 18px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--primary);
+    background: var(--primary);
+    color: var(--primary-foreground);
+    font-size: 14px; font-weight: 500;
+    cursor: pointer;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.16), 0 1px 2px rgba(0,0,0,0.06);
+    transition: background .12s, border-color .12s;
+  }
+  .btn-cta:hover { background: var(--primary-active); border-color: var(--primary-active); }
+  .btn-cta:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-cta.secondary {
+    background: var(--card); color: var(--foreground); border-color: var(--border);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+  }
+  .btn-cta.secondary:hover { background: var(--surface-soft); }
+
+  /* ─────────── shared cards ─────────── */
+
+  /* welcome — deployment summary */
+  .summary-card {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    background: var(--card);
+  }
+  .summary-card .cell {
+    padding: 18px 20px;
+    border-right: 1px solid var(--hairline-soft);
+  }
+  .summary-card .cell:nth-child(2n) { border-right: none; }
+  .summary-card .cell:nth-child(-n+2) { border-bottom: 1px solid var(--hairline-soft); }
+  .summary-card .label {
+    font-size: 11px; font-weight: 600; letter-spacing: 0.4px;
+    text-transform: uppercase; color: var(--muted-foreground);
+    margin-bottom: 6px;
+  }
+  .summary-card .value {
+    font-family: var(--font-mono); font-size: 13px;
+    color: var(--foreground);
+  }
+  .summary-card .value.plain { font-family: var(--font-sans); font-weight: 500; font-size: 14px; }
+  .pill-good {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 2px 8px; border-radius: 9999px;
+    background: color-mix(in oklab, var(--good) 14%, transparent);
+    color: var(--good);
+    font-size: 11.5px; font-weight: 600;
+  }
+  .pill-good .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+  /* integrations rows */
+  .conn-list {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    background: var(--card);
+  }
+  .conn-row {
+    display: flex; align-items: center; gap: 16px;
+    padding: 18px 20px;
+    border-bottom: 1px solid var(--hairline-soft);
+  }
+  .conn-row:last-child { border-bottom: none; }
+  .conn-icon {
+    width: 40px; height: 40px;
+    border-radius: var(--radius-md);
+    display: inline-flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .conn-icon-git    { background: var(--src-git-bg); color: var(--src-git); }
+  .conn-icon-cal    { background: var(--src-cal-bg); color: var(--src-cal); }
+  .conn-icon-slack  { background: var(--src-slack-bg); color: var(--src-slack); }
+  .conn-meta { flex: 1; min-width: 0; }
+  .conn-meta .ttl { font-size: 14.5px; font-weight: 600; color: var(--foreground); margin-bottom: 2px; }
+  .conn-meta .scope {
+    font-size: 12.5px; color: var(--muted-foreground);
+    line-height: 1.45;
+  }
+  .conn-meta .scope code {
+    font-family: var(--font-mono); font-size: 11.5px;
+    background: var(--surface-strong);
+    padding: 1px 5px; border-radius: 4px;
+    color: var(--foreground);
+  }
+  .conn-required {
+    font-size: 10.5px; font-weight: 600; letter-spacing: 0.3px;
+    color: var(--muted-foreground);
+    text-transform: uppercase;
+    padding: 2px 7px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    margin-left: 6px;
+    vertical-align: middle;
+  }
+  .conn-action { flex-shrink: 0; }
+
+  .btn-conn {
+    display: inline-flex; align-items: center; gap: 8px;
+    height: 36px; padding: 0 14px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--foreground);
+    font-size: 13px; font-weight: 500;
+    cursor: pointer;
+  }
+  .btn-conn:hover { background: var(--surface-soft); border-color: var(--border-strong); }
+  .btn-conn.connected {
+    background: color-mix(in oklab, var(--good) 12%, var(--card));
+    border-color: color-mix(in oklab, var(--good) 28%, transparent);
+    color: var(--good);
+  }
+  .btn-conn.connected:hover { background: color-mix(in oklab, var(--good) 16%, var(--card)); }
+
+  /* AI provider grid */
+  .provider-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+  .provider-card {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 14px;
+    background: var(--card);
+    cursor: pointer;
+    text-align: left;
+    display: flex; flex-direction: column; gap: 4px;
+    transition: all .12s;
+    font-family: inherit;
+  }
+  .provider-card:hover { border-color: var(--border-strong); background: var(--surface-soft); }
+  .provider-card[data-selected="true"] {
+    border-color: var(--primary);
+    background: color-mix(in oklab, var(--primary) 5%, var(--card));
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--primary) 15%, transparent);
+  }
+  .provider-card .pname {
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 13.5px; font-weight: 600; color: var(--foreground);
+  }
+  .provider-card .pfree {
+    font-size: 11px; font-weight: 600;
+    color: var(--good);
+    background: color-mix(in oklab, var(--good) 12%, transparent);
+    padding: 1px 6px; border-radius: 4px;
+  }
+  .provider-card .pmodel {
+    font-family: var(--font-mono); font-size: 11.5px; color: var(--muted-foreground);
+  }
+  .provider-card .ptag {
+    font-size: 11.5px; color: var(--muted-foreground);
+  }
+
+  /* form fields */
+  .field { margin-bottom: 16px; }
+  .field-label {
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 12.5px; font-weight: 500;
+    margin-bottom: 6px;
+    color: var(--foreground);
+  }
+  .field-label .hint { color: var(--muted-foreground); font-weight: 400; }
+  .field-input {
+    width: 100%; height: 38px; padding: 0 12px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--input);
+    background: var(--background);
+    color: var(--foreground);
+    font-size: 13.5px; font-family: var(--font-mono);
+    outline: none;
+  }
+  .field-input:focus-visible {
+    border-color: var(--ring);
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring) 24%, transparent);
+  }
+  .field-help {
+    font-size: 12px; color: var(--muted-foreground);
+    margin-top: 6px;
+    line-height: 1.45;
+  }
+  .field-help a { color: var(--primary); text-decoration: none; }
+  .field-help a:hover { text-decoration: underline; }
+
+  /* alerts list */
+  .alert-row {
+    display: flex; align-items: flex-start; gap: 16px;
+    padding: 18px 20px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--card);
+    margin-bottom: 10px;
+  }
+  .alert-row .alert-meta { flex: 1; }
+  .alert-row .ttl {
+    font-size: 14.5px; font-weight: 600;
+    margin-bottom: 4px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .alert-row .desc { font-size: 12.5px; color: var(--muted-foreground); line-height: 1.5; }
+  .alert-row .extras {
+    margin-top: 12px; padding-top: 10px;
+    border-top: 1px dashed var(--hairline-soft);
+    display: flex; align-items: center; gap: 8px;
+    font-size: 12px; color: var(--muted-foreground);
+  }
+  .alert-row[data-on="true"] { border-color: color-mix(in oklab, var(--primary) 30%, var(--border)); }
+
+  /* toggle */
+  .toggle {
+    flex-shrink: 0;
+    position: relative;
+    width: 36px; height: 20px;
+    border-radius: 9999px;
+    background: var(--input);
+    border: none; padding: 0;
+    cursor: pointer;
+    transition: background .15s;
+  }
+  .toggle[data-on="true"] { background: var(--primary); }
+  .toggle::after {
+    content: ""; position: absolute; top: 2px; left: 2px;
+    width: 16px; height: 16px;
+    border-radius: 50%;
+    background: var(--background);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.18);
+    transition: transform .15s;
+  }
+  .toggle[data-on="true"]::after { transform: translateX(16px); }
+
+  /* threshold — segmented chips */
+  .threshold {
+    margin-top: 14px; padding-top: 14px;
+    border-top: 1px dashed var(--hairline-soft);
+    display: flex; align-items: center; gap: 14px;
+    flex-wrap: wrap;
+  }
+  .threshold .thr-label {
+    font-size: 12px; color: var(--muted-foreground);
+    letter-spacing: 0.1px;
+    flex-shrink: 0;
+  }
+  .threshold .thr-segments {
+    display: inline-flex;
+    padding: 3px;
+    background: var(--surface-strong);
+    border: 1px solid var(--hairline-soft);
+    border-radius: 999px;
+    gap: 2px;
+  }
+  .threshold .thr-seg {
+    appearance: none; -webkit-appearance: none; background: transparent;
+    border: 0; cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: 12px; font-weight: 500;
+    color: var(--muted-foreground);
+    padding: 6px 12px;
+    border-radius: 999px;
+    transition: color 120ms ease, background 120ms ease, box-shadow 120ms ease;
+    line-height: 1;
+    letter-spacing: -0.1px;
+  }
+  .threshold .thr-seg:hover { color: var(--foreground); }
+  .threshold .thr-seg[aria-pressed="true"] {
+    background: var(--canvas);
+    color: var(--foreground);
+    box-shadow: 0 1px 2px color-mix(in oklab, var(--ink) 8%, transparent),
+                0 0 0 1px var(--hairline-strong);
+  }
+  .threshold .thr-help {
+    font-size: 12px; color: var(--muted-foreground);
+    margin-left: auto;
+  }
+  .threshold .thr-help b { color: var(--foreground); font-weight: 500; }
+
+  /* ready preview */
+  .ready-grid {
+    display: grid; grid-template-columns: 1.2fr 1fr;
+    gap: 16px;
+  }
+  .ready-card {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 20px;
+    background: var(--card);
+  }
+  .ready-card .ttl {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 14px; font-weight: 600;
+    margin-bottom: 12px;
+  }
+  .ready-card .ico {
+    width: 28px; height: 28px;
+    border-radius: var(--radius-sm);
+    background: color-mix(in oklab, var(--primary) 12%, transparent);
+    color: var(--primary);
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .ready-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; }
+  .ready-list li {
+    display: flex; align-items: flex-start; gap: 10px;
+    font-size: 13px; color: var(--body); line-height: 1.5;
+  }
+  .ready-list li svg { flex-shrink: 0; margin-top: 2px; color: var(--good); }
+
+  .next-up {
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .next-up .item {
+    display: flex; gap: 10px; align-items: flex-start;
+    padding: 10px 12px;
+    border-radius: var(--radius-md);
+    background: var(--surface-soft);
+    border: 1px solid var(--hairline-soft);
+  }
+  .next-up .item .num {
+    font-family: var(--font-mono); font-size: 11.5px;
+    color: var(--muted-foreground);
+    width: 18px; flex-shrink: 0;
+  }
+  .next-up .item .text { font-size: 12.5px; color: var(--foreground); line-height: 1.45; }
+
+  /* responsive */
+  @media (max-width: 820px) {
+    .ob-main { grid-template-columns: 1fr; gap: 32px; }
+    .ob-rail { position: static; }
+    .ob-steps { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; }
+    .ob-steps::before { display: none; }
+    .ob-step { flex-shrink: 0; }
+    .ob-step .meta { display: none; }
+    .summary-card { grid-template-columns: 1fr; }
+    .summary-card .cell { border-right: none !important; }
+    .provider-grid { grid-template-columns: 1fr 1fr; }
+    .ready-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="ob-shell">
+
+  <!-- TOPBAR -->
+  <div class="ob-top">
+    <div class="ob-brand">
+      <img src="devy-logo.png" alt="" />
+      <span>Devy</span>
+    </div>
+    <a href="Devy.html" class="ob-skip">Skip setup →</a>
+  </div>
+
+  <div class="ob-main">
+
+    <!-- STEPPER RAIL -->
+    <aside class="ob-rail">
+      <h4>Setup</h4>
+      <ol class="ob-steps" id="stepper">
+        <li class="ob-step" data-step="0" data-state="active">
+          <span class="marker">1</span>
+          <span class="meta"><span class="name">Welcome</span><span class="desc">Confirm deployment</span></span>
+        </li>
+        <li class="ob-step" data-step="1">
+          <span class="marker">2</span>
+          <span class="meta"><span class="name">Integrations</span><span class="desc">GitHub, Calendar, Slack</span></span>
+        </li>
+        <li class="ob-step" data-step="2">
+          <span class="marker">3</span>
+          <span class="meta"><span class="name">AI provider</span><span class="desc">Bring your own key</span></span>
+        </li>
+        <li class="ob-step" data-step="3">
+          <span class="marker">4</span>
+          <span class="meta"><span class="name">Alerts</span><span class="desc">When Devy taps you</span></span>
+        </li>
+        <li class="ob-step" data-step="4">
+          <span class="marker">5</span>
+          <span class="meta"><span class="name">Ready</span><span class="desc">Open your day</span></span>
+        </li>
+      </ol>
+    </aside>
+
+    <!-- BODY -->
+    <main class="ob-body">
+
+      <!-- STEP 0: Welcome -->
+      <section class="step" data-step="0" data-active="true">
+        <div class="ob-step-eyebrow">Step 1 of 5</div>
+        <h1 class="ob-h1">Welcome to your Devy.</h1>
+        <p class="ob-sub">Your backend is up and you're signed in. Let's make sure the deployment looks right, then connect the tools that feed your inbox.</p>
+
+        <div class="summary-card">
+          <div class="cell">
+            <div class="label">Signed in</div>
+            <div class="value">you@kovacs.dev</div>
+          </div>
+          <div class="cell">
+            <div class="label">Worker</div>
+            <div class="value">devy.kovacs.dev <span class="pill-good" style="margin-left:8px"><span class="dot"></span>healthy</span></div>
+          </div>
+          <div class="cell">
+            <div class="label">Supabase project</div>
+            <div class="value">clearday-prod.supabase.co</div>
+          </div>
+          <div class="cell">
+            <div class="label">Allowed email</div>
+            <div class="value">you@kovacs.dev</div>
+          </div>
+        </div>
+
+        <div style="margin-top:24px;display:flex;gap:10px;align-items:flex-start;padding:14px 16px;border-radius:var(--radius-md);background:var(--brand-blue-tint);border:1px solid color-mix(in oklab, var(--primary) 18%, transparent);">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="color:var(--primary);flex-shrink:0;margin-top:1px"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><circle cx="12" cy="8" r="0.5" fill="currentColor"/></svg>
+          <div style="font-size:13px;color:var(--body);line-height:1.5">
+            <b style="color:var(--foreground)">Tokens stay on this Worker.</b> Every provider you connect next stores its refresh token in <i>your</i> Supabase. Clearday-the-project never sees them.
+          </div>
+        </div>
+      </section>
+
+      <!-- STEP 1: Integrations -->
+      <section class="step" data-step="1">
+        <div class="ob-step-eyebrow">Step 2 of 5</div>
+        <h1 class="ob-h1">Connect your sources.</h1>
+        <p class="ob-sub">v1 reads from these three. Each opens a consent screen, then drops the refresh token into your Supabase. Read-only — Devy never writes back.</p>
+
+        <div class="conn-list">
+          <div class="conn-row" data-provider="git">
+            <div class="conn-icon conn-icon-git">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.57.1.78-.25.78-.55v-1.93c-3.2.7-3.87-1.54-3.87-1.54-.52-1.33-1.27-1.69-1.27-1.69-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.02 1.76 2.69 1.25 3.34.96.1-.74.4-1.25.73-1.54-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.28 1.18-3.09-.12-.29-.51-1.46.11-3.05 0 0 .96-.31 3.16 1.18a10.97 10.97 0 0 1 5.76 0c2.2-1.49 3.16-1.18 3.16-1.18.62 1.59.23 2.76.11 3.05.74.81 1.18 1.83 1.18 3.09 0 4.42-2.7 5.4-5.27 5.68.41.36.78 1.06.78 2.13v3.16c0 .31.21.66.79.55C20.21 21.39 23.5 17.08 23.5 12 23.5 5.65 18.35.5 12 .5z"/></svg>
+            </div>
+            <div class="conn-meta">
+              <div class="ttl">GitHub <span class="conn-required">required</span></div>
+              <div class="scope">PRs where you're a reviewer, author, or assignee. Scopes: <code>read:user</code> <code>repo</code></div>
+            </div>
+            <div class="conn-action">
+              <button type="button" class="btn-conn" data-action="connect">Connect</button>
+            </div>
+          </div>
+
+          <div class="conn-row" data-provider="cal">
+            <div class="conn-icon conn-icon-cal">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/></svg>
+            </div>
+            <div class="conn-meta">
+              <div class="ttl">Google Calendar <span class="conn-required">required</span></div>
+              <div class="scope">Primary calendar only · accepted events with a video link · 10-minute pre-meeting alert. Read-only.</div>
+            </div>
+            <div class="conn-action">
+              <button type="button" class="btn-conn" data-action="connect">Connect</button>
+            </div>
+          </div>
+
+          <div class="conn-row" data-provider="slack">
+            <div class="conn-icon conn-icon-slack">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="13" y="2" width="3" height="8" rx="1.5"/><rect x="2" y="13" width="8" height="3" rx="1.5"/><rect x="14" y="14" width="8" height="3" rx="1.5"/><rect x="8" y="14" width="3" height="8" rx="1.5"/></svg>
+            </div>
+            <div class="conn-meta">
+              <div class="ttl">Slack</div>
+              <div class="scope">DMs, mentions, and replies in threads you've participated in.</div>
+            </div>
+            <div class="conn-action">
+              <button type="button" class="btn-conn" data-action="connect">Connect</button>
+            </div>
+          </div>
+        </div>
+
+        <p style="font-size:12px;color:var(--muted-foreground);margin-top:14px;line-height:1.5">
+          Tickets (Jira / Linear) are not in v1 — they ride along with the issue tracker that lands first.
+        </p>
+      </section>
+
+      <!-- STEP 2: AI provider -->
+      <section class="step" data-step="2">
+        <div class="ob-step-eyebrow">Step 3 of 5</div>
+        <h1 class="ob-h1">Pick your AI provider.</h1>
+        <p class="ob-sub">Devy uses one chat-completion call per morning briefing. Bring your own key — most of these have a generous free tier so you don't pay anything to dogfood.</p>
+
+        <div class="provider-grid" id="provider-grid">
+          <button type="button" class="provider-card" data-provider="gemini" data-selected="true">
+            <div class="pname">Gemini <span class="pfree">free tier</span></div>
+            <div class="pmodel">gemini-2.5-flash</div>
+            <div class="ptag">Fast, generous quota</div>
+          </button>
+          <button type="button" class="provider-card" data-provider="groq">
+            <div class="pname">Groq <span class="pfree">free tier</span></div>
+            <div class="pmodel">llama-3.1-70b</div>
+            <div class="ptag">Cheapest tokens</div>
+          </button>
+          <button type="button" class="provider-card" data-provider="openai">
+            <div class="pname">OpenAI</div>
+            <div class="pmodel">gpt-4o-mini</div>
+            <div class="ptag">Reliable default</div>
+          </button>
+          <button type="button" class="provider-card" data-provider="anthropic">
+            <div class="pname">Anthropic</div>
+            <div class="pmodel">claude-haiku-4-5</div>
+            <div class="ptag">Tight summaries</div>
+          </button>
+          <button type="button" class="provider-card" data-provider="openrouter">
+            <div class="pname">OpenRouter</div>
+            <div class="pmodel">any · routed</div>
+            <div class="ptag">One key, all models</div>
+          </button>
+          <button type="button" class="provider-card" data-provider="skip">
+            <div class="pname">Skip for now</div>
+            <div class="pmodel">no briefing</div>
+            <div class="ptag">Add a key later</div>
+          </button>
+        </div>
+
+        <div class="field" id="api-key-field">
+          <label class="field-label">
+            <span>API key</span>
+            <span class="hint">Stored in your Supabase. Never sent to Clearday.</span>
+          </label>
+          <input class="field-input" type="password" placeholder="sk-… / AIza… / gsk_…" autocomplete="off" />
+          <div class="field-help">
+            Don't have a key? <a href="#">Get one for Gemini</a> — takes ~60 seconds.
+          </div>
+        </div>
+      </section>
+
+      <!-- STEP 3: Alerts -->
+      <section class="step" data-step="3">
+        <div class="ob-step-eyebrow">Step 4 of 5</div>
+        <h1 class="ob-h1">Where should Devy tap you?</h1>
+        <p class="ob-sub">When a meeting's about to start or someone needs you, Devy can ping you outside the app. Pick one or both — both run when enabled.</p>
+
+        <div class="alert-row" data-on="true">
+          <div class="conn-icon conn-icon-slack" style="width:36px;height:36px">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="13" y="2" width="3" height="8" rx="1.5"/><rect x="2" y="13" width="8" height="3" rx="1.5"/><rect x="14" y="14" width="8" height="3" rx="1.5"/><rect x="8" y="14" width="3" height="8" rx="1.5"/></svg>
+          </div>
+          <div class="alert-meta">
+            <div class="ttl">Slack self-DM <span class="conn-required" style="background:color-mix(in oklab, var(--good) 12%, transparent);color:var(--good);border-color:color-mix(in oklab, var(--good) 28%, transparent)">recommended</span></div>
+            <div class="desc">Devy posts to your own Slackbot DM. Reuses the Slack you just connected — nothing extra to set up.</div>
+          </div>
+          <button type="button" class="toggle" data-on="true" data-target="slack-dm" aria-label="Toggle Slack self-DM"></button>
+        </div>
+
+        <div class="alert-row" data-on="false">
+          <div class="conn-icon" style="width:36px;height:36px;background:var(--src-ai-bg);color:var(--src-ai)">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+          </div>
+          <div class="alert-meta">
+            <div class="ttl">Web Push (PWA)</div>
+            <div class="desc">Install Devy as a PWA and receive OS-level notifications. Requires a subscription on this device.</div>
+          </div>
+          <button type="button" class="toggle" data-on="false" data-target="webpush" aria-label="Toggle Web Push"></button>
+        </div>
+
+        <div class="alert-row" style="display:flex;flex-direction:column;align-items:stretch;gap:0">
+          <div style="display:flex;align-items:flex-start;gap:16px;width:100%">
+            <div class="conn-icon" style="width:36px;height:36px;background:var(--surface-strong);color:var(--muted-foreground)">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            </div>
+            <div class="alert-meta">
+              <div class="ttl">Pre-meeting alert</div>
+              <div class="desc">How early Devy nudges you before a calendar event with a video link.</div>
+            </div>
+          </div>
+          <div class="threshold" id="threshold" data-value="10">
+            <span class="thr-label">Nudge me</span>
+            <div class="thr-segments" role="radiogroup" aria-label="Pre-meeting alert lead time">
+              <button type="button" class="thr-seg" data-min="2"  aria-pressed="false" role="radio">2 min</button>
+              <button type="button" class="thr-seg" data-min="5"  aria-pressed="false" role="radio">5 min</button>
+              <button type="button" class="thr-seg" data-min="10" aria-pressed="true"  role="radio">10 min</button>
+              <button type="button" class="thr-seg" data-min="15" aria-pressed="false" role="radio">15 min</button>
+              <button type="button" class="thr-seg" data-min="30" aria-pressed="false" role="radio">30 min</button>
+            </div>
+            <span class="thr-help"><b id="threshold-val">10 min</b> before the meeting</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- STEP 4: Ready -->
+      <section class="step" data-step="4">
+        <div class="ob-step-eyebrow">Step 5 of 5</div>
+        <h1 class="ob-h1">You're all set.</h1>
+        <p class="ob-sub">First poll runs in about 30 seconds. Here's what Devy will do for you.</p>
+
+        <div class="ready-grid">
+          <div class="ready-card">
+            <div class="ttl"><span class="ico">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3 8-8"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+            </span> What's wired up</div>
+            <ul class="ready-list">
+              <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> GitHub PRs (reviewer, author, assignee) — polls every 90 seconds</li>
+              <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Google Calendar primary — polls every 2 minutes</li>
+              <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Slack DMs, mentions, and threads you've replied in</li>
+              <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Morning briefing via Gemini — daily at 07:30</li>
+              <li><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Slack self-DM alerts · 10-min meeting heads-up</li>
+            </ul>
+          </div>
+
+          <div class="ready-card">
+            <div class="ttl"><span class="ico">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h7l-1 8 10-12h-7l1-8z"/></svg>
+            </span> Try next</div>
+            <div class="next-up">
+              <div class="item"><span class="num">01</span><span class="text">Press <span class="kbd" style="display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;font-family:var(--font-mono);font-size:11px;font-weight:500;color:var(--muted-foreground);background:var(--card);border:1px solid var(--border);border-bottom-width:2px;border-radius:var(--radius-sm);">⌘K</span> on any page to jump anywhere or run a command.</span></div>
+              <div class="item"><span class="num">02</span><span class="text">Click "Start focus" in the sidebar to write a Calendar block + Slack snooze in one go.</span></div>
+              <div class="item"><span class="num">03</span><span class="text">Pin a channel to Slack mentions if you want <code>@here</code> to count there too.</span></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- nav -->
+      <div class="ob-nav">
+        <button type="button" class="btn-cta secondary" id="prev-btn" disabled>← Back</button>
+        <span class="spacer"></span>
+        <span style="font-size:12px;color:var(--muted-foreground)" id="progress-label">Step 1 of 5</span>
+        <button type="button" class="btn-cta" id="next-btn">Continue →</button>
+      </div>
+
+    </main>
+  </div>
+</div>
+
+<!-- Tweaks panel mount -->
+<div id="tweaks-root"></div>
+
+<script>
+  // ───────────── stepper ─────────────
+  const TOTAL_STEPS = 5;
+  let currentStep = 0;
+  const stepperEl = document.getElementById('stepper');
+  const stepEls = document.querySelectorAll('.step');
+  const prevBtn = document.getElementById('prev-btn');
+  const nextBtn = document.getElementById('next-btn');
+  const progressLabel = document.getElementById('progress-label');
+
+  function renderStep() {
+    stepEls.forEach(el => el.dataset.active = String(Number(el.dataset.step) === currentStep));
+    stepperEl.querySelectorAll('.ob-step').forEach(el => {
+      const i = Number(el.dataset.step);
+      const state = i < currentStep ? 'done' : i === currentStep ? 'active' : 'pending';
+      el.dataset.state = state;
+      const m = el.querySelector('.marker');
+      m.innerHTML = state === 'done'
+        ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>'
+        : (i + 1);
+    });
+    prevBtn.disabled = currentStep === 0;
+    nextBtn.textContent = currentStep === TOTAL_STEPS - 1 ? 'Open Devy →' : 'Continue →';
+    progressLabel.textContent = `Step ${currentStep + 1} of ${TOTAL_STEPS}`;
+  }
+  prevBtn.addEventListener('click', () => { if (currentStep > 0) { currentStep--; renderStep(); window.scrollTo({top:0,behavior:'smooth'}); } });
+  nextBtn.addEventListener('click', () => {
+    if (currentStep < TOTAL_STEPS - 1) { currentStep++; renderStep(); window.scrollTo({top:0,behavior:'smooth'}); }
+    else { window.location.href = 'Devy.html'; }
+  });
+  stepperEl.querySelectorAll('.ob-step').forEach(el => {
+    el.addEventListener('click', () => { currentStep = Number(el.dataset.step); renderStep(); });
+  });
+
+  // ───────────── connect buttons (demo) ─────────────
+  document.querySelectorAll('[data-action="connect"]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      btn.classList.add('connected');
+      btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Connected';
+    });
+  });
+
+  // ───────────── provider grid ─────────────
+  const providerGrid = document.getElementById('provider-grid');
+  const apiKeyField = document.getElementById('api-key-field');
+  providerGrid.addEventListener('click', e => {
+    const card = e.target.closest('.provider-card');
+    if (!card) return;
+    providerGrid.querySelectorAll('.provider-card').forEach(c => c.dataset.selected = 'false');
+    card.dataset.selected = 'true';
+    apiKeyField.style.display = card.dataset.provider === 'skip' ? 'none' : 'block';
+  });
+
+  // ───────────── toggles ─────────────
+  document.querySelectorAll('.toggle').forEach(t => {
+    t.addEventListener('click', () => {
+      const on = t.dataset.on === 'true';
+      t.dataset.on = String(!on);
+      const row = t.closest('.alert-row');
+      if (row) row.dataset.on = String(!on);
+    });
+  });
+
+  // ───────────── threshold ─────────────
+  const thr = document.getElementById('threshold');
+  const thrVal = document.getElementById('threshold-val');
+  thr.querySelectorAll('.thr-seg').forEach(seg => {
+    seg.addEventListener('click', () => {
+      thr.querySelectorAll('.thr-seg').forEach(s => s.setAttribute('aria-pressed', 'false'));
+      seg.setAttribute('aria-pressed', 'true');
+      const v = seg.dataset.min;
+      thr.dataset.value = v;
+      thrVal.textContent = v + ' min';
+    });
+  });
+
+  // expose for tweaks
+  window.__goToStep = (i) => { currentStep = i; renderStep(); };
+</script>
+
+<!-- Tweaks panel -->
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel" data-presets="env,react">
+const { useEffect } = React;
+
+const OB_TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "theme": "light",
+  "step": 0
+}/*EDITMODE-END*/;
+
+function OnboardingTweaks() {
+  const [t, setTweak] = window.useTweaks(OB_TWEAK_DEFAULTS);
+  useEffect(() => { document.documentElement.dataset.theme = t.theme; }, [t.theme]);
+  useEffect(() => { if (window.__goToStep) window.__goToStep(t.step); }, [t.step]);
+
+  return (
+    <window.TweaksPanel title="Tweaks">
+      <window.TweakSection title="Appearance">
+        <window.TweakRadio
+          label="Theme" value={t.theme}
+          options={[{value:"light",label:"Light"},{value:"dark",label:"Dark"}]}
+          onChange={v => setTweak("theme", v)} />
+      </window.TweakSection>
+      <window.TweakSection title="Preview">
+        <window.TweakRadio
+          label="Step" value={t.step}
+          options={[
+            {value:0,label:"1"},{value:1,label:"2"},{value:2,label:"3"},{value:3,label:"4"},{value:4,label:"5"}
+          ]}
+          onChange={v => setTweak("step", v)} />
+      </window.TweakSection>
+    </window.TweaksPanel>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("tweaks-root")).render(<OnboardingTweaks />);
+</script>
+</body>
+</html>

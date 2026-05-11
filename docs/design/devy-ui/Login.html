@@ -1,0 +1,531 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Sign in · Devy</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="tokens.css" />
+<style>
+  html, body { height: 100%; }
+  body {
+    background: var(--canvas);
+    color: var(--ink);
+    overflow: hidden;
+  }
+
+  .auth-shell {
+    display: grid;
+    grid-template-columns: 1.05fr 1fr;
+    height: 100vh;
+    width: 100vw;
+  }
+
+  /* ---------- LEFT — brand panel ---------- */
+  .brand-panel {
+    position: relative;
+    background:
+      radial-gradient(120% 80% at 12% 10%, rgba(142, 131, 250, 0.32) 0%, transparent 55%),
+      radial-gradient(90% 70% at 95% 100%, rgba(44, 108, 248, 0.28) 0%, transparent 60%),
+      linear-gradient(180deg, #050d2c 0%, #01154d 60%, #02091f 100%);
+    color: #f4f6ff;
+    padding: 32px 40px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    isolation: isolate;
+  }
+  .brand-panel::before {
+    content: "";
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px);
+    background-size: 32px 32px;
+    background-position: -1px -1px;
+    mask-image: radial-gradient(ellipse 80% 80% at 50% 50%, black 30%, transparent 80%);
+    pointer-events: none;
+    z-index: 0;
+  }
+  .brand-panel > * { position: relative; z-index: 1; }
+
+  .brand-mark {
+    display: flex; align-items: center; gap: 10px;
+  }
+  .brand-mark img {
+    width: 28px; height: 28px;
+    filter: drop-shadow(0 1px 4px rgba(0,0,0,0.4));
+  }
+  .brand-mark span {
+    font-size: 16px; font-weight: 600; letter-spacing: -0.2px; color: #fff;
+  }
+
+  .brand-copy {
+    margin-top: 80px;
+    max-width: 460px;
+  }
+  .brand-eyebrow {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 4px 10px;
+    border: 1px solid rgba(255,255,255,0.14);
+    background: rgba(255,255,255,0.04);
+    color: #cfd6e8;
+    border-radius: 9999px;
+    font-size: 11px; font-weight: 600; letter-spacing: 0.4px;
+    text-transform: uppercase;
+  }
+  .brand-eyebrow .pulse {
+    width: 6px; height: 6px; border-radius: 50%; background: #4ade80;
+    box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.5);
+    animation: pulse 1.8s infinite;
+  }
+  @keyframes pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.5); }
+    70%  { box-shadow: 0 0 0 6px rgba(74, 222, 128, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0); }
+  }
+
+  .brand-headline {
+    margin: 18px 0 14px;
+    font-size: 40px;
+    font-weight: 600;
+    line-height: 1.1;
+    letter-spacing: -1.2px;
+    color: #fff;
+  }
+  .brand-headline em {
+    font-style: normal;
+    background: linear-gradient(90deg, #a094fb 0%, #4f86fa 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .brand-sub {
+    color: #b9c0d3;
+    font-size: 15px;
+    line-height: 1.55;
+    max-width: 420px;
+  }
+
+  /* preview stack */
+  .preview-stack {
+    margin-top: 56px;
+    position: relative;
+    flex: 1;
+    min-height: 0;
+  }
+  .signal-card {
+    position: absolute;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-radius: 12px;
+    padding: 12px 14px;
+    color: #e7ebf6;
+    width: 360px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+  }
+  .signal-card .row1 {
+    display: flex; align-items: center; gap: 8px;
+    margin-bottom: 6px;
+  }
+  .src-tag {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 2px 8px;
+    border-radius: 6px;
+    font-size: 10.5px; font-weight: 600; letter-spacing: 0.2px;
+    text-transform: uppercase;
+  }
+  .src-git { background: rgba(165, 180, 252, 0.16); color: #c7d2fe; }
+  .src-cal { background: rgba(147, 197, 253, 0.16); color: #bfdbfe; }
+  .src-slack { background: rgba(103, 232, 249, 0.16); color: #a5f3fc; }
+  .src-ai { background: rgba(216, 180, 254, 0.16); color: #e9d5ff; }
+
+  .meta { color: #8a93ad; font-size: 11.5px; margin-left: auto; font-family: var(--font-mono); }
+  .signal-card .title { font-size: 13.5px; font-weight: 500; line-height: 1.35; color: #fff; margin-bottom: 6px; }
+  .signal-card .sub { font-size: 12px; color: #98a1b8; line-height: 1.4; }
+
+  .card-1 { top: 0;   left: -10px; transform: rotate(-1.5deg); }
+  .card-2 { top: 88px; left: 60px; transform: rotate(1.2deg); }
+  .card-3 { top: 196px; left: 20px; transform: rotate(-0.8deg); }
+  .card-4 { top: 296px; left: 100px; transform: rotate(1.6deg); }
+
+  /* footnote */
+  .brand-foot {
+    margin-top: auto;
+    display: flex; align-items: center; justify-content: space-between;
+    color: #8c95ad;
+    font-size: 12px;
+  }
+  .brand-foot a { color: #cfd6e8; text-decoration: none; }
+  .brand-foot a:hover { color: #fff; }
+  .brand-foot .dot { width: 3px; height: 3px; border-radius: 50%; background: #4a5274; margin: 0 8px; }
+
+  /* ---------- RIGHT — sign-in panel ---------- */
+  .auth-panel {
+    display: flex; flex-direction: column;
+    padding: 32px 40px;
+    background: var(--canvas);
+    overflow-y: auto;
+  }
+  .auth-top {
+    display: flex; align-items: center; justify-content: flex-end;
+    gap: 16px;
+    color: var(--muted-foreground);
+    font-size: 13px;
+  }
+  .auth-top a { color: var(--foreground); text-decoration: none; font-weight: 500; }
+  .auth-top a:hover { text-decoration: underline; }
+
+  .auth-card {
+    margin: auto 0;
+    width: 100%;
+    max-width: 380px;
+    align-self: center;
+  }
+
+  .auth-title {
+    font-size: 28px; font-weight: 600; line-height: 1.15; letter-spacing: -0.6px;
+    color: var(--foreground);
+    margin-bottom: 8px;
+  }
+  .auth-sub {
+    color: var(--muted-foreground);
+    font-size: 14px;
+    line-height: 1.5;
+    margin-bottom: 28px;
+  }
+
+  /* deployment chip */
+  .deployment-chip {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--surface-soft);
+    margin-bottom: 20px;
+  }
+  .deployment-chip .label {
+    font-size: 11px; font-weight: 600; letter-spacing: 0.4px;
+    text-transform: uppercase; color: var(--muted-foreground);
+  }
+  .deployment-chip .url {
+    font-family: var(--font-mono); font-size: 12px;
+    color: var(--foreground);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .deployment-chip .health {
+    margin-left: auto;
+    display: inline-flex; align-items: center; gap: 6px;
+    color: var(--good); font-size: 11.5px; font-weight: 600;
+  }
+  .deployment-chip .health .dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--good);
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--good) 18%, transparent);
+  }
+
+  /* google button */
+  .google-btn {
+    width: 100%;
+    height: 48px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: var(--card);
+    color: var(--foreground);
+    display: inline-flex; align-items: center; justify-content: center;
+    gap: 12px;
+    font-size: 14.5px; font-weight: 500;
+    cursor: pointer;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+    transition: background .12s, border-color .12s, box-shadow .12s, transform .04s;
+  }
+  .google-btn:hover {
+    background: var(--surface-soft);
+    border-color: var(--border-strong);
+  }
+  .google-btn:active { transform: translateY(1px); }
+  .google-btn:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring) 24%, transparent);
+  }
+
+  .divider {
+    display: flex; align-items: center; gap: 12px;
+    margin: 24px 0;
+    color: var(--muted-foreground);
+    font-size: 12px; font-weight: 500;
+  }
+  .divider::before, .divider::after {
+    content: ""; flex: 1; height: 1px; background: var(--border);
+  }
+
+  .info-list {
+    list-style: none; padding: 0; margin: 0;
+    display: flex; flex-direction: column; gap: 12px;
+  }
+  .info-list li {
+    display: flex; gap: 10px;
+    color: var(--body);
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  .info-list li .ico {
+    flex-shrink: 0;
+    width: 16px; height: 16px;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: var(--primary);
+    margin-top: 2px;
+  }
+  .info-list li b {
+    color: var(--foreground);
+    font-weight: 600;
+  }
+  .info-list code {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: var(--surface-strong);
+    color: var(--foreground);
+  }
+
+  .auth-foot {
+    margin-top: 32px;
+    padding-top: 18px;
+    border-top: 1px solid var(--hairline-soft);
+    color: var(--muted-foreground);
+    font-size: 12px;
+    line-height: 1.5;
+  }
+  .auth-foot a { color: var(--foreground); text-decoration: none; }
+  .auth-foot a:hover { text-decoration: underline; }
+
+  /* ---------- responsive ---------- */
+  @media (max-width: 920px) {
+    .auth-shell { grid-template-columns: 1fr; }
+    .brand-panel { display: none; }
+    body { overflow: auto; }
+  }
+
+  /* ---------- tweak-driven variants ---------- */
+  body[data-layout="centered"] .auth-shell { grid-template-columns: 1fr; }
+  body[data-layout="centered"] .brand-panel { display: none; }
+  body[data-layout="centered"] .auth-panel {
+    background:
+      radial-gradient(60% 50% at 50% 0%, color-mix(in oklab, var(--brand-blue) 8%, transparent) 0%, transparent 60%),
+      var(--canvas);
+  }
+  body[data-layout="centered"] .auth-card { margin: auto; max-width: 420px; }
+  body[data-layout="centered"] .auth-top { display: none; }
+
+  body[data-layout="minimal"] .auth-shell { grid-template-columns: 1fr; }
+  body[data-layout="minimal"] .brand-panel { display: none; }
+  body[data-layout="minimal"] .auth-card { margin: auto; max-width: 360px; text-align: center; }
+  body[data-layout="minimal"] .deployment-chip { justify-content: center; }
+  body[data-layout="minimal"] .info-list,
+  body[data-layout="minimal"] .divider { display: none; }
+  body[data-layout="minimal"] .auth-top { display: none; }
+
+  body[data-show-preview="false"] .preview-stack { display: none; }
+  body[data-show-preview="false"] .brand-copy { margin-bottom: auto; }
+
+  body[data-show-info="false"] .info-list,
+  body[data-show-info="false"] .divider { display: none; }
+</style>
+</head>
+<body>
+
+<div class="auth-shell">
+
+  <!-- LEFT: brand / preview -->
+  <section class="brand-panel" aria-hidden="true">
+    <div class="brand-mark">
+      <img src="devy-logo.png" alt="" />
+      <span>Devy</span>
+    </div>
+
+    <div class="brand-copy">
+      <span class="brand-eyebrow"><span class="pulse"></span>Worker · auth.clearday.dev</span>
+      <h1 class="brand-headline">Your morning,<br/><em>already triaged.</em></h1>
+      <p class="brand-sub">Devy folds GitHub, Calendar and Slack into one focus surface — so you stop bouncing between tabs to find the four things that actually need you today.</p>
+    </div>
+
+    <div class="preview-stack">
+      <div class="signal-card card-1">
+        <div class="row1">
+          <span class="src-tag src-cal">Calendar</span>
+          <span class="meta">in 13 min</span>
+        </div>
+        <div class="title">Standup — Platform team</div>
+        <div class="sub">9 attendees · Google Meet</div>
+      </div>
+
+      <div class="signal-card card-2">
+        <div class="row1">
+          <span class="src-tag src-git">GitHub</span>
+          <span class="meta">+184 −47 · #421</span>
+        </div>
+        <div class="title">feat(signals): batch upsert path for slack webhook</div>
+        <div class="sub">priya-w requested your review · 22 min ago</div>
+      </div>
+
+      <div class="signal-card card-3">
+        <div class="row1">
+          <span class="src-tag src-slack">Slack</span>
+          <span class="meta">3 unread</span>
+        </div>
+        <div class="title">@rahulm in #platform-eng</div>
+        <div class="sub">"thoughts on the retry budget for the slack adapter?"</div>
+      </div>
+
+      <div class="signal-card card-4">
+        <div class="row1">
+          <span class="src-tag src-ai">Briefing</span>
+          <span class="meta">07:42</span>
+        </div>
+        <div class="title">4 things that need you today</div>
+        <div class="sub">2 PR reviews · standup at 9:30 · @rahulm waiting</div>
+      </div>
+    </div>
+
+    <div class="brand-foot">
+      <span>Open source · self-hosted · MIT</span>
+      <span>
+        <a href="#">github.com/geemeows/clearday</a>
+        <span class="dot" style="display:inline-block;vertical-align:middle"></span>
+        <a href="#">docs</a>
+      </span>
+    </div>
+  </section>
+
+
+  <!-- RIGHT: sign-in -->
+  <section class="auth-panel">
+    <div class="auth-top">
+      <span>New here?</span>
+      <a href="#">Deploy your own</a>
+    </div>
+
+    <div class="auth-card">
+      <h2 class="auth-title">Sign in to Devy</h2>
+      <p class="auth-sub">This is a single-tenant deployment. Only the email matching <code style="font-family:var(--font-mono);font-size:12px;padding:1px 5px;border-radius:4px;background:var(--surface-strong);color:var(--foreground);">ALLOWED_EMAIL</code> on this Worker can sign in.</p>
+
+      <div class="deployment-chip">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="color: var(--primary)" aria-hidden="true">
+          <path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/>
+        </svg>
+        <div style="display:flex;flex-direction:column;gap:1px;min-width:0">
+          <span class="label">Deployment</span>
+          <span class="url">devy.kovacs.dev</span>
+        </div>
+        <span class="health"><span class="dot"></span>Online</span>
+      </div>
+
+      <button class="google-btn" type="button" id="google-signin">
+        <!-- Google G mark, official 4-color -->
+        <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+          <path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.71v2.26h2.92c1.7-1.57 2.68-3.88 2.68-6.61z"/>
+          <path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.8.54-1.84.86-3.04.86-2.34 0-4.32-1.58-5.03-3.7H.96v2.33A9 9 0 0 0 9 18z"/>
+          <path fill="#FBBC05" d="M3.97 10.71a5.4 5.4 0 0 1 0-3.43V4.96H.96a9 9 0 0 0 0 8.08l3.01-2.33z"/>
+          <path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.34l2.58-2.58A9 9 0 0 0 9 0 9 9 0 0 0 .96 4.96l3.01 2.33C4.68 5.16 6.66 3.58 9 3.58z"/>
+        </svg>
+        <span>Continue with Google</span>
+      </button>
+
+      <div class="divider">What you'll authorize next</div>
+
+      <ul class="info-list">
+        <li>
+          <span class="ico">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12l2 2 4-4"/><path d="M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9 9 4.03 9 9z"/></svg>
+          </span>
+          <span><b>App login only.</b> Google here just verifies your email — Devy does not retain Google access tokens at this step.</span>
+        </li>
+        <li>
+          <span class="ico">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          </span>
+          <span><b>Tokens stay in your Supabase.</b> Provider tokens for GitHub, Slack and Calendar live in your own backend — never on Clearday's servers.</span>
+        </li>
+        <li>
+          <span class="ico">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h7l-1 8 10-12h-7l1-8z"/></svg>
+          </span>
+          <span><b>Connect integrations after.</b> GitHub, Slack and Google Calendar each get a separate consent screen on first run.</span>
+        </li>
+      </ul>
+
+      <div class="auth-foot">
+        By continuing you agree to the <a href="#">Terms</a> and <a href="#">Privacy notice</a> of this self-hosted deployment.
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<script>
+  document.getElementById('google-signin').addEventListener('click', function(){
+    var btn = this;
+    btn.disabled = true; btn.style.opacity = '0.7'; btn.style.cursor = 'wait';
+    btn.querySelector('span').textContent = 'Redirecting to Google…';
+  });
+</script>
+
+<!-- Tweaks panel mount -->
+<div id="tweaks-root"></div>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel" data-presets="env,react">
+const { useEffect } = React;
+
+const LOGIN_TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "theme": "light",
+  "layout": "split",
+  "showPreview": true,
+  "showInfo": true
+}/*EDITMODE-END*/;
+
+function LoginTweaks() {
+  const [t, setTweak] = window.useTweaks(LOGIN_TWEAK_DEFAULTS);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = t.theme;
+    document.body.dataset.layout = t.layout;
+    document.body.dataset.showPreview = String(t.showPreview);
+    document.body.dataset.showInfo = String(t.showInfo);
+  }, [t.theme, t.layout, t.showPreview, t.showInfo]);
+
+  return (
+    <window.TweaksPanel title="Tweaks">
+      <window.TweakSection title="Appearance">
+        <window.TweakRadio
+          label="Theme" value={t.theme}
+          options={[{value:"light",label:"Light"},{value:"dark",label:"Dark"}]}
+          onChange={v => setTweak("theme", v)} />
+        <window.TweakRadio
+          label="Layout" value={t.layout}
+          options={[{value:"split",label:"Split"},{value:"centered",label:"Centered"},{value:"minimal",label:"Minimal"}]}
+          onChange={v => setTweak("layout", v)} />
+      </window.TweakSection>
+      <window.TweakSection title="Content">
+        <window.TweakToggle
+          label="Show preview cards" value={t.showPreview}
+          onChange={v => setTweak("showPreview", v)} />
+        <window.TweakToggle
+          label="Show authorize-next list" value={t.showInfo}
+          onChange={v => setTweak("showInfo", v)} />
+      </window.TweakSection>
+    </window.TweaksPanel>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("tweaks-root")).render(<LoginTweaks />);
+</script>
+</body>
+</html>
