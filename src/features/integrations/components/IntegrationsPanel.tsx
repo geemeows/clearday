@@ -315,7 +315,7 @@ export function IntegrationsPanel({
               aria-label={`${provider.label} integration`}
               className="overflow-hidden rounded-lg border border-border bg-card"
             >
-              <header className="flex items-center gap-3 px-4 py-3">
+              <header className="flex items-center gap-3 bg-muted/40 px-4 py-3">
                 <SourceGlyph source={provider.kind} size={28} />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
