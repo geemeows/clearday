@@ -430,6 +430,56 @@ describe("ProjectBoardView", () => {
     }
   });
 
+  it("renders linked-ticket chip as a SourceGlyph + mono ext_id per design", () => {
+    const tickets = [
+      {
+        id: "t1",
+        card_id: "k1",
+        source: "github" as const,
+        ext_id: "owner/repo#42",
+        url: "https://github.com/owner/repo/issues/42",
+        status: "open",
+        assignee: null,
+        last_seen_at: null,
+        created_at: "2026-05-11T00:00:00Z",
+      },
+      {
+        id: "t2",
+        card_id: "k1",
+        source: "linear" as const,
+        ext_id: "DEV-441",
+        url: "https://linear.app/x/issue/DEV-441",
+        status: null,
+        assignee: null,
+        last_seen_at: null,
+        created_at: "2026-05-11T00:00:00Z",
+      },
+    ];
+    render(
+      <ProjectBoardView
+        project={project()}
+        columns={[column()]}
+        cards={[
+          card({ id: "k1", column_id: "col1", title: "Linked", order: 0 }),
+        ]}
+        tickets={tickets}
+        loading={false}
+        error={null}
+        onAddCard={() => {}}
+      />,
+    );
+    const ghChip = screen.getByTestId("card-chip-ticket-t1");
+    expect(ghChip.textContent).toContain("owner/repo#42");
+    expect(ghChip.textContent).not.toContain("github ·");
+    expect(ghChip.querySelector('[data-source="git"]')).toBeTruthy();
+    expect(ghChip.getAttribute("title")).toBe("open");
+
+    const linChip = screen.getByTestId("card-chip-ticket-t2");
+    expect(linChip.textContent).toContain("DEV-441");
+    expect(linChip.querySelector('[data-source="linear"]')).toBeTruthy();
+    expect(linChip.getAttribute("title")).toBe("reconnect to refresh");
+  });
+
   it("dueRelative returns today/tomorrow/null based on local day diff", () => {
     const now = new Date("2026-05-11T10:00:00");
     expect(dueRelative(new Date("2026-05-11T23:00:00").toISOString(), now)).toBe("today");

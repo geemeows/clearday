@@ -11,6 +11,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { z } from "zod";
 import { CardDetailPane } from "#/features/projects/CardDetailPane";
+import { SourceGlyph } from "#/features/signals/components/SourceGlyph";
 import {
   formatGithubKey,
   githubKeyUrl,
@@ -1258,10 +1259,16 @@ function CardChip({
           <span
             key={t.id}
             data-testid={`card-chip-ticket-${t.id}`}
-            className="inline-flex items-center gap-0.5 rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground"
+            title={t.status ?? "reconnect to refresh"}
+            className="inline-flex items-center gap-1"
           >
-            {t.source} · {t.ext_id}
-            {t.status ? ` · ${t.status}` : " · reconnect to refresh"}
+            <SourceGlyph
+              source={t.source === "github" ? "git" : t.source}
+              size={12}
+            />
+            <span className="font-mono font-semibold text-[10px] text-muted-foreground">
+              {t.ext_id}
+            </span>
           </span>
         ))}
       </div>
