@@ -1628,14 +1628,95 @@ const DAYS_OF_WEEK: Array<{ id: number; label: string }> = [
   { id: 6, label: "Sat" },
 ];
 
+export type QuietHoursMode = "uniform" | "weekday-weekend" | "per-day";
+
+type DayWindow = { on: boolean; start: string; end: string };
+
 type QuietHoursState = {
   enabled: boolean;
+  mode: QuietHoursMode;
   days: number[];
   start: string;
   end: string;
+  weekday: { start: string; end: string };
+  weekend: { on: boolean; start: string; end: string };
+  per_day: Record<string, DayWindow>;
   utc_offset_minutes: number;
   allow_through: Array<{ kind?: string; threshold?: string; tag?: string }>;
 };
+
+const QUIET_HOURS_MODES: ReadonlyArray<{ id: QuietHoursMode; label: string }> =
+  [
+    { id: "uniform", label: "Same every day" },
+    { id: "weekday-weekend", label: "Weekday / weekend" },
+    { id: "per-day", label: "Per day" },
+  ];
+
+const PER_DAY_KEYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
+
+const ALLOW_THROUGH_PRESETS: ReadonlyArray<{
+  id: string;
+  label: string;
+  rule: { kind?: string; threshold?: string; tag?: string };
+}> = [
+  { id: "mention", label: "@mentions", rule: { kind: "mention" } },
+  { id: "dm", label: "Direct messages", rule: { kind: "dm" } },
+  { id: "urgent", label: "Urgent threshold", rule: { threshold: "urgent" } },
+  { id: "oncall", label: "On-call pages", rule: { tag: "on-call" } },
+  { id: "ci-prod", label: "CI red on prod", rule: { tag: "ci-prod" } },
+];
+
+function allowThroughLabel(r: {
+  kind?: string;
+  threshold?: string;
+  tag?: string;
+}): string {
+  const preset = ALLOW_THROUGH_PRESETS.find(
+    (p) =>
+      p.rule.kind === r.kind &&
+      p.rule.threshold === r.threshold &&
+      p.rule.tag === r.tag,
+  );
+  if (preset) return preset.label;
+  if (r.kind) return `kind: ${r.kind}`;
+  if (r.threshold) return `threshold: ${r.threshold}`;
+  if (r.tag) return `tag: ${r.tag}`;
+  return "rule";
+}
+
+function ruleKey(r: { kind?: string; threshold?: string; tag?: string }) {
+  return `${r.kind ?? ""}|${r.threshold ?? ""}|${r.tag ?? ""}`;
+}
+
+function defaultDayWindow(start: string, end: string): DayWindow {
+  return { on: true, start, end };
+}
+
+function defaultPerDay(start: string, end: string): Record<string, DayWindow> {
+  return Object.fromEntries(
+    PER_DAY_KEYS.map((d) => [
+      d,
+      defaultDayWindow(
+        start,
+        d === "Sat" || d === "Sun"
+          ? "23:59"
+          : d === "Fri"
+            ? "09:00"
+            : end,
+      ),
+    ]),
+  );
+}
+
+function parseDayWindow(raw: unknown, fallback: DayWindow): DayWindow {
+  if (!raw || typeof raw !== "object") return fallback;
+  const r = raw as Record<string, unknown>;
+  return {
+    on: typeof r.on === "boolean" ? r.on : fallback.on,
+    start: typeof r.start === "string" ? r.start : fallback.start,
+    end: typeof r.end === "string" ? r.end : fallback.end,
+  };
+}
 
 function defaultQuietHoursState(raw: Record<string, unknown>): QuietHoursState {
   const days = Array.isArray(raw.days)
@@ -1643,11 +1724,46 @@ function defaultQuietHoursState(raw: Record<string, unknown>): QuietHoursState {
         (d): d is number => typeof d === "number" && d >= 0 && d <= 6,
       )
     : [1, 2, 3, 4, 5];
+  const start = typeof raw.start === "string" ? raw.start : "22:00";
+  const end = typeof raw.end === "string" ? raw.end : "08:00";
+  const mode: QuietHoursMode =
+    raw.mode === "weekday-weekend" || raw.mode === "per-day"
+      ? raw.mode
+      : "uniform";
+  const weekdayRaw =
+    raw.weekday && typeof raw.weekday === "object"
+      ? (raw.weekday as Record<string, unknown>)
+      : {};
+  const weekendRaw =
+    raw.weekend && typeof raw.weekend === "object"
+      ? (raw.weekend as Record<string, unknown>)
+      : {};
+  const perDayRaw =
+    raw.per_day && typeof raw.per_day === "object"
+      ? (raw.per_day as Record<string, unknown>)
+      : {};
+  const perDayDefaults = defaultPerDay(start, end);
   return {
     enabled: raw.enabled === true,
+    mode,
     days,
-    start: typeof raw.start === "string" ? raw.start : "22:00",
-    end: typeof raw.end === "string" ? raw.end : "08:00",
+    start,
+    end,
+    weekday: {
+      start: typeof weekdayRaw.start === "string" ? weekdayRaw.start : start,
+      end: typeof weekdayRaw.end === "string" ? weekdayRaw.end : end,
+    },
+    weekend: {
+      on: typeof weekendRaw.on === "boolean" ? weekendRaw.on : true,
+      start: typeof weekendRaw.start === "string" ? weekendRaw.start : "00:00",
+      end: typeof weekendRaw.end === "string" ? weekendRaw.end : "23:59",
+    },
+    per_day: Object.fromEntries(
+      PER_DAY_KEYS.map((d) => [
+        d,
+        parseDayWindow(perDayRaw[d], perDayDefaults[d]),
+      ]),
+    ),
     utc_offset_minutes:
       typeof raw.utc_offset_minutes === "number" ? raw.utc_offset_minutes : 0,
     allow_through: Array.isArray(raw.allow_through)
@@ -1768,9 +1884,267 @@ export function QuietHoursPanel({
               })}
             </div>
           </div>
+
+          <div>
+            <p className="mb-2 text-zinc-500">Schedule mode</p>
+            <div
+              role="tablist"
+              aria-label="Quiet hours schedule mode"
+              className="inline-flex rounded-md bg-muted p-0.5"
+            >
+              {QUIET_HOURS_MODES.map((m) => {
+                const active = data.mode === m.id;
+                return (
+                  <button
+                    key={m.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={active}
+                    aria-label={`Schedule: ${m.label}`}
+                    onClick={() => persist({ mode: m.id })}
+                    disabled={busy || !data.enabled}
+                    className={`rounded-sm px-3 py-1 text-xs font-medium transition-colors ${
+                      active
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {m.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {data.mode === "weekday-weekend" && (
+              <div className="mt-3 space-y-2">
+                <div className="flex items-center gap-3 rounded-md bg-muted/50 px-3 py-2">
+                  <span className="w-24 font-medium text-foreground text-xs">
+                    Mon–Fri
+                  </span>
+                  <span className="text-muted-foreground text-xs">from</span>
+                  <input
+                    type="time"
+                    aria-label="Weekday quiet start"
+                    value={data.weekday.start}
+                    onChange={(e) =>
+                      persist({
+                        weekday: { ...data.weekday, start: e.target.value },
+                      })
+                    }
+                    disabled={busy || !data.enabled}
+                    className="rounded border border-zinc-200 px-2 py-1 text-xs"
+                  />
+                  <span className="text-muted-foreground text-xs">to</span>
+                  <input
+                    type="time"
+                    aria-label="Weekday quiet end"
+                    value={data.weekday.end}
+                    onChange={(e) =>
+                      persist({
+                        weekday: { ...data.weekday, end: e.target.value },
+                      })
+                    }
+                    disabled={busy || !data.enabled}
+                    className="rounded border border-zinc-200 px-2 py-1 text-xs"
+                  />
+                </div>
+                <div className="flex items-center gap-3 rounded-md bg-muted/50 px-3 py-2">
+                  <span className="w-24 font-medium text-foreground text-xs">
+                    Sat–Sun
+                  </span>
+                  <label className="flex items-center gap-2 text-xs">
+                    <input
+                      type="checkbox"
+                      aria-label="Weekend quiet hours on"
+                      checked={data.weekend.on}
+                      onChange={() =>
+                        persist({
+                          weekend: { ...data.weekend, on: !data.weekend.on },
+                        })
+                      }
+                      disabled={busy || !data.enabled}
+                    />
+                    On
+                  </label>
+                  <span className="text-muted-foreground text-xs">from</span>
+                  <input
+                    type="time"
+                    aria-label="Weekend quiet start"
+                    value={data.weekend.start}
+                    onChange={(e) =>
+                      persist({
+                        weekend: { ...data.weekend, start: e.target.value },
+                      })
+                    }
+                    disabled={busy || !data.enabled || !data.weekend.on}
+                    className="rounded border border-zinc-200 px-2 py-1 text-xs"
+                  />
+                  <span className="text-muted-foreground text-xs">to</span>
+                  <input
+                    type="time"
+                    aria-label="Weekend quiet end"
+                    value={data.weekend.end}
+                    onChange={(e) =>
+                      persist({
+                        weekend: { ...data.weekend, end: e.target.value },
+                      })
+                    }
+                    disabled={busy || !data.enabled || !data.weekend.on}
+                    className="rounded border border-zinc-200 px-2 py-1 text-xs"
+                  />
+                </div>
+              </div>
+            )}
+
+            {data.mode === "per-day" && (
+              <div className="mt-3 space-y-1.5">
+                {PER_DAY_KEYS.map((d) => {
+                  const p = data.per_day[d];
+                  return (
+                    <div
+                      key={d}
+                      className="flex items-center gap-3 rounded-md bg-muted/50 px-3 py-1.5"
+                    >
+                      <span className="w-14 font-medium text-foreground text-xs">
+                        {d}
+                      </span>
+                      <label className="flex items-center gap-1.5 text-xs">
+                        <input
+                          type="checkbox"
+                          aria-label={`Quiet hours on ${d}`}
+                          checked={p.on}
+                          onChange={() =>
+                            persist({
+                              per_day: {
+                                ...data.per_day,
+                                [d]: { ...p, on: !p.on },
+                              },
+                            })
+                          }
+                          disabled={busy || !data.enabled}
+                        />
+                        On
+                      </label>
+                      <input
+                        type="time"
+                        aria-label={`Quiet start ${d}`}
+                        value={p.start}
+                        onChange={(e) =>
+                          persist({
+                            per_day: {
+                              ...data.per_day,
+                              [d]: { ...p, start: e.target.value },
+                            },
+                          })
+                        }
+                        disabled={busy || !data.enabled || !p.on}
+                        className="rounded border border-zinc-200 px-2 py-1 text-xs"
+                      />
+                      <span className="text-muted-foreground text-xs">to</span>
+                      <input
+                        type="time"
+                        aria-label={`Quiet end ${d}`}
+                        value={p.end}
+                        onChange={(e) =>
+                          persist({
+                            per_day: {
+                              ...data.per_day,
+                              [d]: { ...p, end: e.target.value },
+                            },
+                          })
+                        }
+                        disabled={busy || !data.enabled || !p.on}
+                        className="rounded border border-zinc-200 px-2 py-1 text-xs"
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <div>
+            <p className="mb-2 text-zinc-500">Allow through</p>
+            <div className="flex flex-wrap gap-1.5">
+              {data.allow_through.map((r) => {
+                const key = ruleKey(r);
+                return (
+                  <span
+                    key={key}
+                    className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-0.5 text-primary text-xs font-medium"
+                  >
+                    {allowThroughLabel(r)}
+                    <button
+                      type="button"
+                      aria-label={`Remove allow-through ${allowThroughLabel(r)}`}
+                      onClick={() =>
+                        persist({
+                          allow_through: data.allow_through.filter(
+                            (x) => ruleKey(x) !== key,
+                          ),
+                        })
+                      }
+                      disabled={busy}
+                      className="text-primary/70 hover:text-primary"
+                    >
+                      ×
+                    </button>
+                  </span>
+                );
+              })}
+              <AllowThroughAdd
+                disabled={busy}
+                current={data.allow_through}
+                onAdd={(rule) =>
+                  persist({
+                    allow_through: [...data.allow_through, rule],
+                  })
+                }
+              />
+            </div>
+          </div>
         </div>
       )}
     </SettingsPanel>
+  );
+}
+
+function AllowThroughAdd({
+  disabled,
+  current,
+  onAdd,
+}: {
+  disabled: boolean;
+  current: Array<{ kind?: string; threshold?: string; tag?: string }>;
+  onAdd: (rule: { kind?: string; threshold?: string; tag?: string }) => void;
+}) {
+  const currentKeys = new Set(current.map(ruleKey));
+  const available = ALLOW_THROUGH_PRESETS.filter(
+    (p) => !currentKeys.has(ruleKey(p.rule)),
+  );
+  return (
+    <label className="inline-flex items-center">
+      <span className="sr-only">Add allow-through rule</span>
+      <select
+        aria-label="Add allow-through rule"
+        value=""
+        onChange={(e) => {
+          const preset = ALLOW_THROUGH_PRESETS.find((p) => p.id === e.target.value);
+          if (preset) onAdd(preset.rule);
+        }}
+        disabled={disabled || available.length === 0}
+        className="rounded-full border border-dashed border-zinc-300 bg-transparent px-2 py-0.5 text-muted-foreground text-xs hover:text-foreground disabled:opacity-50"
+      >
+        <option value="" disabled>
+          + Add rule
+        </option>
+        {available.map((p) => (
+          <option key={p.id} value={p.id}>
+            {p.label}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 

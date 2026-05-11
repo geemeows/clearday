@@ -648,6 +648,74 @@ describe("QuietHoursPanel", () => {
       ),
     );
   });
+
+  it("switches schedule mode to per-day and persists", async () => {
+    const saver = vi.fn(async () => basePrefs);
+    render(<QuietHoursPanel loader={async () => basePrefs} saver={saver} />);
+    const perDay = await screen.findByRole("tab", {
+      name: /Schedule: Per day/i,
+    });
+    fireEvent.click(perDay);
+    await waitFor(() =>
+      expect(saver).toHaveBeenCalledWith(
+        expect.objectContaining({
+          quiet_hours_v2: expect.objectContaining({ mode: "per-day" }),
+        }),
+      ),
+    );
+  });
+
+  it("renders weekday/weekend editors when the matching mode is active", async () => {
+    const saver = vi.fn(async () => basePrefs);
+    render(
+      <QuietHoursPanel
+        loader={async () => ({
+          ...basePrefs,
+          quiet_hours_v2: {
+            ...basePrefs.quiet_hours_v2,
+            mode: "weekday-weekend",
+          },
+        })}
+        saver={saver}
+      />,
+    );
+    await screen.findByLabelText(/Weekday quiet start/i);
+    await screen.findByLabelText(/Weekend quiet end/i);
+  });
+
+  it("removes an allow-through chip and persists the trimmed list", async () => {
+    const saver = vi.fn(async () => basePrefs);
+    render(<QuietHoursPanel loader={async () => basePrefs} saver={saver} />);
+    const remove = await screen.findByRole("button", {
+      name: /Remove allow-through @mentions/i,
+    });
+    fireEvent.click(remove);
+    await waitFor(() =>
+      expect(saver).toHaveBeenCalledWith(
+        expect.objectContaining({
+          quiet_hours_v2: expect.objectContaining({ allow_through: [] }),
+        }),
+      ),
+    );
+  });
+
+  it("adds an allow-through rule from the picker and persists it", async () => {
+    const saver = vi.fn(async () => basePrefs);
+    render(<QuietHoursPanel loader={async () => basePrefs} saver={saver} />);
+    const picker = await screen.findByLabelText(/Add allow-through rule/i);
+    fireEvent.change(picker, { target: { value: "oncall" } });
+    await waitFor(() =>
+      expect(saver).toHaveBeenCalledWith(
+        expect.objectContaining({
+          quiet_hours_v2: expect.objectContaining({
+            allow_through: expect.arrayContaining([
+              expect.objectContaining({ tag: "on-call" }),
+            ]),
+          }),
+        }),
+      ),
+    );
+  });
 });
 
 describe("FocusBlockPanel", () => {
