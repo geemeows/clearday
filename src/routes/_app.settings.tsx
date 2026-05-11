@@ -820,6 +820,19 @@ const FALLBACK_THRESHOLD_OPTIONS: Array<{
   { value: null, label: "Never (always primary)" },
 ];
 
+function formatLastValidated(iso: string): string {
+  const then = Date.parse(iso);
+  if (!Number.isFinite(then)) return "just now";
+  const seconds = Math.max(0, Math.floor((Date.now() - then) / 1000));
+  if (seconds < 60) return "just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
 export function AiProviderPanel({
   loader,
   saver,
@@ -1225,9 +1238,12 @@ export function AiProviderPanel({
               Test connection
             </button>
             {view.last_validated_at && (
-              <span className="text-muted-foreground text-xs">
-                Last validated{" "}
-                {new Date(view.last_validated_at).toLocaleString()}
+              <span className="inline-flex items-center gap-1.5 font-mono text-[11px] text-emerald-600 dark:text-emerald-400">
+                <span
+                  aria-hidden="true"
+                  className="inline-block size-1.5 rounded-full bg-emerald-500"
+                />
+                Last validated {formatLastValidated(view.last_validated_at)}
               </span>
             )}
           </div>
