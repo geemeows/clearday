@@ -2173,7 +2173,8 @@ async function replaceSlackAllowlist(
 
 const AI_SETTINGS_COLUMNS =
   "provider, model, api_key, base_url, last_validated_at, " +
-  "monthly_budget_usd, fallback_model, privacy_mode, redact_patterns, ai_disabled";
+  "monthly_budget_usd, fallback_model, fallback_threshold_pct, " +
+  "privacy_mode, redact_patterns, ai_disabled";
 
 function aiSettingsStore(service: SupabaseService): AiSettingsStore {
   return {

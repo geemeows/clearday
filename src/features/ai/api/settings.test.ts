@@ -17,6 +17,7 @@ const ROW_DEFAULTS: AiSettingsRow = {
   last_validated_at: null,
   monthly_budget_usd: 25,
   fallback_model: null,
+  fallback_threshold_pct: 80,
   privacy_mode: false,
   redact_patterns: [],
   ai_disabled: false,
@@ -248,6 +249,50 @@ describe("ai-settings-api", () => {
     expect(store.rows?.privacy_mode).toBe(true);
     expect(store.rows?.redact_patterns).toEqual(["acme-[a-z]+", "secret"]);
     expect(store.rows?.ai_disabled).toBe(false);
+  });
+
+  it("putAiSettings: persists fallback_threshold_pct from the allowed set", async () => {
+    const store = memoryStore({ provider: "openai", model: "gpt-4o-mini" });
+    const out = await putAiSettings(
+      { provider: "openai", fallback_threshold_pct: 50 },
+      { store, keySecret: SECRET, fetch: vi.fn() as unknown as typeof fetch },
+    );
+    expect(out.ok).toBe(true);
+    expect(store.rows?.fallback_threshold_pct).toBe(50);
+    if (out.ok) expect(out.settings.fallback_threshold_pct).toBe(50);
+  });
+
+  it("putAiSettings: persists fallback_threshold_pct=null (Never)", async () => {
+    const store = memoryStore({ provider: "openai", model: "gpt-4o-mini" });
+    const out = await putAiSettings(
+      { provider: "openai", fallback_threshold_pct: null },
+      { store, keySecret: SECRET, fetch: vi.fn() as unknown as typeof fetch },
+    );
+    expect(out.ok).toBe(true);
+    expect(store.rows?.fallback_threshold_pct).toBeNull();
+  });
+
+  it("putAiSettings: rejects fallback_threshold_pct outside the allowed set", async () => {
+    const store = memoryStore({ provider: "openai", model: "gpt-4o-mini" });
+    const out = await putAiSettings(
+      { provider: "openai", fallback_threshold_pct: 60 },
+      { store, keySecret: SECRET, fetch: vi.fn() as unknown as typeof fetch },
+    );
+    expect(out).toEqual({
+      ok: false,
+      error: "fallback_threshold_pct must be one of 50/70/80/90 or null",
+    });
+  });
+
+  it("putAiSettings: accepts the openrouter provider", async () => {
+    const store = memoryStore();
+    const out = await putAiSettings(
+      { provider: "openrouter", default_model: "openai/gpt-4o-mini" },
+      { store, keySecret: SECRET, fetch: vi.fn() as unknown as typeof fetch },
+    );
+    expect(out.ok).toBe(true);
+    expect(store.rows?.provider).toBe("openrouter");
+    expect(store.rows?.model).toBe("openai/gpt-4o-mini");
   });
 
   it("putAiSettings: rejects negative budget", async () => {

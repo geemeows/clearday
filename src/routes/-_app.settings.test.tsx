@@ -267,7 +267,7 @@ describe("NotificationsPanel", () => {
 });
 
 describe("AiProviderPanel", () => {
-  it("renders all five provider tiles and marks the active one", async () => {
+  it("renders six provider tiles (5 + Skip) and marks the active one", async () => {
     const loader = vi.fn(async () => ({
       provider: "openai" as const,
       default_model: "gpt-4o-mini",
@@ -283,23 +283,33 @@ describe("AiProviderPanel", () => {
         .getByRole("button", { name: /anthropic/i })
         .getAttribute("aria-pressed"),
     ).toBe("false");
-    expect(screen.getByRole("button", { name: /gemini/i })).toBeTruthy();
+    // "Google" is the display label for the gemini provider per the v3
+    // redesign — the persisted id stays `gemini`.
+    expect(screen.getByRole("button", { name: /google/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /groq/i })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /ollama/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /openrouter/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /skip/i })).toBeTruthy();
   });
 
-  it("does not render the API key field when ollama is active", async () => {
+  it("skip tile marks aria-pressed when ai is disabled", async () => {
     const loader = vi.fn(async () => ({
-      provider: "ollama" as const,
-      default_model: "llama3",
-      base_url: "http://localhost:11434",
-      has_api_key: false,
+      provider: "openai" as const,
+      default_model: "gpt-4o-mini",
+      base_url: null,
+      has_api_key: true,
       last_validated_at: null,
+      ai_disabled: true,
     }));
     render(<AiProviderPanel loader={loader} />);
-    await screen.findByRole("button", { name: /ollama/i });
-    expect(screen.queryByLabelText(/api key/i)).toBeNull();
-    expect(screen.getByLabelText(/base url/i)).toBeTruthy();
+    const skip = await screen.findByRole("button", { name: /skip/i });
+    expect(skip.getAttribute("aria-pressed")).toBe("true");
+    // The provider tile that was previously active stops being marked
+    // active while the user is in the Skip state.
+    expect(
+      screen
+        .getByRole("button", { name: /openai/i })
+        .getAttribute("aria-pressed"),
+    ).toBe("false");
   });
 
   it("save sends the typed key + model to the saver", async () => {
@@ -323,8 +333,8 @@ describe("AiProviderPanel", () => {
     )) as HTMLInputElement;
     fireEvent.change(keyInput, { target: { value: "sk-real" } });
     const modelInput = screen.getByLabelText(
-      /default model/i,
-    ) as HTMLInputElement;
+      /primary model/i,
+    ) as unknown as HTMLSelectElement;
     fireEvent.change(modelInput, { target: { value: "gpt-4o" } });
     fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
     await waitFor(() =>
@@ -333,6 +343,62 @@ describe("AiProviderPanel", () => {
           provider: "openai",
           default_model: "gpt-4o",
           api_key: "sk-real",
+        }),
+      ),
+    );
+  });
+
+  it("persists fallback_threshold_pct selection through the saver", async () => {
+    const baseView = {
+      provider: "openai" as const,
+      default_model: "gpt-4o-mini",
+      base_url: null,
+      has_api_key: true,
+      last_validated_at: null,
+      fallback_model: "gpt-4o-mini",
+      fallback_threshold_pct: 80,
+    };
+    const loader = vi.fn(async () => baseView);
+    const saver = vi.fn(async () => ({ ...baseView, fallback_threshold_pct: 50 }));
+    render(<AiProviderPanel loader={loader} saver={saver} />);
+    const select = (await screen.findByLabelText(
+      /fallback threshold/i,
+    )) as unknown as HTMLSelectElement;
+    fireEvent.change(select, { target: { value: "50" } });
+    await waitFor(() =>
+      expect(saver).toHaveBeenCalledWith(
+        expect.objectContaining({
+          provider: "openai",
+          fallback_threshold_pct: 50,
+        }),
+      ),
+    );
+  });
+
+  it("persists 'never' fallback threshold as null", async () => {
+    const baseView = {
+      provider: "openai" as const,
+      default_model: "gpt-4o-mini",
+      base_url: null,
+      has_api_key: true,
+      last_validated_at: null,
+      fallback_threshold_pct: 80,
+    };
+    const loader = vi.fn(async () => baseView);
+    const saver = vi.fn(async () => ({
+      ...baseView,
+      fallback_threshold_pct: null,
+    }));
+    render(<AiProviderPanel loader={loader} saver={saver} />);
+    const select = (await screen.findByLabelText(
+      /fallback threshold/i,
+    )) as unknown as HTMLSelectElement;
+    fireEvent.change(select, { target: { value: "never" } });
+    await waitFor(() =>
+      expect(saver).toHaveBeenCalledWith(
+        expect.objectContaining({
+          provider: "openai",
+          fallback_threshold_pct: null,
         }),
       ),
     );
@@ -912,7 +978,7 @@ describe("EmailDigestPanel", () => {
     render(<EmailDigestPanel loader={loader} saver={saver} />);
     const select = (await screen.findByLabelText(
       /^transport$/i,
-    )) as unknown as HTMLSelectElement;
+    )) as unknown as unknown as HTMLSelectElement;
     fireEvent.change(select, { target: { value: "postmark" } });
     fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
     await waitFor(() => expect(saver).toHaveBeenCalled());

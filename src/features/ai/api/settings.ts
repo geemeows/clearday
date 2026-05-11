@@ -34,6 +34,7 @@ export type AiSettingsRow = {
   last_validated_at: string | null;
   monthly_budget_usd: number | string | null;
   fallback_model: string | null;
+  fallback_threshold_pct: number | null;
   privacy_mode: boolean | null;
   redact_patterns: string[] | null;
   ai_disabled: boolean | null;
@@ -47,6 +48,11 @@ export type AiSettingsView = {
   last_validated_at: string | null;
   monthly_budget_usd: number;
   fallback_model: string | null;
+  /**
+   * Percent of monthly_budget_usd at which Devy switches to fallback_model.
+   * `null` means "never switch" (the user picked "Never" in the panel).
+   */
+  fallback_threshold_pct: number | null;
   privacy_mode: boolean;
   redact_patterns: string[];
   ai_disabled: boolean;
@@ -77,7 +83,10 @@ const KNOWN_PROVIDERS: LlmProvider[] = [
   "gemini",
   "groq",
   "ollama",
+  "openrouter",
 ];
+
+const ALLOWED_FALLBACK_THRESHOLDS = new Set([50, 70, 80, 90]);
 
 export function isKnownProvider(p: unknown): p is LlmProvider {
   return typeof p === "string" && (KNOWN_PROVIDERS as string[]).includes(p);
@@ -92,6 +101,7 @@ function viewOf(row: AiSettingsRow | null, monthSpent: number): AiSettingsView {
     last_validated_at: row?.last_validated_at ?? null,
     monthly_budget_usd: Number(row?.monthly_budget_usd ?? 25),
     fallback_model: row?.fallback_model ?? null,
+    fallback_threshold_pct: row?.fallback_threshold_pct ?? null,
     privacy_mode: !!row?.privacy_mode,
     redact_patterns: row?.redact_patterns ?? [],
     ai_disabled: !!row?.ai_disabled,
@@ -116,6 +126,7 @@ export type PutBody = {
   api_key?: unknown;
   monthly_budget_usd?: unknown;
   fallback_model?: unknown;
+  fallback_threshold_pct?: unknown;
   privacy_mode?: unknown;
   redact_patterns?: unknown;
   ai_disabled?: unknown;
@@ -159,6 +170,22 @@ export async function putAiSettings(
       body.fallback_model.trim().length > 0
         ? body.fallback_model.trim()
         : null;
+  }
+  if (body.fallback_threshold_pct !== undefined) {
+    // `null` is the "Never" option from the panel; otherwise enforce the
+    // enumerated set (50/70/80/90) so it survives the DB check constraint.
+    if (body.fallback_threshold_pct === null) {
+      patch.fallback_threshold_pct = null;
+    } else {
+      const n = Number(body.fallback_threshold_pct);
+      if (!ALLOWED_FALLBACK_THRESHOLDS.has(n)) {
+        return {
+          ok: false,
+          error: "fallback_threshold_pct must be one of 50/70/80/90 or null",
+        };
+      }
+      patch.fallback_threshold_pct = n;
+    }
   }
   if (body.privacy_mode !== undefined) {
     patch.privacy_mode = !!body.privacy_mode;

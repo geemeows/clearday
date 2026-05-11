@@ -8,6 +8,7 @@ import { gemini } from "#/features/ai/internal/llm/llms/gemini";
 import { groq } from "#/features/ai/internal/llm/llms/groq";
 import { ollama } from "#/features/ai/internal/llm/llms/ollama";
 import { openai } from "#/features/ai/internal/llm/llms/openai";
+import { openrouter } from "#/features/ai/internal/llm/llms/openrouter";
 
 export const LLMS: Record<LlmProvider, Llm> = {
   anthropic,
@@ -15,4 +16,5 @@ export const LLMS: Record<LlmProvider, Llm> = {
   groq,
   gemini,
   ollama,
+  openrouter,
 };

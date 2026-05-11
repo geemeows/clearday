@@ -679,7 +679,13 @@ function urlBase64ToUint8Array(s: string): Uint8Array {
   return out;
 }
 
-type AiProvider = "anthropic" | "openai" | "gemini" | "groq" | "ollama";
+type AiProvider =
+  | "anthropic"
+  | "openai"
+  | "gemini"
+  | "groq"
+  | "ollama"
+  | "openrouter";
 
 type AiSettingsView = {
   provider: AiProvider | null;
@@ -692,6 +698,7 @@ type AiSettingsView = {
   // back to sensible defaults below.
   monthly_budget_usd?: number;
   fallback_model?: string | null;
+  fallback_threshold_pct?: number | null;
   privacy_mode?: boolean;
   redact_patterns?: string[];
   ai_disabled?: boolean;
@@ -705,21 +712,92 @@ type AiPutBody = {
   api_key?: string;
   monthly_budget_usd?: number;
   fallback_model?: string | null;
+  fallback_threshold_pct?: number | null;
   privacy_mode?: boolean;
   redact_patterns?: string[];
   ai_disabled?: boolean;
+};
+
+type AiModelOption = {
+  id: string;
+  label: string;
+  tier: string;
 };
 
 const AI_PROVIDERS: Array<{
   id: AiProvider;
   label: string;
   needsKey: boolean;
+  models: AiModelOption[];
 }> = [
-  { id: "anthropic", label: "Anthropic", needsKey: true },
-  { id: "openai", label: "OpenAI", needsKey: true },
-  { id: "gemini", label: "Google Gemini", needsKey: true },
-  { id: "groq", label: "Groq", needsKey: true },
-  { id: "ollama", label: "Ollama (local)", needsKey: false },
+  {
+    id: "anthropic",
+    label: "Anthropic",
+    needsKey: true,
+    models: [
+      { id: "claude-sonnet-4-6", label: "Claude Sonnet 4.6", tier: "smartest" },
+      {
+        id: "claude-opus-4-7",
+        label: "Claude Opus 4.7",
+        tier: "best reasoning",
+      },
+      {
+        id: "claude-haiku-4-5",
+        label: "Claude Haiku 4.5",
+        tier: "fast & cheap",
+      },
+    ],
+  },
+  {
+    id: "openai",
+    label: "OpenAI",
+    needsKey: true,
+    models: [
+      { id: "gpt-4o", label: "GPT-4o", tier: "balanced" },
+      { id: "gpt-4o-mini", label: "GPT-4o mini", tier: "fast & cheap" },
+    ],
+  },
+  {
+    id: "gemini",
+    // The design labels the Gemini provider as "Google"; the persisted
+    // provider id stays `gemini` to match the existing llm-client.
+    label: "Google",
+    needsKey: true,
+    models: [
+      { id: "gemini-1.5-pro", label: "Gemini 1.5 Pro", tier: "smartest" },
+      { id: "gemini-1.5-flash", label: "Gemini 1.5 Flash", tier: "fast" },
+    ],
+  },
+  {
+    id: "groq",
+    label: "Groq",
+    needsKey: true,
+    models: [
+      {
+        id: "llama-3.1-70b-versatile",
+        label: "Llama 3.1 70B",
+        tier: "balanced",
+      },
+      { id: "llama-3.1-8b-instant", label: "Llama 3.1 8B", tier: "fastest" },
+    ],
+  },
+  {
+    id: "openrouter",
+    label: "OpenRouter",
+    needsKey: true,
+    models: [
+      {
+        id: "anthropic/claude-sonnet-4-6",
+        label: "Claude Sonnet 4.6 (via OpenRouter)",
+        tier: "smartest",
+      },
+      {
+        id: "openai/gpt-4o-mini",
+        label: "GPT-4o mini (via OpenRouter)",
+        tier: "fast & cheap",
+      },
+    ],
+  },
 ];
 
 const DEFAULT_MODELS: Record<AiProvider, string> = {
@@ -728,7 +806,19 @@ const DEFAULT_MODELS: Record<AiProvider, string> = {
   gemini: "gemini-1.5-flash",
   groq: "llama-3.1-70b-versatile",
   ollama: "llama3",
+  openrouter: "openai/gpt-4o-mini",
 };
+
+const FALLBACK_THRESHOLD_OPTIONS: Array<{
+  value: number | null;
+  label: string;
+}> = [
+  { value: 50, label: "50% — switch early" },
+  { value: 70, label: "70%" },
+  { value: 80, label: "80% — recommended" },
+  { value: 90, label: "90%" },
+  { value: null, label: "Never (always primary)" },
+];
 
 export function AiProviderPanel({
   loader,
@@ -807,6 +897,9 @@ export function AiProviderPanel({
           provider,
           default_model: draftModel || DEFAULT_MODELS[provider],
           base_url: draftBaseUrl || undefined,
+          // Selecting a provider tile is also how a user un-skips after
+          // having clicked Skip.
+          ai_disabled: false,
         });
         persist({ ...next });
         setDraftModel(next.default_model ?? DEFAULT_MODELS[provider]);
@@ -860,23 +953,90 @@ export function AiProviderPanel({
   }, [load, persist, test]);
 
   const activeProvider = view?.provider ?? null;
-  const needsKey = activeProvider
-    ? (AI_PROVIDERS.find((p) => p.id === activeProvider)?.needsKey ?? true)
-    : true;
+  const activeProviderDef = activeProvider
+    ? AI_PROVIDERS.find((p) => p.id === activeProvider)
+    : null;
+  const needsKey = activeProviderDef?.needsKey ?? true;
   const isBusy = busy || actionBusy;
+  const isSkipped = !!view?.ai_disabled;
+
+  const saveFallbackModel = useCallback(
+    async (next: string) => {
+      if (!view?.provider) return;
+      setActionBusy(true);
+      try {
+        const saved = await save({
+          provider: view.provider,
+          fallback_model: next || null,
+        });
+        persist({ ...saved });
+        setActionError(null);
+      } catch (e) {
+        setActionError(e instanceof Error ? e.message : "save failed");
+      } finally {
+        setActionBusy(false);
+      }
+    },
+    [persist, save, view?.provider],
+  );
+
+  const saveFallbackThreshold = useCallback(
+    async (raw: string) => {
+      if (!view?.provider) return;
+      const next = raw === "never" ? null : Number(raw);
+      setActionBusy(true);
+      try {
+        const saved = await save({
+          provider: view.provider,
+          fallback_threshold_pct: next,
+        });
+        persist({ ...saved });
+        setActionError(null);
+      } catch (e) {
+        setActionError(e instanceof Error ? e.message : "save failed");
+      } finally {
+        setActionBusy(false);
+      }
+    },
+    [persist, save, view?.provider],
+  );
+
+  const skipProvider = useCallback(async () => {
+    setActionBusy(true);
+    try {
+      // "Skip" maps to ai_disabled = true. We keep whatever provider is
+      // already on the row so the user can un-skip later without losing
+      // their config; if they never picked one, anthropic is the default
+      // shown on the row, so persistence requires a provider to satisfy
+      // putAiSettings' "unknown provider" guard.
+      const provider = view?.provider ?? "anthropic";
+      const saved = await save({ provider, ai_disabled: true });
+      persist({ ...saved });
+      setActionError(null);
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : "save failed");
+    } finally {
+      setActionBusy(false);
+    }
+  }, [persist, save, view?.provider]);
+
+  const currentFallbackThreshold =
+    view?.fallback_threshold_pct === undefined
+      ? 80
+      : view.fallback_threshold_pct;
 
   return (
     <SettingsPanel
       title="AI provider"
-      desc="Bring your own LLM API key. Clearday never operates a shared model."
+      desc="Bring your own key. Devy never stores prompts; spend tracked locally."
       error={error}
       busy={busy && !view}
     >
       {view && (
         <div className="mt-4 space-y-5">
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-6">
             {AI_PROVIDERS.map((p) => {
-              const active = view.provider === p.id;
+              const active = view.provider === p.id && !isSkipped;
               return (
                 <button
                   key={p.id}
@@ -886,35 +1046,125 @@ export function AiProviderPanel({
                   disabled={isBusy}
                   className={`rounded border px-3 py-2 text-left text-sm ${
                     active
-                      ? "border-zinc-900 bg-zinc-900 text-white"
-                      : "border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50"
+                      ? "border-primary bg-primary/10 text-foreground"
+                      : "border-border bg-background text-zinc-700 hover:bg-muted/50"
                   }`}
                 >
                   <span className="block font-medium">{p.label}</span>
-                  <span
-                    className={`block text-xs ${active ? "text-zinc-200" : "text-zinc-500"}`}
-                  >
-                    {active ? "Active" : "Select"}
+                  <span className="block text-muted-foreground text-xs">
+                    {p.models.length} models
                   </span>
                 </button>
               );
             })}
+            <button
+              type="button"
+              aria-pressed={isSkipped}
+              onClick={skipProvider}
+              disabled={isBusy}
+              className={`rounded border px-3 py-2 text-left text-sm ${
+                isSkipped
+                  ? "border-primary bg-primary/10 text-foreground"
+                  : "border-border bg-background text-zinc-700 hover:bg-muted/50"
+              }`}
+            >
+              <span className="block font-medium">Skip</span>
+              <span className="block text-muted-foreground text-xs">
+                No AI calls
+              </span>
+            </button>
           </div>
 
           <label className="block text-sm">
-            <span className="block font-medium text-zinc-900">
-              Default model
+            <span className="block font-medium text-foreground">
+              Primary model
             </span>
-            <input
-              type="text"
-              value={draftModel}
-              onChange={(e) => setDraftModel(e.target.value)}
-              placeholder={
-                activeProvider ? DEFAULT_MODELS[activeProvider] : "model id"
+            {activeProviderDef ? (
+              <select
+                value={draftModel}
+                onChange={(e) => setDraftModel(e.target.value)}
+                className="mt-1 w-full rounded border border-border bg-background px-2 py-1.5 font-mono text-sm"
+                disabled={isBusy}
+              >
+                {activeProviderDef.models.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.label} — {m.tier}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                type="text"
+                value={draftModel}
+                onChange={(e) => setDraftModel(e.target.value)}
+                placeholder="model id"
+                className="mt-1 w-full rounded border border-border px-2 py-1.5 text-sm"
+                disabled={isBusy || !activeProvider}
+              />
+            )}
+          </label>
+
+          <label className="block text-sm">
+            <span className="block font-medium text-foreground">
+              Fallback model
+            </span>
+            {activeProviderDef ? (
+              <select
+                value={view.fallback_model ?? ""}
+                onChange={(e) => saveFallbackModel(e.target.value)}
+                className="mt-1 w-full rounded border border-border bg-background px-2 py-1.5 font-mono text-sm"
+                disabled={isBusy}
+              >
+                <option value="">— None —</option>
+                {activeProviderDef.models.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.label} — {m.tier}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                type="text"
+                value={view.fallback_model ?? ""}
+                onChange={(e) => saveFallbackModel(e.target.value)}
+                placeholder="e.g. gpt-4o-mini"
+                className="mt-1 w-full rounded border border-border px-2 py-1.5 text-sm"
+                disabled={isBusy || !activeProvider}
+              />
+            )}
+            <span className="mt-1 block text-muted-foreground text-xs">
+              Used after the budget switch-over threshold — and on
+              rate-limit retries.
+            </span>
+          </label>
+
+          <label className="block text-sm">
+            <span className="block font-medium text-foreground">
+              Fallback threshold
+            </span>
+            <select
+              value={
+                currentFallbackThreshold === null
+                  ? "never"
+                  : String(currentFallbackThreshold)
               }
-              className="mt-1 w-full rounded border border-border px-2 py-1.5 text-sm"
+              onChange={(e) => saveFallbackThreshold(e.target.value)}
+              className="mt-1 w-full rounded border border-border bg-background px-2 py-1.5 font-mono text-sm"
               disabled={isBusy || !activeProvider}
-            />
+            >
+              {FALLBACK_THRESHOLD_OPTIONS.map((o) => (
+                <option
+                  key={o.value === null ? "never" : String(o.value)}
+                  value={o.value === null ? "never" : String(o.value)}
+                >
+                  {o.label}
+                </option>
+              ))}
+            </select>
+            <span className="mt-1 block text-muted-foreground text-xs">
+              Percent of the monthly budget at which Devy switches to the
+              fallback model.
+            </span>
           </label>
 
           {activeProvider === "ollama" && (

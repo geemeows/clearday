@@ -34,7 +34,13 @@ export type ChatResponse = {
   };
 };
 
-export type LlmProvider = "anthropic" | "openai" | "gemini" | "groq" | "ollama";
+export type LlmProvider =
+  | "anthropic"
+  | "openai"
+  | "gemini"
+  | "groq"
+  | "ollama"
+  | "openrouter";
 
 export type LlmConfig = {
   provider: LlmProvider;

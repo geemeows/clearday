@@ -71,6 +71,7 @@ async function configuredRow(): Promise<AiSettingsRow> {
     last_validated_at: null,
     monthly_budget_usd: 25,
     fallback_model: null,
+    fallback_threshold_pct: 80,
     privacy_mode: false,
     redact_patterns: null,
     ai_disabled: false,
