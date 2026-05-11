@@ -4,6 +4,7 @@
 // — this surface is only the level title + header KV + tree + wheel.
 
 import { createFileRoute } from "@tanstack/react-router";
+import { Link2, LayoutGrid } from "lucide-react";
 import { useEffect, useState } from "react";
 import { CareerWheelChart } from "#/features/career/components/CareerWheel";
 import {
@@ -262,6 +263,33 @@ function SharedCriterion({
   );
 }
 
+function EvidenceChip({ evidence }: { evidence: StoredEvidence }) {
+  const Icon = evidence.card_id ? LayoutGrid : Link2;
+  const chipClass =
+    "inline-flex max-w-[240px] items-center gap-1.5 rounded-full border border-border bg-secondary px-1.5 py-0.5 text-[11.5px] font-medium text-foreground no-underline";
+  const label = (
+    <>
+      <Icon aria-hidden="true" className="h-[11px] w-[11px] shrink-0" />
+      <span className="truncate">{evidence.title}</span>
+    </>
+  );
+  return evidence.url ? (
+    <a
+      href={evidence.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      title={evidence.title}
+      className={chipClass}
+    >
+      {label}
+    </a>
+  ) : (
+    <span title={evidence.title} className={chipClass}>
+      {label}
+    </span>
+  );
+}
+
 function SharedIndicatorRow({
   indicator,
   evidence,
@@ -275,22 +303,18 @@ function SharedIndicatorRow({
       <span className="text-foreground">{indicator.description}</span>{" "}
       <span>· score {indicator.score}</span>
       {evidence.length > 0 && (
-        <ul aria-label="Evidence" className="mt-1 list-disc space-y-0.5 pl-5">
+        <ul
+          aria-label="Evidence"
+          className="mt-1.5 flex flex-wrap items-center gap-1.5"
+        >
           {evidence.map((e) => (
             <li key={e.id}>
-              {e.url ? (
-                <a
-                  href={e.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-foreground underline"
-                >
-                  {e.title}
-                </a>
-              ) : (
-                <span className="text-foreground">{e.title}</span>
+              <EvidenceChip evidence={e} />
+              {e.note && (
+                <span className="ml-1 text-muted-foreground italic">
+                  — {e.note}
+                </span>
               )}
-              {e.note && <span className="ml-1">— {e.note}</span>}
             </li>
           ))}
         </ul>
