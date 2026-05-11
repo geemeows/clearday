@@ -1189,10 +1189,10 @@ function CardChip({
           onKeyboardMove?.("right");
         }
       }}
-      className="w-full cursor-grab rounded-md border border-border bg-background px-3 py-2 text-left text-sm shadow-sm hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary active:cursor-grabbing"
+      className="w-full cursor-grab rounded-md border border-border bg-background px-3 py-2 text-left shadow-sm hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary active:cursor-grabbing"
     >
-      <span className="line-clamp-2 text-foreground">{card.title}</span>
-      <div className="mt-1 flex flex-wrap items-center gap-1">
+      {(card.priority || card.due_at || (tickets ?? []).length > 0) && (
+      <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
         {card.priority && (
           <span
             data-priority={card.priority}
@@ -1272,6 +1272,10 @@ function CardChip({
           </span>
         ))}
       </div>
+      )}
+      <span className="line-clamp-2 block text-[13px] font-medium leading-[1.35] text-foreground">
+        {card.title}
+      </span>
     </button>
   );
 }

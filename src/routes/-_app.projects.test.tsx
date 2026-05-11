@@ -480,6 +480,67 @@ describe("ProjectBoardView", () => {
     expect(linChip.getAttribute("title")).toBe("reconnect to refresh");
   });
 
+  it("renders chips above the title with design-token title typography (13px/500/1.35)", () => {
+    render(
+      <ProjectBoardView
+        project={project()}
+        columns={[column()]}
+        cards={[
+          card({
+            id: "k1",
+            column_id: "col1",
+            title: "Order me",
+            priority: "P1",
+            order: 0,
+          }),
+        ]}
+        loading={false}
+        error={null}
+        onAddCard={() => {}}
+      />,
+    );
+    const cardButton = screen.getByRole("button", { name: "Order me" });
+    const children = Array.from(cardButton.children);
+    const chipRowIdx = children.findIndex((el) =>
+      el.querySelector('[data-priority="P1"]'),
+    );
+    const titleIdx = children.findIndex((el) => el.textContent === "Order me");
+    expect(chipRowIdx).toBeGreaterThanOrEqual(0);
+    expect(titleIdx).toBeGreaterThanOrEqual(0);
+    expect(chipRowIdx).toBeLessThan(titleIdx);
+    const titleEl = children[titleIdx] as HTMLElement;
+    expect(titleEl.className).toContain("text-[13px]");
+    expect(titleEl.className).toContain("font-medium");
+    expect(titleEl.className).toContain("leading-[1.35]");
+  });
+
+  it("omits the chip row when card has no priority, no due, and no tickets", () => {
+    render(
+      <ProjectBoardView
+        project={project()}
+        columns={[column()]}
+        cards={[
+          card({
+            id: "k1",
+            column_id: "col1",
+            title: "Bare card",
+            priority: null,
+            due_at: null,
+            order: 0,
+          }),
+        ]}
+        loading={false}
+        error={null}
+        onAddCard={() => {}}
+      />,
+    );
+    const cardButton = screen.getByRole("button", { name: "Bare card" });
+    expect(cardButton.querySelector("[data-priority]")).toBeNull();
+    expect(cardButton.querySelector("[data-due]")).toBeNull();
+    // Only the title span should be a direct child.
+    expect(cardButton.children.length).toBe(1);
+  });
+
   it("dueRelative returns today/tomorrow/null based on local day diff", () => {
     const now = new Date("2026-05-11T10:00:00");
     expect(dueRelative(new Date("2026-05-11T23:00:00").toISOString(), now)).toBe("today");
