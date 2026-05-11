@@ -20,7 +20,6 @@ import {
 } from "#/features/career/store";
 import type { SupabaseLike } from "#/shared/db";
 
-const SCALE_MIN = 1;
 const SCALE_MAX = 4;
 
 // Group flat rows into the nested LevelTree the satisfaction math expects.
@@ -59,20 +58,30 @@ type WheelPoint = {
   target: number;
 };
 
-function pointsForRadius(
+function radiusFor(value: number, radius: number): number {
+  return (value / SCALE_MAX) * radius;
+}
+
+function polarXY(
+  cx: number,
+  cy: number,
+  r: number,
+  angleDeg: number,
+): [number, number] {
+  const a = ((angleDeg - 90) * Math.PI) / 180;
+  return [cx + r * Math.cos(a), cy + r * Math.sin(a)];
+}
+
+function polygonPointsAt(
   values: number[],
+  angles: number[],
   cx: number,
   cy: number,
   radius: number,
 ): string {
-  if (values.length === 0) return "";
-  const step = (Math.PI * 2) / values.length;
   return values
     .map((v, i) => {
-      const angle = -Math.PI / 2 + i * step;
-      const r = ((v - SCALE_MIN) / (SCALE_MAX - SCALE_MIN)) * radius;
-      const x = cx + Math.cos(angle) * r;
-      const y = cy + Math.sin(angle) * r;
+      const [x, y] = polarXY(cx, cy, radiusFor(v, radius), angles[i]);
       return `${x.toFixed(2)},${y.toFixed(2)}`;
     })
     .join(" ");
@@ -82,7 +91,8 @@ export function CareerWheelChart({ points }: { points: WheelPoint[] }) {
   const size = 360;
   const cx = size / 2;
   const cy = size / 2;
-  const radius = size * 0.4;
+  const padding = 56;
+  const radius = (size - padding * 2) / 2;
   const axisCount = points.length;
   const ringValues = [1, 2, 3, 4];
 
@@ -94,14 +104,17 @@ export function CareerWheelChart({ points }: { points: WheelPoint[] }) {
     );
   }
 
-  const targetPoly = pointsForRadius(
+  const angles = points.map((_, i) => (360 / axisCount) * i);
+  const targetPoly = polygonPointsAt(
     points.map((p) => p.target),
+    angles,
     cx,
     cy,
     radius,
   );
-  const currentPoly = pointsForRadius(
+  const currentPoly = polygonPointsAt(
     points.map((p) => p.current),
+    angles,
     cx,
     cy,
     radius,
@@ -116,62 +129,113 @@ export function CareerWheelChart({ points }: { points: WheelPoint[] }) {
     >
       <title>Career wheel</title>
       {/* Concentric scale rings */}
-      {ringValues.map((rv) => {
-        const r = ((rv - SCALE_MIN) / (SCALE_MAX - SCALE_MIN)) * radius;
+      {ringValues.map((rv) => (
+        <circle
+          key={rv}
+          cx={cx}
+          cy={cy}
+          r={radiusFor(rv, radius)}
+          fill="none"
+          stroke="var(--hairline-soft)"
+          strokeWidth={1}
+        />
+      ))}
+      {/* Axes */}
+      {points.map((p, i) => {
+        const a = angles[i];
+        const [x, y] = polarXY(cx, cy, radius, a);
         return (
-          <circle
-            key={rv}
-            cx={cx}
-            cy={cy}
-            r={r}
-            fill="none"
-            stroke="currentColor"
-            strokeOpacity={0.15}
+          <line
+            key={p.competencyId}
+            x1={cx}
+            y1={cy}
+            x2={x}
+            y2={y}
+            stroke="var(--hairline-soft)"
+            strokeWidth={1}
           />
         );
       })}
-      {/* Axes */}
+      {/* Target polygon — dashed outline */}
+      <polygon
+        points={targetPoly}
+        fill="none"
+        stroke="var(--muted-foreground)"
+        strokeWidth={1.25}
+        strokeDasharray="4 3"
+        opacity={0.7}
+      />
+      {/* Current polygon — filled */}
+      <polygon
+        points={currentPoly}
+        className="fill-primary/20 stroke-primary"
+        strokeWidth={2}
+        strokeLinejoin="round"
+      />
+      {/* Current point dots */}
       {points.map((p, i) => {
-        const angle = -Math.PI / 2 + i * ((Math.PI * 2) / axisCount);
-        const x = cx + Math.cos(angle) * radius;
-        const y = cy + Math.sin(angle) * radius;
-        const labelX = cx + Math.cos(angle) * (radius + 18);
-        const labelY = cy + Math.sin(angle) * (radius + 18);
+        const [x, y] = polarXY(cx, cy, radiusFor(p.current, radius), angles[i]);
         return (
-          <g key={p.competencyId}>
-            <line
-              x1={cx}
-              y1={cy}
-              x2={x}
-              y2={y}
-              stroke="currentColor"
-              strokeOpacity={0.2}
-            />
+          <circle
+            key={`dot-${p.competencyId}`}
+            cx={x}
+            cy={y}
+            r={3.5}
+            className="fill-primary"
+            stroke="var(--background)"
+            strokeWidth={1.5}
+          />
+        );
+      })}
+      {/* Per-axis labels: name + current / target */}
+      {points.map((p, i) => {
+        const a = angles[i];
+        const [lx, ly] = polarXY(cx, cy, radius + 26, a);
+        const anchor =
+          a > 5 && a < 175 ? "start" : a > 185 && a < 355 ? "end" : "middle";
+        const dy =
+          a > 95 && a < 265
+            ? 12
+            : a < 5 || a > 355 || (a > 175 && a < 185)
+              ? 4
+              : 0;
+        return (
+          <g key={`label-${p.competencyId}`}>
             <text
-              x={labelX}
-              y={labelY}
-              textAnchor="middle"
-              dominantBaseline="middle"
+              x={lx}
+              y={ly + dy}
+              textAnchor={anchor}
               fontSize={11}
-              className="fill-muted-foreground"
+              fontWeight={600}
+              className="fill-foreground"
             >
               {p.name}
+            </text>
+            <text
+              x={lx}
+              y={ly + dy + 13}
+              textAnchor={anchor}
+              fontSize={10}
+              className="fill-muted-foreground"
+            >
+              {p.current.toFixed(1)} / {p.target.toFixed(1)}
             </text>
           </g>
         );
       })}
-      {/* Target polygon */}
-      <polygon
-        points={targetPoly}
-        className="fill-primary/10 stroke-primary/40"
-        strokeWidth={1.5}
-      />
-      {/* Current polygon */}
-      <polygon
-        points={currentPoly}
-        className="fill-primary/30 stroke-primary"
-        strokeWidth={2}
-      />
+      {/* Ring value labels along top axis */}
+      {ringValues.map((rv) => (
+        <text
+          key={`ring-${rv}`}
+          x={cx + 3}
+          y={cy - radiusFor(rv, radius) + 3}
+          fontSize={9}
+          fontWeight={500}
+          fill="var(--muted-soft)"
+        >
+          {rv}
+        </text>
+      ))}
     </svg>
   );
 }
@@ -247,7 +311,10 @@ export function CareerWheel({
           Current
         </li>
         <li className="flex items-center gap-1.5">
-          <span className="inline-block h-2 w-2 rounded-sm bg-primary/30" />
+          <span
+            aria-hidden="true"
+            className="inline-block h-2 w-3 border-dashed border-muted-foreground border-t"
+          />
           Target
         </li>
       </ul>
