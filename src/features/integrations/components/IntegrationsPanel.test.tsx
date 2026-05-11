@@ -398,4 +398,43 @@ describe("IntegrationsPanel", () => {
     });
     expect(openUrl).not.toHaveBeenCalled();
   });
+
+  it("renders the Sheets re-consent banner and routes its CTA to Google OAuth", async () => {
+    const loader = loaderWith([]);
+    const connectUrl = vi.fn(async () => ({
+      ok: true,
+      url: "https://auth.example.com/start/google",
+    }));
+    const openUrl = vi.fn();
+    render(
+      <IntegrationsPanel
+        sourcesLoader={loader}
+        connectUrl={connectUrl}
+        openUrl={openUrl}
+        now={NOW}
+      />,
+    );
+    const banner = await screen.findByRole("complementary", {
+      name: "Google Sheets re-consent",
+    });
+    expect(
+      within(banner).getByText(/google sheets — for career sync/i),
+    ).toBeTruthy();
+    expect(within(banner).getByText(/re-auth needed/i)).toBeTruthy();
+    expect(within(banner).getByText("spreadsheets")).toBeTruthy();
+    expect(within(banner).getByText("drive.file")).toBeTruthy();
+    fireEvent.click(
+      within(banner).getByRole("button", { name: "Re-authorize Google" }),
+    );
+    await waitFor(() => {
+      expect(openUrl).toHaveBeenCalledWith(
+        "https://auth.example.com/start/google",
+      );
+    });
+    const callArgs = connectUrl.mock.calls[0] as unknown as
+      | [string, string | undefined]
+      | undefined;
+    expect(callArgs?.[0]).toBe("google");
+    expect(callArgs?.[1]).toBeUndefined();
+  });
 });

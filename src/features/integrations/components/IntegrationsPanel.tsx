@@ -13,7 +13,7 @@
 // connect-url proxy keyed by account_id (#122). Remove hits
 // DELETE /api/accounts/:id (#122).
 
-import { Plus, X } from "lucide-react";
+import { Plus, ShieldCheck, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Avatar, AvatarFallback } from "#/components/coss/avatar";
 import { Button } from "#/components/coss/button";
@@ -55,10 +55,6 @@ type ProviderDef = {
   description: string;
   scopes: string;
   isMock?: boolean;
-  // Optional notice shown beneath the provider description — used when a
-  // newly-shipped feature widens scopes and existing connected users will
-  // need to re-consent on the next refresh.
-  reconsentNotice?: string;
 };
 
 const PROVIDERS: ReadonlyArray<ProviderDef> = [
@@ -85,8 +81,6 @@ const PROVIDERS: ReadonlyArray<ProviderDef> = [
     label: "Google Calendar",
     description: "Today's meetings and conflict detection",
     scopes: "calendar.readonly, calendar.events, spreadsheets, drive.file",
-    reconsentNotice:
-      "Already connected before May 2026? You'll be asked to re-grant Google access on the next sync — Career → Google Sheet needs the new Sheets + Drive scopes.",
   },
   {
     id: "linear",
@@ -298,6 +292,47 @@ export function IntegrationsPanel({
       busy={busy && !data}
       className="space-y-4"
     >
+      <aside
+        aria-label="Google Sheets re-consent"
+        className="grid grid-cols-[auto_1fr_auto] items-center gap-3.5 rounded-lg border border-border bg-card p-3.5"
+      >
+        <span
+          aria-hidden="true"
+          className="inline-flex size-9 items-center justify-center rounded-md bg-emerald-100 dark:bg-emerald-900/40"
+        >
+          <span className="inline-flex size-[22px] items-center justify-center rounded-sm bg-emerald-600 font-bold text-[13px] text-white">
+            S
+          </span>
+        </span>
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-sm">
+              Google Sheets — for Career sync
+            </span>
+            <span className="rounded-full bg-amber-500/15 px-1.5 py-px font-bold text-[10px] text-amber-700 uppercase tracking-wider dark:text-amber-300">
+              Re-auth needed
+            </span>
+          </div>
+          <p className="mt-1 text-muted-foreground text-xs">
+            Adds{" "}
+            <code className="font-mono text-[11px]">spreadsheets</code> +{" "}
+            <code className="font-mono text-[11px]">drive.file</code> scopes to
+            your existing Google connection. Per-file access only — Devy can
+            only read or write sheets it created.
+          </p>
+        </div>
+        <Button
+          type="button"
+          variant="default"
+          size="sm"
+          disabled={busyProvider === "google"}
+          onClick={() => onAddAccount("google")}
+          aria-label="Re-authorize Google"
+        >
+          <ShieldCheck className="size-3.5" />
+          Re-authorize Google
+        </Button>
+      </aside>
       <div
         aria-label="Accounts summary"
         className="flex items-center justify-end text-muted-foreground text-xs"
@@ -334,14 +369,6 @@ export function IntegrationsPanel({
                   <p className="mt-0.5 text-muted-foreground text-xs">
                     {provider.description}
                   </p>
-                  {provider.reconsentNotice ? (
-                    <p
-                      role="note"
-                      className="mt-1 rounded-sm border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-[11px] text-amber-700 dark:text-amber-300"
-                    >
-                      {provider.reconsentNotice}
-                    </p>
-                  ) : null}
                 </div>
                 <Button
                   type="button"
