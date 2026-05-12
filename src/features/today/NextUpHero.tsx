@@ -96,13 +96,14 @@ export function NextUpHero({
                 <li
                   key={item.url}
                   className={cn(
-                    "flex items-baseline gap-2 text-sm",
+                    "flex items-baseline gap-2 text-xs",
                     urgent ? "text-white/80" : "text-foreground",
                   )}
                 >
                   <span
-                    className={
-                      urgent ? "text-white/40" : "text-muted-foreground"
+                    className={urgent ? "text-white/40" : undefined}
+                    style={
+                      urgent ? undefined : { color: "var(--muted-soft)" }
                     }
                   >
                     ·
