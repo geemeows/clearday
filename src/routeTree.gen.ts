@@ -15,6 +15,7 @@ import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
 import { Route as AppTodayRouteImport } from './routes/_app.today'
+import { Route as AppTasksRouteImport } from './routes/_app.tasks'
 import { Route as AppSettingsRouteImport } from './routes/_app.settings'
 import { Route as AppProjectsRouteImport } from './routes/_app.projects'
 import { Route as AppInboxRouteImport } from './routes/_app.inbox'
@@ -59,6 +60,11 @@ const AuthCallbackRoute = AuthCallbackRouteImport.update({
 const AppTodayRoute = AppTodayRouteImport.update({
   id: '/today',
   path: '/today',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppTasksRoute = AppTasksRouteImport.update({
+  id: '/tasks',
+  path: '/tasks',
   getParentRoute: () => AppRoute,
 } as any)
 const AppSettingsRoute = AppSettingsRouteImport.update({
@@ -153,6 +159,7 @@ export interface FileRoutesByFullPath {
   '/inbox': typeof AppInboxRoute
   '/projects': typeof AppProjectsRouteWithChildren
   '/settings': typeof AppSettingsRouteWithChildren
+  '/tasks': typeof AppTasksRoute
   '/today': typeof AppTodayRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/projects/$projectId': typeof AppProjectsProjectIdRoute
@@ -174,6 +181,7 @@ export interface FileRoutesByTo {
   '/calendar': typeof AppCalendarRoute
   '/career': typeof AppCareerRoute
   '/inbox': typeof AppInboxRoute
+  '/tasks': typeof AppTasksRoute
   '/today': typeof AppTodayRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/projects/$projectId': typeof AppProjectsProjectIdRoute
@@ -199,6 +207,7 @@ export interface FileRoutesById {
   '/_app/inbox': typeof AppInboxRoute
   '/_app/projects': typeof AppProjectsRouteWithChildren
   '/_app/settings': typeof AppSettingsRouteWithChildren
+  '/_app/tasks': typeof AppTasksRoute
   '/_app/today': typeof AppTodayRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/_app/projects/$projectId': typeof AppProjectsProjectIdRoute
@@ -224,6 +233,7 @@ export interface FileRouteTypes {
     | '/inbox'
     | '/projects'
     | '/settings'
+    | '/tasks'
     | '/today'
     | '/auth/callback'
     | '/projects/$projectId'
@@ -245,6 +255,7 @@ export interface FileRouteTypes {
     | '/calendar'
     | '/career'
     | '/inbox'
+    | '/tasks'
     | '/today'
     | '/auth/callback'
     | '/projects/$projectId'
@@ -269,6 +280,7 @@ export interface FileRouteTypes {
     | '/_app/inbox'
     | '/_app/projects'
     | '/_app/settings'
+    | '/_app/tasks'
     | '/_app/today'
     | '/auth/callback'
     | '/_app/projects/$projectId'
@@ -334,6 +346,13 @@ declare module '@tanstack/react-router' {
       path: '/today'
       fullPath: '/today'
       preLoaderRoute: typeof AppTodayRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/tasks': {
+      id: '/_app/tasks'
+      path: '/tasks'
+      fullPath: '/tasks'
+      preLoaderRoute: typeof AppTasksRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/settings': {
@@ -496,6 +515,7 @@ interface AppRouteChildren {
   AppInboxRoute: typeof AppInboxRoute
   AppProjectsRoute: typeof AppProjectsRouteWithChildren
   AppSettingsRoute: typeof AppSettingsRouteWithChildren
+  AppTasksRoute: typeof AppTasksRoute
   AppTodayRoute: typeof AppTodayRoute
 }
 
@@ -506,6 +526,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppInboxRoute: AppInboxRoute,
   AppProjectsRoute: AppProjectsRouteWithChildren,
   AppSettingsRoute: AppSettingsRouteWithChildren,
+  AppTasksRoute: AppTasksRoute,
   AppTodayRoute: AppTodayRoute,
 }
 
