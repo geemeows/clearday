@@ -951,13 +951,11 @@ export function AiProviderPanel({
 
   // Sync drafts from the persisted snapshot when a fresh one lands.
   const lastViewRef = useRef<AiSettingsView | null>(null);
-  useEffect(() => {
-    if (view && view !== lastViewRef.current) {
-      setDraftModel(view.default_model ?? "");
-      setDraftBaseUrl(view.base_url ?? "");
-      lastViewRef.current = view;
-    }
-  }, [view]);
+  if (view && view !== lastViewRef.current) {
+    lastViewRef.current = view;
+    setDraftModel(view.default_model ?? "");
+    setDraftBaseUrl(view.base_url ?? "");
+  }
 
   const selectProvider = useCallback(
     async (provider: AiProvider) => {
@@ -2412,12 +2410,10 @@ export function FocusDefaultsPanel({
   // Local draft for the text input — synced from the last persisted snapshot.
   const [draftEmoji, setDraftEmoji] = useState("");
   const lastSnapshotRef = useRef<{ emoji: string } | null>(null);
-  useEffect(() => {
-    if (data && data !== lastSnapshotRef.current) {
-      setDraftEmoji(data.emoji);
-      lastSnapshotRef.current = data;
-    }
-  }, [data]);
+  if (data && data !== lastSnapshotRef.current) {
+    lastSnapshotRef.current = data;
+    setDraftEmoji(data.emoji);
+  }
 
   const commit = useCallback(() => {
     const trimmed = draftEmoji.trim() || DEFAULT_FOCUS_STATUS_EMOJI;
@@ -2548,19 +2544,17 @@ export function EmailDigestPanel({
   });
 
   const lastSnapshotRef = useRef<EmailDigestSettingsView | null>(null);
-  useEffect(() => {
-    if (view && view !== lastSnapshotRef.current) {
-      setDraft((d) => ({
-        ...d,
-        api_key: "",
-        from_email: view.from_email ?? "",
-        to_email: view.to_email ?? "",
-        hour_utc: view.hour_utc,
-        transport: view.transport,
-      }));
-      lastSnapshotRef.current = view;
-    }
-  }, [view]);
+  if (view && view !== lastSnapshotRef.current) {
+    lastSnapshotRef.current = view;
+    setDraft((d) => ({
+      ...d,
+      api_key: "",
+      from_email: view.from_email ?? "",
+      to_email: view.to_email ?? "",
+      hour_utc: view.hour_utc,
+      transport: view.transport,
+    }));
+  }
 
   const error = actionError ?? (loadError ? loadError.message : null);
 
