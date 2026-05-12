@@ -66,7 +66,7 @@ export function NextUpHero({
 
         <h2
           className={cn(
-            "font-semibold text-2xl leading-tight",
+            "font-semibold text-[17px] leading-[1.3]",
             urgent ? "text-white" : "text-foreground",
           )}
         >
