@@ -12,6 +12,18 @@ describe("TasksPage", () => {
     ).toBeTruthy();
   });
 
+  it("counts only assignee=you tasks in the heading caption", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    const assignedToYou = FIXTURE_TASKS.filter(
+      (t) => t.assignee === "you",
+    ).length;
+    expect(
+      screen.getByText(
+        new RegExp(`${assignedToYou} assigned to you · Linear · Sprint 24`),
+      ),
+    ).toBeTruthy();
+  });
+
   it("renders one column per status with the bucket count", () => {
     render(<TasksPage tasks={FIXTURE_TASKS} />);
     for (const label of ["To do", "In progress", "In review", "Done this week"]) {

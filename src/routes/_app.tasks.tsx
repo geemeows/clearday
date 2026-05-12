@@ -309,7 +309,7 @@ export function TasksPage({
           Tasks
         </h1>
         <span className="ml-[14px] text-[13px] text-muted-foreground">
-          {tasks.length} assigned to you · Linear · Sprint 24
+          {tasks.filter((t) => t.assignee === "you").length} assigned to you · Linear · Sprint 24
         </span>
       </header>
 
