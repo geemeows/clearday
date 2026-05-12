@@ -350,14 +350,14 @@ export function IntegrationsPanel({
               aria-label={`${provider.label} integration`}
               className="overflow-hidden rounded-lg border border-border bg-card"
             >
-              <header className="flex items-center gap-3 bg-muted/40 px-4 py-3">
+              <header className="flex items-center gap-3.5 bg-[var(--surface-soft)] px-4 py-4">
                 <SourceGlyph source={provider.kind} size={28} />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <span className="font-medium text-sm">
+                    <span className="font-semibold text-[15px]">
                       {provider.label}
                     </span>
-                    <span className="text-[11px] text-muted-foreground">
+                    <span className="font-mono text-[11px] text-muted-foreground">
                       {accountCountLabel(accounts.length)}
                     </span>
                     {provider.isMock ? (
@@ -386,7 +386,7 @@ export function IntegrationsPanel({
               {accounts.length > 0 ? (
                 <ul
                   aria-label={`${provider.label} accounts`}
-                  className="divide-y divide-border border-border border-t"
+                  className="divide-y divide-[var(--hairline-soft)] border-[var(--hairline-soft)] border-t"
                 >
                   {accounts.map((account) => (
                     <AccountRowItem
@@ -402,7 +402,20 @@ export function IntegrationsPanel({
                     />
                   ))}
                 </ul>
-              ) : null}
+              ) : (
+                <div className="flex items-center justify-center gap-1 px-4 py-5 text-muted-foreground text-[13px]">
+                  No accounts connected.
+                  <button
+                    type="button"
+                    disabled={isProviderBusy || provider.isMock}
+                    onClick={() => onAddAccount(provider.providerKey)}
+                    className="font-semibold text-[13px] text-primary hover:underline disabled:opacity-60"
+                    aria-label={`Connect ${provider.label}`}
+                  >
+                    Connect one →
+                  </button>
+                </div>
+              )}
 
               {provider.providerKey === "slack" ? (
                 <SlackProviderSettings
@@ -526,7 +539,7 @@ function SlackProviderSettings({
   onRemove: (name: string) => void;
 }) {
   return (
-    <section className="border-border border-t px-4 py-3">
+    <section className="border-[var(--hairline-soft)] border-t bg-[var(--canvas)] px-4 py-3.5">
       <h3 className="font-semibold text-sm tracking-tight">
         Slack channel allowlist
       </h3>
@@ -592,7 +605,7 @@ function CalendarProviderSettings({
   onChange: (next: WeekStart) => void;
 }) {
   return (
-    <section className="border-border border-t px-4 py-3">
+    <section className="border-[var(--hairline-soft)] border-t bg-[var(--canvas)] px-4 py-3.5">
       <h3 className="font-semibold text-sm tracking-tight">Week starts on</h3>
       <p className="mt-1 text-muted-foreground text-xs">
         Affects the week view on the Calendar page and weekly stats.
@@ -626,9 +639,9 @@ function CalendarProviderSettings({
 }
 
 function accountCountLabel(n: number): string {
-  if (n === 0) return "Not connected";
-  if (n === 1) return "1 account";
-  return `${n} accounts`;
+  if (n === 0) return "0 accounts connected";
+  if (n === 1) return "1 account connected";
+  return `${n} accounts connected`;
 }
 
 function computeInitials(name: string): string {

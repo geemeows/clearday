@@ -149,6 +149,25 @@ describe("IntegrationsPanel", () => {
     expect(within(slack).queryByLabelText(/Slack accounts/)).toBeNull();
   });
 
+  it("renders an empty-state 'Connect one' CTA on providers with no accounts", async () => {
+    const loader = loaderWith([]);
+    render(<IntegrationsPanel sourcesLoader={loader} now={NOW} />);
+    const card = await screen.findByRole("listitem", {
+      name: "GitHub integration",
+    });
+    expect(within(card).getByText(/no accounts connected/i)).toBeTruthy();
+    const cta = within(card).getByRole("button", { name: "Connect GitHub" });
+    expect(cta.hasAttribute("disabled")).toBe(false);
+    // Mock provider's empty-state CTA is disabled (matches header Add button).
+    const linearCard = screen.getByRole("listitem", {
+      name: "Linear integration",
+    });
+    const linearCta = within(linearCard).getByRole("button", {
+      name: "Connect Linear",
+    });
+    expect(linearCta.hasAttribute("disabled")).toBe(true);
+  });
+
   it("'+ Add account' triggers a fresh OAuth flow with no account_id", async () => {
     const loader = loaderWith([GITHUB_ACCT]);
     const connectUrl = vi.fn(async () => ({
