@@ -839,7 +839,7 @@ export function InboxPreviewCard({
   return (
     <article
       aria-label="Inbox preview"
-      className="rounded-lg border border-border bg-card p-5"
+      className="rounded-lg border border-border bg-card px-4 pt-5 pb-3"
     >
       <header className="flex items-baseline gap-2 px-1.5">
         <span className="font-semibold text-[15px] text-foreground leading-[1.3]">
