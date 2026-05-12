@@ -876,6 +876,10 @@ const TICKET_STATUS_LABEL: Record<string, string> = {
   ticket_assigned: "Assigned",
 };
 
+function ticketStatusDotTone(kind: string): "good" | "warn" {
+  return kind === "ticket_blocked" ? "warn" : "good";
+}
+
 // TODO(post-redesign): replace the GitHub PR / ticket signal fetch with the
 // dedicated Linear/Jira adapter once it lands — see PRD #29.
 export function useInProgressTickets(
@@ -1053,13 +1057,17 @@ export function InProgressCard({
             const days = daysInProgress(s);
             const prRef = prRefOf(s);
             const priority = s.payload?.priority_label as string | undefined;
+            const ticketId =
+              (s.payload?.identifier as string | undefined) || s.source_id;
+            const statusLabel = TICKET_STATUS_LABEL[s.kind] ?? s.kind;
+            const statusTone = ticketStatusDotTone(s.kind);
             return (
               <li
                 key={s.id}
                 className="flex items-center gap-3 border-border border-b py-3 last:border-0"
               >
                 <span className="rounded-md bg-secondary px-2 py-0.5 font-mono font-semibold text-[11px] text-foreground">
-                  {TICKET_STATUS_LABEL[s.kind] ?? s.kind}
+                  {ticketId}
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate font-medium text-foreground text-sm">
@@ -1076,9 +1084,16 @@ export function InProgressCard({
                   </span>
                 </span>
                 <span
-                  aria-hidden="true"
+                  aria-label={statusLabel}
+                  data-status-tone={statusTone}
+                  role="img"
                   className="inline-block h-1.5 w-1.5 shrink-0 rounded-full"
-                  style={{ background: "var(--good, #0a8754)" }}
+                  style={{
+                    background:
+                      statusTone === "warn"
+                        ? "var(--warn, #c2740c)"
+                        : "var(--good, #0a8754)",
+                  }}
                 />
                 {s.url && (
                   <a

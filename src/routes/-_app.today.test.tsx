@@ -424,18 +424,32 @@ describe("InProgressCard", () => {
     tags: null,
   });
 
-  it("renders tickets with their status label and an Open link", async () => {
+  it("renders tickets with their external id pill, a status-tinted dot, and an Open link", async () => {
     const loader = vi.fn(async () => [
       ticket("ENG-1", "ticket_in_progress"),
       ticket("ENG-2", "ticket_blocked"),
     ]);
     render(<InProgressCard loader={loader} />);
     await waitFor(() => screen.getByText("Ticket ENG-1"));
-    expect(screen.getAllByText("In progress").length).toBeGreaterThan(0);
-    expect(screen.getByText("Blocked")).toBeTruthy();
+    expect(screen.getByText("ENG-1")).toBeTruthy();
+    expect(screen.getByText("ENG-2")).toBeTruthy();
+    const inProgressDot = screen.getByRole("img", { name: "In progress" });
+    expect(inProgressDot.getAttribute("data-status-tone")).toBe("good");
+    const blockedDot = screen.getByRole("img", { name: "Blocked" });
+    expect(blockedDot.getAttribute("data-status-tone")).toBe("warn");
     expect(
       screen.getAllByRole("link", { name: /^open$/i })[0].getAttribute("href"),
     ).toBe("https://linear.app/x/issue/ENG-1");
+  });
+
+  it("prefers payload.identifier over source_id for the ticket pill when present", async () => {
+    const t = ticket("row-1", "ticket_in_progress");
+    t.payload = { identifier: "ENG-42" };
+    const loader = vi.fn(async () => [t]);
+    render(<InProgressCard loader={loader} />);
+    await waitFor(() => screen.getByText("Ticket row-1"));
+    expect(screen.getByText("ENG-42")).toBeTruthy();
+    expect(screen.queryByText("row-1")).toBeNull();
   });
 
   it("prefixes the metadata line with the ticket priority when present", async () => {
