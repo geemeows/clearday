@@ -441,8 +441,8 @@ export function BriefingCard({ generator }: { generator?: Generator } = {}) {
           Morning briefing
         </span>
         {result?.ok && (
-          <span className="font-mono text-[11px] text-muted-foreground uppercase tracking-wider">
-            {result.model.toUpperCase()}
+          <span className="font-mono text-[10px] text-muted-foreground">
+            {result.model}
             {latencyMs != null && ` · ${formatLatency(latencyMs)}`}
             {" · $0.000"}
             {result.cached && " · cached"}

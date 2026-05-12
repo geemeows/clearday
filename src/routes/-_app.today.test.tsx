@@ -196,7 +196,7 @@ describe("BriefingCard", () => {
     await waitFor(() => screen.getByText(/Lead with the/i));
     const strong = container.querySelector("strong");
     expect(strong?.textContent).toBe("design review");
-    expect(screen.getByText(/HAIKU-4-5/)).toBeTruthy();
+    expect(screen.getByText(/haiku-4-5/)).toBeTruthy();
     expect(generator).toHaveBeenCalledWith(false);
   });
 
