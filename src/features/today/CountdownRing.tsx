@@ -92,7 +92,7 @@ export function CountdownRing({
           <span data-testid="countdown-ss">{ss}</span>
         </div>
         {label && (
-          <div className="mt-2.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+          <div className="mt-2.5 font-semibold text-[10px] leading-[1.25] tracking-[0.4px] uppercase text-muted-foreground">
             {label}
           </div>
         )}
