@@ -75,7 +75,7 @@ export function CountdownRing({
           cy="80"
           r={radius}
           fill="none"
-          stroke="var(--accent, var(--primary))"
+          stroke="var(--primary)"
           strokeWidth="3"
           strokeLinecap="round"
           strokeDasharray={`${dash} ${circumference}`}
@@ -83,13 +83,16 @@ export function CountdownRing({
         />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <div className="font-mono font-bold text-4xl text-foreground tabular-nums tracking-tight">
+        <div
+          className="font-mono font-bold text-[44px] text-foreground tabular-nums leading-none"
+          style={{ letterSpacing: "-2px" }}
+        >
           <span data-testid="countdown-mm">{mm}</span>
-          <span className="text-muted-foreground">:</span>
+          <span style={{ color: "var(--muted-soft)" }}>:</span>
           <span data-testid="countdown-ss">{ss}</span>
         </div>
         {label && (
-          <div className="mt-1 font-mono text-[10px] text-muted-foreground uppercase tracking-wider">
+          <div className="mt-2.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
             {label}
           </div>
         )}
