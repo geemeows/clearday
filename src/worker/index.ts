@@ -22,6 +22,7 @@ import { type AlertChannel, fireChannels } from "#/features/alerts/dispatcher";
 import {
   buildDispatcherDeps,
   loadDueQueuedAlerts,
+  loadMeetingThresholdMin,
   loadUpcomingMeetings,
   removeQueuedAlert,
 } from "#/features/alerts/server/glue";
@@ -876,6 +877,7 @@ export default {
     ctx.waitUntil(
       runMeetingAlertTick({
         loadUpcomingMeetings: () => loadUpcomingMeetings(service),
+        loadMeetingThresholdMin: () => loadMeetingThresholdMin(service),
         dispatcher,
       })
         .then((report) => {

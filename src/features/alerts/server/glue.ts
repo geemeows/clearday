@@ -161,6 +161,28 @@ export function buildDispatcherDeps(
   };
 }
 
+const ALLOWED_MEETING_THRESHOLDS = [2, 5, 10, 15, 30] as const;
+const DEFAULT_MEETING_THRESHOLD_MIN = 10;
+
+export async function loadMeetingThresholdMin(
+  service: Service,
+): Promise<number> {
+  const { data, error } = await service
+    .from("user_preferences")
+    .select("notification_threshold_min")
+    .eq("id", true)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  const raw = data?.notification_threshold_min;
+  if (
+    typeof raw === "number" &&
+    (ALLOWED_MEETING_THRESHOLDS as readonly number[]).includes(raw)
+  ) {
+    return raw;
+  }
+  return DEFAULT_MEETING_THRESHOLD_MIN;
+}
+
 async function loadNotificationPrefs(
   service: Service,
 ): Promise<NotificationPrefs> {

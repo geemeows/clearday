@@ -93,6 +93,46 @@ describe("runMeetingAlertTick", () => {
     expect(spies.slack).not.toHaveBeenCalled();
   });
 
+  it("honors the configured meeting threshold (5min → ~6min lookahead)", async () => {
+    const now = new Date("2026-05-04T10:00:00Z");
+    const meetings = [
+      meeting("m-in-5", "2026-05-04T10:05:00Z"),
+      meeting("m-in-7", "2026-05-04T10:07:00Z"),
+      meeting("m-in-9", "2026-05-04T10:09:00Z"),
+    ];
+    const { deps, spies } = makeDispatcher();
+    const report = await runMeetingAlertTick({
+      loadUpcomingMeetings: async () => meetings,
+      loadMeetingThresholdMin: async () => 5,
+      dispatcher: deps,
+      now: () => now,
+    });
+    expect(report.dispatched).toHaveLength(1);
+    expect(report.dispatched[0].signalId).toBe("m-in-5");
+    expect(spies.slack).toHaveBeenCalledTimes(1);
+  });
+
+  it("widens the lookahead when the user picks 30 min", async () => {
+    const now = new Date("2026-05-04T10:00:00Z");
+    const meetings = [
+      meeting("m-in-25", "2026-05-04T10:25:00Z"),
+      meeting("m-in-31", "2026-05-04T10:31:00Z"),
+      meeting("m-in-32", "2026-05-04T10:32:00Z"),
+    ];
+    const { deps, spies } = makeDispatcher();
+    const report = await runMeetingAlertTick({
+      loadUpcomingMeetings: async () => meetings,
+      loadMeetingThresholdMin: async () => 30,
+      dispatcher: deps,
+      now: () => now,
+    });
+    expect(report.dispatched.map((d) => d.signalId)).toEqual([
+      "m-in-25",
+      "m-in-31",
+    ]);
+    expect(spies.slack).toHaveBeenCalledTimes(2);
+  });
+
   it("does not refire when idempotency already recorded", async () => {
     const now = new Date("2026-05-04T10:00:00Z");
     const m = meeting("m-soon", "2026-05-04T10:09:30Z");
