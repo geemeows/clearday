@@ -13,7 +13,7 @@
   border-radius: 0;
 }
 .re-wrap:focus-within {
-  border-color: var(--ink-soft, var(--hairline));
+  border-color: var(--ring);
 }
 
 .re-toolbar {
