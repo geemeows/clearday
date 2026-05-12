@@ -651,10 +651,10 @@ export function TodaySchedule({
                 aria-current={isNow ? "true" : undefined}
                 className={
                   focus
-                    ? "grid items-center gap-3 bg-foreground px-2 py-2 text-background first:rounded-t-md last:rounded-b-md"
-                    : "grid items-center gap-3 py-2"
+                    ? "grid items-center gap-3.5 bg-foreground px-2 py-2 text-background first:rounded-t-md last:rounded-b-md"
+                    : "grid items-center gap-3.5 py-2"
                 }
-                style={{ gridTemplateColumns: "84px 6px 1fr auto" }}
+                style={{ gridTemplateColumns: "60px 6px 1fr auto" }}
               >
                 <time
                   dateTime={e.startsAt.toISOString()}
@@ -979,7 +979,7 @@ export function DueTodayCard({
           {cards.map((c) => (
             <li
               key={c.id}
-              className="flex items-center gap-3 border-border border-b py-3 last:border-0"
+              className="flex items-center gap-3 border-[var(--hairline-soft)] border-b py-3 last:border-0"
             >
               {c.priority && (
                 <span className="rounded-md bg-secondary px-2 py-0.5 font-mono font-semibold text-[11px] text-foreground">
@@ -1066,7 +1066,7 @@ export function InProgressCard({
             return (
               <li
                 key={s.id}
-                className="flex items-center gap-3 border-border border-b py-3 last:border-0"
+                className="flex items-center gap-3 border-[var(--hairline-soft)] border-b py-3 last:border-0"
               >
                 <span className="rounded-md bg-secondary px-2 py-0.5 font-mono font-semibold text-[11px] text-foreground">
                   {ticketId}
