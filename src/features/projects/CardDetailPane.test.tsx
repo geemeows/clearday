@@ -3,6 +3,33 @@ import { describe, expect, it, vi } from "vitest";
 import { CardDetailPane } from "#/features/projects/CardDetailPane";
 import type { StoredCard, StoredColumn } from "#/features/projects/store";
 
+// Replace RichEditor with a textarea shim. The real RichEditor is covered by
+// its own suite (#/components/rich-editor/RichEditor.test.tsx); CardDetailPane
+// only cares about the value / onChange / onBlur wiring.
+vi.mock("#/components/rich-editor", () => ({
+  RichEditor: ({
+    value,
+    onChange,
+    onBlur,
+    ariaLabel,
+    placeholder,
+  }: {
+    value?: string;
+    onChange?: (html: string) => void;
+    onBlur?: (html: string) => void;
+    ariaLabel?: string;
+    placeholder?: string;
+  }) => (
+    <textarea
+      aria-label={ariaLabel}
+      placeholder={placeholder}
+      value={value ?? ""}
+      onChange={(e) => onChange?.(e.target.value)}
+      onBlur={(e) => onBlur?.(e.target.value)}
+    />
+  ),
+}));
+
 function makeCard(overrides: Partial<StoredCard> = {}): StoredCard {
   return {
     id: "card1",
@@ -57,20 +84,21 @@ describe("CardDetailPane rendering", () => {
   it("renders body when present", () => {
     render(
       <CardDetailPane
-        card={makeCard({ body: "Some details here" })}
+        card={makeCard({ body: "<p>Some details here</p>" })}
         columns={columns}
         onChange={vi.fn()}
         onDelete={vi.fn()}
         onClose={vi.fn()}
       />,
     );
+    // body is now stored as HTML (TipTap output); the editor shim displays it raw.
     expect(
       (
         screen.getByRole("textbox", {
           name: "Card body",
         }) as HTMLTextAreaElement
       ).value,
-    ).toBe("Some details here");
+    ).toBe("<p>Some details here</p>");
   });
 
   it("renders existing tags as chips", () => {
@@ -186,7 +214,7 @@ describe("CardDetailPane title", () => {
 // ─── body ─────────────────────────────────────────────────────────────────────
 
 describe("CardDetailPane body", () => {
-  it("calls onChange with body text on blur", () => {
+  it("calls onChange with body HTML on blur", () => {
     const onChange = vi.fn();
     render(
       <CardDetailPane
@@ -197,26 +225,26 @@ describe("CardDetailPane body", () => {
         onClose={vi.fn()}
       />,
     );
-    const textarea = screen.getByRole("textbox", { name: "Card body" });
-    fireEvent.change(textarea, { target: { value: "Some notes" } });
-    fireEvent.blur(textarea);
-    expect(onChange).toHaveBeenCalledWith({ body: "Some notes" });
+    const editor = screen.getByRole("textbox", { name: "Card body" });
+    fireEvent.change(editor, { target: { value: "<p>Some notes</p>" } });
+    fireEvent.blur(editor);
+    expect(onChange).toHaveBeenCalledWith({ body: "<p>Some notes</p>" });
   });
 
   it("calls onChange with null when body is cleared", () => {
     const onChange = vi.fn();
     render(
       <CardDetailPane
-        card={makeCard({ body: "Existing" })}
+        card={makeCard({ body: "<p>Existing</p>" })}
         columns={columns}
         onChange={onChange}
         onDelete={vi.fn()}
         onClose={vi.fn()}
       />,
     );
-    const textarea = screen.getByRole("textbox", { name: "Card body" });
-    fireEvent.change(textarea, { target: { value: "" } });
-    fireEvent.blur(textarea);
+    const editor = screen.getByRole("textbox", { name: "Card body" });
+    fireEvent.change(editor, { target: { value: "" } });
+    fireEvent.blur(editor);
     expect(onChange).toHaveBeenCalledWith({ body: null });
   });
 });

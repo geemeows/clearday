@@ -5,6 +5,7 @@
 
 import { RefreshCw, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { RichEditor } from "#/components/rich-editor";
 import type {
   CardPatch,
   StoredCard,
@@ -23,6 +24,13 @@ export type CardDetailPaneProps = {
   onUnlinkTicket?: (ticketId: string) => void;
   onRefreshTicket?: (ticketId: string) => void;
 };
+
+// TipTap returns "<p></p>" for an empty document. Treat that as null so
+// existing card.body === null contract is preserved.
+function isEmptyHtml(html: string): boolean {
+  const stripped = html.replace(/<p>(\s|&nbsp;|<br\/?>)*<\/p>/g, "").trim();
+  return stripped.length === 0;
+}
 
 const PRIORITIES: Array<{ value: string; label: string }> = [
   { value: "", label: "—" },
@@ -74,10 +82,13 @@ export function CardDetailPane({
     if (trimmed !== card.title) onChange({ title: trimmed });
   }, [title, card.title, onChange]);
 
-  const commitBody = useCallback(() => {
-    const next = body.length === 0 ? null : body;
-    if (next !== (card.body ?? null)) onChange({ body: next });
-  }, [body, card.body, onChange]);
+  const commitBody = useCallback(
+    (html: string) => {
+      const next = isEmptyHtml(html) ? null : html;
+      if (next !== (card.body ?? null)) onChange({ body: next });
+    },
+    [card.body, onChange],
+  );
 
   const handleColumnChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const next = e.target.value;
@@ -184,14 +195,13 @@ export function CardDetailPane({
 
         <div className="flex flex-col gap-5 px-5 py-4">
           <Field label="Description">
-            <textarea
-              aria-label="Card body"
+            <RichEditor
+              ariaLabel="Card body"
               value={body}
-              onChange={(e) => setBody(e.target.value)}
+              onChange={setBody}
               onBlur={commitBody}
-              rows={5}
               placeholder="Add details…"
-              className="w-full resize-y rounded-md border border-border bg-background px-2.5 py-2 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-primary"
+              minHeight={96}
             />
           </Field>
 
