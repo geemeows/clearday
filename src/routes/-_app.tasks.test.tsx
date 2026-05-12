@@ -122,6 +122,18 @@ describe("TasksPage", () => {
     });
   });
 
+  it("omits the per-card delete button when no onDeleteTask handler is provided", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    expect(screen.queryByLabelText("Delete DEV-441")).toBeNull();
+  });
+
+  it("fires onDeleteTask with the card id when the delete button is clicked", () => {
+    const onDeleteTask = vi.fn();
+    render(<TasksPage tasks={FIXTURE_TASKS} onDeleteTask={onDeleteTask} />);
+    fireEvent.click(screen.getByLabelText("Delete DEV-441"));
+    expect(onDeleteTask).toHaveBeenCalledWith("DEV-441");
+  });
+
   it("does not fire onCreateTask when the id or title is empty", () => {
     const onCreateTask = vi.fn();
     render(

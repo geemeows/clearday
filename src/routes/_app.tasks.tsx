@@ -11,6 +11,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import {
   createTask,
+  deleteTask,
   linkTaskPr,
   listTasks,
   updateTaskStatus,
@@ -194,6 +195,19 @@ function TasksRoute() {
     }
   };
 
+  const handleDeleteTask = async (id: string) => {
+    if (tasks === null) return;
+    const prev = tasks;
+    setTasks(tasks.filter((t) => t.id !== id));
+    if (fromFixture) return;
+    try {
+      await deleteTask(client, id);
+    } catch (e) {
+      setTasks(prev);
+      setError(e instanceof Error ? e.message : "failed to delete task");
+    }
+  };
+
   const handleLinkPr = async (id: string, pr: string | null) => {
     if (tasks === null) return;
     const prev = tasks;
@@ -237,6 +251,7 @@ function TasksRoute() {
       onMoveTask={handleMoveTask}
       onLinkPr={handleLinkPr}
       onCreateTask={handleCreateTask}
+      onDeleteTask={handleDeleteTask}
     />
   );
 }
@@ -246,11 +261,13 @@ export function TasksPage({
   onMoveTask,
   onLinkPr,
   onCreateTask,
+  onDeleteTask,
 }: {
   tasks: Task[];
   onMoveTask?: (id: string, status: TaskStatus) => void;
   onLinkPr?: (id: string, pr: string | null) => void;
   onCreateTask?: (task: Task) => void;
+  onDeleteTask?: (id: string) => void;
 }) {
   return (
     <div className="mx-auto max-w-[1500px] px-9 pt-7 pb-12">
@@ -305,6 +322,7 @@ export function TasksPage({
                       task={t}
                       onMoveTask={onMoveTask}
                       onLinkPr={onLinkPr}
+                      onDeleteTask={onDeleteTask}
                     />
                   </li>
                 ))}
@@ -321,10 +339,12 @@ function TaskCard({
   task,
   onMoveTask,
   onLinkPr,
+  onDeleteTask,
 }: {
   task: Task;
   onMoveTask?: (id: string, status: TaskStatus) => void;
   onLinkPr?: (id: string, pr: string | null) => void;
+  onDeleteTask?: (id: string) => void;
 }) {
   const pri = PRIORITY_STYLE[task.p];
   return (
@@ -381,6 +401,20 @@ function TaskCard({
             {task.days}d
           </span>
         )}
+        {onDeleteTask && (
+          <button
+            type="button"
+            aria-label={`Delete ${task.id}`}
+            onClick={() => onDeleteTask(task.id)}
+            className={
+              task.days > 0
+                ? "ml-1 rounded-[4px] border border-border bg-transparent px-1 py-[1px] font-mono text-[9px] text-muted-foreground"
+                : "ml-auto rounded-[4px] border border-border bg-transparent px-1 py-[1px] font-mono text-[9px] text-muted-foreground"
+            }
+          >
+            ×
+          </button>
+        )}
         {onMoveTask && (
           <select
             aria-label={`Status for ${task.id}`}
@@ -389,7 +423,7 @@ function TaskCard({
               onMoveTask(task.id, e.currentTarget.value as TaskStatus)
             }
             className={
-              task.days > 0
+              task.days > 0 || onDeleteTask
                 ? "ml-1.5 rounded-[4px] border border-border bg-transparent px-1 py-[1px] font-mono text-[9px] text-muted-foreground"
                 : "ml-auto rounded-[4px] border border-border bg-transparent px-1 py-[1px] font-mono text-[9px] text-muted-foreground"
             }
