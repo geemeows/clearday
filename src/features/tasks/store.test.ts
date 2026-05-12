@@ -68,6 +68,7 @@ describe("listTasks", () => {
           days: 1,
           pr: "#421",
           labels: ["security"],
+          assignee: "alice",
           created_at: "2026-05-12T00:00:00Z",
         },
         {
@@ -78,6 +79,7 @@ describe("listTasks", () => {
           days: 6,
           pr: null,
           labels: ["perf"],
+          assignee: null,
           created_at: "2026-05-12T01:00:00Z",
         },
       ],
@@ -92,6 +94,7 @@ describe("listTasks", () => {
         days: 1,
         pr: "#421",
         labels: ["security"],
+        assignee: "alice",
       },
       {
         id: "DEV-401",
@@ -101,6 +104,7 @@ describe("listTasks", () => {
         days: 6,
         pr: null,
         labels: ["perf"],
+        assignee: null,
       },
     ]);
   });
@@ -151,6 +155,7 @@ describe("createTask", () => {
       days: 0,
       pr: null,
       labels: ["ai"],
+      assignee: null,
     });
     expect(spies.from).toHaveBeenCalledWith("tasks");
     expect(spies.upsert).toHaveBeenCalledWith(
@@ -162,6 +167,7 @@ describe("createTask", () => {
         days: 0,
         pr: null,
         labels: ["ai"],
+        assignee: null,
       },
       { onConflict: "id" },
     );
@@ -178,6 +184,7 @@ describe("createTask", () => {
         days: 0,
         pr: null,
         labels: [],
+        assignee: null,
       }),
     ).rejects.toThrow(/rls denied/);
   });

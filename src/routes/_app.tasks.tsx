@@ -14,6 +14,7 @@ import {
   deleteTask,
   linkTaskPr,
   listTasks,
+  setTaskAssignee,
   updateTaskStatus,
 } from "#/features/tasks/store";
 import { supabase } from "#/lib/supabase";
@@ -30,6 +31,7 @@ export type Task = {
   days: number;
   pr: string | null;
   labels: string[];
+  assignee: string | null;
 };
 
 export const FIXTURE_TASKS: Task[] = [
@@ -41,6 +43,7 @@ export const FIXTURE_TASKS: Task[] = [
     days: 1,
     pr: "#421",
     labels: ["security"],
+    assignee: "you",
   },
   {
     id: "DEV-447",
@@ -50,6 +53,7 @@ export const FIXTURE_TASKS: Task[] = [
     days: 3,
     pr: null,
     labels: ["infra"],
+    assignee: null,
   },
   {
     id: "DEV-401",
@@ -59,6 +63,7 @@ export const FIXTURE_TASKS: Task[] = [
     days: 6,
     pr: "#410",
     labels: ["perf"],
+    assignee: null,
   },
   {
     id: "DEV-432",
@@ -68,6 +73,7 @@ export const FIXTURE_TASKS: Task[] = [
     days: 0,
     pr: null,
     labels: ["ai"],
+    assignee: null,
   },
   {
     id: "DEV-455",
@@ -77,6 +83,7 @@ export const FIXTURE_TASKS: Task[] = [
     days: 0,
     pr: null,
     labels: ["frontend"],
+    assignee: null,
   },
   {
     id: "DEV-460",
@@ -86,6 +93,7 @@ export const FIXTURE_TASKS: Task[] = [
     days: 0,
     pr: null,
     labels: ["alerts"],
+    assignee: null,
   },
   {
     id: "DEV-388",
@@ -95,6 +103,7 @@ export const FIXTURE_TASKS: Task[] = [
     days: 1,
     pr: "#398",
     labels: ["onboarding"],
+    assignee: null,
   },
   {
     id: "DEV-378",
@@ -104,6 +113,7 @@ export const FIXTURE_TASKS: Task[] = [
     days: 2,
     pr: "#392",
     labels: ["sync"],
+    assignee: null,
   },
   {
     id: "DEV-360",
@@ -113,6 +123,7 @@ export const FIXTURE_TASKS: Task[] = [
     days: 4,
     pr: "#372",
     labels: ["security"],
+    assignee: "you",
   },
 ];
 
@@ -221,6 +232,19 @@ function TasksRoute() {
     }
   };
 
+  const handleAssign = async (id: string, assignee: string | null) => {
+    if (tasks === null) return;
+    const prev = tasks;
+    setTasks(tasks.map((t) => (t.id === id ? { ...t, assignee } : t)));
+    if (fromFixture) return;
+    try {
+      await setTaskAssignee(client, id, assignee);
+    } catch (e) {
+      setTasks(prev);
+      setError(e instanceof Error ? e.message : "failed to assign task");
+    }
+  };
+
   if (error) {
     return (
       <section className="mx-auto max-w-[1500px] px-9 pt-7 pb-12">
@@ -250,6 +274,7 @@ function TasksRoute() {
       tasks={tasks}
       onMoveTask={handleMoveTask}
       onLinkPr={handleLinkPr}
+      onAssign={handleAssign}
       onCreateTask={handleCreateTask}
       onDeleteTask={handleDeleteTask}
     />
@@ -260,12 +285,14 @@ export function TasksPage({
   tasks,
   onMoveTask,
   onLinkPr,
+  onAssign,
   onCreateTask,
   onDeleteTask,
 }: {
   tasks: Task[];
   onMoveTask?: (id: string, status: TaskStatus) => void;
   onLinkPr?: (id: string, pr: string | null) => void;
+  onAssign?: (id: string, assignee: string | null) => void;
   onCreateTask?: (task: Task) => void;
   onDeleteTask?: (id: string) => void;
 }) {
@@ -322,6 +349,7 @@ export function TasksPage({
                       task={t}
                       onMoveTask={onMoveTask}
                       onLinkPr={onLinkPr}
+                      onAssign={onAssign}
                       onDeleteTask={onDeleteTask}
                     />
                   </li>
@@ -339,11 +367,13 @@ function TaskCard({
   task,
   onMoveTask,
   onLinkPr,
+  onAssign,
   onDeleteTask,
 }: {
   task: Task;
   onMoveTask?: (id: string, status: TaskStatus) => void;
   onLinkPr?: (id: string, pr: string | null) => void;
+  onAssign?: (id: string, assignee: string | null) => void;
   onDeleteTask?: (id: string) => void;
 }) {
   const pri = PRIORITY_STYLE[task.p];
@@ -370,6 +400,15 @@ function TaskCard({
         >
           {task.p}
         </span>
+        {onAssign ? (
+          <AssigneeInput task={task} onAssign={onAssign} />
+        ) : (
+          task.assignee && (
+            <span className="font-mono text-[10px] text-muted-foreground">
+              @{task.assignee}
+            </span>
+          )
+        )}
         {onLinkPr ? (
           <PrLinkInput task={task} onLinkPr={onLinkPr} />
         ) : (
@@ -463,6 +502,7 @@ function CreateTaskForm({
       days: 0,
       pr: null,
       labels: [],
+      assignee: null,
     });
     setId("");
     setTitle("");
@@ -520,6 +560,39 @@ function CreateTaskForm({
         Add task
       </button>
     </form>
+  );
+}
+
+function AssigneeInput({
+  task,
+  onAssign,
+}: {
+  task: Task;
+  onAssign: (id: string, assignee: string | null) => void;
+}) {
+  const [value, setValue] = useState(task.assignee ?? "");
+  useEffect(() => {
+    setValue(task.assignee ?? "");
+  }, [task.assignee]);
+  const commit = () => {
+    const next = value.trim() === "" ? null : value.trim();
+    if (next === task.assignee) return;
+    onAssign(task.id, next);
+  };
+  return (
+    <input
+      aria-label={`Assignee for ${task.id}`}
+      value={value}
+      placeholder="@who"
+      onChange={(e) => setValue(e.currentTarget.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          e.currentTarget.blur();
+        }
+      }}
+      className="w-16 rounded-[4px] border border-border bg-transparent px-1 py-[1px] font-mono text-[10px] text-muted-foreground"
+    />
   );
 }
 

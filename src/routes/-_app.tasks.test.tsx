@@ -119,6 +119,7 @@ describe("TasksPage", () => {
       days: 0,
       pr: null,
       labels: [],
+      assignee: null,
     });
   });
 
@@ -132,6 +133,35 @@ describe("TasksPage", () => {
     render(<TasksPage tasks={FIXTURE_TASKS} onDeleteTask={onDeleteTask} />);
     fireEvent.click(screen.getByLabelText("Delete DEV-441"));
     expect(onDeleteTask).toHaveBeenCalledWith("DEV-441");
+  });
+
+  it("omits the per-card assignee input when no onAssign handler is provided", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    expect(screen.queryByLabelText("Assignee for DEV-441")).toBeNull();
+  });
+
+  it("fires onAssign with the typed value when the assignee input is committed", () => {
+    const onAssign = vi.fn();
+    render(<TasksPage tasks={FIXTURE_TASKS} onAssign={onAssign} />);
+    const input = screen.getByLabelText(
+      "Assignee for DEV-447",
+    ) as unknown as HTMLInputElement;
+    expect(input.value).toBe("");
+    fireEvent.change(input, { target: { value: "alice" } });
+    fireEvent.blur(input);
+    expect(onAssign).toHaveBeenCalledWith("DEV-447", "alice");
+  });
+
+  it("fires onAssign with null when the assignee input is cleared", () => {
+    const onAssign = vi.fn();
+    render(<TasksPage tasks={FIXTURE_TASKS} onAssign={onAssign} />);
+    const input = screen.getByLabelText(
+      "Assignee for DEV-441",
+    ) as unknown as HTMLInputElement;
+    expect(input.value).toBe("you");
+    fireEvent.change(input, { target: { value: "" } });
+    fireEvent.blur(input);
+    expect(onAssign).toHaveBeenCalledWith("DEV-441", null);
   });
 
   it("does not fire onCreateTask when the id or title is empty", () => {

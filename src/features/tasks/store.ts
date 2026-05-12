@@ -3,8 +3,7 @@
 // Tracer-bullet scope: read path + status transition + link-PR + create +
 // delete + assign mutations. Row shape matches `Task` from
 // `src/routes/_app.tasks.tsx` so the route swaps `FIXTURE_TASKS` for
-// `listTasks()` mechanically. `setTaskAssignee` ships as the store boundary
-// only — the route UI affordance lands once an assign affordance is spec'd.
+// `listTasks()` mechanically.
 
 import type { Task, TaskPriority, TaskStatus } from "#/routes/_app.tasks";
 import type { SupabaseLike } from "#/shared/db";
@@ -17,6 +16,7 @@ export type StoredTask = {
   days: number;
   pr: string | null;
   labels: string[];
+  assignee: string | null;
   created_at: string;
 };
 
@@ -55,6 +55,7 @@ export async function createTask(
       days: task.days,
       pr: task.pr,
       labels: task.labels,
+      assignee: task.assignee,
     },
     { onConflict: "id" },
   );
@@ -104,5 +105,6 @@ function toTask(row: StoredTask): Task {
     days: row.days,
     pr: row.pr,
     labels: row.labels,
+    assignee: row.assignee,
   };
 }
