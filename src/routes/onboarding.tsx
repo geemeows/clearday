@@ -1231,7 +1231,9 @@ function AlertsStep({
                 <button
                   key={m}
                   type="button"
-                  aria-pressed={active}
+                  role="radio"
+                  aria-checked={active}
+                  aria-label={`${m} min`}
                   onClick={() => onThreshold(m)}
                   className={cn(
                     "rounded-full px-3 py-1.5 font-mono text-xs leading-none transition-colors",

@@ -367,6 +367,49 @@ describe("OnboardingFlow", () => {
     ).toBeTruthy();
   });
 
+  it("preserves step state when navigating Back then Continue again", async () => {
+    const saveAiSettings = vi.fn(async () => ({ ok: true as const }));
+    const saveAlerts = vi.fn(async () => ({ ok: true as const }));
+    const { container } = renderInRouter(
+      <OnboardingFlow
+        {...baseProps()}
+        saveAiSettings={saveAiSettings}
+        saveAlerts={saveAlerts}
+      />,
+    );
+    await screen.findByRole("heading", { name: /welcome to your devy/i });
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    await screen.findByRole("heading", { name: /pick your ai provider/i });
+    const openaiTile = container.querySelector('[data-provider="openai"]');
+    if (!openaiTile) throw new Error("openai tile not found");
+    fireEvent.click(openaiTile);
+    fireEvent.change(screen.getByLabelText(/api key/i), {
+      target: { value: "sk-back-step" },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /back/i }));
+    await screen.findByRole("heading", { name: /connect your sources/i });
+
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    await screen.findByRole("heading", { name: /pick your ai provider/i });
+    const openaiTileAgain = container.querySelector(
+      '[data-provider="openai"]',
+    ) as HTMLButtonElement;
+    expect(openaiTileAgain.getAttribute("aria-pressed")).toBe("true");
+    const apiKeyInput = screen.getByLabelText(/api key/i) as HTMLInputElement;
+    expect(apiKeyInput.value).toBe("sk-back-step");
+
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    await waitFor(() => expect(saveAiSettings).toHaveBeenCalledTimes(1));
+    expect(saveAiSettings).toHaveBeenCalledWith({
+      provider: "openai",
+      default_model: "gpt-4o-mini",
+      api_key: "sk-back-step",
+      ai_disabled: false,
+    });
+  });
+
   it("Open Devy on the final step calls complete + onFinish", async () => {
     const props = baseProps();
     renderInRouter(<OnboardingFlow {...props} />);
