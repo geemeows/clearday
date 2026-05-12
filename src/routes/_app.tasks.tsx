@@ -8,7 +8,7 @@
 // keyboard-accessible and unobtrusive rather than chrome-driven.
 
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   createTask,
   deleteTask,
@@ -296,6 +296,20 @@ export function TasksPage({
   onCreateTask?: (task: Task) => void;
   onDeleteTask?: (id: string) => void;
 }) {
+  // Shared ref for the card currently being dragged. Mirrors the
+  // `dragCardIdRef` pattern in src/routes/_app.projects.$projectId.tsx — avoids
+  // dataTransfer serialization, keeps the test boundary honest.
+  const dragTaskIdRef = useRef<string | null>(null);
+  const handleKeyboardMove = (id: string, direction: "left" | "right") => {
+    if (!onMoveTask) return;
+    const current = COLUMNS.findIndex(
+      (c) => c.id === (tasks.find((t) => t.id === id)?.status ?? null),
+    );
+    if (current === -1) return;
+    const next = direction === "left" ? current - 1 : current + 1;
+    if (next < 0 || next >= COLUMNS.length) return;
+    onMoveTask(id, COLUMNS[next].id);
+  };
   return (
     <div className="mx-auto max-w-[1500px] px-9 pt-7 pb-12">
       <header className="mb-[18px] flex items-baseline">
@@ -322,6 +336,23 @@ export function TasksPage({
             <section
               key={col.id}
               aria-label={col.label}
+              onDragOver={
+                onMoveTask
+                  ? (e) => {
+                      e.preventDefault();
+                    }
+                  : undefined
+              }
+              onDrop={
+                onMoveTask
+                  ? (e) => {
+                      e.preventDefault();
+                      const id = dragTaskIdRef.current;
+                      dragTaskIdRef.current = null;
+                      if (id) onMoveTask(id, col.id);
+                    }
+                  : undefined
+              }
               className="rounded-lg border border-border bg-card px-3 pt-3.5 pb-3"
             >
               <header
@@ -351,6 +382,18 @@ export function TasksPage({
                       onLinkPr={onLinkPr}
                       onAssign={onAssign}
                       onDeleteTask={onDeleteTask}
+                      onDragStart={
+                        onMoveTask
+                          ? () => {
+                              dragTaskIdRef.current = t.id;
+                            }
+                          : undefined
+                      }
+                      onKeyboardMove={
+                        onMoveTask
+                          ? (dir) => handleKeyboardMove(t.id, dir)
+                          : undefined
+                      }
                     />
                   </li>
                 ))}
@@ -369,17 +412,37 @@ function TaskCard({
   onLinkPr,
   onAssign,
   onDeleteTask,
+  onDragStart,
+  onKeyboardMove,
 }: {
   task: Task;
   onMoveTask?: (id: string, status: TaskStatus) => void;
   onLinkPr?: (id: string, pr: string | null) => void;
   onAssign?: (id: string, assignee: string | null) => void;
   onDeleteTask?: (id: string) => void;
+  onDragStart?: () => void;
+  onKeyboardMove?: (direction: "left" | "right") => void;
 }) {
   const pri = PRIORITY_STYLE[task.p];
   return (
     <article
       aria-label={task.id}
+      draggable={Boolean(onDragStart)}
+      onDragStart={onDragStart}
+      tabIndex={onKeyboardMove ? 0 : undefined}
+      onKeyDown={
+        onKeyboardMove
+          ? (e) => {
+              if (e.key === "ArrowLeft") {
+                e.preventDefault();
+                onKeyboardMove("left");
+              } else if (e.key === "ArrowRight") {
+                e.preventDefault();
+                onKeyboardMove("right");
+              }
+            }
+          : undefined
+      }
       className="rounded-[10px] px-3 py-2.5"
       style={{
         border: "1px solid var(--hairline-soft)",

@@ -164,6 +164,49 @@ describe("TasksPage", () => {
     expect(onAssign).toHaveBeenCalledWith("DEV-441", null);
   });
 
+  it("moves a task to the dropped column when onMoveTask is provided", () => {
+    const onMoveTask = vi.fn();
+    render(<TasksPage tasks={FIXTURE_TASKS} onMoveTask={onMoveTask} />);
+    const card = screen.getByRole("article", { name: "DEV-441" });
+    expect((card as HTMLElement).getAttribute("draggable")).toBe("true");
+    fireEvent.dragStart(card);
+    const todoColumn = screen.getByRole("region", { name: "To do" });
+    fireEvent.dragOver(todoColumn);
+    fireEvent.drop(todoColumn);
+    expect(onMoveTask).toHaveBeenCalledWith("DEV-441", "todo");
+  });
+
+  it("moves a task with ArrowRight / ArrowLeft on the focused card", () => {
+    const onMoveTask = vi.fn();
+    render(<TasksPage tasks={FIXTURE_TASKS} onMoveTask={onMoveTask} />);
+    const card = screen.getByRole("article", { name: "DEV-441" });
+    fireEvent.keyDown(card, { key: "ArrowRight" });
+    expect(onMoveTask).toHaveBeenLastCalledWith("DEV-441", "review");
+    fireEvent.keyDown(card, { key: "ArrowLeft" });
+    expect(onMoveTask).toHaveBeenLastCalledWith("DEV-441", "todo");
+  });
+
+  it("does not move past the first or last column with keyboard arrows", () => {
+    const onMoveTask = vi.fn();
+    render(<TasksPage tasks={FIXTURE_TASKS} onMoveTask={onMoveTask} />);
+    // DEV-432 is in "todo" (first column) — ArrowLeft is a no-op.
+    fireEvent.keyDown(screen.getByRole("article", { name: "DEV-432" }), {
+      key: "ArrowLeft",
+    });
+    // DEV-360 is in "done" (last column) — ArrowRight is a no-op.
+    fireEvent.keyDown(screen.getByRole("article", { name: "DEV-360" }), {
+      key: "ArrowRight",
+    });
+    expect(onMoveTask).not.toHaveBeenCalled();
+  });
+
+  it("makes cards non-draggable and non-focusable when no onMoveTask is provided", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    const card = screen.getByRole("article", { name: "DEV-441" });
+    expect((card as HTMLElement).getAttribute("draggable")).toBe("false");
+    expect((card as HTMLElement).getAttribute("tabindex")).toBeNull();
+  });
+
   it("does not fire onCreateTask when the id or title is empty", () => {
     const onCreateTask = vi.fn();
     render(
