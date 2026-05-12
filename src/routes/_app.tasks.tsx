@@ -1,14 +1,15 @@
 // Wholesale port from docs/design/devy-ui/tasks.jsx (Redesign v4 / Slice 4).
 //
 // Slice 4 shipped the presentational tree against `FIXTURE_TASKS`. Issue #172
-// landed the read path: the route now loads from `public.tasks` via
-// `listTasks`, falling back to the fixture when the table is empty so the UI
-// keeps working pre-seed. `TasksPage({ tasks })` stays unchanged so the
-// presentational tests keep importing `FIXTURE_TASKS` directly.
+// landed the read path + status / link-PR store mutations. This iteration
+// wires `updateTaskStatus` through the route via a per-card status select —
+// the smallest UI affordance that round-trips the mutation end-to-end. The
+// mockup is presentational and exposes no status-change affordance, so the
+// select is keyboard-accessible and unobtrusive rather than chrome-driven.
 
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { listTasks } from "#/features/tasks/store";
+import { listTasks, updateTaskStatus } from "#/features/tasks/store";
 import { supabase } from "#/lib/supabase";
 import type { SupabaseLike } from "#/shared/db";
 
@@ -139,12 +140,14 @@ function TasksRoute() {
   const client = supabase as unknown as SupabaseLike;
   const [tasks, setTasks] = useState<Task[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [fromFixture, setFromFixture] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     listTasks(client)
       .then((list) => {
         if (cancelled) return;
+        setFromFixture(list.length === 0);
         setTasks(list.length > 0 ? list : FIXTURE_TASKS);
       })
       .catch((e) => {
@@ -155,6 +158,21 @@ function TasksRoute() {
       cancelled = true;
     };
   }, [client]);
+
+  const handleMoveTask = async (id: string, status: TaskStatus) => {
+    if (tasks === null) return;
+    const prev = tasks;
+    setTasks(tasks.map((t) => (t.id === id ? { ...t, status } : t)));
+    // Fixture rows aren't in the DB yet — local-only move keeps the affordance
+    // alive pre-seed without a guaranteed-failing round-trip.
+    if (fromFixture) return;
+    try {
+      await updateTaskStatus(client, id, status);
+    } catch (e) {
+      setTasks(prev);
+      setError(e instanceof Error ? e.message : "failed to update task status");
+    }
+  };
 
   if (error) {
     return (
@@ -180,10 +198,16 @@ function TasksRoute() {
     );
   }
 
-  return <TasksPage tasks={tasks} />;
+  return <TasksPage tasks={tasks} onMoveTask={handleMoveTask} />;
 }
 
-export function TasksPage({ tasks }: { tasks: Task[] }) {
+export function TasksPage({
+  tasks,
+  onMoveTask,
+}: {
+  tasks: Task[];
+  onMoveTask?: (id: string, status: TaskStatus) => void;
+}) {
   return (
     <div className="mx-auto max-w-[1500px] px-9 pt-7 pb-12">
       <header className="mb-[18px] flex items-baseline">
@@ -231,7 +255,7 @@ export function TasksPage({ tasks }: { tasks: Task[] }) {
               <ul className="flex flex-col gap-2 pt-2.5">
                 {items.map((t) => (
                   <li key={t.id}>
-                    <TaskCard task={t} />
+                    <TaskCard task={t} onMoveTask={onMoveTask} />
                   </li>
                 ))}
               </ul>
@@ -243,7 +267,13 @@ export function TasksPage({ tasks }: { tasks: Task[] }) {
   );
 }
 
-function TaskCard({ task }: { task: Task }) {
+function TaskCard({
+  task,
+  onMoveTask,
+}: {
+  task: Task;
+  onMoveTask?: (id: string, status: TaskStatus) => void;
+}) {
   const pri = PRIORITY_STYLE[task.p];
   return (
     <article
@@ -294,6 +324,26 @@ function TaskCard({ task }: { task: Task }) {
           <span className="ml-auto font-mono text-[9px] text-muted-foreground">
             {task.days}d
           </span>
+        )}
+        {onMoveTask && (
+          <select
+            aria-label={`Status for ${task.id}`}
+            value={task.status}
+            onChange={(e) =>
+              onMoveTask(task.id, e.currentTarget.value as TaskStatus)
+            }
+            className={
+              task.days > 0
+                ? "ml-1.5 rounded-[4px] border border-border bg-transparent px-1 py-[1px] font-mono text-[9px] text-muted-foreground"
+                : "ml-auto rounded-[4px] border border-border bg-transparent px-1 py-[1px] font-mono text-[9px] text-muted-foreground"
+            }
+          >
+            {COLUMNS.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.label}
+              </option>
+            ))}
+          </select>
         )}
       </div>
     </article>

@@ -1,5 +1,5 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 import { FIXTURE_TASKS, TasksPage } from "#/routes/_app.tasks";
 
 describe("TasksPage", () => {
@@ -28,5 +28,21 @@ describe("TasksPage", () => {
     expect(card.textContent).toContain("P1");
     expect(card.textContent).toContain("security");
     expect(card.textContent).toContain("PR #421");
+  });
+
+  it("omits the per-card status select when no onMoveTask handler is provided", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    expect(screen.queryByLabelText("Status for DEV-441")).toBeNull();
+  });
+
+  it("fires onMoveTask with the picked status when the per-card select changes", () => {
+    const onMoveTask = vi.fn();
+    render(<TasksPage tasks={FIXTURE_TASKS} onMoveTask={onMoveTask} />);
+    const select = screen.getByLabelText(
+      "Status for DEV-441",
+    ) as unknown as HTMLSelectElement;
+    expect(select.value).toBe("in_progress");
+    fireEvent.change(select, { target: { value: "done" } });
+    expect(onMoveTask).toHaveBeenCalledWith("DEV-441", "done");
   });
 });
