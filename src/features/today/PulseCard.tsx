@@ -111,7 +111,7 @@ export function PulseCard({
       className="rounded-lg border border-border bg-card p-6"
     >
       <header className="flex items-baseline gap-2">
-        <span className="font-semibold text-sm text-foreground tracking-tight">
+        <span className="font-semibold text-[15px] text-foreground leading-[1.3]">
           Pulse
         </span>
         <span className="font-medium text-muted-foreground text-xs">
