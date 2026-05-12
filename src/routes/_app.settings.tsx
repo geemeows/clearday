@@ -1152,83 +1152,85 @@ export function AiProviderPanel({
             </button>
           </div>
 
-          <label className="block text-sm">
-            <span className="block font-medium text-foreground">
-              Primary model
-            </span>
-            {activeProviderDef ? (
-              <select
-                value={draftModel}
-                onChange={(e) => setDraftModel(e.target.value)}
-                className="mt-1 w-full rounded border border-border bg-background px-2 py-1.5 font-mono text-sm"
-                disabled={isBusy}
-              >
-                {activeProviderDef.models.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.label} — {m.tier}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <input
-                type="text"
-                value={draftModel}
-                onChange={(e) => setDraftModel(e.target.value)}
-                placeholder="model id"
-                className="mt-1 w-full rounded border border-border px-2 py-1.5 text-sm"
-                disabled={isBusy || !activeProvider}
-              />
-            )}
-            <span className="mt-1 block text-muted-foreground text-[11px]">
-              Used for daily briefing, smart routing, and inbox triage.
-              {primaryModelMeta && (
-                <>
-                  {" "}
-                  <span className="font-mono">{primaryModelMeta.cost}</span>
-                </>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <label className="block text-sm">
+              <span className="block font-mono text-[10px] text-muted-foreground tracking-[0.12em] uppercase">
+                Primary model
+              </span>
+              {activeProviderDef ? (
+                <select
+                  value={draftModel}
+                  onChange={(e) => setDraftModel(e.target.value)}
+                  className="mt-1.5 w-full rounded border border-border bg-background px-2 py-1.5 font-mono text-sm"
+                  disabled={isBusy}
+                >
+                  {activeProviderDef.models.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.label} — {m.tier}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  value={draftModel}
+                  onChange={(e) => setDraftModel(e.target.value)}
+                  placeholder="model id"
+                  className="mt-1.5 w-full rounded border border-border px-2 py-1.5 text-sm"
+                  disabled={isBusy || !activeProvider}
+                />
               )}
-            </span>
-          </label>
+              <span className="mt-1.5 block text-muted-foreground text-[11px]">
+                Used for daily briefing, smart routing, and inbox triage.
+                {primaryModelMeta && (
+                  <>
+                    {" "}
+                    <span className="font-mono">{primaryModelMeta.cost}</span>
+                  </>
+                )}
+              </span>
+            </label>
 
-          <label className="block text-sm">
-            <span className="block font-medium text-foreground">
-              Fallback model
-            </span>
-            {activeProviderDef ? (
-              <select
-                value={view.fallback_model ?? ""}
-                onChange={(e) => saveFallbackModel(e.target.value)}
-                className="mt-1 w-full rounded border border-border bg-background px-2 py-1.5 font-mono text-sm"
-                disabled={isBusy}
-              >
-                <option value="">— None —</option>
-                {activeProviderDef.models.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.label} — {m.tier}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <input
-                type="text"
-                value={view.fallback_model ?? ""}
-                onChange={(e) => saveFallbackModel(e.target.value)}
-                placeholder="e.g. gpt-4o-mini"
-                className="mt-1 w-full rounded border border-border px-2 py-1.5 text-sm"
-                disabled={isBusy || !activeProvider}
-              />
-            )}
-            <span className="mt-1 block text-muted-foreground text-[11px]">
-              Used after the budget switch-over threshold — and on
-              rate-limit retries.
-              {fallbackModelMeta && (
-                <>
-                  {" "}
-                  <span className="font-mono">{fallbackModelMeta.cost}</span>
-                </>
+            <label className="block text-sm">
+              <span className="block font-mono text-[10px] text-muted-foreground tracking-[0.12em] uppercase">
+                Fallback model
+              </span>
+              {activeProviderDef ? (
+                <select
+                  value={view.fallback_model ?? ""}
+                  onChange={(e) => saveFallbackModel(e.target.value)}
+                  className="mt-1.5 w-full rounded border border-border bg-background px-2 py-1.5 font-mono text-sm"
+                  disabled={isBusy}
+                >
+                  <option value="">— None —</option>
+                  {activeProviderDef.models.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.label} — {m.tier}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  value={view.fallback_model ?? ""}
+                  onChange={(e) => saveFallbackModel(e.target.value)}
+                  placeholder="e.g. gpt-4o-mini"
+                  className="mt-1.5 w-full rounded border border-border px-2 py-1.5 text-sm"
+                  disabled={isBusy || !activeProvider}
+                />
               )}
-            </span>
-          </label>
+              <span className="mt-1.5 block text-muted-foreground text-[11px]">
+                Used after the budget switch-over threshold — and on
+                rate-limit retries.
+                {fallbackModelMeta && (
+                  <>
+                    {" "}
+                    <span className="font-mono">{fallbackModelMeta.cost}</span>
+                  </>
+                )}
+              </span>
+            </label>
+          </div>
 
           <label className="block text-sm">
             <span className="block font-medium text-foreground">
