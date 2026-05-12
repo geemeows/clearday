@@ -851,12 +851,16 @@ function AutomationRow({
           />
           <p className="truncate font-medium text-sm">{automation.name}</p>
           {dryRun && (
-            <span className="rounded bg-[var(--warn-soft)] px-1.5 py-px font-mono text-[9px] tracking-[0.04em] text-[var(--warn)] uppercase">
+            <span
+              aria-label={`${automation.name} dry-run`}
+              className="rounded bg-[var(--warn-soft)] px-1.5 py-px font-mono text-[9px] tracking-[0.04em] text-[var(--warn)] uppercase"
+            >
               Dry-run
             </span>
           )}
           {deferred && (
             <span
+              aria-label="Includes a not-yet-wired capability"
               title="Includes a not-yet-wired capability"
               className="rounded bg-[var(--surface-strong)] px-1.5 py-px font-mono text-[9px] tracking-[0.04em] text-[var(--muted)] uppercase"
             >
@@ -864,7 +868,10 @@ function AutomationRow({
             </span>
           )}
           {failed && (
-            <span className="rounded bg-[var(--danger-soft)] px-1.5 py-px font-mono text-[9px] tracking-[0.04em] text-[var(--danger)] uppercase">
+            <span
+              aria-label="Last run failed"
+              className="rounded bg-[var(--danger-soft)] px-1.5 py-px font-mono text-[9px] tracking-[0.04em] text-[var(--danger)] uppercase"
+            >
               Fail
             </span>
           )}
