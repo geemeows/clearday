@@ -7,6 +7,7 @@
 // Cancel just closes. Backend wiring (POST /api/focus) lives in the
 // caller.
 
+import { Target } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "#/components/coss/button";
 import {
@@ -65,7 +66,11 @@ export function FocusModal({
         style={{ width: "min(28rem, calc(100vw - 2rem))" }}
       >
         <DialogHeader>
-          <DialogTitle>Start focus session</DialogTitle>
+          <div className="mb-0.5 inline-flex items-center gap-1.5 font-semibold text-[10px] text-muted-foreground uppercase leading-[1.25] tracking-[0.4px]">
+            <Target className="size-3" aria-hidden />
+            <span>Focus</span>
+          </div>
+          <DialogTitle>Start a focus session</DialogTitle>
           <DialogDescription>
             Block your calendar, set Slack status, and snooze notifications.
           </DialogDescription>
@@ -111,9 +116,9 @@ export function FocusModal({
 
         <section
           aria-label="Will do"
-          className="rounded-md border border-border bg-muted/40 p-3"
+          className="rounded-md border border-[var(--hairline-soft)] bg-[var(--surface-soft)] p-3"
         >
-          <h4 className="font-medium text-foreground text-xs uppercase tracking-wider">
+          <h4 className="font-semibold text-[10px] text-muted-foreground uppercase leading-[1.25] tracking-[0.4px]">
             Will do
           </h4>
           <ul className="mt-2 space-y-1 text-muted-foreground text-sm">
@@ -131,7 +136,7 @@ export function FocusModal({
         <DialogFooter>
           <Button
             type="button"
-            variant="outline"
+            variant="ghost"
             onClick={() => onOpenChange(false)}
           >
             Cancel

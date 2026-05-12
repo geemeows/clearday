@@ -7,6 +7,7 @@ import { Sparkles } from "lucide-react";
 import {
   type ComponentType,
   type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
   useCallback,
   useEffect,
   useMemo,
@@ -284,7 +285,7 @@ function PaletteDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         showCloseButton={false}
-        className="overflow-hidden p-0 sm:max-w-[640px]"
+        className="overflow-hidden p-0 sm:max-w-[620px]"
         aria-label="Command palette"
       >
         <DialogTitle className="sr-only">Command palette</DialogTitle>
@@ -323,12 +324,12 @@ function PaletteDialog({
                       className="gap-3"
                     >
                       <c.icon className="h-4 w-4 text-muted-foreground" />
-                      <div className="min-w-0 flex-1 truncate font-medium text-foreground">
+                      <div className="min-w-0 flex-1 truncate text-[13.5px] text-foreground">
                         {c.label}
                       </div>
                       <span
                         aria-hidden
-                        className="font-mono text-[10px] text-muted-foreground"
+                        className="text-muted-foreground text-xs tracking-widest"
                       >
                         ↵
                       </span>
@@ -349,9 +350,9 @@ function PaletteDialog({
                       onSelect={() => openResult(r)}
                       className="gap-3"
                     >
-                      <SourceGlyph source={g.glyph} size={20} />
+                      <SourceGlyph source={g.glyph} size={16} />
                       <div className="min-w-0 flex-1">
-                        <div className="truncate font-medium text-foreground">
+                        <div className="truncate text-[13.5px] text-foreground">
                           {r.title}
                         </div>
                         <div className="truncate text-xs text-muted-foreground">
@@ -360,7 +361,7 @@ function PaletteDialog({
                       </div>
                       <span
                         aria-hidden
-                        className="font-mono text-[10px] text-muted-foreground"
+                        className="text-muted-foreground text-xs tracking-widest"
                       >
                         ↵
                       </span>
@@ -376,6 +377,7 @@ function PaletteDialog({
               onDismiss={() => setAnswer({ kind: "idle" })}
             />
           )}
+          <KbdHintsFooter />
           <AskAiFooter
             query={query}
             disabled={!query.trim() || answer.kind === "loading"}
@@ -384,6 +386,37 @@ function PaletteDialog({
         </Command>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function FooterKbd({ children }: { children: ReactNode }) {
+  return (
+    <span className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-sm border bg-background px-1 font-mono text-[11px] text-muted-foreground">
+      {children}
+    </span>
+  );
+}
+
+function KbdHintsFooter() {
+  return (
+    <div
+      className="flex items-center gap-4 border-t px-4 py-2 text-muted-foreground text-xs"
+      style={{ background: "var(--surface-soft)" }}
+    >
+      <span className="inline-flex items-center gap-1.5">
+        <FooterKbd>↑</FooterKbd>
+        <FooterKbd>↓</FooterKbd>
+        <span className="ml-0.5">Navigate</span>
+      </span>
+      <span className="inline-flex items-center gap-1.5">
+        <FooterKbd>↵</FooterKbd>
+        <span className="ml-0.5">Open</span>
+      </span>
+      <span className="ml-auto inline-flex items-center gap-1.5">
+        <FooterKbd>esc</FooterKbd>
+        <span className="ml-0.5">Close</span>
+      </span>
+    </div>
   );
 }
 
