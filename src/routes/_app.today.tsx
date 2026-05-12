@@ -817,11 +817,11 @@ export function InboxPreviewCard({
       className="rounded-lg border border-border bg-card p-5"
     >
       <header className="flex items-baseline gap-2 px-1.5">
-        <span className="font-semibold text-base text-foreground">
+        <span className="font-semibold text-[15px] text-foreground leading-[1.3]">
           Needs you
         </span>
         {unreadCount > 0 && (
-          <span className="text-muted-foreground text-xs">
+          <span className="font-medium text-muted-foreground text-xs">
             {unreadCount} unread
           </span>
         )}
