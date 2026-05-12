@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
+  ArrowRight,
   ExternalLink,
   Plug,
   RefreshCw,
@@ -1063,13 +1064,14 @@ export function InboxPreviewCard({
           </span>
         )}
         <span className="flex-1" />
-        <a
-          href="/inbox"
-          aria-label="Open all"
-          className="rounded-sm px-2.5 py-1 font-medium text-foreground text-xs hover:bg-accent"
+        <Link
+          to="/inbox"
+          aria-label="Open inbox"
+          className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 font-medium text-foreground text-xs hover:bg-accent"
         >
-          Open all →
-        </a>
+          Open inbox
+          <ArrowRight aria-hidden="true" className="h-3.5 w-3.5" />
+        </Link>
       </header>
       {error && <p className="mt-3 px-1.5 text-destructive text-sm">{error}</p>}
       {!error && signals == null && (

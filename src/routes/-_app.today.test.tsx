@@ -392,7 +392,7 @@ describe("InboxPreviewCard", () => {
     await waitFor(() => screen.getByText("PR 2"));
     expect(screen.getByText("PR 1")).toBeTruthy();
     expect(
-      screen.getByRole("link", { name: /open all/i }).getAttribute("href"),
+      screen.getByRole("link", { name: /open inbox/i }).getAttribute("href"),
     ).toBe("/inbox");
   });
 
