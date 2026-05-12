@@ -9,7 +9,7 @@
 
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { listTasks, updateTaskStatus } from "#/features/tasks/store";
+import { linkTaskPr, listTasks, updateTaskStatus } from "#/features/tasks/store";
 import { supabase } from "#/lib/supabase";
 import type { SupabaseLike } from "#/shared/db";
 
@@ -174,6 +174,19 @@ function TasksRoute() {
     }
   };
 
+  const handleLinkPr = async (id: string, pr: string | null) => {
+    if (tasks === null) return;
+    const prev = tasks;
+    setTasks(tasks.map((t) => (t.id === id ? { ...t, pr } : t)));
+    if (fromFixture) return;
+    try {
+      await linkTaskPr(client, id, pr);
+    } catch (e) {
+      setTasks(prev);
+      setError(e instanceof Error ? e.message : "failed to link task pr");
+    }
+  };
+
   if (error) {
     return (
       <section className="mx-auto max-w-[1500px] px-9 pt-7 pb-12">
@@ -198,15 +211,23 @@ function TasksRoute() {
     );
   }
 
-  return <TasksPage tasks={tasks} onMoveTask={handleMoveTask} />;
+  return (
+    <TasksPage
+      tasks={tasks}
+      onMoveTask={handleMoveTask}
+      onLinkPr={handleLinkPr}
+    />
+  );
 }
 
 export function TasksPage({
   tasks,
   onMoveTask,
+  onLinkPr,
 }: {
   tasks: Task[];
   onMoveTask?: (id: string, status: TaskStatus) => void;
+  onLinkPr?: (id: string, pr: string | null) => void;
 }) {
   return (
     <div className="mx-auto max-w-[1500px] px-9 pt-7 pb-12">
@@ -255,7 +276,11 @@ export function TasksPage({
               <ul className="flex flex-col gap-2 pt-2.5">
                 {items.map((t) => (
                   <li key={t.id}>
-                    <TaskCard task={t} onMoveTask={onMoveTask} />
+                    <TaskCard
+                      task={t}
+                      onMoveTask={onMoveTask}
+                      onLinkPr={onLinkPr}
+                    />
                   </li>
                 ))}
               </ul>
@@ -270,9 +295,11 @@ export function TasksPage({
 function TaskCard({
   task,
   onMoveTask,
+  onLinkPr,
 }: {
   task: Task;
   onMoveTask?: (id: string, status: TaskStatus) => void;
+  onLinkPr?: (id: string, pr: string | null) => void;
 }) {
   const pri = PRIORITY_STYLE[task.p];
   return (
@@ -298,10 +325,14 @@ function TaskCard({
         >
           {task.p}
         </span>
-        {task.pr && (
-          <span className="ml-auto font-mono text-[10px] text-muted-foreground">
-            PR {task.pr}
-          </span>
+        {onLinkPr ? (
+          <PrLinkInput task={task} onLinkPr={onLinkPr} />
+        ) : (
+          task.pr && (
+            <span className="ml-auto font-mono text-[10px] text-muted-foreground">
+              PR {task.pr}
+            </span>
+          )
         )}
       </div>
       <div className="mb-1.5 font-medium text-[13px] text-foreground leading-[1.35]">
@@ -347,5 +378,38 @@ function TaskCard({
         )}
       </div>
     </article>
+  );
+}
+
+function PrLinkInput({
+  task,
+  onLinkPr,
+}: {
+  task: Task;
+  onLinkPr: (id: string, pr: string | null) => void;
+}) {
+  const [value, setValue] = useState(task.pr ?? "");
+  useEffect(() => {
+    setValue(task.pr ?? "");
+  }, [task.pr]);
+  const commit = () => {
+    const next = value.trim() === "" ? null : value.trim();
+    if (next === task.pr) return;
+    onLinkPr(task.id, next);
+  };
+  return (
+    <input
+      aria-label={`PR for ${task.id}`}
+      value={value}
+      placeholder="PR"
+      onChange={(e) => setValue(e.currentTarget.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          e.currentTarget.blur();
+        }
+      }}
+      className="ml-auto w-14 rounded-[4px] border border-border bg-transparent px-1 py-[1px] font-mono text-[10px] text-muted-foreground"
+    />
   );
 }

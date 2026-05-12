@@ -45,4 +45,43 @@ describe("TasksPage", () => {
     fireEvent.change(select, { target: { value: "done" } });
     expect(onMoveTask).toHaveBeenCalledWith("DEV-441", "done");
   });
+
+  it("omits the per-card PR input when no onLinkPr handler is provided", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    expect(screen.queryByLabelText("PR for DEV-441")).toBeNull();
+  });
+
+  it("fires onLinkPr with the typed value when the input is committed", () => {
+    const onLinkPr = vi.fn();
+    render(<TasksPage tasks={FIXTURE_TASKS} onLinkPr={onLinkPr} />);
+    const input = screen.getByLabelText(
+      "PR for DEV-447",
+    ) as unknown as HTMLInputElement;
+    expect(input.value).toBe("");
+    fireEvent.change(input, { target: { value: "#500" } });
+    fireEvent.blur(input);
+    expect(onLinkPr).toHaveBeenCalledWith("DEV-447", "#500");
+  });
+
+  it("fires onLinkPr with null when the input is cleared", () => {
+    const onLinkPr = vi.fn();
+    render(<TasksPage tasks={FIXTURE_TASKS} onLinkPr={onLinkPr} />);
+    const input = screen.getByLabelText(
+      "PR for DEV-441",
+    ) as unknown as HTMLInputElement;
+    expect(input.value).toBe("#421");
+    fireEvent.change(input, { target: { value: "" } });
+    fireEvent.blur(input);
+    expect(onLinkPr).toHaveBeenCalledWith("DEV-441", null);
+  });
+
+  it("does not fire onLinkPr when the value is unchanged on blur", () => {
+    const onLinkPr = vi.fn();
+    render(<TasksPage tasks={FIXTURE_TASKS} onLinkPr={onLinkPr} />);
+    const input = screen.getByLabelText(
+      "PR for DEV-441",
+    ) as unknown as HTMLInputElement;
+    fireEvent.blur(input);
+    expect(onLinkPr).not.toHaveBeenCalled();
+  });
 });
