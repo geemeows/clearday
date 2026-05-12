@@ -664,7 +664,29 @@ export function TodaySchedule({
                       : "text-right font-mono text-[11px] text-muted-foreground tabular-nums"
                   }
                 >
-                  {formatRangeShort(e.startsAt, e.endsAt)}
+                  {(() => {
+                    const { start, end } = formatRangeShort(
+                      e.startsAt,
+                      e.endsAt,
+                    );
+                    return (
+                      <>
+                        {start}
+                        {end && (
+                          <span
+                            style={
+                              focus
+                                ? undefined
+                                : { color: "var(--muted-soft)" }
+                            }
+                          >
+                            {" – "}
+                            {end}
+                          </span>
+                        )}
+                      </>
+                    );
+                  })()}
                 </time>
                 <span
                   aria-hidden="true"
@@ -739,17 +761,20 @@ function formatHeaderTime(d: Date): string {
   });
 }
 
-function formatRangeShort(start: Date, end: Date | null): string {
+function formatRangeShort(
+  start: Date,
+  end: Date | null,
+): { start: string; end: string | null } {
   const s = start.toLocaleString(undefined, {
     hour: "numeric",
     minute: "2-digit",
   });
-  if (!end) return s;
+  if (!end) return { start: s, end: null };
   const e = end.toLocaleString(undefined, {
     hour: "numeric",
     minute: "2-digit",
   });
-  return `${s} – ${e}`;
+  return { start: s, end: e };
 }
 
 function isCurrentBlock(e: MeetingEvent, now: Date): boolean {
