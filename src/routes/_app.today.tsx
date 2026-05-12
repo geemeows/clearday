@@ -875,7 +875,7 @@ export function InboxPreviewCard({
               <Link
                 to="/inbox"
                 search={{ signal: s.id }}
-                className="block rounded-md hover:bg-accent"
+                className="block rounded-md hover:bg-[var(--surface-soft)]"
               >
                 <InboxPreviewRow signal={s} nowIso={nowIso} />
               </Link>
