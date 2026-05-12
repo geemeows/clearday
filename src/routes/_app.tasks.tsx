@@ -15,6 +15,7 @@ import {
   linkTaskPr,
   listTasks,
   setTaskAssignee,
+  setTaskPriority,
   updateTaskStatus,
 } from "#/features/tasks/store";
 import { supabase } from "#/lib/supabase";
@@ -222,6 +223,18 @@ function TasksRoute() {
     }
   };
 
+  const handleSetPriority = async (id: string, p: TaskPriority) => {
+    if (tasks === null) return;
+    const prev = tasks;
+    setTasks(tasks.map((t) => (t.id === id ? { ...t, p } : t)));
+    try {
+      await setTaskPriority(client, id, p);
+    } catch (e) {
+      setTasks(prev);
+      setError(e instanceof Error ? e.message : "failed to update task priority");
+    }
+  };
+
   const handleAssign = async (id: string, assignee: string | null) => {
     if (tasks === null) return;
     const prev = tasks;
@@ -264,6 +277,7 @@ function TasksRoute() {
       onMoveTask={handleMoveTask}
       onLinkPr={handleLinkPr}
       onAssign={handleAssign}
+      onSetPriority={handleSetPriority}
       onCreateTask={handleCreateTask}
       onDeleteTask={handleDeleteTask}
     />
@@ -275,6 +289,7 @@ export function TasksPage({
   onMoveTask,
   onLinkPr,
   onAssign,
+  onSetPriority,
   onCreateTask,
   onDeleteTask,
 }: {
@@ -282,6 +297,7 @@ export function TasksPage({
   onMoveTask?: (id: string, status: TaskStatus) => void;
   onLinkPr?: (id: string, pr: string | null) => void;
   onAssign?: (id: string, assignee: string | null) => void;
+  onSetPriority?: (id: string, p: TaskPriority) => void;
   onCreateTask?: (task: Task) => void;
   onDeleteTask?: (id: string) => void;
 }) {
@@ -380,6 +396,7 @@ export function TasksPage({
                       onMoveTask={onMoveTask}
                       onLinkPr={onLinkPr}
                       onAssign={onAssign}
+                      onSetPriority={onSetPriority}
                       onDeleteTask={onDeleteTask}
                       onDragStart={
                         onMoveTask
@@ -410,6 +427,7 @@ function TaskCard({
   onMoveTask,
   onLinkPr,
   onAssign,
+  onSetPriority,
   onDeleteTask,
   onDragStart,
   onKeyboardMove,
@@ -418,6 +436,7 @@ function TaskCard({
   onMoveTask?: (id: string, status: TaskStatus) => void;
   onLinkPr?: (id: string, pr: string | null) => void;
   onAssign?: (id: string, assignee: string | null) => void;
+  onSetPriority?: (id: string, p: TaskPriority) => void;
   onDeleteTask?: (id: string) => void;
   onDragStart?: () => void;
   onKeyboardMove?: (direction: "left" | "right") => void;
@@ -452,16 +471,37 @@ function TaskCard({
         <span className="font-mono font-bold text-[10px] text-muted-foreground">
           {task.id}
         </span>
-        <span
-          className="rounded-sm px-1.5 font-semibold text-[9px]"
-          style={{
-            background: pri.bg,
-            color: pri.color,
-            padding: "1px 6px",
-          }}
-        >
-          {task.p}
-        </span>
+        {onSetPriority ? (
+          <select
+            aria-label={`Priority for ${task.id}`}
+            value={task.p}
+            onChange={(e) =>
+              onSetPriority(task.id, e.currentTarget.value as TaskPriority)
+            }
+            className="rounded-sm font-semibold text-[9px]"
+            style={{
+              background: pri.bg,
+              color: pri.color,
+              padding: "1px 6px",
+              border: "none",
+            }}
+          >
+            <option value="P1">P1</option>
+            <option value="P2">P2</option>
+            <option value="P3">P3</option>
+          </select>
+        ) : (
+          <span
+            className="rounded-sm px-1.5 font-semibold text-[9px]"
+            style={{
+              background: pri.bg,
+              color: pri.color,
+              padding: "1px 6px",
+            }}
+          >
+            {task.p}
+          </span>
+        )}
         {onAssign ? (
           <AssigneeInput task={task} onAssign={onAssign} />
         ) : (

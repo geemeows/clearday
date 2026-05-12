@@ -176,6 +176,22 @@ describe("TasksPage", () => {
     expect(onAssign).toHaveBeenCalledWith("DEV-441", null);
   });
 
+  it("omits the per-card priority select when no onSetPriority handler is provided", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    expect(screen.queryByLabelText("Priority for DEV-441")).toBeNull();
+  });
+
+  it("fires onSetPriority with the picked priority when the per-card select changes", () => {
+    const onSetPriority = vi.fn();
+    render(<TasksPage tasks={FIXTURE_TASKS} onSetPriority={onSetPriority} />);
+    const select = screen.getByLabelText(
+      "Priority for DEV-441",
+    ) as unknown as HTMLSelectElement;
+    expect(select.value).toBe("P1");
+    fireEvent.change(select, { target: { value: "P2" } });
+    expect(onSetPriority).toHaveBeenCalledWith("DEV-441", "P2");
+  });
+
   it("moves a task to the dropped column when onMoveTask is provided", () => {
     const onMoveTask = vi.fn();
     render(<TasksPage tasks={FIXTURE_TASKS} onMoveTask={onMoveTask} />);

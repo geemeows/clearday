@@ -86,6 +86,18 @@ export async function setTaskAssignee(
   if (error) throw new Error(`task assignee update failed: ${error.message}`);
 }
 
+export async function setTaskPriority(
+  client: SupabaseLike,
+  id: string,
+  priority: TaskPriority,
+): Promise<void> {
+  const { error } = await client
+    .from("tasks")
+    .update({ priority } as Record<string, unknown>)
+    .eq("id", id);
+  if (error) throw new Error(`task priority update failed: ${error.message}`);
+}
+
 export async function deleteTask(
   client: SupabaseLike,
   id: string,
