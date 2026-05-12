@@ -190,27 +190,36 @@ describe("BriefingCard", () => {
     cached: false,
   };
 
-  it("renders briefing text with **bold** parsed and a model footer", async () => {
+  it("renders the Morning rundown headline + items[] from the fixture", async () => {
     const generator = vi.fn(async () => okResult);
     const { container } = render(<BriefingCard generator={generator} />);
     await waitFor(() => screen.getByText(/Lead with the/i));
+    expect(screen.getByText(/Morning rundown/)).toBeTruthy();
     const strong = container.querySelector("strong");
     expect(strong?.textContent).toBe("design review");
     expect(screen.getByText(/haiku-4-5/)).toBeTruthy();
+    // Items rendered from FIXTURE_BRIEFING_ITEMS: priority chips + fixture titles.
+    expect(screen.getByText(/ACT NOW/)).toBeTruthy();
+    expect(
+      screen.getByText(/PR #421 — auth middleware refactor/i),
+    ).toBeTruthy();
     expect(generator).toHaveBeenCalledWith(false);
   });
 
-  it("renders the no-provider prompt with a link to Settings", async () => {
+  it("renders BriefingEmpty when no AI provider is configured", async () => {
     const generator = vi.fn(
       async (): Promise<BriefingResult> => ({
         ok: false,
         reason: "no_provider",
       }),
     );
-    render(<BriefingCard generator={generator} />);
-    await waitFor(() => screen.getByText(/No AI provider configured/));
-    const link = screen.getByRole("link", { name: /AI provider/i });
-    expect(link.getAttribute("href")).toBe("/settings");
+    await renderWithRouter(<BriefingCard generator={generator} />);
+    await waitFor(() => screen.getByText(/Morning rundown is off/i));
+    expect(
+      screen.getByText(/Connect an AI provider \(Anthropic, OpenAI/i),
+    ).toBeTruthy();
+    const link = screen.getByRole("link", { name: /Connect provider/i });
+    expect(link.getAttribute("href")).toBe("/settings/ai");
   });
 
   it("shows a fallback-model badge when the budget meter swapped models", async () => {
@@ -326,7 +335,8 @@ describe("TodaySchedule", () => {
 });
 
 // Wraps a component tree in a minimal TanStack Router so <Link> calls have a
-// router context. Used by InboxPreviewCard tests where rows link to /inbox.
+// router context. Used by InboxPreviewCard tests where rows link to /inbox
+// and BriefingEmpty where the Connect provider CTA links to /settings/ai.
 async function renderWithRouter(node: ReactElement) {
   const rootRoute = createRootRoute({ component: () => node });
   const inboxRoute = createRoute({
@@ -334,8 +344,13 @@ async function renderWithRouter(node: ReactElement) {
     path: "/inbox",
     component: () => null,
   });
+  const settingsAiRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/settings/ai",
+    component: () => null,
+  });
   const router = createRouter({
-    routeTree: rootRoute.addChildren([inboxRoute]),
+    routeTree: rootRoute.addChildren([inboxRoute, settingsAiRoute]),
     history: createMemoryHistory({ initialEntries: ["/today"] }),
   });
   await router.load();

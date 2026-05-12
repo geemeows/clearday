@@ -1,5 +1,12 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ExternalLink, RefreshCw, Sparkles, Video, X } from "lucide-react";
+import {
+  ExternalLink,
+  Plug,
+  RefreshCw,
+  Sparkles,
+  Video,
+  X,
+} from "lucide-react";
 import {
   type ReactNode,
   useCallback,
@@ -500,16 +507,39 @@ export function BriefingCard({
 
   if (suppressed) return null;
 
+  // Off-state: no AI provider configured. Per docs/design/devy-ui/today.jsx
+  // BriefingEmpty — render the dashed "Morning rundown is off" panel.
+  if (result?.ok === false && result.reason === "no_provider") {
+    return <BriefingEmpty />;
+  }
+
   return (
     <article
       aria-label="Morning briefing"
       className="rounded-lg border border-border bg-card px-[18px] py-4"
     >
       <header className="flex items-center gap-2.5">
-        <SourceGlyph source="ai" size={20} />
-        <span className="font-semibold text-foreground text-sm leading-[1.3]">
-          Morning briefing
+        <span
+          aria-hidden="true"
+          className="inline-flex size-7 shrink-0 items-center justify-center rounded-lg text-white"
+          style={{
+            background:
+              "linear-gradient(135deg, var(--brand-blue) 0%, var(--brand-lavender) 100%)",
+          }}
+        >
+          <Sparkles className="size-3.5" />
         </span>
+        <div className="flex flex-col gap-px">
+          <span className="font-semibold text-foreground text-sm leading-[1.3]">
+            Morning rundown
+          </span>
+          {result?.ok && (
+            <span className="text-[11px] text-muted-foreground leading-tight">
+              {renderBold(result.text)}
+            </span>
+          )}
+        </div>
+        <span className="flex-1" />
         {result?.ok && (
           <span className="font-mono text-[10px] text-muted-foreground">
             {result.model}
@@ -518,7 +548,6 @@ export function BriefingCard({
             {result.cached && " · cached"}
           </span>
         )}
-        <span className="flex-1" />
         {result?.ok && result.used_fallback && (
           <span className="inline-flex items-center rounded-sm border border-amber-200 bg-amber-50 px-2 py-0.5 font-medium text-[11px] text-amber-800">
             Running on fallback model
@@ -536,22 +565,136 @@ export function BriefingCard({
           </CossButton>
         )}
       </header>
-      <div className="mt-3.5 text-foreground text-sm leading-relaxed">
-        {busy && !result && (
-          <p className="text-muted-foreground">Generating your briefing…</p>
-        )}
-        {result?.ok && (
-          <>
-            <p className="whitespace-pre-line">{renderBold(result.text)}</p>
-            {regenWarning && (
-              <p className="mt-2 text-amber-700 text-xs">{regenWarning}</p>
-            )}
-          </>
-        )}
-        {result?.ok === false && (
+      {busy && !result && (
+        <p className="mt-3.5 text-muted-foreground text-sm">
+          Generating your briefing…
+        </p>
+      )}
+      {result?.ok && (
+        <>
+          {/* items[] populated layout — see PRD #158 + #160 fixture rule.
+              Live producer still returns text; ship the items[] UI against
+              FIXTURE_BRIEFING_ITEMS so the swap is mechanical when the
+              backend migrates from text → items[]. */}
+          <ul className="mt-3.5 flex flex-col gap-1.5">
+            {FIXTURE_BRIEFING_ITEMS.map((item) => (
+              <li key={item.id}>
+                <BriefingItemRow item={item} />
+              </li>
+            ))}
+          </ul>
+          {regenWarning && (
+            <p className="mt-2 text-amber-700 text-xs">{regenWarning}</p>
+          )}
+        </>
+      )}
+      {result?.ok === false && (
+        <div className="mt-3.5 text-foreground text-sm leading-relaxed">
           <BriefingFallback result={result} busy={busy} />
-        )}
+        </div>
+      )}
+    </article>
+  );
+}
+
+const PRIORITY_STYLES: Record<
+  BriefingItemPriority,
+  { dot: string; soft: string; label: string }
+> = {
+  high: {
+    dot: "var(--brand-blue)",
+    soft: "var(--brand-blue-soft)",
+    label: "ACT NOW",
+  },
+  watch: { dot: "var(--warn)", soft: "var(--warn-soft)", label: "WATCH" },
+  plan: {
+    dot: "var(--brand-lavender)",
+    soft: "var(--brand-lavender-soft)",
+    label: "PLANNED",
+  },
+  skip: {
+    dot: "var(--muted-foreground)",
+    soft: "var(--surface-soft)",
+    label: "AUTO",
+  },
+};
+
+function BriefingItemRow({ item }: { item: BriefingItem }) {
+  const p = PRIORITY_STYLES[item.priority];
+  return (
+    <div
+      className="relative grid items-center gap-3 rounded-lg border border-border bg-background py-2 pr-3 pl-3.5"
+      style={{ gridTemplateColumns: "auto 1fr auto" }}
+    >
+      <span
+        aria-hidden="true"
+        className="absolute top-0 bottom-0 left-0 w-[3px] rounded-l-lg"
+        style={{ background: p.dot }}
+      />
+      <div className="flex min-w-[72px] flex-col items-start gap-[3px]">
+        <span
+          className="rounded-[3px] px-1.5 py-px font-bold text-[9px] tracking-[0.5px] uppercase"
+          style={{ background: p.soft, color: p.dot }}
+        >
+          {p.label}
+        </span>
+        <span className="font-mono text-[9.5px] text-muted-foreground">
+          {item.tag}
+        </span>
       </div>
+      <div className="flex min-w-0 flex-col gap-px">
+        <div className="flex items-center gap-1.5">
+          <SourceGlyph source={item.source} size={12} />
+          <span className="truncate font-semibold text-[12.5px] text-foreground leading-[1.3]">
+            {item.title}
+          </span>
+          <span className="shrink-0 text-[10px] text-muted-foreground">
+            · {item.reason}
+          </span>
+        </div>
+        <p className="truncate text-[11.5px] text-muted-foreground leading-[1.4]">
+          {item.body}
+        </p>
+      </div>
+      {item.cta && (
+        <CossButton variant="ghost" size="sm">
+          {item.cta.label}
+        </CossButton>
+      )}
+    </div>
+  );
+}
+
+export function BriefingEmpty() {
+  return (
+    <article
+      aria-label="Morning briefing"
+      className="grid items-center gap-4 rounded-lg border border-[var(--hairline-soft)] border-dashed bg-[var(--surface-soft)] px-[22px] py-5"
+      style={{ gridTemplateColumns: "auto 1fr auto" }}
+    >
+      <span
+        aria-hidden="true"
+        className="inline-flex size-9 shrink-0 items-center justify-center rounded-[10px] border border-[var(--hairline-soft)] border-dashed bg-[var(--surface-card)] text-muted-foreground"
+      >
+        <Sparkles className="size-4" />
+      </span>
+      <div className="flex min-w-0 flex-col gap-0.5">
+        <span className="font-semibold text-foreground text-sm leading-[1.3]">
+          Morning rundown is off
+        </span>
+        <span className="text-[12px] text-muted-foreground leading-[1.45]">
+          Connect an AI provider (Anthropic, OpenAI, Google, or Groq) and Devy
+          will generate a daily briefing from your signals — your key, your
+          inference, no shared model.
+        </span>
+      </div>
+      <Link
+        to="/settings/ai"
+        className="inline-flex shrink-0 items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 font-medium text-primary-foreground text-xs hover:opacity-90"
+      >
+        <Plug aria-hidden="true" className="size-3.5" />
+        Connect provider
+      </Link>
     </article>
   );
 }
