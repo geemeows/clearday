@@ -624,8 +624,10 @@ export function TodaySchedule({
       className="rounded-lg border border-border bg-card p-5"
     >
       <header className="flex items-baseline gap-2">
-        <span className="font-semibold text-base text-foreground">Today</span>
-        <span className="text-muted-foreground text-xs">
+        <span className="font-semibold text-foreground text-sm tracking-tight">
+          Today
+        </span>
+        <span className="font-medium text-muted-foreground text-xs">
           {formatHeaderDate(now)}
         </span>
         <span className="flex-1" />
@@ -1029,11 +1031,11 @@ export function InProgressCard({
       className="rounded-lg border border-border bg-card p-5"
     >
       <header className="flex items-baseline gap-2">
-        <span className="font-semibold text-base text-foreground">
+        <span className="font-semibold text-foreground text-sm tracking-tight">
           In progress
         </span>
         {tickets != null && top.length > 0 && (
-          <span className="text-muted-foreground text-xs">
+          <span className="font-medium text-muted-foreground text-xs">
             {top.length} {plural(top.length, "ticket")}
           </span>
         )}
