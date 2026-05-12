@@ -1,10 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
-import { listTasks } from "#/features/tasks/store";
+import { listTasks, updateTaskStatus } from "#/features/tasks/store";
 import type { SupabaseLike } from "#/shared/db";
 
 function makeClient(overrides: {
   data?: Record<string, unknown>[];
   error?: { message: string } | null;
+  updateError?: { message: string } | null;
 }) {
   const limit = vi.fn(async () => ({
     data: overrides.data ?? [],
@@ -13,10 +14,13 @@ function makeClient(overrides: {
   const order = vi.fn(() => ({ limit }));
   const select = vi.fn(() => ({ order, limit, eq: vi.fn(), in: vi.fn() }));
   const upsert = vi.fn(async () => ({ error: null }));
-  const update = vi.fn(() => ({ eq: vi.fn(async () => ({ error: null })) }));
+  const updateEq = vi.fn(async () => ({
+    error: overrides.updateError ?? null,
+  }));
+  const update = vi.fn(() => ({ eq: updateEq }));
   const from = vi.fn(() => ({ select, upsert, update }));
   const client = { from } as unknown as SupabaseLike;
-  return { client, spies: { from, select, order, limit } };
+  return { client, spies: { from, select, order, limit, update, updateEq } };
 }
 
 describe("listTasks", () => {
@@ -83,5 +87,22 @@ describe("listTasks", () => {
     await listTasks(client);
     expect(spies.from).toHaveBeenCalledWith("tasks");
     expect(spies.order).toHaveBeenCalledWith("created_at", { ascending: true });
+  });
+});
+
+describe("updateTaskStatus", () => {
+  it("updates the task row matching the given id with the new status", async () => {
+    const { client, spies } = makeClient({});
+    await updateTaskStatus(client, "DEV-441", "done");
+    expect(spies.from).toHaveBeenCalledWith("tasks");
+    expect(spies.update).toHaveBeenCalledWith({ status: "done" });
+    expect(spies.updateEq).toHaveBeenCalledWith("id", "DEV-441");
+  });
+
+  it("throws when the update errors", async () => {
+    const { client } = makeClient({ updateError: { message: "rls denied" } });
+    await expect(
+      updateTaskStatus(client, "DEV-441", "review"),
+    ).rejects.toThrow(/rls denied/);
   });
 });
