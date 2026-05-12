@@ -207,6 +207,27 @@ describe("TasksPage", () => {
     expect((card as HTMLElement).getAttribute("tabindex")).toBeNull();
   });
 
+  it("renders the empty-state message with create-form copy when tasks is empty", () => {
+    render(<TasksPage tasks={[]} onCreateTask={vi.fn()} />);
+    const status = screen.getByRole("status");
+    expect(status.textContent).toContain("No tasks yet.");
+    expect(status.textContent).toContain(
+      "Use the form above to create your first task.",
+    );
+  });
+
+  it("omits the form-pointer copy when no onCreateTask handler is provided", () => {
+    render(<TasksPage tasks={[]} />);
+    const status = screen.getByRole("status");
+    expect(status.textContent).toContain("No tasks yet.");
+    expect(status.textContent).not.toContain("Use the form above");
+  });
+
+  it("does not render the empty-state message when tasks are present", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
   it("does not fire onCreateTask when the id or title is empty", () => {
     const onCreateTask = vi.fn();
     render(

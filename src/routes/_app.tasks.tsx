@@ -1,11 +1,11 @@
 // Wholesale port from docs/design/devy-ui/tasks.jsx (Redesign v4 / Slice 4).
 //
 // Slice 4 shipped the presentational tree against `FIXTURE_TASKS`. Issue #172
-// landed the read path + status / link-PR / create store mutations. This
-// iteration wires `createTask` into the route via an inline create form, the
-// smallest UI affordance that round-trips the mutation end-to-end. The mockup
-// is presentational and exposes no create affordance, so the form is
-// keyboard-accessible and unobtrusive rather than chrome-driven.
+// landed the read path + status / link-PR / create / delete / assign mutations
+// and wired them into the route. With `createTask` live, the fixture fallback
+// is retired: an empty `listTasks` result now renders a real empty state that
+// invites the user to create their first task via the inline form. The
+// `FIXTURE_TASKS` export is kept for the presentational tests.
 
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
@@ -157,15 +157,13 @@ function TasksRoute() {
   const client = supabase as unknown as SupabaseLike;
   const [tasks, setTasks] = useState<Task[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [fromFixture, setFromFixture] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     listTasks(client)
       .then((list) => {
         if (cancelled) return;
-        setFromFixture(list.length === 0);
-        setTasks(list.length > 0 ? list : FIXTURE_TASKS);
+        setTasks(list);
       })
       .catch((e) => {
         if (cancelled) return;
@@ -180,9 +178,6 @@ function TasksRoute() {
     if (tasks === null) return;
     const prev = tasks;
     setTasks(tasks.map((t) => (t.id === id ? { ...t, status } : t)));
-    // Fixture rows aren't in the DB yet — local-only move keeps the affordance
-    // alive pre-seed without a guaranteed-failing round-trip.
-    if (fromFixture) return;
     try {
       await updateTaskStatus(client, id, status);
     } catch (e) {
@@ -194,14 +189,11 @@ function TasksRoute() {
   const handleCreateTask = async (task: Task) => {
     if (tasks === null) return;
     const prev = tasks;
-    const prevFixture = fromFixture;
-    setTasks(prevFixture ? [task] : [task, ...tasks]);
-    setFromFixture(false);
+    setTasks([task, ...tasks]);
     try {
       await createTask(client, task);
     } catch (e) {
       setTasks(prev);
-      setFromFixture(prevFixture);
       setError(e instanceof Error ? e.message : "failed to create task");
     }
   };
@@ -210,7 +202,6 @@ function TasksRoute() {
     if (tasks === null) return;
     const prev = tasks;
     setTasks(tasks.filter((t) => t.id !== id));
-    if (fromFixture) return;
     try {
       await deleteTask(client, id);
     } catch (e) {
@@ -223,7 +214,6 @@ function TasksRoute() {
     if (tasks === null) return;
     const prev = tasks;
     setTasks(tasks.map((t) => (t.id === id ? { ...t, pr } : t)));
-    if (fromFixture) return;
     try {
       await linkTaskPr(client, id, pr);
     } catch (e) {
@@ -236,7 +226,6 @@ function TasksRoute() {
     if (tasks === null) return;
     const prev = tasks;
     setTasks(tasks.map((t) => (t.id === id ? { ...t, assignee } : t)));
-    if (fromFixture) return;
     try {
       await setTaskAssignee(client, id, assignee);
     } catch (e) {
@@ -325,6 +314,16 @@ export function TasksPage({
       </header>
 
       {onCreateTask && <CreateTaskForm onCreateTask={onCreateTask} />}
+
+      {tasks.length === 0 && (
+        <p
+          role="status"
+          className="mb-3 rounded-lg border border-border bg-card px-3 py-6 text-center text-[13px] text-muted-foreground"
+        >
+          No tasks yet.
+          {onCreateTask ? " Use the form above to create your first task." : ""}
+        </p>
+      )}
 
       <div
         className="grid gap-4"
