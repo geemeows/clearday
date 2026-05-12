@@ -3,14 +3,14 @@
 // (migration 0030); this dialog is the owner-side surface.
 
 import { useEffect, useState } from "react";
-import { Button } from "#/components/coss/button";
+import { Button } from "#/components/ui/button";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from "#/components/coss/dialog";
+} from "#/components/ui/dialog";
 import {
   createShareLink,
   getShareLinks,

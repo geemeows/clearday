@@ -3,7 +3,7 @@
 // Pure presentational component. Renders $ used / $ cap, a percentage
 // progress bar, and the fallback / hard-stop threshold rules.
 
-import { Progress } from "#/components/coss/progress";
+import { Progress } from "#/components/ui/progress";
 
 export type AiBudgetCardProps = {
   used: number;

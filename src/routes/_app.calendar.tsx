@@ -21,8 +21,8 @@ import {
   weekRangeLabel,
   weekStartOf,
 } from "#/features/calendar/layout";
-import { useWeekStart } from "#/features/settings/week-start/use-week-start";
 import type { EventKind, WeekEvent } from "#/features/calendar/types";
+import { useWeekStart } from "#/features/settings/week-start/use-week-start";
 import { apiFetch } from "#/lib/api-client";
 import { cn } from "#/lib/cn";
 import type { StoredSignal } from "#/shared/signal";

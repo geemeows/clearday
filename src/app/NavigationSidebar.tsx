@@ -11,8 +11,8 @@ import {
   Target,
 } from "lucide-react";
 import { type ReactNode, useState } from "react";
-import { Avatar, AvatarFallback, AvatarImage } from "#/components/coss/avatar";
-import { Button } from "#/components/coss/button";
+import { Avatar, AvatarFallback, AvatarImage } from "#/components/ui/avatar";
+import { Button } from "#/components/ui/button";
 import { FocusActiveBlock } from "#/features/focus/components/FocusActiveBlock";
 import type { ProviderAccountStatus } from "#/features/integrations/provider-account-status";
 import { ThemeToggle } from "#/features/settings/theme/components/ThemeToggle";

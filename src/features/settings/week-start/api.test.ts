@@ -7,7 +7,9 @@ import {
   type WeekStartView,
 } from "#/features/settings/week-start/api";
 
-function makeStore(initial: WeekStartView = DEFAULT_WEEK_START): WeekStartStore {
+function makeStore(
+  initial: WeekStartView = DEFAULT_WEEK_START,
+): WeekStartStore {
   let row: WeekStartView = { ...initial };
   return {
     load: vi.fn(async () => ({ ...row })),

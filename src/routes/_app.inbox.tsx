@@ -2,8 +2,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { z } from "zod";
-import { StatusBadge } from "#/components/ui/StatusBadge";
-import { UserAvatar } from "#/components/ui/UserAvatar";
+import { StatusBadge } from "#/components/StatusBadge";
+import { UserAvatar } from "#/components/UserAvatar";
 import {
   providerOpenLabel,
   providerSourceKind,

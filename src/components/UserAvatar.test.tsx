@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { UserAvatar } from "#/components/ui/UserAvatar";
+import { UserAvatar } from "#/components/UserAvatar";
 
 describe("UserAvatar", () => {
   it("renders initials from a single-word name", () => {

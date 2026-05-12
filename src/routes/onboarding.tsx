@@ -1,8 +1,13 @@
-import { Link, createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
+import {
+  createFileRoute,
+  Link,
+  redirect,
+  useNavigate,
+} from "@tanstack/react-router";
 import { Check, Info } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Button } from "#/components/coss/button";
-import { SettingsPanel } from "#/components/ui/SettingsPanel";
+import { SettingsPanel } from "#/components/SettingsPanel";
+import { Button } from "#/components/ui/button";
 import { signOut, useAuth } from "#/features/auth/auth";
 import {
   SourceGlyph,
@@ -503,12 +508,44 @@ const AI_PROVIDER_TILES: ReadonlyArray<{
   model: string;
   tag: string;
 }> = [
-  { id: "gemini", name: "Gemini", free: true, model: "gemini-2.5-flash", tag: "Fast, generous quota" },
-  { id: "groq", name: "Groq", free: true, model: "llama-3.1-70b", tag: "Cheapest tokens" },
-  { id: "openai", name: "OpenAI", model: "gpt-4o-mini", tag: "Reliable default" },
-  { id: "anthropic", name: "Anthropic", model: "claude-haiku-4-5", tag: "Tight summaries" },
-  { id: "openrouter", name: "OpenRouter", model: "any · routed", tag: "One key, all models" },
-  { id: "skip", name: "Skip for now", model: "no briefing", tag: "Add a key later" },
+  {
+    id: "gemini",
+    name: "Gemini",
+    free: true,
+    model: "gemini-2.5-flash",
+    tag: "Fast, generous quota",
+  },
+  {
+    id: "groq",
+    name: "Groq",
+    free: true,
+    model: "llama-3.1-70b",
+    tag: "Cheapest tokens",
+  },
+  {
+    id: "openai",
+    name: "OpenAI",
+    model: "gpt-4o-mini",
+    tag: "Reliable default",
+  },
+  {
+    id: "anthropic",
+    name: "Anthropic",
+    model: "claude-haiku-4-5",
+    tag: "Tight summaries",
+  },
+  {
+    id: "openrouter",
+    name: "OpenRouter",
+    model: "any · routed",
+    tag: "One key, all models",
+  },
+  {
+    id: "skip",
+    name: "Skip for now",
+    model: "no briefing",
+    tag: "Add a key later",
+  },
 ];
 
 const THRESHOLD_MINS = [2, 5, 10, 15, 30] as const;
@@ -584,7 +621,8 @@ export function OnboardingFlow({
         if (!cancelled) setSources(body.sources);
       })
       .catch((e) => {
-        if (!cancelled) setError(e instanceof Error ? e.message : "failed to load");
+        if (!cancelled)
+          setError(e instanceof Error ? e.message : "failed to load");
       });
     return () => {
       cancelled = true;
@@ -759,7 +797,8 @@ export function OnboardingFlow({
               className="absolute top-3.5 bottom-3.5 left-[13px] w-px bg-border"
             />
             {STEPS.map((s, i) => {
-              const state = i < step ? "done" : i === step ? "active" : "pending";
+              const state =
+                i < step ? "done" : i === step ? "active" : "pending";
               return (
                 <li key={s.name}>
                   <button
@@ -775,11 +814,17 @@ export function OnboardingFlow({
                         "z-10 flex h-[26px] w-[26px] flex-shrink-0 items-center justify-center rounded-full border text-xs font-semibold",
                         state === "active" &&
                           "border-primary bg-primary text-primary-foreground shadow-[0_0_0_4px_color-mix(in_oklab,var(--primary)_15%,transparent)]",
-                        state === "done" && "border-primary/30 bg-primary/10 text-primary",
-                        state === "pending" && "border-border bg-background text-muted-foreground",
+                        state === "done" &&
+                          "border-primary/30 bg-primary/10 text-primary",
+                        state === "pending" &&
+                          "border-border bg-background text-muted-foreground",
                       )}
                     >
-                      {state === "done" ? <Check className="size-3" aria-hidden /> : i + 1}
+                      {state === "done" ? (
+                        <Check className="size-3" aria-hidden />
+                      ) : (
+                        i + 1
+                      )}
                     </span>
                     <span className="flex flex-col pt-0.5">
                       <span
@@ -840,7 +885,12 @@ export function OnboardingFlow({
               onThreshold={setThreshold}
             />
           )}
-          {step === 4 && <ReadyStep providerLabel={labelFor(aiProvider)} threshold={threshold} />}
+          {step === 4 && (
+            <ReadyStep
+              providerLabel={labelFor(aiProvider)}
+              threshold={threshold}
+            />
+          )}
 
           <div className="mt-10 flex items-center gap-3 border-t border-border/60 pt-5">
             <Button
@@ -877,7 +927,15 @@ function StepEyebrow({ index }: { index: number }) {
   );
 }
 
-function StepHeader({ index, title, sub }: { index: number; title: string; sub: string }) {
+function StepHeader({
+  index,
+  title,
+  sub,
+}: {
+  index: number;
+  title: string;
+  sub: string;
+}) {
   return (
     <>
       <StepEyebrow index={index} />
@@ -901,18 +959,36 @@ function WelcomeStep({ signedInEmail }: { signedInEmail: string }) {
       />
       <div className="grid grid-cols-1 overflow-hidden rounded-lg border border-border bg-card sm:grid-cols-2">
         <SummaryCell label="Signed in" value={signedInEmail} mono />
-        <SummaryCell label="Worker" value="devy.kovacs.dev" mono trailing={
-          <span className="ml-2 inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11.5px] font-semibold text-emerald-600">
-            <span className="size-1.5 rounded-full bg-current" /> healthy
-          </span>
-        } />
-        <SummaryCell label="Supabase project" value="clearday-prod.supabase.co" mono />
+        <SummaryCell
+          label="Worker"
+          value="devy.kovacs.dev"
+          mono
+          trailing={
+            <span className="ml-2 inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11.5px] font-semibold text-emerald-600">
+              <span className="size-1.5 rounded-full bg-current" /> healthy
+            </span>
+          }
+        />
+        <SummaryCell
+          label="Supabase project"
+          value="clearday-prod.supabase.co"
+          mono
+        />
         <SummaryCell label="Allowed email" value={signedInEmail} mono />
       </div>
-      <div className="mt-6 flex items-start gap-2.5 rounded-md border border-primary/20 px-4 py-3.5 text-[13px] leading-[1.5] text-foreground/90" style={{ background: "var(--brand-blue-tint)" }}>
-        <Info aria-hidden className="mt-px size-[18px] flex-shrink-0 text-primary" strokeWidth={1.8} />
+      <div
+        className="mt-6 flex items-start gap-2.5 rounded-md border border-primary/20 px-4 py-3.5 text-[13px] leading-[1.5] text-foreground/90"
+        style={{ background: "var(--brand-blue-tint)" }}
+      >
+        <Info
+          aria-hidden
+          className="mt-px size-[18px] flex-shrink-0 text-primary"
+          strokeWidth={1.8}
+        />
         <div>
-          <b className="text-foreground">Tokens stay on this Worker.</b> Every provider you connect next stores its refresh token in <i>your</i> Supabase. Clearday-the-project never sees them.
+          <b className="text-foreground">Tokens stay on this Worker.</b> Every
+          provider you connect next stores its refresh token in <i>your</i>{" "}
+          Supabase. Clearday-the-project never sees them.
         </div>
       </div>
     </div>
@@ -957,7 +1033,10 @@ function IntegrationsStep({
         title="Connect your sources."
         sub="v1 reads from these three. Each opens a consent screen, then drops the refresh token into your Supabase. Read-only — Devy never writes back."
       />
-      <ul aria-label="Connect providers" className="overflow-hidden rounded-lg border border-border bg-card">
+      <ul
+        aria-label="Connect providers"
+        className="overflow-hidden rounded-lg border border-border bg-card"
+      >
         {PROVIDER_CARDS.map((card, i) => {
           const connected = isConnected(card.id);
           const required = card.id !== "slack";
@@ -1008,7 +1087,8 @@ function IntegrationsStep({
         })}
       </ul>
       <p className="mt-3.5 text-xs leading-relaxed text-muted-foreground">
-        Tickets (Jira / Linear) are not in v1 — they ride along with the issue tracker that lands first.
+        Tickets (Jira / Linear) are not in v1 — they ride along with the issue
+        tracker that lands first.
       </p>
     </div>
   );
@@ -1060,7 +1140,9 @@ function AiProviderStep({
               <div className="font-mono text-[11.5px] text-muted-foreground">
                 {tile.model}
               </div>
-              <div className="text-[11.5px] text-muted-foreground">{tile.tag}</div>
+              <div className="text-[11.5px] text-muted-foreground">
+                {tile.tag}
+              </div>
             </button>
           );
         })}
@@ -1083,7 +1165,8 @@ function AiProviderStep({
             className="h-[38px] w-full rounded-md border border-input bg-background px-3 font-mono text-[13.5px] text-foreground outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/24"
           />
           <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-            Saved when you click Continue. You can change it later in Settings → AI provider.
+            Saved when you click Continue. You can change it later in Settings →
+            AI provider.
           </p>
         </div>
       )}
@@ -1129,7 +1212,9 @@ function AlertsStep({
         glyph={<SourceGlyph source="ai" size={36} />}
       />
       <div className="mt-2.5 rounded-lg border border-border bg-card p-5">
-        <div className="mb-1 text-[14.5px] font-semibold">Pre-meeting alert</div>
+        <div className="mb-1 text-[14.5px] font-semibold">
+          Pre-meeting alert
+        </div>
         <p className="mb-3.5 text-[12.5px] text-muted-foreground">
           How early Devy nudges you before a calendar event with a video link.
         </p>
@@ -1146,8 +1231,6 @@ function AlertsStep({
                 <button
                   key={m}
                   type="button"
-                  role="radio"
-                  aria-checked={active}
                   aria-pressed={active}
                   onClick={() => onThreshold(m)}
                   className={cn(
@@ -1163,7 +1246,8 @@ function AlertsStep({
             })}
           </div>
           <span className="ml-auto text-xs text-muted-foreground">
-            <b className="font-medium text-foreground">{threshold} min</b> before the meeting
+            <b className="font-medium text-foreground">{threshold} min</b>{" "}
+            before the meeting
           </span>
         </div>
       </div>
@@ -1203,7 +1287,9 @@ function AlertRow({
             </span>
           )}
         </div>
-        <p className="mt-1 text-[12.5px] leading-snug text-muted-foreground">{desc}</p>
+        <p className="mt-1 text-[12.5px] leading-snug text-muted-foreground">
+          {desc}
+        </p>
       </div>
       <button
         type="button"
@@ -1229,7 +1315,13 @@ function AlertRow({
   );
 }
 
-function ReadyStep({ providerLabel, threshold }: { providerLabel: string; threshold: number }) {
+function ReadyStep({
+  providerLabel,
+  threshold,
+}: {
+  providerLabel: string;
+  threshold: number;
+}) {
   return (
     <div>
       <StepHeader
@@ -1253,8 +1345,14 @@ function ReadyStep({ providerLabel, threshold }: { providerLabel: string; thresh
               `Morning briefing via ${providerLabel} — daily at 07:30`,
               `Slack self-DM alerts · ${threshold}-min meeting heads-up`,
             ].map((line) => (
-              <li key={line} className="flex items-start gap-2.5 text-[13px] leading-snug text-foreground/90">
-                <Check className="mt-0.5 size-3.5 flex-shrink-0 text-emerald-600" aria-hidden />
+              <li
+                key={line}
+                className="flex items-start gap-2.5 text-[13px] leading-snug text-foreground/90"
+              >
+                <Check
+                  className="mt-0.5 size-3.5 flex-shrink-0 text-emerald-600"
+                  aria-hidden
+                />
                 {line}
               </li>
             ))}
@@ -1280,7 +1378,9 @@ function ReadyStep({ providerLabel, threshold }: { providerLabel: string; thresh
                 <span className="w-[18px] flex-shrink-0 font-mono text-[11.5px] text-muted-foreground">
                   {String(i + 1).padStart(2, "0")}
                 </span>
-                <span className="text-[12.5px] leading-snug text-foreground">{text}</span>
+                <span className="text-[12.5px] leading-snug text-foreground">
+                  {text}
+                </span>
               </div>
             ))}
           </div>

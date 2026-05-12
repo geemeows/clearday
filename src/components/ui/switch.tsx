@@ -2,7 +2,7 @@
 
 import { Switch as SwitchPrimitive } from "@base-ui/react/switch";
 import type * as React from "react";
-import { Spinner } from "#/components/coss/spinner";
+import { Spinner } from "#/components/ui/spinner";
 import { cn } from "#/lib/cn";
 
 export function Switch({

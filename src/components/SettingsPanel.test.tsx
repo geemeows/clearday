@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { SettingsPanel } from "#/components/ui/SettingsPanel";
+import { SettingsPanel } from "#/components/SettingsPanel";
 
 describe("SettingsPanel", () => {
   it("renders title as an h2 and desc as a paragraph", () => {

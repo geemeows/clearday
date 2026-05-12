@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { Avatar, AvatarFallback, AvatarImage } from "#/components/coss/avatar";
-import { Checkbox } from "#/components/coss/checkbox";
+import { Avatar, AvatarFallback, AvatarImage } from "#/components/ui/avatar";
+import { Checkbox } from "#/components/ui/checkbox";
 import {
   Command,
   CommandEmpty,
@@ -9,17 +9,17 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
-} from "#/components/coss/command";
+} from "#/components/ui/command";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogTitle,
-} from "#/components/coss/dialog";
-import { Input } from "#/components/coss/input";
-import { Label } from "#/components/coss/label";
-import { Progress } from "#/components/coss/progress";
-import { Switch } from "#/components/coss/switch";
+} from "#/components/ui/dialog";
+import { Input } from "#/components/ui/input";
+import { Label } from "#/components/ui/label";
+import { Progress } from "#/components/ui/progress";
+import { Switch } from "#/components/ui/switch";
 
 describe("coss Avatar", () => {
   it("renders fallback content with the avatar data-slot contract", () => {

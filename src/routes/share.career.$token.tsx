@@ -4,7 +4,7 @@
 // — this surface is only the level title + header KV + tree + wheel.
 
 import { createFileRoute } from "@tanstack/react-router";
-import { Link2, LayoutGrid } from "lucide-react";
+import { LayoutGrid, Link2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { CareerWheelChart } from "#/features/career/components/CareerWheel";
 import {

@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { Button } from "#/components/coss/button";
+import { Button } from "#/components/ui/button";
 
 describe("coss Button", () => {
   it("renders children inside a native button", () => {

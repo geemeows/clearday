@@ -1135,8 +1135,7 @@ async function handlePreferencesPut(
     ) {
       return json(
         {
-          error:
-            "notification_threshold_min must be one of 2, 5, 10, 15, 30",
+          error: "notification_threshold_min must be one of 2, 5, 10, 15, 30",
         },
         400,
       );

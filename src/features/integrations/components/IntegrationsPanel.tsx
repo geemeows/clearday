@@ -15,10 +15,10 @@
 
 import { ChevronDown, Plus, ShieldCheck, X } from "lucide-react";
 import { useMemo, useState } from "react";
-import { Avatar, AvatarFallback } from "#/components/coss/avatar";
-import { Button } from "#/components/coss/button";
-import { Input } from "#/components/coss/input";
-import { SettingsPanel } from "#/components/ui/SettingsPanel";
+import { SettingsPanel } from "#/components/SettingsPanel";
+import { Avatar, AvatarFallback } from "#/components/ui/avatar";
+import { Button } from "#/components/ui/button";
+import { Input } from "#/components/ui/input";
 import type { ProviderAccountStatus } from "#/features/integrations/provider-account-status";
 import type { WeekStart } from "#/features/settings/week-start/api";
 import { useWeekStart } from "#/features/settings/week-start/use-week-start";
@@ -326,8 +326,7 @@ export function IntegrationsPanel({
             </span>
           </div>
           <p className="mt-1 text-muted-foreground text-xs">
-            Adds{" "}
-            <code className="font-mono text-[11px]">spreadsheets</code> +{" "}
+            Adds <code className="font-mono text-[11px]">spreadsheets</code> +{" "}
             <code className="font-mono text-[11px]">drive.file</code> scopes to
             your existing Google connection. Per-file access only — Devy can
             only read or write sheets it created.
@@ -345,10 +344,7 @@ export function IntegrationsPanel({
           Re-authorize Google
         </Button>
       </aside>
-      <div
-        aria-label="Accounts summary"
-        className="flex items-center justify-end text-muted-foreground text-xs"
-      >
+      <div className="flex items-center justify-end text-muted-foreground text-xs">
         {totalAccounts} {totalAccounts === 1 ? "account" : "accounts"} across{" "}
         {PROVIDERS.length} providers
       </div>
@@ -423,55 +419,55 @@ export function IntegrationsPanel({
               {isExpanded ? (
                 <div id={bodyId}>
                   {accounts.length > 0 ? (
-                <ul
-                  aria-label={`${provider.label} accounts`}
-                  className="divide-y divide-[var(--hairline-soft)] border-[var(--hairline-soft)] border-t"
-                >
-                  {accounts.map((account) => (
-                    <AccountRowItem
-                      key={account.id}
-                      provider={provider}
-                      account={account}
-                      now={now}
-                      busy={busyAccount === account.id}
-                      onReauthorize={() =>
-                        onReauthorize(provider.providerKey, account.id)
-                      }
-                      onRemove={() => onRemoveAccount(account.id)}
+                    <ul
+                      aria-label={`${provider.label} accounts`}
+                      className="divide-y divide-[var(--hairline-soft)] border-[var(--hairline-soft)] border-t"
+                    >
+                      {accounts.map((account) => (
+                        <AccountRowItem
+                          key={account.id}
+                          provider={provider}
+                          account={account}
+                          now={now}
+                          busy={busyAccount === account.id}
+                          onReauthorize={() =>
+                            onReauthorize(provider.providerKey, account.id)
+                          }
+                          onRemove={() => onRemoveAccount(account.id)}
+                        />
+                      ))}
+                    </ul>
+                  ) : (
+                    <div className="flex items-center justify-center gap-1 px-4 py-5 text-muted-foreground text-[13px]">
+                      No accounts connected.
+                      <button
+                        type="button"
+                        disabled={isProviderBusy || provider.isMock}
+                        onClick={() => onAddAccount(provider.providerKey)}
+                        className="font-semibold text-[13px] text-primary hover:underline disabled:opacity-60"
+                        aria-label={`Connect ${provider.label}`}
+                      >
+                        Connect one →
+                      </button>
+                    </div>
+                  )}
+
+                  {provider.providerKey === "slack" ? (
+                    <SlackProviderSettings
+                      channels={channels}
+                      draft={draft}
+                      onDraft={setDraft}
+                      onAdd={onAddChannel}
+                      onRemove={onRemoveChannel}
                     />
-                  ))}
-                </ul>
-              ) : (
-                <div className="flex items-center justify-center gap-1 px-4 py-5 text-muted-foreground text-[13px]">
-                  No accounts connected.
-                  <button
-                    type="button"
-                    disabled={isProviderBusy || provider.isMock}
-                    onClick={() => onAddAccount(provider.providerKey)}
-                    className="font-semibold text-[13px] text-primary hover:underline disabled:opacity-60"
-                    aria-label={`Connect ${provider.label}`}
-                  >
-                    Connect one →
-                  </button>
-                </div>
-              )}
+                  ) : null}
 
-              {provider.providerKey === "slack" ? (
-                <SlackProviderSettings
-                  channels={channels}
-                  draft={draft}
-                  onDraft={setDraft}
-                  onAdd={onAddChannel}
-                  onRemove={onRemoveChannel}
-                />
-              ) : null}
-
-              {provider.providerKey === "google" ? (
-                <CalendarProviderSettings
-                  weekStart={weekStart}
-                  onChange={setWeekStart}
-                />
-              ) : null}
+                  {provider.providerKey === "google" ? (
+                    <CalendarProviderSettings
+                      weekStart={weekStart}
+                      onChange={setWeekStart}
+                    />
+                  ) : null}
                 </div>
               ) : null}
             </li>

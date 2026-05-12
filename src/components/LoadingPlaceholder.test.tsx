@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { LoadingPlaceholder } from "#/components/ui/LoadingPlaceholder";
+import { LoadingPlaceholder } from "#/components/LoadingPlaceholder";
 
 describe("LoadingPlaceholder", () => {
   it("renders default 'Loading…' copy", () => {

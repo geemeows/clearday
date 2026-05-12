@@ -1,7 +1,7 @@
 import { createFileRoute, Link, Outlet } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Checkbox } from "#/components/coss/checkbox";
-import { SettingsPanel } from "#/components/ui/SettingsPanel";
+import { SettingsPanel } from "#/components/SettingsPanel";
+import { Checkbox } from "#/components/ui/checkbox";
 import type { IntegrationView } from "#/features/integrations/api/integrations-api";
 import {
   DEFAULT_RETENTION_DAYS,
@@ -1153,12 +1153,13 @@ export function AiProviderPanel({
           </div>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <label className="block text-sm">
+            <div className="block text-sm">
               <span className="block font-mono text-[10px] text-muted-foreground tracking-[0.12em] uppercase">
                 Primary model
               </span>
               {activeProviderDef ? (
                 <select
+                  aria-label="Primary model"
                   value={draftModel}
                   onChange={(e) => setDraftModel(e.target.value)}
                   className="mt-1.5 w-full rounded border border-border bg-background px-2 py-1.5 font-mono text-sm"
@@ -1172,6 +1173,7 @@ export function AiProviderPanel({
                 </select>
               ) : (
                 <input
+                  aria-label="Primary model"
                   type="text"
                   value={draftModel}
                   onChange={(e) => setDraftModel(e.target.value)}
@@ -1189,14 +1191,15 @@ export function AiProviderPanel({
                   </>
                 )}
               </span>
-            </label>
+            </div>
 
-            <label className="block text-sm">
+            <div className="block text-sm">
               <span className="block font-mono text-[10px] text-muted-foreground tracking-[0.12em] uppercase">
                 Fallback model
               </span>
               {activeProviderDef ? (
                 <select
+                  aria-label="Fallback model"
                   value={view.fallback_model ?? ""}
                   onChange={(e) => saveFallbackModel(e.target.value)}
                   className="mt-1.5 w-full rounded border border-border bg-background px-2 py-1.5 font-mono text-sm"
@@ -1211,6 +1214,7 @@ export function AiProviderPanel({
                 </select>
               ) : (
                 <input
+                  aria-label="Fallback model"
                   type="text"
                   value={view.fallback_model ?? ""}
                   onChange={(e) => saveFallbackModel(e.target.value)}
@@ -1220,8 +1224,8 @@ export function AiProviderPanel({
                 />
               )}
               <span className="mt-1.5 block text-muted-foreground text-[11px]">
-                Used after the budget switch-over threshold — and on
-                rate-limit retries.
+                Used after the budget switch-over threshold — and on rate-limit
+                retries.
                 {fallbackModelMeta && (
                   <>
                     {" "}
@@ -1229,7 +1233,7 @@ export function AiProviderPanel({
                   </>
                 )}
               </span>
-            </label>
+            </div>
           </div>
 
           <label className="block text-sm">
@@ -1828,11 +1832,7 @@ function defaultPerDay(start: string, end: string): Record<string, DayWindow> {
       d,
       defaultDayWindow(
         start,
-        d === "Sat" || d === "Sun"
-          ? "23:59"
-          : d === "Fri"
-            ? "09:00"
-            : end,
+        d === "Sat" || d === "Sun" ? "23:59" : d === "Fri" ? "09:00" : end,
       ),
     ]),
   );
@@ -2259,7 +2259,9 @@ function AllowThroughAdd({
         aria-label="Add allow-through rule"
         value=""
         onChange={(e) => {
-          const preset = ALLOW_THROUGH_PRESETS.find((p) => p.id === e.target.value);
+          const preset = ALLOW_THROUGH_PRESETS.find(
+            (p) => p.id === e.target.value,
+          );
           if (preset) onAdd(preset.rule);
         }}
         disabled={disabled || available.length === 0}

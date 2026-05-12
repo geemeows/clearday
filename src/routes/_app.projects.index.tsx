@@ -2,7 +2,7 @@ import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { Kanban, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { z } from "zod";
-import { Button } from "#/components/coss/button";
+import { Button } from "#/components/ui/button";
 import {
   createColumn,
   createProject,

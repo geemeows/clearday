@@ -9,7 +9,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { Button } from "#/components/coss/button";
+import { Button } from "#/components/ui/button";
 import { CareerSyncControls } from "#/features/career/components/CareerSyncControls";
 import { CareerWheel } from "#/features/career/components/CareerWheel";
 import { ShareLinkDialog } from "#/features/career/components/ShareLinkDialog";
@@ -555,7 +555,10 @@ export function CareerLevelView({
           <AddCompetencyForm onAdd={handleAdd} />
         </section>
 
-        <aside aria-label="Career wheel" className="lg:sticky lg:top-8 lg:self-start">
+        <aside
+          aria-label="Career wheel"
+          className="lg:sticky lg:top-8 lg:self-start"
+        >
           <CareerWheel level={level} client={client} />
         </aside>
       </div>
@@ -653,9 +656,7 @@ export function LevelSwitcher({
             }}
             className="block w-full rounded px-2.5 py-1.5 text-left hover:bg-muted"
             style={
-              viewingIsActive
-                ? { background: "var(--accent-tint)" }
-                : undefined
+              viewingIsActive ? { background: "var(--accent-tint)" } : undefined
             }
           >
             <div className="font-semibold text-foreground text-sm">
@@ -1142,8 +1143,7 @@ function ScoreDots({
           <button
             key={dotValue}
             type="button"
-            role="radio"
-            aria-checked={value === dotValue}
+            aria-pressed={value === dotValue}
             aria-label={`${label}: ${dotValue}`}
             onClick={() => {
               if (dotValue !== value) onChange(dotValue);

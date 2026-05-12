@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { Tabs, TabsList, TabsPanel, TabsTab } from "#/components/coss/tabs";
+import { Tabs, TabsList, TabsPanel, TabsTab } from "#/components/ui/tabs";
 import type { StoredSignal } from "#/features/signals/components/InboxView";
 import { SourceGlyph } from "#/features/signals/components/SourceGlyph";
 import {

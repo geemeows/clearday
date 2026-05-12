@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { ErrorAlert } from "#/components/ui/ErrorAlert";
+import { ErrorAlert } from "#/components/ErrorAlert";
 
 describe("ErrorAlert", () => {
   it("returns null when error is null", () => {

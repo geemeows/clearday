@@ -332,9 +332,7 @@ export function InboxView({
                   style={{
                     fontSize: 12,
                     padding: "3px 10px",
-                    background: active
-                      ? "var(--primary)"
-                      : "var(--secondary)",
+                    background: active ? "var(--primary)" : "var(--secondary)",
                     color: active
                       ? "var(--primary-foreground)"
                       : "var(--secondary-foreground)",

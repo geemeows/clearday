@@ -6,10 +6,10 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   DEFAULT_WEEK_START,
-  type WeekStart,
   WEEK_START_STORAGE_KEY,
   WEEK_START_UPDATED_EVENT,
   WEEK_STARTS,
+  type WeekStart,
   type WeekStartView,
 } from "#/features/settings/week-start/api";
 import { apiFetch } from "#/lib/api-client";
@@ -65,6 +65,9 @@ export function dispatchWeekStartChanged(value: WeekStart): void {
 export function useWeekStart(): UseWeekStartResult {
   const [value, setValue] = useState<WeekStart>(() => readCachedWeekStart());
 
+  // Hydration must run once on mount; we don't want a stale `value`
+  // closure to trigger re-fetches.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: hydration runs once on mount
   useEffect(() => {
     let cancelled = false;
     (apiFetch("/api/week-start") as Promise<WeekStartView>)
@@ -92,9 +95,6 @@ export function useWeekStart(): UseWeekStartResult {
       cancelled = true;
       window.removeEventListener(WEEK_START_UPDATED_EVENT, onChanged);
     };
-    // Hydration must run once on mount; we don't want a stale `value`
-    // closure to trigger re-fetches.
-    // biome-ignore lint/correctness/useExhaustiveDependencies: see above
   }, []);
 
   const setWeekStart = useCallback(

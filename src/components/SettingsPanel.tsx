@@ -1,6 +1,6 @@
 import type React from "react";
-import { ErrorAlert } from "#/components/ui/ErrorAlert";
-import { LoadingPlaceholder } from "#/components/ui/LoadingPlaceholder";
+import { ErrorAlert } from "#/components/ErrorAlert";
+import { LoadingPlaceholder } from "#/components/LoadingPlaceholder";
 import { cn } from "#/lib/cn";
 
 export function SettingsPanel({

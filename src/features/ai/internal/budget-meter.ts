@@ -55,12 +55,7 @@ export function decideModel(args: DecideArgs): Decision {
       : args.fallbackThresholdPct === null
         ? null
         : args.fallbackThresholdPct / 100;
-  if (
-    monthBudget > 0 &&
-    threshold !== null &&
-    ratio >= threshold &&
-    fallback
-  ) {
+  if (monthBudget > 0 && threshold !== null && ratio >= threshold && fallback) {
     return { model: fallback, usedFallback: true, refused: false, ratio };
   }
   return { model: requested, usedFallback: false, refused: false, ratio };

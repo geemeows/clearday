@@ -375,7 +375,10 @@ describe("AiProviderPanel", () => {
       fallback_threshold_pct: 80,
     };
     const loader = vi.fn(async () => baseView);
-    const saver = vi.fn(async () => ({ ...baseView, fallback_threshold_pct: 50 }));
+    const saver = vi.fn(async () => ({
+      ...baseView,
+      fallback_threshold_pct: 50,
+    }));
     render(<AiProviderPanel loader={loader} saver={saver} />);
     const select = (await screen.findByLabelText(
       /fallback threshold/i,

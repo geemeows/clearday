@@ -6,7 +6,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "#/components/coss/dialog";
+} from "#/components/ui/dialog";
 import type { AlertChannel } from "#/features/alerts/dispatcher";
 import { ACTION_LIST, ACTIONS } from "#/features/automations/actions";
 import type { AutomationRunRow } from "#/features/automations/api";
@@ -823,11 +823,7 @@ function AutomationRow({
       ? "dry"
       : "succeeded";
   const dotLabel =
-    dotStatus === "failed"
-      ? "fail"
-      : dotStatus === "dry"
-        ? "dry"
-        : "ok";
+    dotStatus === "failed" ? "fail" : dotStatus === "dry" ? "dry" : "ok";
   const dotClass =
     dotStatus === "failed"
       ? "bg-[var(--danger)]"
@@ -848,24 +844,19 @@ function AutomationRow({
       </label>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <span
+          <output
             aria-label={`Last run ${dotLabel}`}
-            role="status"
             title={dotLabel}
             className={`inline-block size-[7px] shrink-0 rounded-full ${dotClass}`}
           />
           <p className="truncate font-medium text-sm">{automation.name}</p>
           {dryRun && (
-            <span
-              aria-label={`${automation.name} dry-run`}
-              className="rounded bg-[var(--warn-soft)] px-1.5 py-px font-mono text-[9px] tracking-[0.04em] text-[var(--warn)] uppercase"
-            >
+            <span className="rounded bg-[var(--warn-soft)] px-1.5 py-px font-mono text-[9px] tracking-[0.04em] text-[var(--warn)] uppercase">
               Dry-run
             </span>
           )}
           {deferred && (
             <span
-              aria-label="Includes a not-yet-wired capability"
               title="Includes a not-yet-wired capability"
               className="rounded bg-[var(--surface-strong)] px-1.5 py-px font-mono text-[9px] tracking-[0.04em] text-[var(--muted)] uppercase"
             >
@@ -873,23 +864,21 @@ function AutomationRow({
             </span>
           )}
           {failed && (
-            <span
-              aria-label="Last run failed"
-              className="rounded bg-[var(--danger-soft)] px-1.5 py-px font-mono text-[9px] tracking-[0.04em] text-[var(--danger)] uppercase"
-            >
+            <span className="rounded bg-[var(--danger-soft)] px-1.5 py-px font-mono text-[9px] tracking-[0.04em] text-[var(--danger)] uppercase">
               Fail
             </span>
           )}
         </div>
         <div className="mt-0.5 flex items-center gap-1.5">
           <span className="rounded bg-[var(--surface-strong)] px-1.5 py-px font-mono text-[9.5px] tracking-[0.04em] text-[var(--muted)] uppercase">
-            {TRIGGERS[automation.trigger_kind]?.label ?? automation.trigger_kind}
+            {TRIGGERS[automation.trigger_kind]?.label ??
+              automation.trigger_kind}
           </span>
           <span className="font-mono text-[10px] text-muted-foreground">→</span>
           <span className="truncate font-mono text-[10.5px] text-foreground">
             {automation.actions.length === 1
-              ? (ACTIONS[automation.actions[0]!.type]?.label ??
-                automation.actions[0]!.type)
+              ? (ACTIONS[automation.actions[0]?.type ?? ""]?.label ??
+                automation.actions[0]?.type)
               : `${automation.actions.length} actions`}
           </span>
         </div>

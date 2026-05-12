@@ -371,9 +371,9 @@ describe("IntegrationsPanel", () => {
     const loader = loaderWith([GITHUB_ACCT, GITHUB_WORK, SLACK_ACCT]);
     render(<IntegrationsPanel sourcesLoader={loader} now={NOW} />);
     await waitFor(() => {
-      expect(
-        screen.getByLabelText("Accounts summary").textContent,
-      ).toMatch(/3 accounts across 4 providers/);
+      expect(screen.getByLabelText("Accounts summary").textContent).toMatch(
+        /3 accounts across 4 providers/,
+      );
     });
   });
 

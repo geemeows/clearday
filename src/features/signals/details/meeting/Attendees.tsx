@@ -1,4 +1,4 @@
-import { UserAvatar } from "#/components/ui/UserAvatar";
+import { UserAvatar } from "#/components/UserAvatar";
 
 export type MeetingAttendee = {
   email: string | null;

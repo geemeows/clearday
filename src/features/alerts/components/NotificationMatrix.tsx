@@ -4,7 +4,7 @@
 // channels. Parent owns `value` and gets `onToggle(kind, channel)` once per
 // click — the component never mutates the prop.
 
-import { Checkbox } from "#/components/coss/checkbox";
+import { Checkbox } from "#/components/ui/checkbox";
 
 export type MatrixKind = { id: string; label: string };
 export type MatrixChannel = { id: string; label: string };

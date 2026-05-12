@@ -3,7 +3,7 @@
 import { Checkbox as CheckboxPrimitive } from "@base-ui/react/checkbox";
 import { CheckIcon } from "lucide-react";
 import type * as React from "react";
-import { Spinner } from "#/components/coss/spinner";
+import { Spinner } from "#/components/ui/spinner";
 import { cn } from "#/lib/cn";
 
 export function Checkbox({

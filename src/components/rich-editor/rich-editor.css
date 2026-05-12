@@ -70,8 +70,12 @@
   outline: none;
   min-height: inherit;
 }
-.re-content .ProseMirror p { margin: 0 0 6px; }
-.re-content .ProseMirror p:last-child { margin-bottom: 0; }
+.re-content .ProseMirror p {
+  margin: 0 0 6px;
+}
+.re-content .ProseMirror p:last-child {
+  margin-bottom: 0;
+}
 .re-content .ProseMirror h1,
 .re-content .ProseMirror h2,
 .re-content .ProseMirror h3 {
@@ -83,7 +87,9 @@
   margin: 4px 0 6px;
   padding-left: 20px;
 }
-.re-content .ProseMirror li { margin: 1px 0; }
+.re-content .ProseMirror li {
+  margin: 1px 0;
+}
 .re-content .ProseMirror code {
   font-family: var(--font-mono);
   font-size: 12px;

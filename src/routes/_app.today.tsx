@@ -7,7 +7,7 @@ import {
   useMemo,
   useState,
 } from "react";
-import { Button as CossButton } from "#/components/coss/button";
+import { Button as CossButton } from "#/components/ui/button";
 import type { BriefingResult } from "#/features/briefing/morning-briefing";
 import type { MeetingEvent } from "#/features/calendar/events";
 import {
@@ -292,7 +292,8 @@ export function OnboardingBanner({
 } = {}) {
   const load = useMemo(
     () =>
-      loader ?? (() => apiFetch("/api/onboarding/status") as Promise<OnboardingStatus>),
+      loader ??
+      (() => apiFetch("/api/onboarding/status") as Promise<OnboardingStatus>),
     [loader],
   );
   const complete = useMemo(
@@ -675,9 +676,7 @@ export function TodaySchedule({
                         {end && (
                           <span
                             style={
-                              focus
-                                ? undefined
-                                : { color: "var(--muted-soft)" }
+                              focus ? undefined : { color: "var(--muted-soft)" }
                             }
                           >
                             {" – "}
@@ -708,7 +707,8 @@ export function TodaySchedule({
                       <span
                         className="inline-flex shrink-0 items-center rounded-full px-2 py-px font-semibold text-[10px] uppercase tracking-wider"
                         style={{
-                          background: "var(--primary-disabled, var(--secondary))",
+                          background:
+                            "var(--primary-disabled, var(--secondary))",
                           color: "var(--primary-active, var(--primary))",
                         }}
                       >

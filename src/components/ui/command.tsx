@@ -7,7 +7,7 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from "#/components/coss/dialog";
+} from "#/components/ui/dialog";
 import { cn } from "#/lib/utils";
 
 function Command({

@@ -1,11 +1,25 @@
-import { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterProvider } from "@tanstack/react-router";
+import {
+  createMemoryHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+  RouterProvider,
+} from "@tanstack/react-router";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { OnboardingFlow, OnboardingHero, SlackAllowlistPanel } from "#/routes/onboarding";
+import {
+  OnboardingFlow,
+  OnboardingHero,
+  SlackAllowlistPanel,
+} from "#/routes/onboarding";
 
 function renderInRouter(ui: React.ReactNode) {
   const rootRoute = createRootRoute({ component: () => <>{ui}</> });
-  const todayRoute = createRoute({ getParentRoute: () => rootRoute, path: "/today", component: () => null });
+  const todayRoute = createRoute({
+    getParentRoute: () => rootRoute,
+    path: "/today",
+    component: () => null,
+  });
   const router = createRouter({
     routeTree: rootRoute.addChildren([todayRoute]),
     history: createMemoryHistory({ initialEntries: ["/"] }),
@@ -201,7 +215,13 @@ describe("OnboardingFlow", () => {
 
   it("renders the 5-step stepper rail and Skip link", async () => {
     renderInRouter(<OnboardingFlow {...baseProps()} />);
-    for (const name of ["Welcome", "Integrations", "AI provider", "Alerts", "Ready"]) {
+    for (const name of [
+      "Welcome",
+      "Integrations",
+      "AI provider",
+      "Alerts",
+      "Ready",
+    ]) {
       const matches = await screen.findAllByText(name);
       expect(matches.length).toBeGreaterThan(0);
     }
@@ -288,9 +308,7 @@ describe("OnboardingFlow", () => {
 
   it("persists alert channels + threshold via saveAlerts when leaving step 4", async () => {
     const saveAlerts = vi.fn(async () => ({ ok: true as const }));
-    renderInRouter(
-      <OnboardingFlow {...baseProps()} saveAlerts={saveAlerts} />,
-    );
+    renderInRouter(<OnboardingFlow {...baseProps()} saveAlerts={saveAlerts} />);
     await screen.findByRole("heading", { name: /welcome to your devy/i });
     fireEvent.click(screen.getByRole("button", { name: /continue/i }));
     fireEvent.click(screen.getByRole("button", { name: /continue/i }));
@@ -310,16 +328,16 @@ describe("OnboardingFlow", () => {
 
   it("persists an empty alert_channels array when both toggles are off", async () => {
     const saveAlerts = vi.fn(async () => ({ ok: true as const }));
-    renderInRouter(
-      <OnboardingFlow {...baseProps()} saveAlerts={saveAlerts} />,
-    );
+    renderInRouter(<OnboardingFlow {...baseProps()} saveAlerts={saveAlerts} />);
     await screen.findByRole("heading", { name: /welcome to your devy/i });
     fireEvent.click(screen.getByRole("button", { name: /continue/i }));
     fireEvent.click(screen.getByRole("button", { name: /continue/i }));
     await screen.findByRole("heading", { name: /pick your ai provider/i });
     fireEvent.click(screen.getByRole("button", { name: /continue/i }));
     await screen.findByRole("heading", { name: /where should devy tap you/i });
-    fireEvent.click(screen.getByRole("switch", { name: /toggle slack self-dm/i }));
+    fireEvent.click(
+      screen.getByRole("switch", { name: /toggle slack self-dm/i }),
+    );
     fireEvent.click(screen.getByRole("button", { name: /continue/i }));
     await waitFor(() => expect(saveAlerts).toHaveBeenCalledTimes(1));
     expect(saveAlerts).toHaveBeenCalledWith({
@@ -333,9 +351,7 @@ describe("OnboardingFlow", () => {
       ok: false as const,
       error: "preferences write failed",
     }));
-    renderInRouter(
-      <OnboardingFlow {...baseProps()} saveAlerts={saveAlerts} />,
-    );
+    renderInRouter(<OnboardingFlow {...baseProps()} saveAlerts={saveAlerts} />);
     await screen.findByRole("heading", { name: /welcome to your devy/i });
     fireEvent.click(screen.getByRole("button", { name: /continue/i }));
     fireEvent.click(screen.getByRole("button", { name: /continue/i }));

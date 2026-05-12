@@ -47,7 +47,10 @@ describe("useWeekStart", () => {
 
   it("setWeekStart mirrors to localStorage, dispatches the event, and PUTs the API", async () => {
     mockApi.mockResolvedValueOnce({ weekStart: "mon" });
-    mockApi.mockResolvedValueOnce({ ok: true, weekStart: { weekStart: "sun" } });
+    mockApi.mockResolvedValueOnce({
+      ok: true,
+      weekStart: { weekStart: "sun" },
+    });
 
     const { result } = renderHook(() => useWeekStart());
     await waitFor(() => {

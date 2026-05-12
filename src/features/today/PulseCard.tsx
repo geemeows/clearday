@@ -46,7 +46,10 @@ function toDonutData(stats: WeekStats): PulseDonutSlice[] {
 // Relative time for the Pulse header's "updated Ns ago" caption. Matches the
 // `updated 32s ago` mono caption in docs/design/devy-ui/today.jsx.
 export function formatUpdatedAgo(updatedAt: Date, now: Date): string {
-  const seconds = Math.max(0, Math.floor((now.getTime() - updatedAt.getTime()) / 1000));
+  const seconds = Math.max(
+    0,
+    Math.floor((now.getTime() - updatedAt.getTime()) / 1000),
+  );
   if (seconds < 60) return `${seconds}s ago`;
   const minutes = Math.floor(seconds / 60);
   if (minutes < 60) return `${minutes}m ago`;

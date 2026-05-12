@@ -1,5 +1,5 @@
 import { CalendarClock, ExternalLink, Video, X } from "lucide-react";
-import { Button as CossButton } from "#/components/coss/button";
+import { Button as CossButton } from "#/components/ui/button";
 import { SourceGlyph } from "#/features/signals/components/SourceGlyph";
 import type { NextUpMeeting } from "#/features/signals/views/today";
 import { CountdownRing } from "#/features/today/CountdownRing";
@@ -102,9 +102,7 @@ export function NextUpHero({
                 >
                   <span
                     className={urgent ? "text-white/40" : undefined}
-                    style={
-                      urgent ? undefined : { color: "var(--muted-soft)" }
-                    }
+                    style={urgent ? undefined : { color: "var(--muted-soft)" }}
                   >
                     ·
                   </span>

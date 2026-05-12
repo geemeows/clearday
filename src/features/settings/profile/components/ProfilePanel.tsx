@@ -10,7 +10,7 @@
 // 64×64 avatar, name + meta line, and a secondary Sign out button.
 
 import { useEffect, useMemo, useState } from "react";
-import { Button } from "#/components/coss/button";
+import { Button } from "#/components/ui/button";
 import { signOut as defaultSignOut } from "#/features/auth/auth";
 import type { IntegrationView } from "#/features/integrations/api/integrations-api";
 import { ThemeToggle } from "#/features/settings/theme/components/ThemeToggle";

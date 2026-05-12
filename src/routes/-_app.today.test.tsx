@@ -545,15 +545,25 @@ describe("PulseCard", () => {
 describe("formatUpdatedAgo", () => {
   it("formats seconds / minutes / hours / days", () => {
     const now = new Date("2026-05-04T12:00:00.000Z");
-    expect(formatUpdatedAgo(new Date("2026-05-04T11:59:30.000Z"), now)).toBe("30s ago");
-    expect(formatUpdatedAgo(new Date("2026-05-04T11:55:00.000Z"), now)).toBe("5m ago");
-    expect(formatUpdatedAgo(new Date("2026-05-04T09:00:00.000Z"), now)).toBe("3h ago");
-    expect(formatUpdatedAgo(new Date("2026-05-02T12:00:00.000Z"), now)).toBe("2d ago");
+    expect(formatUpdatedAgo(new Date("2026-05-04T11:59:30.000Z"), now)).toBe(
+      "30s ago",
+    );
+    expect(formatUpdatedAgo(new Date("2026-05-04T11:55:00.000Z"), now)).toBe(
+      "5m ago",
+    );
+    expect(formatUpdatedAgo(new Date("2026-05-04T09:00:00.000Z"), now)).toBe(
+      "3h ago",
+    );
+    expect(formatUpdatedAgo(new Date("2026-05-02T12:00:00.000Z"), now)).toBe(
+      "2d ago",
+    );
   });
 
   it("clamps negative deltas to 0s", () => {
     const now = new Date("2026-05-04T12:00:00.000Z");
-    expect(formatUpdatedAgo(new Date("2026-05-04T12:00:30.000Z"), now)).toBe("0s ago");
+    expect(formatUpdatedAgo(new Date("2026-05-04T12:00:30.000Z"), now)).toBe(
+      "0s ago",
+    );
   });
 });
 

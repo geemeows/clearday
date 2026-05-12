@@ -10,7 +10,7 @@
 
 import { ExternalLink } from "lucide-react";
 import { useState } from "react";
-import { Button } from "#/components/coss/button";
+import { Button } from "#/components/ui/button";
 
 export type CareerSyncControlsProps = {
   levelId: string;

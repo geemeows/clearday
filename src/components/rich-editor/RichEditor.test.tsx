@@ -1,10 +1,12 @@
-import type { Editor } from "@tiptap/react";
 import { fireEvent, render, screen } from "@testing-library/react";
+import type { Editor } from "@tiptap/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RichEditor } from "./RichEditor";
 
 // Helper: render the editor and grab the underlying TipTap editor instance.
-function renderEditor(props: Partial<React.ComponentProps<typeof RichEditor>> = {}) {
+function renderEditor(
+  props: Partial<React.ComponentProps<typeof RichEditor>> = {},
+) {
   let ed: Editor | null = null;
   const utils = render(
     <RichEditor
@@ -69,7 +71,7 @@ describe("RichEditor", () => {
     expect(editor.getHTML()).toContain("<em>");
   });
 
-describe("Link extension", () => {
+  describe("Link extension", () => {
     beforeEach(() => {
       vi.spyOn(window, "prompt").mockReturnValue("https://example.com");
     });

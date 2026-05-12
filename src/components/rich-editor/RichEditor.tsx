@@ -14,7 +14,7 @@ import {
   Quote,
   Strikethrough,
 } from "lucide-react";
-import { useEffect, type ReactNode } from "react";
+import { type ReactNode, useEffect } from "react";
 import "./rich-editor.css";
 
 export type RichEditorProps = {
@@ -106,13 +106,10 @@ export function RichEditor({
 
   if (!editor) return null;
 
-  const isActive = (
-    name: string,
-    attrs?: Record<string, unknown>,
-  ): boolean => editor.isActive(name, attrs);
+  const isActive = (name: string, attrs?: Record<string, unknown>): boolean =>
+    editor.isActive(name, attrs);
 
-  const wrapperClass =
-    "re-wrap" + (flat ? " re-flat" : "") + (className ? ` ${className}` : "");
+  const wrapperClass = `re-wrap${flat ? " re-flat" : ""}${className ? ` ${className}` : ""}`;
 
   return (
     <div className={wrapperClass}>
