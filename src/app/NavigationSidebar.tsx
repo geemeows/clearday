@@ -1,6 +1,8 @@
 // Pure presentational sidebar for the Devy app shell. All data comes in as
 // props — no fetches, no router lookups inside. The parent (AppShell) wires
 // hooks and route navigation; this module just renders.
+//
+// Wholesale port from docs/design/devy-ui/shell.jsx (Redesign v4 / Slice 1).
 
 import {
   ChevronDown,
@@ -10,12 +12,11 @@ import {
   Settings as SettingsIcon,
   Target,
 } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { type ComponentType, useState } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "#/components/ui/avatar";
 import { Button } from "#/components/ui/button";
 import { FocusActiveBlock } from "#/features/focus/components/FocusActiveBlock";
 import type { ProviderAccountStatus } from "#/features/integrations/provider-account-status";
-import { ThemeToggle } from "#/features/settings/theme/components/ThemeToggle";
 import {
   SourceGlyph,
   type SourceKind,
@@ -27,7 +28,7 @@ export const OPEN_CMDK_EVENT = "devy:open-cmdk";
 export type NavPage = {
   to: string;
   label: string;
-  icon: React.ComponentType<{ className?: string }>;
+  icon: ComponentType<{ className?: string }>;
 };
 
 export type NavSource = {
@@ -91,55 +92,43 @@ export function NavigationSidebar({
   return (
     <aside
       aria-label="Primary"
-      className="flex w-60 shrink-0 flex-col border-r border-border bg-sidebar text-sidebar-foreground"
+      className="flex w-60 shrink-0 flex-col gap-3.5 border-r border-border bg-[var(--surface-soft)] px-2.5 py-3 text-sidebar-foreground"
     >
       <BrandWordmark />
 
-      <div className="px-3 pb-3">
-        <button
-          type="button"
-          onClick={onOpenCmdk}
-          aria-label="Search anything"
-          className="flex w-full items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-left text-muted-foreground text-sm hover:bg-accent"
-        >
-          <span className="flex-1 truncate">Search anything…</span>
-          <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
-            ⌘K
-          </kbd>
-        </button>
-      </div>
+      <button
+        type="button"
+        onClick={onOpenCmdk}
+        aria-label="Search anything"
+        className="flex w-full items-center gap-2 rounded-md border border-border bg-background px-2.5 py-1.5 text-left text-muted-foreground text-[12.5px] hover:bg-accent"
+      >
+        <span className="flex-1 truncate">Search anything…</span>
+        <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+          ⌘K
+        </kbd>
+      </button>
 
-      <nav aria-label="Workspace" className="px-2">
-        <SectionTitle>Workspace</SectionTitle>
-        <ul className="mt-1 space-y-0.5">
+      <nav aria-label="Workspace">
+        <ul className="flex flex-col gap-px">
           {pages.map((p) => {
+            const isInbox = p.to === "/inbox";
             const active = page === p.to || page.startsWith(`${p.to}/`);
-            const badge = p.to === "/inbox" ? inboxBadge : 0;
-            const badgeId = p.to === "/inbox" ? "inbox-badge" : undefined;
+            const badge = isInbox ? inboxBadge : 0;
+            const badgeId = isInbox ? "inbox-badge" : undefined;
             const items = [
               <li key={p.to}>
-                <Button
-                  type="button"
-                  variant={active ? "secondary" : "ghost"}
+                <NavRowButton
+                  icon={p.icon}
+                  label={p.label}
+                  active={active}
                   onClick={() => onPage(p.to)}
-                  aria-current={active ? "page" : undefined}
-                  className="h-9 w-full justify-start gap-2 px-2 font-normal"
-                >
-                  <p.icon className="h-4 w-4" />
-                  <span className="flex-1 text-left">{p.label}</span>
-                  {badge > 0 ? (
-                    <span
-                      data-testid={badgeId}
-                      className="rounded-full bg-primary px-1.5 py-0.5 font-mono text-[10px] text-primary-foreground"
-                    >
-                      {badge}
-                    </span>
-                  ) : null}
-                </Button>
+                  badge={badge > 0 ? badge : undefined}
+                  badgeTestId={badgeId}
+                />
               </li>,
             ];
-            // Projects nav sits between Inbox and Career per design.
-            if (p.to === "/inbox") {
+            // Projects nav sits between Inbox and Career per the mockup.
+            if (isInbox) {
               items.push(
                 <li key="__projects" className="list-none">
                   <ProjectsNav
@@ -160,11 +149,57 @@ export function NavigationSidebar({
 
       <SourcesRail sources={sources} />
 
-      <div className="mt-auto flex flex-col gap-2 px-3 pb-3">
+      <div className="mt-auto flex flex-col gap-1.5">
         <FocusSlot focus={focus} onStartFocus={onStartFocus} />
         <AccountRow profile={profile} onOpenSettings={onOpenSettings} />
       </div>
     </aside>
+  );
+}
+
+function NavRowButton({
+  icon: Icon,
+  label,
+  active,
+  onClick,
+  badge,
+  badgeTestId,
+}: {
+  icon: ComponentType<{ className?: string }>;
+  label: string;
+  active: boolean;
+  onClick: () => void;
+  badge?: number;
+  badgeTestId?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-current={active ? "page" : undefined}
+      className={cn(
+        "flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-[13px] transition-colors",
+        active
+          ? "bg-secondary font-semibold text-foreground"
+          : "font-medium text-muted-foreground hover:bg-accent",
+      )}
+    >
+      <Icon className="h-[15px] w-[15px] shrink-0" />
+      <span className="flex-1 truncate">{label}</span>
+      {badge != null && badge > 0 ? (
+        <span
+          data-testid={badgeTestId}
+          className={cn(
+            "inline-flex min-w-[18px] justify-center rounded-full px-1.5 py-0.5 font-mono text-[10px]",
+            active
+              ? "bg-primary text-primary-foreground"
+              : "bg-secondary text-secondary-foreground",
+          )}
+        >
+          {badge}
+        </span>
+      ) : null}
+    </button>
   );
 }
 
@@ -183,44 +218,46 @@ function ProjectsNav({
   onNavigateToProject: (id: string) => void;
   onNewProject: () => void;
 }) {
+  const active = page === "/projects" || page.startsWith("/projects/");
   return (
     <nav aria-label="Projects">
       <button
         type="button"
         onClick={onToggleProjects}
         aria-expanded={projectsOpen}
-        className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent"
+        className={cn(
+          "flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-[13px] transition-colors",
+          active
+            ? "bg-secondary font-semibold text-foreground"
+            : "font-medium text-muted-foreground hover:bg-accent",
+        )}
       >
-        <Kanban className="h-4 w-4 shrink-0 text-muted-foreground" />
-        <span className="flex-1 text-left font-normal text-foreground">
-          Projects
-        </span>
+        <Kanban className="h-[15px] w-[15px] shrink-0" />
+        <span className="flex-1 text-left">Projects</span>
         <ChevronRight
           className={cn(
-            "h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-150",
+            "h-3 w-3 shrink-0 transition-transform duration-150",
             projectsOpen && "rotate-90",
           )}
         />
       </button>
 
       {projectsOpen && (
-        <ul className="mt-0.5 max-h-52 space-y-0.5 overflow-y-auto">
+        <ul className="mt-0.5 max-h-[220px] space-y-px overflow-y-auto pl-[22px]">
           {projects.map((p) => {
-            const active =
+            const projActive =
               page === `/projects/${p.id}` ||
               page.startsWith(`/projects/${p.id}/`);
             return (
               <li key={p.id}>
                 <Button
                   type="button"
-                  variant={active ? "secondary" : "ghost"}
+                  variant={projActive ? "secondary" : "ghost"}
                   onClick={() => onNavigateToProject(p.id)}
-                  aria-current={active ? "page" : undefined}
-                  className="h-8 w-full justify-start gap-2 pl-7 font-normal"
+                  aria-current={projActive ? "page" : undefined}
+                  className="h-7 w-full justify-start gap-2 px-2 font-normal text-[12.5px] text-muted-foreground"
                 >
-                  <span className="flex-1 truncate text-left text-sm">
-                    {p.name}
-                  </span>
+                  <span className="flex-1 truncate text-left">{p.name}</span>
                 </Button>
               </li>
             );
@@ -230,10 +267,10 @@ function ProjectsNav({
               type="button"
               variant="ghost"
               onClick={onNewProject}
-              className="h-8 w-full justify-start gap-2 pl-7 font-normal text-muted-foreground"
+              className="h-7 w-full justify-start gap-1.5 px-2 font-normal text-[12px] text-muted-foreground"
             >
               <Plus className="h-3.5 w-3.5" />
-              <span className="text-sm">New project</span>
+              <span>New project</span>
             </Button>
           </li>
         </ul>
@@ -242,8 +279,8 @@ function ProjectsNav({
   );
 }
 
-// Collapsible sources rail per design: header row summarises connection state
-// with a single dot + count; expanding reveals each provider's row.
+// Collapsible sources rail per the mockup: header row summarises connection
+// state with a single dot + count; expanding reveals each provider's row.
 function SourcesRail({ sources }: { sources: NavSource[] }) {
   const [open, setOpen] = useState(false);
   if (sources.length === 0) return null;
@@ -255,17 +292,21 @@ function SourcesRail({ sources }: { sources: NavSource[] }) {
   const summary: ProviderAccountStatus =
     bad > 0 ? "auth_failed" : warn > 0 ? "stale" : good > 0 ? "ok" : "neutral";
   const summaryLabel =
-    bad > 0 ? `${bad} down` : warn > 0 ? `${warn} warn` : `${good} connected`;
+    bad > 0
+      ? `${bad} down`
+      : warn > 0
+        ? `${warn} warn`
+        : `${sources.length} connected`;
   const Chev = open ? ChevronDown : ChevronRight;
   return (
-    <nav aria-label="Sources" className="mt-4 px-2">
+    <nav aria-label="Sources">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
-        className="flex w-full items-center gap-2 rounded-md px-2 py-1.5"
+        className="flex w-full items-center gap-2 px-1.5 py-1"
       >
-        <span className="flex-1 text-left font-medium text-[10px] text-muted-foreground uppercase tracking-wider">
+        <span className="flex-1 text-left font-semibold text-[10px] text-muted-foreground uppercase tracking-[0.4px]">
           Sources
         </span>
         <span
@@ -278,18 +319,20 @@ function SourcesRail({ sources }: { sources: NavSource[] }) {
         <Chev className="h-3 w-3 shrink-0 text-muted-foreground" />
       </button>
       {open ? (
-        <ul className="mt-1 space-y-0.5">
+        <ul className="mt-1 space-y-px">
           {sources.map((s) => (
             <li
               key={s.id}
-              className="flex items-center gap-2 rounded px-2 py-1.5 text-sm text-muted-foreground"
+              className="flex items-center gap-2.5 rounded-md px-1.5 py-[5px] text-[12.5px] text-foreground"
               title={`${s.label}: ${statusLabel(s.status)}`}
             >
-              <SourceGlyph source={s.kind} size={20} />
-              <span className="flex-1 truncate">{s.label}</span>
-              <span className="font-mono text-[10px] text-muted-foreground">
-                {s.count}
-              </span>
+              <SourceGlyph source={s.kind} size={16} />
+              <span className="flex-1 truncate font-medium">{s.label}</span>
+              {s.count > 0 ? (
+                <span className="font-medium text-[11px] text-muted-foreground">
+                  {s.count}
+                </span>
+              ) : null}
               <output
                 aria-label={`${s.label} status: ${statusLabel(s.status)}`}
                 data-source={s.id}
@@ -306,14 +349,16 @@ function SourcesRail({ sources }: { sources: NavSource[] }) {
 
 function BrandWordmark() {
   return (
-    <div className="flex items-center gap-2 px-4 py-5">
-      <span
+    <div className="flex items-center gap-2.5 px-1.5 py-1">
+      <img
+        src="/brand/devy-logo.png"
+        alt=""
         aria-hidden="true"
-        className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-primary font-bold text-primary-foreground text-xs"
-      >
-        D
+        className="block h-[26px] w-[26px]"
+      />
+      <span className="font-semibold text-[15px] text-foreground tracking-tight">
+        Devy
       </span>
-      <span className="font-semibold text-sm tracking-tight">Devy</span>
     </div>
   );
 }
@@ -335,15 +380,16 @@ function FocusSlot({
   }
   return (
     <div data-focus-active="false">
-      <button
+      <Button
         type="button"
+        variant="default"
         onClick={onStartFocus}
         aria-label="Start focus session"
-        className="flex w-full items-center justify-center gap-2 rounded-md bg-primary px-3 py-2.5 font-medium text-primary-foreground text-sm shadow-sm transition-colors hover:bg-primary-active"
+        className="w-full gap-2"
       >
         <Target className="h-4 w-4" />
         Start focus session
-      </button>
+      </Button>
     </div>
   );
 }
@@ -356,34 +402,37 @@ function AccountRow({
   onOpenSettings: () => void;
 }) {
   const name = profile.displayName?.trim() || "Account";
-  const initials = name.charAt(0).toUpperCase();
+  const initials = (name.match(/\b\w/g) ?? [name[0] ?? "A"])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
   return (
-    <div className="flex items-center gap-2 rounded-md border border-border bg-background px-2 py-1.5">
-      <Avatar className="h-8 w-8">
+    <button
+      type="button"
+      onClick={onOpenSettings}
+      aria-label="Settings"
+      className="flex items-center gap-2.5 rounded-md px-1.5 py-1 text-left transition-colors hover:bg-accent"
+    >
+      <Avatar className="h-[26px] w-[26px] border border-border">
         {profile.avatarUrl ? (
           <AvatarImage src={profile.avatarUrl} alt="" />
         ) : null}
-        <AvatarFallback className="text-xs">{initials}</AvatarFallback>
+        <AvatarFallback className="bg-secondary text-[11px] font-semibold text-foreground">
+          {initials}
+        </AvatarFallback>
       </Avatar>
       <div className="min-w-0 flex-1">
-        <div className="truncate text-sm">{name}</div>
+        <div className="truncate font-semibold text-[12.5px] text-foreground">
+          {name}
+        </div>
         {profile.email ? (
           <div className="truncate text-[11px] text-muted-foreground">
             {profile.email}
           </div>
         ) : null}
       </div>
-      <ThemeToggle />
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        onClick={onOpenSettings}
-        aria-label="Settings"
-      >
-        <SettingsIcon className="h-4 w-4" />
-      </Button>
-    </div>
+      <SettingsIcon className="h-[13px] w-[13px] shrink-0 text-muted-foreground" />
+    </button>
   );
 }
 
@@ -405,21 +454,13 @@ function statusLabel(status: ProviderAccountStatus): string {
 function dotClass(status: ProviderAccountStatus): string {
   switch (status) {
     case "ok":
-      return "bg-emerald-500";
+      return "bg-[var(--good)]";
     case "stale":
     case "rate_limited":
-      return "bg-amber-500";
+      return "bg-[var(--warn)]";
     case "auth_failed":
-      return "bg-red-500";
+      return "bg-[var(--danger)]";
     default:
-      return "bg-zinc-300";
+      return "bg-muted-foreground/30";
   }
-}
-
-function SectionTitle({ children }: { children: ReactNode }) {
-  return (
-    <div className="px-2 pt-2 font-medium text-[10px] text-muted-foreground uppercase tracking-wider">
-      {children}
-    </div>
-  );
 }

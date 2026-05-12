@@ -181,3 +181,64 @@ describe("NavigationSidebar — Projects section", () => {
     expect(screen.getByRole("button", { name: /new project/i })).toBeTruthy();
   });
 });
+
+describe("NavigationSidebar — Sources rail", () => {
+  it("renders nothing when sources list is empty", () => {
+    renderSidebar({ sources: [] });
+    expect(screen.queryByRole("navigation", { name: /sources/i })).toBeNull();
+  });
+
+  it("renders 'N connected' summary when every source is ok", () => {
+    renderSidebar({
+      sources: [
+        { id: "gh", label: "GitHub", kind: "git", count: 0, status: "ok" },
+        { id: "slack", label: "Slack", kind: "slack", count: 0, status: "ok" },
+      ],
+    });
+    expect(screen.getByText("2 connected")).toBeTruthy();
+  });
+
+  it("renders 'N warn' summary when any source is stale or rate-limited", () => {
+    renderSidebar({
+      sources: [
+        { id: "gh", label: "GitHub", kind: "git", count: 0, status: "ok" },
+        {
+          id: "slack",
+          label: "Slack",
+          kind: "slack",
+          count: 0,
+          status: "stale",
+        },
+      ],
+    });
+    expect(screen.getByText("1 warn")).toBeTruthy();
+  });
+
+  it("renders 'N down' summary when any source is auth_failed", () => {
+    renderSidebar({
+      sources: [
+        { id: "gh", label: "GitHub", kind: "git", count: 0, status: "ok" },
+        {
+          id: "slack",
+          label: "Slack",
+          kind: "slack",
+          count: 0,
+          status: "auth_failed",
+        },
+      ],
+    });
+    expect(screen.getByText("1 down")).toBeTruthy();
+  });
+
+  it("collapses the source list by default and expands on toggle click", () => {
+    renderSidebar({
+      sources: [
+        { id: "gh", label: "GitHub", kind: "git", count: 0, status: "ok" },
+      ],
+    });
+    expect(screen.queryByText("GitHub")).toBeNull();
+    const rail = screen.getByRole("navigation", { name: /sources/i });
+    fireEvent.click(within(rail).getByRole("button", { name: /sources/i }));
+    expect(within(rail).getByText("GitHub")).toBeTruthy();
+  });
+});
