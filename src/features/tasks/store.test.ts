@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { listTasks, updateTaskStatus } from "#/features/tasks/store";
+import { linkTaskPr, listTasks, updateTaskStatus } from "#/features/tasks/store";
 import type { SupabaseLike } from "#/shared/db";
 
 function makeClient(overrides: {
@@ -104,5 +104,28 @@ describe("updateTaskStatus", () => {
     await expect(
       updateTaskStatus(client, "DEV-441", "review"),
     ).rejects.toThrow(/rls denied/);
+  });
+});
+
+describe("linkTaskPr", () => {
+  it("updates the task row matching the given id with the new pr", async () => {
+    const { client, spies } = makeClient({});
+    await linkTaskPr(client, "DEV-441", "#421");
+    expect(spies.from).toHaveBeenCalledWith("tasks");
+    expect(spies.update).toHaveBeenCalledWith({ pr: "#421" });
+    expect(spies.updateEq).toHaveBeenCalledWith("id", "DEV-441");
+  });
+
+  it("clears the pr link when passed null", async () => {
+    const { client, spies } = makeClient({});
+    await linkTaskPr(client, "DEV-441", null);
+    expect(spies.update).toHaveBeenCalledWith({ pr: null });
+  });
+
+  it("throws when the update errors", async () => {
+    const { client } = makeClient({ updateError: { message: "rls denied" } });
+    await expect(linkTaskPr(client, "DEV-441", "#421")).rejects.toThrow(
+      /rls denied/,
+    );
   });
 });
