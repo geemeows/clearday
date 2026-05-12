@@ -418,6 +418,41 @@ describe("IntegrationsPanel", () => {
     expect(openUrl).not.toHaveBeenCalled();
   });
 
+  it("per-card chevron toggles aria-expanded and hides/shows the card body", async () => {
+    const loader = loaderWith([GITHUB_ACCT]);
+    render(<IntegrationsPanel sourcesLoader={loader} now={NOW} />);
+    const card = await screen.findByRole("listitem", {
+      name: "GitHub integration",
+    });
+    const toggle = within(card).getByRole("button", {
+      name: /collapse github card/i,
+    });
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    expect(
+      within(card).getByRole("listitem", { name: "GitHub account @alice" }),
+    ).toBeTruthy();
+
+    fireEvent.click(toggle);
+
+    const collapsedToggle = within(card).getByRole("button", {
+      name: /expand github card/i,
+    });
+    expect(collapsedToggle.getAttribute("aria-expanded")).toBe("false");
+    expect(
+      within(card).queryByRole("listitem", { name: "GitHub account @alice" }),
+    ).toBeNull();
+
+    fireEvent.click(collapsedToggle);
+    expect(
+      within(card)
+        .getByRole("button", { name: /collapse github card/i })
+        .getAttribute("aria-expanded"),
+    ).toBe("true");
+    expect(
+      within(card).getByRole("listitem", { name: "GitHub account @alice" }),
+    ).toBeTruthy();
+  });
+
   it("renders the Sheets re-consent banner and routes its CTA to Google OAuth", async () => {
     const loader = loaderWith([]);
     const connectUrl = vi.fn(async () => ({

@@ -13,7 +13,7 @@
 // connect-url proxy keyed by account_id (#122). Remove hits
 // DELETE /api/accounts/:id (#122).
 
-import { Plus, ShieldCheck, X } from "lucide-react";
+import { ChevronDown, Plus, ShieldCheck, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Avatar, AvatarFallback } from "#/components/coss/avatar";
 import { Button } from "#/components/coss/button";
@@ -141,6 +141,9 @@ export function IntegrationsPanel({
   const [busyAccount, setBusyAccount] = useState<string | null>(null);
   const [busyProvider, setBusyProvider] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(
+    () => new Set<string>(),
+  );
   const { weekStart, setWeekStart } = useWeekStart();
 
   const load = useMemo(
@@ -284,6 +287,15 @@ export function IntegrationsPanel({
     setChannels((prev) => prev.filter((c) => c !== name));
   };
 
+  const onToggleCollapsed = (providerId: string) => {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(providerId)) next.delete(providerId);
+      else next.add(providerId);
+      return next;
+    });
+  };
+
   return (
     <SettingsPanel
       title="Integrations"
@@ -344,13 +356,38 @@ export function IntegrationsPanel({
         {PROVIDERS.map((provider) => {
           const accounts = accountsByProvider[provider.id] ?? [];
           const isProviderBusy = busyProvider === provider.providerKey;
+          const isExpanded = !collapsed.has(provider.id);
+          const bodyId = `integration-card-body-${provider.id}`;
           return (
             <li
               key={provider.id}
               aria-label={`${provider.label} integration`}
               className="overflow-hidden rounded-lg border border-border bg-card"
             >
-              <header className="flex items-center gap-3.5 bg-[var(--surface-soft)] px-4 py-4">
+              <header
+                className={cn(
+                  "flex items-center gap-3.5 px-4 py-4",
+                  isExpanded
+                    ? "bg-[var(--surface-soft)]"
+                    : "bg-[var(--surface-card)]",
+                )}
+              >
+                <button
+                  type="button"
+                  aria-expanded={isExpanded}
+                  aria-controls={bodyId}
+                  aria-label={`${isExpanded ? "Collapse" : "Expand"} ${provider.label} card`}
+                  onClick={() => onToggleCollapsed(provider.id)}
+                  className="inline-flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-[var(--surface-card)] hover:text-foreground"
+                >
+                  <ChevronDown
+                    aria-hidden="true"
+                    className={cn(
+                      "size-4 transition-transform duration-150",
+                      isExpanded ? "rotate-0" : "-rotate-90",
+                    )}
+                  />
+                </button>
                 <SourceGlyph source={provider.kind} size={28} />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
@@ -383,7 +420,9 @@ export function IntegrationsPanel({
                 </Button>
               </header>
 
-              {accounts.length > 0 ? (
+              {isExpanded ? (
+                <div id={bodyId}>
+                  {accounts.length > 0 ? (
                 <ul
                   aria-label={`${provider.label} accounts`}
                   className="divide-y divide-[var(--hairline-soft)] border-[var(--hairline-soft)] border-t"
@@ -432,6 +471,8 @@ export function IntegrationsPanel({
                   weekStart={weekStart}
                   onChange={setWeekStart}
                 />
+              ) : null}
+                </div>
               ) : null}
             </li>
           );
