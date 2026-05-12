@@ -344,7 +344,10 @@ export function IntegrationsPanel({
           Re-authorize Google
         </Button>
       </aside>
-      <div className="flex items-center justify-end text-muted-foreground text-xs">
+      <div
+        aria-label="Accounts summary"
+        className="flex items-center justify-end text-muted-foreground text-xs"
+      >
         {totalAccounts} {totalAccounts === 1 ? "account" : "accounts"} across{" "}
         {PROVIDERS.length} providers
       </div>
