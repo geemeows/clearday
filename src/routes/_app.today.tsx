@@ -172,7 +172,7 @@ export function TodayView({
   return (
     <section className="mx-auto flex max-w-7xl flex-col gap-5 px-10 pt-8 pb-16">
       <header>
-        <h1 className="font-semibold text-3xl text-foreground tracking-tight">
+        <h1 className="font-semibold text-3xl text-foreground leading-[1.2] tracking-[-0.6px]">
           {greeting ?? "Today"}
         </h1>
         {summary && (
@@ -631,7 +631,7 @@ export function TodaySchedule({
           {formatHeaderDate(now)}
         </span>
         <span className="flex-1" />
-        <span className="font-mono text-[11px] text-muted-foreground tabular-nums">
+        <span className="font-medium text-muted-foreground text-xs">
           {formatHeaderTime(now)}
         </span>
       </header>
