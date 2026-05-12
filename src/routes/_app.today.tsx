@@ -1052,6 +1052,7 @@ export function InProgressCard({
           {top.map((s) => {
             const days = daysInProgress(s);
             const prRef = prRefOf(s);
+            const priority = s.payload?.priority_label as string | undefined;
             return (
               <li
                 key={s.id}
@@ -1066,6 +1067,7 @@ export function InProgressCard({
                   </span>
                   <span className="block truncate font-mono text-[11px] text-muted-foreground">
                     {[
+                      priority,
                       days != null && `${days}d in progress`,
                       prRef && `PR ${prRef}`,
                     ]

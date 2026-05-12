@@ -438,6 +438,15 @@ describe("InProgressCard", () => {
     ).toBe("https://linear.app/x/issue/ENG-1");
   });
 
+  it("prefixes the metadata line with the ticket priority when present", async () => {
+    const t = ticket("ENG-3", "ticket_in_progress");
+    t.payload = { priority_label: "High" };
+    const loader = vi.fn(async () => [t]);
+    render(<InProgressCard loader={loader} />);
+    await waitFor(() => screen.getByText("Ticket ENG-3"));
+    expect(screen.getByText(/^High · \d+d in progress$/)).toBeTruthy();
+  });
+
   it("renders an empty-state with a Settings link when nothing is in progress", async () => {
     const loader = vi.fn(async () => [] as StoredSignal[]);
     render(<InProgressCard loader={loader} />);
