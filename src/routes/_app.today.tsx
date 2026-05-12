@@ -1053,7 +1053,7 @@ export function InProgressCard({
   return (
     <article
       aria-label="In progress"
-      className="rounded-lg border border-border bg-card p-5"
+      className="rounded-lg border border-border bg-card px-[22px] py-5"
     >
       <header className="flex items-baseline gap-2">
         <span className="font-semibold text-[15px] text-foreground leading-[1.3]">
@@ -1079,7 +1079,7 @@ export function InProgressCard({
         </p>
       )}
       {!error && top.length > 0 && (
-        <ul className="mt-2 flex flex-col">
+        <ul className="mt-3 flex flex-col">
           {top.map((s) => {
             const days = daysInProgress(s);
             const prRef = prRefOf(s);
