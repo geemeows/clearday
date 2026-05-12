@@ -433,9 +433,9 @@ export function BriefingCard({ generator }: { generator?: Generator } = {}) {
   return (
     <article
       aria-label="Morning briefing"
-      className="rounded-lg border border-border bg-card p-6"
+      className="rounded-lg border border-border bg-card px-[18px] py-4"
     >
-      <header className="flex items-center gap-2">
+      <header className="flex items-center gap-2.5">
         <SourceGlyph source="ai" size={20} />
         <span className="font-semibold text-foreground text-sm leading-[1.3]">
           Morning briefing
