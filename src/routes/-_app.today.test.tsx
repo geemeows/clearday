@@ -18,7 +18,7 @@ import type { BriefingResult } from "#/features/briefing/morning-briefing";
 import { toMeetingEvents } from "#/features/calendar/events";
 import type { DueCard } from "#/features/projects/store";
 import { UpcomingEventsCard } from "#/features/signals/components/UpcomingEventsCard";
-import { PulseCard } from "#/features/today/PulseCard";
+import { formatUpdatedAgo, PulseCard } from "#/features/today/PulseCard";
 import {
   BriefingCard,
   DueTodayCard,
@@ -533,6 +533,27 @@ describe("PulseCard", () => {
     });
     render(<PulseCard now={now} loader={loader} />);
     await waitFor(() => screen.getByText(/boom/i));
+  });
+
+  it("renders an `updated Ns ago` caption once stats have loaded", async () => {
+    const loader = vi.fn(async (_since: string) => [] as StoredSignal[]);
+    render(<PulseCard now={now} loader={loader} />);
+    await waitFor(() => screen.getByText(/updated \d+s ago/i));
+  });
+});
+
+describe("formatUpdatedAgo", () => {
+  it("formats seconds / minutes / hours / days", () => {
+    const now = new Date("2026-05-04T12:00:00.000Z");
+    expect(formatUpdatedAgo(new Date("2026-05-04T11:59:30.000Z"), now)).toBe("30s ago");
+    expect(formatUpdatedAgo(new Date("2026-05-04T11:55:00.000Z"), now)).toBe("5m ago");
+    expect(formatUpdatedAgo(new Date("2026-05-04T09:00:00.000Z"), now)).toBe("3h ago");
+    expect(formatUpdatedAgo(new Date("2026-05-02T12:00:00.000Z"), now)).toBe("2d ago");
+  });
+
+  it("clamps negative deltas to 0s", () => {
+    const now = new Date("2026-05-04T12:00:00.000Z");
+    expect(formatUpdatedAgo(new Date("2026-05-04T12:00:30.000Z"), now)).toBe("0s ago");
   });
 });
 

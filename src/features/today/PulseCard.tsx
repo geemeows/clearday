@@ -43,6 +43,19 @@ function toDonutData(stats: WeekStats): PulseDonutSlice[] {
   }));
 }
 
+// Relative time for the Pulse header's "updated Ns ago" caption. Matches the
+// `updated 32s ago` mono caption in docs/design/devy-ui/today.jsx.
+export function formatUpdatedAgo(updatedAt: Date, now: Date): string {
+  const seconds = Math.max(0, Math.floor((now.getTime() - updatedAt.getTime()) / 1000));
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
 function formatLatencyDelta(delta: number): {
   text: string;
   positive: boolean;
@@ -67,6 +80,7 @@ export function PulseCard({
 }) {
   const [stats, setStats] = useState<WeekStats | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
 
   const sinceIso = useMemo(() => {
     const d = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
@@ -79,6 +93,7 @@ export function PulseCard({
       .then((list) => {
         if (cancelled) return;
         setStats(computeWeekStats(list, now));
+        setUpdatedAt(new Date());
         setError(null);
       })
       .catch((e) => {
@@ -96,8 +111,17 @@ export function PulseCard({
       className="rounded-lg border border-border bg-card p-6"
     >
       <header className="flex items-baseline gap-2">
-        <span className="font-semibold text-base text-foreground">Pulse</span>
-        <span className="text-muted-foreground text-xs">last 7 days</span>
+        <span className="font-semibold text-sm text-foreground tracking-tight">
+          Pulse
+        </span>
+        <span className="font-medium text-muted-foreground text-xs">
+          last 7 days
+        </span>
+        {updatedAt && (
+          <span className="ml-auto font-mono text-[11px] text-muted-foreground">
+            updated {formatUpdatedAgo(updatedAt, now)}
+          </span>
+        )}
       </header>
 
       {error && <p className="mt-3 text-destructive text-sm">{error}</p>}
