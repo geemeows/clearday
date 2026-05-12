@@ -986,11 +986,11 @@ export function DueTodayCard({
       className="rounded-lg border border-border bg-card p-5"
     >
       <header className="flex items-baseline gap-2">
-        <span className="font-semibold text-base text-foreground">
+        <span className="font-semibold text-[15px] text-foreground leading-[1.3]">
           Due today
         </span>
         {cards != null && cards.length > 0 && (
-          <span className="text-muted-foreground text-xs">
+          <span className="font-medium text-muted-foreground text-xs">
             {cards.length} {plural(cards.length, "card")}
           </span>
         )}
