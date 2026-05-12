@@ -749,6 +749,49 @@ describe("LevelSwitcher", () => {
     }
   });
 
+  it("invokes onSelectLevel with the chosen archived level", () => {
+    const onSelectLevel = vi.fn();
+    const archived = [
+      level({
+        id: "lvl-a",
+        title: "L4",
+        status: "archived",
+        archived_at: "2026-04-01T00:00:00Z",
+      }),
+    ];
+    render(
+      <LevelSwitcher
+        active={level({ title: "L5" })}
+        archived={archived}
+        onSelectLevel={onSelectLevel}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /switch level/i }));
+    fireEvent.click(screen.getByText("L4"));
+    expect(onSelectLevel).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "lvl-a" }),
+    );
+  });
+
+  it("shows the current level's title in the trigger when current differs from active", () => {
+    const archivedLvl = level({
+      id: "lvl-a",
+      title: "L4",
+      status: "archived",
+      archived_at: "2026-04-01T00:00:00Z",
+    });
+    render(
+      <LevelSwitcher
+        active={level({ id: "lvl-active", title: "L5" })}
+        current={archivedLvl}
+        archived={[archivedLvl]}
+      />,
+    );
+    const trigger = screen.getByRole("button", { name: /switch level/i });
+    expect(trigger.textContent).toMatch(/L4/);
+    expect(trigger.textContent).toMatch(/archived/i);
+  });
+
   it("does not invoke onNewBlankLevel when the prompt is cancelled", () => {
     const onNewBlankLevel = vi.fn();
     const originalPrompt = window.prompt;

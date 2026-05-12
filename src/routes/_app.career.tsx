@@ -63,6 +63,7 @@ export function CareerPage() {
     undefined,
   );
   const [archived, setArchived] = useState<StoredLevel[]>([]);
+  const [viewingId, setViewingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const client = supabase as unknown as SupabaseLike;
 
@@ -151,12 +152,22 @@ export function CareerPage() {
     );
   }
 
+  const viewing =
+    (viewingId === null
+      ? active
+      : (archived.find((l) => l.id === viewingId) ?? active)) ?? active;
+
   return (
     <CareerLevelView
-      level={active}
+      level={viewing}
+      activeLevel={active}
       archived={archived}
       client={client}
-      onNewBlankLevel={handleCreate}
+      onNewBlankLevel={(title) => {
+        setViewingId(null);
+        return handleCreate(title);
+      }}
+      onSelectLevel={(l) => setViewingId(l.id === active.id ? null : l.id)}
     />
   );
 }
@@ -326,13 +337,17 @@ function ArchivedLevelRow({
 export function CareerLevelView({
   level,
   client,
+  activeLevel,
   archived = [],
   onNewBlankLevel,
+  onSelectLevel,
 }: {
   level: StoredLevel;
   client: SupabaseLike;
+  activeLevel?: StoredLevel;
   archived?: StoredLevel[];
   onNewBlankLevel?: (title: string) => void;
+  onSelectLevel?: (level: StoredLevel) => void;
 }) {
   const [competencies, setCompetencies] = useState<StoredCompetency[] | null>(
     null,
@@ -446,9 +461,11 @@ export function CareerLevelView({
         </div>
         <div className="flex-1">
           <LevelSwitcher
-            active={level}
+            active={activeLevel ?? level}
+            current={level}
             archived={archived}
             onNewBlankLevel={onNewBlankLevel}
+            onSelectLevel={onSelectLevel}
           />
           <p className="text-muted-foreground text-sm">
             Active level — add competencies to start building your tree.
@@ -548,13 +565,19 @@ export function CareerLevelView({
 
 export function LevelSwitcher({
   active,
+  current,
   archived,
   onNewBlankLevel,
+  onSelectLevel,
 }: {
   active: StoredLevel;
+  current?: StoredLevel;
   archived: StoredLevel[];
   onNewBlankLevel?: (title: string) => void;
+  onSelectLevel?: (level: StoredLevel) => void;
 }) {
+  const viewing = current ?? active;
+  const viewingIsActive = viewing.id === active.id;
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
 
@@ -588,17 +611,29 @@ export function LevelSwitcher({
         className="inline-flex items-center gap-2 rounded-md border border-border bg-card py-[5px] pr-2.5 pl-3 text-foreground hover:bg-muted"
       >
         <span className="font-bold text-lg leading-none tracking-tight">
-          {active.title}
+          {viewing.title}
         </span>
-        <span
-          className="rounded-full px-[7px] py-px font-bold text-[10px] uppercase tracking-wider"
-          style={{
-            background: "var(--good-soft)",
-            color: "var(--good)",
-          }}
-        >
-          Active
-        </span>
+        {viewingIsActive ? (
+          <span
+            className="rounded-full px-[7px] py-px font-bold text-[10px] uppercase tracking-wider"
+            style={{
+              background: "var(--good-soft)",
+              color: "var(--good)",
+            }}
+          >
+            Active
+          </span>
+        ) : (
+          <span
+            className="rounded-full px-[7px] py-px font-bold text-[10px] uppercase tracking-wider"
+            style={{
+              background: "var(--surface-soft)",
+              color: "var(--muted-foreground)",
+            }}
+          >
+            Archived
+          </span>
+        )}
         <ChevronDown className="h-[13px] w-[13px] text-muted-foreground" />
       </button>
       {open && (
@@ -610,9 +645,18 @@ export function LevelSwitcher({
           <p className="px-2.5 pt-2 pb-1 font-medium text-muted-foreground text-xs uppercase tracking-wide">
             Active
           </p>
-          <div
-            className="rounded px-2.5 py-1.5"
-            style={{ background: "var(--accent-tint)" }}
+          <button
+            type="button"
+            onClick={() => {
+              setOpen(false);
+              onSelectLevel?.(active);
+            }}
+            className="block w-full rounded px-2.5 py-1.5 text-left hover:bg-muted"
+            style={
+              viewingIsActive
+                ? { background: "var(--accent-tint)" }
+                : undefined
+            }
           >
             <div className="font-semibold text-foreground text-sm">
               {active.title}
@@ -620,7 +664,7 @@ export function LevelSwitcher({
             <div className="text-muted-foreground text-xs">
               Started {formatDateShort(active.created_at)}
             </div>
-          </div>
+          </button>
           {archived.length > 0 && (
             <>
               <p className="px-2.5 pt-3 pb-1 font-medium text-muted-foreground text-xs uppercase tracking-wide">
@@ -629,14 +673,26 @@ export function LevelSwitcher({
               <ul aria-label="Archived levels list">
                 {archived.map((a) => (
                   <li key={a.id}>
-                    <div className="px-2.5 py-1.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setOpen(false);
+                        onSelectLevel?.(a);
+                      }}
+                      className="block w-full rounded px-2.5 py-1.5 text-left hover:bg-muted"
+                      style={
+                        viewing.id === a.id
+                          ? { background: "var(--accent-tint)" }
+                          : undefined
+                      }
+                    >
                       <div className="font-medium text-foreground text-sm">
                         {a.title}
                       </div>
                       <div className="text-muted-foreground text-xs">
                         Archived {formatDateShort(a.archived_at)}
                       </div>
-                    </div>
+                    </button>
                   </li>
                 ))}
               </ul>
