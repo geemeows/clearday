@@ -171,7 +171,7 @@ export function TodayView({
 }) {
   return (
     <section className="mx-auto flex max-w-7xl flex-col gap-5 px-10 pt-8 pb-16">
-      <header>
+      <header className="mb-1">
         <h1 className="font-semibold text-3xl text-foreground leading-[1.2] tracking-[-0.6px]">
           {greeting ?? "Today"}
         </h1>
@@ -466,7 +466,7 @@ export function BriefingCard({ generator }: { generator?: Generator } = {}) {
           </CossButton>
         )}
       </header>
-      <div className="mt-3 text-foreground text-sm leading-relaxed">
+      <div className="mt-3.5 text-foreground text-sm leading-relaxed">
         {busy && !result && (
           <p className="text-muted-foreground">Generating your briefing…</p>
         )}

@@ -179,11 +179,8 @@ function PulseBody({ stats }: { stats: WeekStats }) {
         </div>
         <p
           data-trend={delta.positive ? "down" : "up"}
-          className={
-            delta.positive
-              ? "mt-1 font-medium text-[11px] text-emerald-600"
-              : "mt-1 font-medium text-[11px] text-destructive"
-          }
+          className="mt-1 font-medium text-[11px]"
+          style={{ color: delta.positive ? "var(--good)" : "var(--danger)" }}
         >
           {delta.text}
         </p>
