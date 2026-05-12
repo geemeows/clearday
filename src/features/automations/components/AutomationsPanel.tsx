@@ -830,7 +830,7 @@ function AutomationRow({
         : "ok";
   const dotClass =
     dotStatus === "failed"
-      ? "bg-destructive"
+      ? "bg-[var(--danger)]"
       : dotStatus === "dry"
         ? "bg-[var(--warn)]"
         : "bg-[var(--good)]";
@@ -867,7 +867,7 @@ function AutomationRow({
             <span
               aria-label="Includes a not-yet-wired capability"
               title="Includes a not-yet-wired capability"
-              className="rounded bg-secondary px-1.5 py-px font-mono text-[9px] tracking-[0.04em] text-muted-foreground uppercase"
+              className="rounded bg-[var(--surface-strong)] px-1.5 py-px font-mono text-[9px] tracking-[0.04em] text-[var(--muted)] uppercase"
             >
               Deferred
             </span>
@@ -875,14 +875,14 @@ function AutomationRow({
           {failed && (
             <span
               aria-label="Last run failed"
-              className="rounded bg-destructive/10 px-1.5 py-px font-mono text-[9px] tracking-[0.04em] text-destructive uppercase"
+              className="rounded bg-[var(--danger-soft)] px-1.5 py-px font-mono text-[9px] tracking-[0.04em] text-[var(--danger)] uppercase"
             >
               Fail
             </span>
           )}
         </div>
         <div className="mt-0.5 flex items-center gap-1.5">
-          <span className="rounded bg-secondary px-1.5 py-px font-mono text-[9.5px] tracking-[0.04em] text-muted-foreground uppercase">
+          <span className="rounded bg-[var(--surface-strong)] px-1.5 py-px font-mono text-[9.5px] tracking-[0.04em] text-[var(--muted)] uppercase">
             {TRIGGERS[automation.trigger_kind]?.label ?? automation.trigger_kind}
           </span>
           <span className="font-mono text-[10px] text-muted-foreground">→</span>
@@ -897,7 +897,7 @@ function AutomationRow({
           <p
             aria-label={`Last failure for ${automation.name}`}
             role="note"
-            className="mt-1 truncate font-mono text-[10px] text-destructive"
+            className="mt-1 truncate font-mono text-[10px] text-[var(--danger)]"
           >
             Last failure: {latestFailure.error ?? "unknown error"}
           </p>
