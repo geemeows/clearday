@@ -825,6 +825,6 @@ function ConflictBanner({
 
 function kindClass(kind: EventKind): string {
   if (kind === "focus") return "bg-foreground text-background";
-  if (kind === "break") return "bg-secondary text-foreground";
+  if (kind === "break") return "bg-secondary text-muted-foreground";
   return "bg-primary text-primary-foreground";
 }
