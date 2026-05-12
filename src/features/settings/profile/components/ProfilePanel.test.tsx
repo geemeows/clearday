@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  deriveInitials,
   loadProfileFields,
   type ProfileFields,
   ProfilePanel,
@@ -48,11 +49,20 @@ describe("ProfilePanel", () => {
     });
   });
 
-  it("renders avatar fallback, name, email, and GitHub handle from useProfile", async () => {
+  it("renders name and a meta line that joins email + GitHub handle", async () => {
     render(<ProfilePanel loader={async () => FIELDS} />);
     expect(await screen.findByText("Devy User")).toBeTruthy();
-    expect(screen.getByText("user@example.com")).toBeTruthy();
-    expect(screen.getByText("@geemeows")).toBeTruthy();
+    expect(
+      screen.getByText("user@example.com · GitHub @geemeows"),
+    ).toBeTruthy();
+  });
+
+  it("hides the GitHub handle when no integration is connected", async () => {
+    const noGithub: ProfileFields = { ...FIELDS, githubHandle: null };
+    render(<ProfilePanel loader={async () => noGithub} />);
+    expect(await screen.findByText("user@example.com")).toBeTruthy();
+    expect(screen.queryByText(/GitHub @/)).toBeNull();
+    expect(screen.queryByText(/@undefined/)).toBeNull();
   });
 
   it("Sign out button fires the injected handler", async () => {
@@ -70,6 +80,21 @@ describe("ProfilePanel", () => {
         name: /switch to (light|dark) mode/i,
       }),
     ).toBeTruthy();
+  });
+
+  describe("deriveInitials", () => {
+    it("uses the first letter of the first and last name token", () => {
+      expect(deriveInitials("Ada Lovelace", null)).toBe("AL");
+      expect(deriveInitials("Erin Marie Kovacs", null)).toBe("EK");
+    });
+
+    it("falls back to the first two characters when only one token is present", () => {
+      expect(deriveInitials("Devy", null)).toBe("DE");
+    });
+
+    it("falls back to the email when no display name is set", () => {
+      expect(deriveInitials(null, "grace@example.com")).toBe("GR");
+    });
   });
 
   describe("loadProfileFields", () => {
