@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   createTask,
+  deleteTask,
   linkTaskPr,
   listTasks,
   updateTaskStatus,
@@ -12,6 +13,8 @@ function makeClient(overrides: {
   error?: { message: string } | null;
   updateError?: { message: string } | null;
   upsertError?: { message: string } | null;
+  deleteError?: { message: string } | null;
+  omitDelete?: boolean;
 }) {
   const limit = vi.fn(async () => ({
     data: overrides.data ?? [],
@@ -26,11 +29,29 @@ function makeClient(overrides: {
     error: overrides.updateError ?? null,
   }));
   const update = vi.fn(() => ({ eq: updateEq }));
-  const from = vi.fn(() => ({ select, upsert, update }));
+  const deleteEq = vi.fn(async () => ({
+    error: overrides.deleteError ?? null,
+  }));
+  const del = vi.fn(() => ({ eq: deleteEq }));
+  const from = vi.fn(() => {
+    const builder: Record<string, unknown> = { select, upsert, update };
+    if (!overrides.omitDelete) builder.delete = del;
+    return builder;
+  });
   const client = { from } as unknown as SupabaseLike;
   return {
     client,
-    spies: { from, select, order, limit, update, updateEq, upsert },
+    spies: {
+      from,
+      select,
+      order,
+      limit,
+      update,
+      updateEq,
+      upsert,
+      delete: del,
+      deleteEq,
+    },
   };
 }
 
@@ -180,6 +201,28 @@ describe("linkTaskPr", () => {
     const { client } = makeClient({ updateError: { message: "rls denied" } });
     await expect(linkTaskPr(client, "DEV-441", "#421")).rejects.toThrow(
       /rls denied/,
+    );
+  });
+});
+
+describe("deleteTask", () => {
+  it("deletes the task row matching the given id", async () => {
+    const { client, spies } = makeClient({});
+    await deleteTask(client, "DEV-441");
+    expect(spies.from).toHaveBeenCalledWith("tasks");
+    expect(spies.delete).toHaveBeenCalled();
+    expect(spies.deleteEq).toHaveBeenCalledWith("id", "DEV-441");
+  });
+
+  it("throws when the underlying delete errors", async () => {
+    const { client } = makeClient({ deleteError: { message: "rls denied" } });
+    await expect(deleteTask(client, "DEV-441")).rejects.toThrow(/rls denied/);
+  });
+
+  it("throws when the client seam does not expose delete()", async () => {
+    const { client } = makeClient({ omitDelete: true });
+    await expect(deleteTask(client, "DEV-441")).rejects.toThrow(
+      /missing delete/,
     );
   });
 });
