@@ -621,7 +621,7 @@ export function TodaySchedule({
   return (
     <article
       aria-label="Today schedule"
-      className="rounded-lg border border-border bg-card p-5"
+      className="rounded-lg border border-border bg-card px-[22px] py-5"
     >
       <header className="flex items-baseline gap-2">
         <span className="font-semibold text-[15px] text-foreground leading-[1.3]">
