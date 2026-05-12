@@ -708,7 +708,7 @@ export function TodaySchedule({
                       <span
                         className="inline-flex shrink-0 items-center rounded-full px-2 py-px font-semibold text-[10px] uppercase tracking-wider"
                         style={{
-                          background: "var(--accent-tint, var(--secondary))",
+                          background: "var(--primary-disabled, var(--secondary))",
                           color: "var(--primary-active, var(--primary))",
                         }}
                       >
