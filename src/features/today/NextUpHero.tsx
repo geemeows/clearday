@@ -1,8 +1,12 @@
-import { CalendarClock, ExternalLink, Video, X } from "lucide-react";
+import { ArrowRight, ExternalLink, Target, Video, X } from "lucide-react";
+import { useEffect, useState } from "react";
 import { Button as CossButton } from "#/components/ui/button";
 import { SourceGlyph } from "#/features/signals/components/SourceGlyph";
 import type { NextUpMeeting } from "#/features/signals/views/today";
-import { CountdownRing } from "#/features/today/CountdownRing";
+import {
+  computeCountdown,
+  CountdownRing,
+} from "#/features/today/CountdownRing";
 import { cn } from "#/lib/cn";
 
 export function NextUpHero({
@@ -17,43 +21,102 @@ export function NextUpHero({
   onSkipAlert?: () => void;
 }) {
   if (!meeting) return null;
-  const { signal, startsAt, endsAt, videoLink, linkedItems } = meeting;
   const minutesUntil = Math.max(
     0,
-    Math.round((startsAt.getTime() - now.getTime()) / 60_000),
+    Math.round((meeting.startsAt.getTime() - now.getTime()) / 60_000),
   );
+
+  if (minutesUntil > 30) {
+    return <FocusReadyNow meeting={meeting} minutesUntil={minutesUntil} />;
+  }
+  return (
+    <MeetingCountdownNow
+      meeting={meeting}
+      minutesUntil={minutesUntil}
+      alertArmed={alertArmed}
+      onSkipAlert={onSkipAlert}
+    />
+  );
+}
+
+function MeetingCountdownNow({
+  meeting,
+  minutesUntil,
+  alertArmed,
+  onSkipAlert,
+}: {
+  meeting: NextUpMeeting;
+  minutesUntil: number;
+  alertArmed: boolean;
+  onSkipAlert?: () => void;
+}) {
+  const { signal, startsAt, endsAt, videoLink, linkedItems } = meeting;
   const urgent = minutesUntil <= 10;
+  const titleShort = signal.title.split("—")[0]?.trim().toUpperCase() ?? "";
 
   return (
     <article
       aria-label="Next up"
+      data-variant="meeting-countdown"
       data-urgent={urgent ? "true" : undefined}
       className={cn(
-        "grid grid-cols-1 items-stretch gap-6 rounded-lg p-6 transition-colors md:grid-cols-[1fr_auto]",
+        "grid grid-cols-1 items-center gap-6 rounded-[20px] px-7 py-[26px] transition-colors md:grid-cols-[auto_1fr_auto]",
         urgent
           ? "border-0 bg-neutral-900 text-white"
-          : "border border-border bg-card",
+          : "border border-[var(--hairline-soft)] bg-card",
       )}
     >
-      <div className="flex min-w-0 flex-col gap-3">
-        <div
+      <div className="flex min-w-[160px] flex-col items-start">
+        {urgent ? (
+          <UrgentTimer targetIso={startsAt.toISOString()} />
+        ) : (
+          <span
+            className={cn(
+              "font-bold font-mono text-[56px] leading-none tabular-nums",
+              "text-foreground",
+            )}
+            style={{ letterSpacing: "-2px" }}
+          >
+            {formatTime(startsAt)}
+          </span>
+        )}
+        <span
           className={cn(
-            "flex flex-wrap items-center gap-2 text-xs uppercase tracking-wider",
+            "mt-1.5 font-semibold text-[10px] uppercase leading-[1.25] tracking-[0.6px]",
             urgent ? "text-white/55" : "text-muted-foreground",
           )}
         >
-          <SourceGlyph source="cal" size={20} />
-          <span>
-            <CalendarClock
-              className="mr-1 inline h-3.5 w-3.5"
-              aria-hidden="true"
-            />
-            Next up · {formatRelative(minutesUntil)}
+          {urgent ? (
+            <>UNTIL {titleShort}</>
+          ) : (
+            <>
+              STARTS IN {minutesUntil}M · {titleShort}
+            </>
+          )}
+        </span>
+      </div>
+
+      <div
+        className={cn(
+          "min-w-0 border-l pl-6",
+          urgent ? "border-white/15" : "border-[var(--hairline-soft)]",
+        )}
+      >
+        <div className="mb-2 flex items-center gap-2">
+          <SourceGlyph source="cal" size={16} />
+          <span
+            className={cn(
+              "text-xs",
+              urgent ? "text-white/60" : "text-muted-foreground",
+            )}
+          >
+            {formatTimeRange(startsAt, endsAt)}
+            {videoLink ? " · Google Meet" : ""}
           </span>
           {alertArmed && (
             <span
               className={cn(
-                "rounded-sm px-2 py-0.5 font-medium text-[11px] normal-case tracking-normal",
+                "ml-1 rounded-sm px-2 py-0.5 font-medium text-[11px]",
                 urgent
                   ? "bg-white/10 text-white"
                   : "bg-primary/10 text-primary",
@@ -63,118 +126,169 @@ export function NextUpHero({
             </span>
           )}
         </div>
-
         <h2
           className={cn(
-            "font-semibold text-[17px] leading-[1.3]",
+            "mb-2.5 font-semibold text-[17px] leading-[1.3]",
             urgent ? "text-white" : "text-foreground",
           )}
         >
           {signal.title}
         </h2>
-        <p
-          className={cn(
-            "font-mono text-xs",
-            urgent ? "text-white/60" : "text-muted-foreground",
-          )}
-        >
-          {formatTimeRange(startsAt, endsAt)}
-        </p>
-
         {linkedItems.length > 0 && (
-          <div className="mt-1 flex flex-col gap-1">
-            <div
-              className={cn(
-                "font-mono text-[10px] uppercase tracking-wider",
-                urgent ? "text-white/55" : "text-muted-foreground",
-              )}
-            >
-              Agenda · pulled from invite
-            </div>
-            <ul className="flex flex-col gap-0.5">
-              {linkedItems.map((item) => (
-                <li
-                  key={item.url}
-                  className={cn(
-                    "flex items-baseline gap-2 text-xs",
-                    urgent ? "text-white/80" : "text-foreground",
-                  )}
+          <ul className="flex flex-col gap-0.5">
+            {linkedItems.slice(0, 3).map((item) => (
+              <li
+                key={item.url}
+                className={cn(
+                  "flex items-baseline gap-2 text-xs",
+                  urgent ? "text-white/70" : "text-foreground",
+                )}
+              >
+                <span
+                  className={urgent ? "text-white/35" : undefined}
+                  style={urgent ? undefined : { color: "var(--muted-soft)" }}
                 >
-                  <span
-                    className={urgent ? "text-white/40" : undefined}
-                    style={urgent ? undefined : { color: "var(--muted-soft)" }}
-                  >
-                    ·
-                  </span>
-                  <a
-                    href={item.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="truncate hover:underline"
-                  >
-                    {agendaLabel(item)}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </div>
+                  ·
+                </span>
+                <a
+                  href={item.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="truncate hover:underline"
+                >
+                  {agendaLabel(item)}
+                </a>
+              </li>
+            ))}
+          </ul>
         )}
-
-        <div className="mt-2 flex flex-wrap gap-2">
-          {videoLink && (
-            <CossButton
-              variant="default"
-              size="sm"
-              render={
-                <a href={videoLink} target="_blank" rel="noreferrer">
-                  <Video aria-hidden="true" />
-                  Join meeting
-                </a>
-              }
-            />
-          )}
-          {signal.url && (
-            <CossButton
-              variant="outline"
-              size="sm"
-              render={
-                <a href={signal.url} target="_blank" rel="noreferrer">
-                  <ExternalLink aria-hidden="true" />
-                  Open agenda
-                </a>
-              }
-            />
-          )}
-          {alertArmed && onSkipAlert && (
-            <CossButton
-              variant="ghost"
-              size="sm"
-              onClick={onSkipAlert}
-              aria-label="Skip 10-min alert"
-            >
-              <X aria-hidden="true" />
-              Skip 10-min alert
-            </CossButton>
-          )}
-        </div>
       </div>
 
-      <div className="flex flex-col items-center justify-center gap-2 px-2">
-        <CountdownRing
-          targetIso={startsAt.toISOString()}
-          label="UNTIL MEETING"
-        />
+      <div className="flex min-w-[160px] flex-col items-stretch gap-2">
+        {videoLink && (
+          <CossButton
+            variant="default"
+            size="lg"
+            render={
+              <a href={videoLink} target="_blank" rel="noreferrer">
+                <Video aria-hidden="true" />
+                Join meeting
+              </a>
+            }
+          />
+        )}
+        {signal.url && (
+          <CossButton
+            variant={urgent ? "ghost" : "outline"}
+            size="sm"
+            className={
+              urgent ? "border border-white/20 text-white hover:bg-white/10" : ""
+            }
+            render={
+              <a href={signal.url} target="_blank" rel="noreferrer">
+                <ExternalLink aria-hidden="true" />
+                Open agenda
+              </a>
+            }
+          />
+        )}
+        {alertArmed && onSkipAlert && (
+          <CossButton
+            variant="ghost"
+            size="sm"
+            onClick={onSkipAlert}
+            aria-label="Skip 10-min alert"
+            className={urgent ? "text-white/80 hover:bg-white/10" : ""}
+          >
+            <X aria-hidden="true" />
+            Skip 10-min alert
+          </CossButton>
+        )}
       </div>
     </article>
   );
 }
 
-function formatRelative(minutes: number): string {
-  if (minutes <= 0) return "starting now";
-  if (minutes < 60) return `in ${minutes} min`;
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  return m === 0 ? `in ${h}h` : `in ${h}h ${m}m`;
+function UrgentTimer({ targetIso }: { targetIso: string }) {
+  const [now, setNow] = useState<Date>(() => new Date());
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const { mm, ss } = computeCountdown(targetIso, now);
+  return (
+    <span
+      role="timer"
+      aria-label={`${mm}:${ss} remaining`}
+      className="font-bold font-mono text-[64px] text-primary leading-none tabular-nums"
+      style={{ letterSpacing: "-3px" }}
+    >
+      <span data-testid="countdown-mm">{mm}</span>
+      <span className="opacity-40">:</span>
+      <span data-testid="countdown-ss">{ss}</span>
+    </span>
+  );
+}
+
+function FocusReadyNow({
+  meeting,
+  minutesUntil,
+}: {
+  meeting: NextUpMeeting;
+  minutesUntil: number;
+}) {
+  const { signal, startsAt, endsAt } = meeting;
+  return (
+    <article
+      aria-label="Next up"
+      data-variant="focus-ready"
+      className="grid grid-cols-1 items-center gap-6 rounded-[20px] border border-[var(--hairline-soft)] bg-card px-7 py-7 md:grid-cols-[1fr_auto]"
+    >
+      <div>
+        <span className="font-semibold text-[10px] text-muted-foreground uppercase tracking-[0.6px]">
+          RIGHT NOW
+        </span>
+        <div
+          className="mt-1.5 mb-2 font-semibold text-[28px] text-foreground leading-[1.15]"
+          style={{ letterSpacing: "-0.4px" }}
+        >
+          Clear runway — {minutesUntil}m until{" "}
+          {signal.title.split("—")[0]?.trim() ?? "next meeting"}
+        </div>
+        <p className="mb-3.5 text-muted-foreground text-sm">
+          Enough time for a focused review pass.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <CossButton variant="default" size="default">
+            <Target aria-hidden="true" />
+            Start 25-min focus
+          </CossButton>
+          {signal.url && (
+            <CossButton
+              variant="outline"
+              size="default"
+              render={
+                <a href={signal.url} target="_blank" rel="noreferrer">
+                  Open agenda
+                  <ArrowRight aria-hidden="true" />
+                </a>
+              }
+            />
+          )}
+        </div>
+      </div>
+      <div className="flex flex-col items-center gap-2.5">
+        <CountdownRing
+          targetIso={startsAt.toISOString()}
+          lookaheadMs={60 * 60 * 1000}
+          label={`UNTIL ${(signal.title.split("—")[0]?.trim().toUpperCase() ?? "MEETING")}`}
+        />
+        <div className="font-mono text-muted-foreground text-xs">
+          {formatTimeRange(startsAt, endsAt)}
+        </div>
+      </div>
+    </article>
+  );
 }
 
 function formatTimeRange(startsAt: Date, endsAt: Date | null): string {

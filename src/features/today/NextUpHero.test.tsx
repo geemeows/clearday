@@ -150,15 +150,34 @@ describe("NextUpHero", () => {
     expect(article?.getAttribute("data-urgent")).toBeNull();
   });
 
-  it("renders the countdown ring with mm:ss", () => {
+  it("renders a live mm:ss countdown when within 10 minutes (urgent)", () => {
     render(
       <NextUpHero
-        meeting={meeting()}
+        meeting={meeting({
+          startsAt: new Date("2026-05-04T12:08:00.000Z"),
+        })}
         now={new Date("2026-05-04T12:00:00.000Z")}
         alertArmed={false}
       />,
     );
     const timer = screen.getByRole("timer");
-    expect(timer.getAttribute("aria-label")).toBe("13:00 remaining");
+    expect(timer.getAttribute("aria-label")).toBe("08:00 remaining");
+  });
+
+  it("renders the FocusReady variant when the meeting is more than 30 minutes out", () => {
+    const { container } = render(
+      <NextUpHero
+        meeting={meeting({
+          startsAt: new Date("2026-05-04T13:00:00.000Z"),
+          endsAt: new Date("2026-05-04T13:15:00.000Z"),
+        })}
+        now={new Date("2026-05-04T12:00:00.000Z")}
+        alertArmed={false}
+      />,
+    );
+    const article = container.querySelector('article[aria-label="Next up"]');
+    expect(article?.getAttribute("data-variant")).toBe("focus-ready");
+    expect(screen.getByText(/RIGHT NOW/)).toBeTruthy();
+    expect(screen.getByText(/Start 25-min focus/i)).toBeTruthy();
   });
 });
