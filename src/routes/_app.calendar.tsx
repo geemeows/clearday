@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { AlertTriangle, ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
   eventsByMonthGrid,
@@ -745,13 +745,13 @@ function NowLine({ now }: { now: Date }) {
       <hr
         data-testid="now-line"
         aria-label="Now"
-        className="pointer-events-none absolute left-0 right-0 z-10 m-0 h-px border-0 bg-primary"
+        className="pointer-events-none absolute left-0 right-0 z-10 m-0 h-0.5 border-0 bg-primary"
         style={{ top: `${top}px` }}
       />
       <span
         aria-hidden
-        className="pointer-events-none absolute z-10 h-2 w-2 -translate-x-1 -translate-y-1 rounded-full bg-primary"
-        style={{ top: `${top}px`, left: 0 }}
+        className="pointer-events-none absolute z-10 h-2 w-2 rounded-full bg-primary"
+        style={{ top: `${top - 3}px`, left: "-4px" }}
       />
     </>
   );
@@ -785,10 +785,9 @@ function ConflictBanner({
             }}
           >
             <span
-              className="inline-flex items-center gap-1 rounded-xs px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-primary-foreground"
+              className="inline-flex items-center rounded-sm px-[7px] py-[3px] font-mono text-[10px] uppercase tracking-wider text-primary-foreground"
               style={{ background: "var(--destructive, #c13515)" }}
             >
-              <AlertTriangle className="h-3 w-3" />
               Conflict
             </span>
             <span className="font-semibold text-foreground">
