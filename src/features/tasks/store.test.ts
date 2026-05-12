@@ -1,11 +1,17 @@
 import { describe, expect, it, vi } from "vitest";
-import { linkTaskPr, listTasks, updateTaskStatus } from "#/features/tasks/store";
+import {
+  createTask,
+  linkTaskPr,
+  listTasks,
+  updateTaskStatus,
+} from "#/features/tasks/store";
 import type { SupabaseLike } from "#/shared/db";
 
 function makeClient(overrides: {
   data?: Record<string, unknown>[];
   error?: { message: string } | null;
   updateError?: { message: string } | null;
+  upsertError?: { message: string } | null;
 }) {
   const limit = vi.fn(async () => ({
     data: overrides.data ?? [],
@@ -13,14 +19,19 @@ function makeClient(overrides: {
   }));
   const order = vi.fn(() => ({ limit }));
   const select = vi.fn(() => ({ order, limit, eq: vi.fn(), in: vi.fn() }));
-  const upsert = vi.fn(async () => ({ error: null }));
+  const upsert = vi.fn(async () => ({
+    error: overrides.upsertError ?? null,
+  }));
   const updateEq = vi.fn(async () => ({
     error: overrides.updateError ?? null,
   }));
   const update = vi.fn(() => ({ eq: updateEq }));
   const from = vi.fn(() => ({ select, upsert, update }));
   const client = { from } as unknown as SupabaseLike;
-  return { client, spies: { from, select, order, limit, update, updateEq } };
+  return {
+    client,
+    spies: { from, select, order, limit, update, updateEq, upsert },
+  };
 }
 
 describe("listTasks", () => {
@@ -103,6 +114,49 @@ describe("updateTaskStatus", () => {
     const { client } = makeClient({ updateError: { message: "rls denied" } });
     await expect(
       updateTaskStatus(client, "DEV-441", "review"),
+    ).rejects.toThrow(/rls denied/);
+  });
+});
+
+describe("createTask", () => {
+  it("upserts the task row with the storage-side priority rename", async () => {
+    const { client, spies } = makeClient({});
+    await createTask(client, {
+      id: "DEV-500",
+      title: "Privacy redactor patterns",
+      p: "P2",
+      status: "todo",
+      days: 0,
+      pr: null,
+      labels: ["ai"],
+    });
+    expect(spies.from).toHaveBeenCalledWith("tasks");
+    expect(spies.upsert).toHaveBeenCalledWith(
+      {
+        id: "DEV-500",
+        title: "Privacy redactor patterns",
+        priority: "P2",
+        status: "todo",
+        days: 0,
+        pr: null,
+        labels: ["ai"],
+      },
+      { onConflict: "id" },
+    );
+  });
+
+  it("throws when the upsert errors", async () => {
+    const { client } = makeClient({ upsertError: { message: "rls denied" } });
+    await expect(
+      createTask(client, {
+        id: "DEV-500",
+        title: "x",
+        p: "P3",
+        status: "todo",
+        days: 0,
+        pr: null,
+        labels: [],
+      }),
     ).rejects.toThrow(/rls denied/);
   });
 });

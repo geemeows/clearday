@@ -1,9 +1,9 @@
 // Read/write boundary for Tasks (Redesign v4 / Slice 4, issue #172).
 //
-// Tracer-bullet scope: read path + status transition + link-PR mutations. Row
-// shape matches `Task` from `src/routes/_app.tasks.tsx` so the route swaps
-// `FIXTURE_TASKS` for `listTasks()` mechanically. The assign mutation lands in
-// a follow-up alongside its UI affordance.
+// Tracer-bullet scope: read path + status transition + link-PR mutations +
+// create. Row shape matches `Task` from `src/routes/_app.tasks.tsx` so the
+// route swaps `FIXTURE_TASKS` for `listTasks()` mechanically. The assign
+// mutation lands in a follow-up alongside its UI affordance.
 
 import type { Task, TaskPriority, TaskStatus } from "#/routes/_app.tasks";
 import type { SupabaseLike } from "#/shared/db";
@@ -39,6 +39,25 @@ export async function updateTaskStatus(
     .update({ status } as Record<string, unknown>)
     .eq("id", id);
   if (error) throw new Error(`task status update failed: ${error.message}`);
+}
+
+export async function createTask(
+  client: SupabaseLike,
+  task: Task,
+): Promise<void> {
+  const { error } = await client.from("tasks").upsert(
+    {
+      id: task.id,
+      title: task.title,
+      priority: task.p,
+      status: task.status,
+      days: task.days,
+      pr: task.pr,
+      labels: task.labels,
+    },
+    { onConflict: "id" },
+  );
+  if (error) throw new Error(`task create failed: ${error.message}`);
 }
 
 export async function linkTaskPr(
