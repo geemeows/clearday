@@ -22,7 +22,7 @@ function LoginComponent() {
       <div className="w-full max-w-sm space-y-6 text-center">
         <div className="flex flex-col items-center gap-3">
           <img
-            src="/brand/devy_logo.svg"
+            src="/brand/devy-logo.png"
             alt="Devy"
             className="h-12 w-12"
             width={48}

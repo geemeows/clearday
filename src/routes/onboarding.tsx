@@ -231,7 +231,7 @@ export function OnboardingHero({
     <div className="mx-auto w-full max-w-2xl">
       <header className="mb-10 flex flex-col items-center gap-4 text-center">
         <img
-          src="/brand/devy_logo.svg"
+          src="/brand/devy-logo.png"
           alt="Devy"
           className="h-16 w-16"
           width={64}
@@ -731,7 +731,7 @@ export function OnboardingFlow({
       <div className="mb-14 flex items-center justify-between">
         <div className="flex items-center gap-2.5">
           <img
-            src="/brand/devy_logo.svg"
+            src="/brand/devy-logo.png"
             alt=""
             className="h-[26px] w-[26px]"
             width={26}
