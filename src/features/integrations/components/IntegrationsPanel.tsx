@@ -472,33 +472,33 @@ function AccountRowItem({
       </Avatar>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
-          <span className="truncate font-medium text-sm">{handle}</span>
+          <span className="truncate font-semibold text-[14px] text-foreground">
+            {handle}
+          </span>
           {account.primary ? (
-            <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
+            <span className="rounded bg-[var(--surface-strong)] px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
               Primary
             </span>
           ) : null}
-        </div>
-        <div className="mt-1 flex items-center gap-2">
           <output
             aria-label={`${handle} status: ${statusLabel(account.status)}`}
             data-account-status={account.status}
             className={cn("h-2 w-2 rounded-full", dotClass(account.status))}
           />
-          <span className="text-[11px] text-muted-foreground">
+          <span className="truncate font-mono text-[11px] text-muted-foreground">
             {statusText(account, now)}
           </span>
-          {account.context ? (
-            <span className="text-[11px] text-muted-foreground">
-              · {account.context}
-            </span>
-          ) : null}
-          {provider.scopes ? (
-            <span className="font-mono text-[10px] text-muted-foreground/70">
-              {provider.scopes}
-            </span>
-          ) : null}
         </div>
+        {account.context || provider.scopes ? (
+          <div className="mt-0.5 truncate text-[13px] text-muted-foreground">
+            {account.context}
+            {provider.scopes ? (
+              <span className="ml-2 font-mono text-[10px] text-[var(--muted-soft)]">
+                {provider.scopes}
+              </span>
+            ) : null}
+          </div>
+        ) : null}
       </div>
       <Button
         type="button"
