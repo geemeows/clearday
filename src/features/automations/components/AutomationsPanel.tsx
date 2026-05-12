@@ -833,7 +833,7 @@ function AutomationRow({
         ? "bg-[var(--warn)]"
         : "bg-[var(--good)]";
   return (
-    <div className="flex items-center gap-3 rounded border border-border bg-background p-3">
+    <div className="flex items-center gap-3 rounded-[10px] border border-[var(--hairline-soft)] bg-[var(--surface-card)] px-4 py-3.5 transition-colors hover:border-primary">
       <label className="flex items-center gap-2 text-xs text-muted-foreground">
         <input
           type="checkbox"
