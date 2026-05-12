@@ -456,8 +456,10 @@ export function AutomationsPanel({
   return (
     <section aria-label="Automations" className="space-y-[18px]">
       <div>
-        <h2 className="font-semibold text-2xl tracking-tight">Automations</h2>
-        <p className="mt-1 text-muted-foreground text-sm">
+        <h2 className="font-semibold text-xl leading-[1.25] tracking-[-0.2px]">
+          Automations
+        </h2>
+        <p className="mt-1 text-muted-foreground text-sm leading-[1.5]">
           When something happens, do something. Spans GitHub, Slack, Calendar,
           and Focus.
         </p>
