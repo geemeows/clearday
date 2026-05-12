@@ -1143,7 +1143,8 @@ function ScoreDots({
           <button
             key={dotValue}
             type="button"
-            aria-pressed={value === dotValue}
+            role="radio"
+            aria-checked={value === dotValue}
             aria-label={`${label}: ${dotValue}`}
             onClick={() => {
               if (dotValue !== value) onChange(dotValue);
