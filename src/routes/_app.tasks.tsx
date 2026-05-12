@@ -1,11 +1,16 @@
 // Wholesale port from docs/design/devy-ui/tasks.jsx (Redesign v4 / Slice 4).
 //
-// The live app has no Tasks backend yet, so the page renders against a
-// co-located fixture typed against the eventual shape. A `needs-triage`
-// backend follow-up issue tracks wiring the model + persistence; the swap
-// will be mechanical.
+// Slice 4 shipped the presentational tree against `FIXTURE_TASKS`. Issue #172
+// landed the read path: the route now loads from `public.tasks` via
+// `listTasks`, falling back to the fixture when the table is empty so the UI
+// keeps working pre-seed. `TasksPage({ tasks })` stays unchanged so the
+// presentational tests keep importing `FIXTURE_TASKS` directly.
 
 import { createFileRoute } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
+import { listTasks } from "#/features/tasks/store";
+import { supabase } from "#/lib/supabase";
+import type { SupabaseLike } from "#/shared/db";
 
 export type TaskStatus = "todo" | "in_progress" | "review" | "done";
 export type TaskPriority = "P1" | "P2" | "P3";
@@ -131,7 +136,51 @@ export const Route = createFileRoute("/_app/tasks")({
 });
 
 function TasksRoute() {
-  return <TasksPage tasks={FIXTURE_TASKS} />;
+  const client = supabase as unknown as SupabaseLike;
+  const [tasks, setTasks] = useState<Task[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    listTasks(client)
+      .then((list) => {
+        if (cancelled) return;
+        setTasks(list.length > 0 ? list : FIXTURE_TASKS);
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        setError(e instanceof Error ? e.message : "failed to load tasks");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [client]);
+
+  if (error) {
+    return (
+      <section className="mx-auto max-w-[1500px] px-9 pt-7 pb-12">
+        <p
+          role="alert"
+          className="rounded-sm border border-destructive/30 bg-destructive/10 p-3 text-destructive text-sm"
+        >
+          {error}
+        </p>
+      </section>
+    );
+  }
+
+  if (tasks === null) {
+    return (
+      <section
+        aria-busy="true"
+        className="mx-auto max-w-[1500px] px-9 pt-7 pb-12 text-muted-foreground text-sm"
+      >
+        Loading…
+      </section>
+    );
+  }
+
+  return <TasksPage tasks={tasks} />;
 }
 
 export function TasksPage({ tasks }: { tasks: Task[] }) {
