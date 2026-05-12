@@ -1305,7 +1305,13 @@ export function InProgressCard({
                 key={s.id}
                 className="flex items-center gap-3 border-[var(--hairline-soft)] border-b py-3 last:border-0"
               >
-                <span className="rounded-md bg-secondary px-2 py-0.5 font-mono font-semibold text-[11px] text-foreground">
+                <span
+                  className="rounded-md px-2 py-0.5 font-mono font-semibold text-[11px]"
+                  style={{
+                    background: "var(--surface-strong)",
+                    color: "var(--body)",
+                  }}
+                >
                   {ticketId}
                 </span>
                 <span className="min-w-0 flex-1">
