@@ -84,4 +84,59 @@ describe("TasksPage", () => {
     fireEvent.blur(input);
     expect(onLinkPr).not.toHaveBeenCalled();
   });
+
+  it("omits the create-task form when no onCreateTask handler is provided", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    expect(screen.queryByRole("form", { name: "Create task" })).toBeNull();
+    expect(screen.queryByLabelText("New task id")).toBeNull();
+  });
+
+  it("fires onCreateTask with the entered fields when the form is submitted", () => {
+    const onCreateTask = vi.fn();
+    render(
+      <TasksPage tasks={FIXTURE_TASKS} onCreateTask={onCreateTask} />,
+    );
+    fireEvent.change(screen.getByLabelText("New task id"), {
+      target: { value: "DEV-500" },
+    });
+    fireEvent.change(screen.getByLabelText("New task title"), {
+      target: { value: "Privacy redactor patterns" },
+    });
+    fireEvent.change(screen.getByLabelText("New task priority"), {
+      target: { value: "P2" },
+    });
+    fireEvent.change(screen.getByLabelText("New task status"), {
+      target: { value: "review" },
+    });
+    fireEvent.submit(
+      screen.getByRole("form", { name: "Create task" }) as HTMLFormElement,
+    );
+    expect(onCreateTask).toHaveBeenCalledWith({
+      id: "DEV-500",
+      title: "Privacy redactor patterns",
+      p: "P2",
+      status: "review",
+      days: 0,
+      pr: null,
+      labels: [],
+    });
+  });
+
+  it("does not fire onCreateTask when the id or title is empty", () => {
+    const onCreateTask = vi.fn();
+    render(
+      <TasksPage tasks={FIXTURE_TASKS} onCreateTask={onCreateTask} />,
+    );
+    fireEvent.submit(
+      screen.getByRole("form", { name: "Create task" }) as HTMLFormElement,
+    );
+    expect(onCreateTask).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText("New task id"), {
+      target: { value: "DEV-500" },
+    });
+    fireEvent.submit(
+      screen.getByRole("form", { name: "Create task" }) as HTMLFormElement,
+    );
+    expect(onCreateTask).not.toHaveBeenCalled();
+  });
 });

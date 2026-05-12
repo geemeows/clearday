@@ -1,15 +1,20 @@
 // Wholesale port from docs/design/devy-ui/tasks.jsx (Redesign v4 / Slice 4).
 //
 // Slice 4 shipped the presentational tree against `FIXTURE_TASKS`. Issue #172
-// landed the read path + status / link-PR store mutations. This iteration
-// wires `updateTaskStatus` through the route via a per-card status select —
-// the smallest UI affordance that round-trips the mutation end-to-end. The
-// mockup is presentational and exposes no status-change affordance, so the
-// select is keyboard-accessible and unobtrusive rather than chrome-driven.
+// landed the read path + status / link-PR / create store mutations. This
+// iteration wires `createTask` into the route via an inline create form, the
+// smallest UI affordance that round-trips the mutation end-to-end. The mockup
+// is presentational and exposes no create affordance, so the form is
+// keyboard-accessible and unobtrusive rather than chrome-driven.
 
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { linkTaskPr, listTasks, updateTaskStatus } from "#/features/tasks/store";
+import {
+  createTask,
+  linkTaskPr,
+  listTasks,
+  updateTaskStatus,
+} from "#/features/tasks/store";
 import { supabase } from "#/lib/supabase";
 import type { SupabaseLike } from "#/shared/db";
 
@@ -174,6 +179,21 @@ function TasksRoute() {
     }
   };
 
+  const handleCreateTask = async (task: Task) => {
+    if (tasks === null) return;
+    const prev = tasks;
+    const prevFixture = fromFixture;
+    setTasks(prevFixture ? [task] : [task, ...tasks]);
+    setFromFixture(false);
+    try {
+      await createTask(client, task);
+    } catch (e) {
+      setTasks(prev);
+      setFromFixture(prevFixture);
+      setError(e instanceof Error ? e.message : "failed to create task");
+    }
+  };
+
   const handleLinkPr = async (id: string, pr: string | null) => {
     if (tasks === null) return;
     const prev = tasks;
@@ -216,6 +236,7 @@ function TasksRoute() {
       tasks={tasks}
       onMoveTask={handleMoveTask}
       onLinkPr={handleLinkPr}
+      onCreateTask={handleCreateTask}
     />
   );
 }
@@ -224,10 +245,12 @@ export function TasksPage({
   tasks,
   onMoveTask,
   onLinkPr,
+  onCreateTask,
 }: {
   tasks: Task[];
   onMoveTask?: (id: string, status: TaskStatus) => void;
   onLinkPr?: (id: string, pr: string | null) => void;
+  onCreateTask?: (task: Task) => void;
 }) {
   return (
     <div className="mx-auto max-w-[1500px] px-9 pt-7 pb-12">
@@ -242,6 +265,8 @@ export function TasksPage({
           {tasks.length} assigned to you · Linear · Sprint 24
         </span>
       </header>
+
+      {onCreateTask && <CreateTaskForm onCreateTask={onCreateTask} />}
 
       <div
         className="grid gap-4"
@@ -378,6 +403,89 @@ function TaskCard({
         )}
       </div>
     </article>
+  );
+}
+
+function CreateTaskForm({
+  onCreateTask,
+}: {
+  onCreateTask: (task: Task) => void;
+}) {
+  const [id, setId] = useState("");
+  const [title, setTitle] = useState("");
+  const [priority, setPriority] = useState<TaskPriority>("P3");
+  const [status, setStatus] = useState<TaskStatus>("todo");
+
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const trimmedId = id.trim();
+    const trimmedTitle = title.trim();
+    if (!trimmedId || !trimmedTitle) return;
+    onCreateTask({
+      id: trimmedId,
+      title: trimmedTitle,
+      p: priority,
+      status,
+      days: 0,
+      pr: null,
+      labels: [],
+    });
+    setId("");
+    setTitle("");
+    setPriority("P3");
+    setStatus("todo");
+  };
+
+  return (
+    <form
+      aria-label="Create task"
+      onSubmit={handleSubmit}
+      className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card px-3 py-2"
+    >
+      <input
+        aria-label="New task id"
+        value={id}
+        onChange={(e) => setId(e.currentTarget.value)}
+        placeholder="DEV-###"
+        className="w-24 rounded-[4px] border border-border bg-transparent px-2 py-[3px] font-mono text-[11px] text-foreground"
+      />
+      <input
+        aria-label="New task title"
+        value={title}
+        onChange={(e) => setTitle(e.currentTarget.value)}
+        placeholder="Title"
+        className="flex-1 rounded-[4px] border border-border bg-transparent px-2 py-[3px] text-[12px] text-foreground"
+      />
+      <select
+        aria-label="New task priority"
+        value={priority}
+        onChange={(e) => setPriority(e.currentTarget.value as TaskPriority)}
+        className="rounded-[4px] border border-border bg-transparent px-1 py-[3px] font-mono text-[11px] text-muted-foreground"
+      >
+        <option value="P1">P1</option>
+        <option value="P2">P2</option>
+        <option value="P3">P3</option>
+      </select>
+      <select
+        aria-label="New task status"
+        value={status}
+        onChange={(e) => setStatus(e.currentTarget.value as TaskStatus)}
+        className="rounded-[4px] border border-border bg-transparent px-1 py-[3px] font-mono text-[11px] text-muted-foreground"
+      >
+        {COLUMNS.map((c) => (
+          <option key={c.id} value={c.id}>
+            {c.label}
+          </option>
+        ))}
+      </select>
+      <button
+        type="submit"
+        disabled={!id.trim() || !title.trim()}
+        className="rounded-[4px] border border-border bg-primary/10 px-2 py-[3px] text-[11px] text-primary disabled:opacity-40"
+      >
+        Add task
+      </button>
+    </form>
   );
 }
 
