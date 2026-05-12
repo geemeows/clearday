@@ -108,7 +108,7 @@ export function PulseCard({
   return (
     <article
       aria-label="Pulse"
-      className="rounded-lg border border-border bg-card p-6"
+      className="rounded-lg border border-border bg-card px-6 py-[22px]"
     >
       <header className="flex items-baseline gap-2">
         <span className="font-semibold text-[15px] text-foreground leading-[1.3]">
@@ -144,7 +144,7 @@ function PulseBody({ stats }: { stats: WeekStats }) {
   );
 
   return (
-    <div className="mt-4 grid grid-cols-1 gap-5 md:grid-cols-3 md:gap-0">
+    <div className="mt-3.5 grid grid-cols-1 gap-5 md:grid-cols-3 md:gap-0">
       {/* Donut — signal source mix */}
       <section className="flex items-center gap-3.5 md:border-[var(--hairline-soft)] md:border-r md:pr-5">
         <PulseDonut data={donutData} />
