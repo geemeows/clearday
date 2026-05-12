@@ -437,7 +437,7 @@ export function BriefingCard({ generator }: { generator?: Generator } = {}) {
     >
       <header className="flex items-center gap-2">
         <SourceGlyph source="ai" size={20} />
-        <span className="font-semibold text-base text-foreground">
+        <span className="font-semibold text-foreground text-sm leading-[1.3]">
           Morning briefing
         </span>
         {result?.ok && (
