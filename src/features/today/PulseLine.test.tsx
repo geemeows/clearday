@@ -17,9 +17,17 @@ describe("PulseLine", () => {
     expect(paths).toHaveLength(1);
   });
 
-  it("renders nothing when given an empty series", () => {
-    const { container } = render(<PulseLine values={[]} />);
+  it("renders a ChartEmpty placeholder for empty / single-value series", () => {
+    const { container, getByText, rerender } = render(
+      <PulseLine values={[]} />,
+    );
     expect(container.querySelectorAll("[data-pulse-point]")).toHaveLength(0);
     expect(container.querySelectorAll("path")).toHaveLength(0);
+    expect(getByText("Not enough data")).toBeTruthy();
+    expect(getByText("Need at least 2 days of activity")).toBeTruthy();
+
+    rerender(<PulseLine values={[5]} />);
+    expect(container.querySelectorAll("[data-pulse-point]")).toHaveLength(0);
+    expect(container.querySelector("[data-pulse-empty]")).toBeTruthy();
   });
 });

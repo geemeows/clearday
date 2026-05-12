@@ -1,3 +1,5 @@
+import { ChartEmpty } from "#/features/today/ChartEmpty";
+
 export function PulseLine({
   values,
   width = 220,
@@ -11,14 +13,12 @@ export function PulseLine({
   color?: string;
   unit?: string;
 }) {
-  if (values.length === 0) {
+  if (values.length < 2) {
     return (
-      <svg
-        viewBox={`0 0 ${width} ${height + 18}`}
-        width="100%"
+      <ChartEmpty
         height={height + 18}
-        role="img"
-        aria-label="Review latency trend"
+        label="Not enough data"
+        sub="Need at least 2 days of activity"
       />
     );
   }

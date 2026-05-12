@@ -1,3 +1,5 @@
+import { ChartEmpty } from "#/features/today/ChartEmpty";
+
 export type PulseBarsDatum = {
   day: string;
   prs: number;
@@ -11,6 +13,15 @@ export function PulseBars({
   data: PulseBarsDatum[];
   height?: number;
 }) {
+  if (data.length === 0 || !data.some((d) => d.prs > 0 || d.tickets > 0)) {
+    return (
+      <ChartEmpty
+        height={height + 22}
+        label="Nothing shipped yet this week"
+        sub="Bars will appear once a PR merges or a ticket closes"
+      />
+    );
+  }
   const max = Math.max(1, ...data.map((d) => Math.max(d.prs, d.tickets)));
   const slot = 46;
   const width = 8 + data.length * slot;

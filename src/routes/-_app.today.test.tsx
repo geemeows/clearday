@@ -512,9 +512,14 @@ describe("PulseCard", () => {
       ).toBeGreaterThan(0),
     );
     expect(container.querySelectorAll("[data-pulse-point]")).toHaveLength(7);
+    // No PR merges / ticket closes in the fixture → ChartEmpty replaces bars,
+    // matching docs/design/devy-ui/today.jsx Pulse empty-state spec.
     expect(container.querySelectorAll("[data-pulse-bar-group]")).toHaveLength(
-      5,
+      0,
     );
+    expect(
+      screen.getByText(/Nothing shipped yet this week/i),
+    ).toBeTruthy();
     expect(screen.getByText(/last 7 days/i)).toBeTruthy();
     expect(screen.getByText(/Review latency/i)).toBeTruthy();
     expect(screen.getByText(/Shipped this week/i)).toBeTruthy();

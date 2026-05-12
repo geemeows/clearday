@@ -17,7 +17,10 @@ import {
 import { type DueCard, listCardsDueOn } from "#/features/projects/store";
 import type { ProfileView } from "#/features/settings/profile/api";
 import { InboxPreviewRow } from "#/features/signals/components/InboxPreviewRow";
-import { SourceGlyph } from "#/features/signals/components/SourceGlyph";
+import {
+  SourceGlyph,
+  type SourceKind,
+} from "#/features/signals/components/SourceGlyph";
 import { daysInProgress, prRefOf } from "#/features/signals/display";
 import {
   filterMeetingsToToday,
@@ -99,6 +102,17 @@ function TodayPage() {
     [meetings, now],
   );
 
+  // Suppress the briefing when a meeting is <10 minutes out, per
+  // docs/design/devy-ui/today.jsx — the user shouldn't be reading the
+  // morning rundown when they should be in the meeting.
+  const briefingSuppressed = useMemo(() => {
+    if (!nextUp) return false;
+    const mins = Math.floor(
+      (nextUp.startsAt.getTime() - now.getTime()) / 60_000,
+    );
+    return mins >= 0 && mins <= 10;
+  }, [nextUp, now]);
+
   const greeting = useGreeting(now);
 
   return (
@@ -125,7 +139,7 @@ function TodayPage() {
           />
         )
       }
-      briefing={<BriefingCard />}
+      briefing={<BriefingCard suppressed={briefingSuppressed} />}
       onboardingBanner={<OnboardingBanner />}
       schedule={
         meetings != null && <TodaySchedule events={todaysMeetings} now={now} />
@@ -172,8 +186,8 @@ export function TodayView({
   return (
     <section className="mx-auto flex max-w-7xl flex-col gap-5 px-10 pt-8 pb-16">
       <header className="mb-1">
-        <h1 className="font-semibold text-3xl text-foreground leading-[1.2] tracking-[-0.6px]">
-          {greeting ?? "Today"}
+        <h1 className="font-semibold text-5xl text-foreground leading-[1.05] tracking-[-0.6px]">
+          {greeting ?? "Today"}.
         </h1>
         {summary && (
           <p className="mt-1 text-muted-foreground text-sm">{summary}</p>
@@ -360,9 +374,62 @@ export function OnboardingBanner({
   );
 }
 
+// Fixture for the briefing.items[] shape. The mockup's populated layout
+// renders structured items, but the live producer still returns plain text.
+// Backend follow-up (see linked issue on #160): migrate producer from
+// text → items[]. Items are typed against the eventual shape so the
+// swap is mechanical when the backend lands.
+export type BriefingItemPriority = "high" | "watch" | "plan" | "skip";
+
+export type BriefingItem = {
+  id: string;
+  priority: BriefingItemPriority;
+  tag: string;
+  source: SourceKind;
+  title: string;
+  reason: string;
+  body: string;
+  cta?: { label: string };
+};
+
+export const FIXTURE_BRIEFING_ITEMS: BriefingItem[] = [
+  {
+    id: "bi-1",
+    priority: "high",
+    tag: "10:00 STANDUP",
+    source: "git",
+    title: "PR #421 — auth middleware refactor",
+    reason: "Priya is blocked",
+    body: "Session-token storage redesign; compliance flagged the old shape.",
+    cta: { label: "Open PR" },
+  },
+  {
+    id: "bi-2",
+    priority: "watch",
+    tag: "TODAY",
+    source: "cal",
+    title: "Design review at 11:30",
+    reason: "agenda not yet finalised",
+    body: "Three open threads in #design — read before walking in.",
+    cta: { label: "Open agenda" },
+  },
+  {
+    id: "bi-3",
+    priority: "plan",
+    tag: "THIS WEEK",
+    source: "linear",
+    title: "DEV-238 — onboarding gate",
+    reason: "due Friday",
+    body: "Backend wiring landed; UI verifications outstanding.",
+  },
+];
+
 type Generator = (force: boolean) => Promise<BriefingResult>;
 
-export function BriefingCard({ generator }: { generator?: Generator } = {}) {
+export function BriefingCard({
+  generator,
+  suppressed,
+}: { generator?: Generator; suppressed?: boolean } = {}) {
   const [result, setResult] = useState<BriefingResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [latencyMs, setLatencyMs] = useState<number | null>(null);
@@ -430,6 +497,8 @@ export function BriefingCard({ generator }: { generator?: Generator } = {}) {
       setBusy(false);
     }
   }, [gen]);
+
+  if (suppressed) return null;
 
   return (
     <article

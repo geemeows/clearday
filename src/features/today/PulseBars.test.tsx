@@ -43,8 +43,8 @@ describe("PulseBars", () => {
     expect(ticketBars[1].getAttribute("height")).toBe("45");
   });
 
-  it("handles an all-zero dataset without dividing by zero", () => {
-    const { container } = render(
+  it("renders a ChartEmpty placeholder for an all-zero dataset", () => {
+    const { container, getByText } = render(
       <PulseBars
         data={[
           { day: "Mon", prs: 0, tickets: 0 },
@@ -52,8 +52,12 @@ describe("PulseBars", () => {
         ]}
       />,
     );
-    const prBars = container.querySelectorAll('[data-pulse-bar="prs"]');
-    expect(prBars[0].getAttribute("height")).toBe("0");
-    expect(prBars[1].getAttribute("height")).toBe("0");
+    expect(container.querySelectorAll('[data-pulse-bar="prs"]')).toHaveLength(
+      0,
+    );
+    expect(getByText("Nothing shipped yet this week")).toBeTruthy();
+    expect(
+      getByText("Bars will appear once a PR merges or a ticket closes"),
+    ).toBeTruthy();
   });
 });
