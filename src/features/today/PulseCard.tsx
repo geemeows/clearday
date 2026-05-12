@@ -148,7 +148,7 @@ function PulseBody({ stats }: { stats: WeekStats }) {
       {/* Donut — signal source mix */}
       <section className="flex items-center gap-3.5 md:border-[var(--hairline-soft)] md:border-r md:pr-5">
         <PulseDonut data={donutData} />
-        <ul className="flex flex-col gap-1.5 text-xs">
+        <ul className="flex flex-col gap-1.5 text-[11px]">
           {donutData.map((d) => (
             <li key={d.source} className="flex items-center gap-2">
               <span
