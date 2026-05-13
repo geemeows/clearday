@@ -1384,4 +1384,30 @@ describe("TasksPage", () => {
     });
     expect(screen.queryByLabelText("Total assigned count")).toBeNull();
   });
+
+  it("renders a header-level total done count badge summing across columns", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    // Fixture: 1 task at status=done (DEV-360).
+    expect(screen.getByLabelText("Total done count").textContent).toBe("1 done");
+  });
+
+  it("updates the total done count badge to reflect the filtered set", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    // P1 priority filter keeps DEV-441 (in_progress) + DEV-360 (done);
+    // only DEV-360 is done → 1.
+    fireEvent.change(screen.getByLabelText("Filter by priority"), {
+      target: { value: "P1" },
+    });
+    expect(screen.getByLabelText("Total done count").textContent).toBe("1 done");
+  });
+
+  it("hides the total done count badge when no visible task is done", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    // P2 priority filter has no done tasks in the fixture (only DEV-360 is
+    // done and it is P1) → badge hides.
+    fireEvent.change(screen.getByLabelText("Filter by priority"), {
+      target: { value: "P2" },
+    });
+    expect(screen.queryByLabelText("Total done count")).toBeNull();
+  });
 });

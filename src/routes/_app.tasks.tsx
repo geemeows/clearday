@@ -508,6 +508,7 @@ export function TasksPage({
   const totalAssigned = filteredTasks.filter(
     (t) => t.assignee !== null,
   ).length;
+  const totalDone = filteredTasks.filter((t) => t.status === "done").length;
   return (
     <div className="mx-auto max-w-[1500px] px-9 pt-7 pb-12">
       <header className="mb-[18px] flex items-baseline">
@@ -680,6 +681,19 @@ export function TasksPage({
             }}
           >
             {totalAssigned} assigned
+          </span>
+        )}
+        {totalDone > 0 && (
+          <span
+            aria-label="Total done count"
+            className="ml-2 rounded-sm font-mono font-semibold text-[10px]"
+            style={{
+              background: "var(--src-slack-bg)",
+              color: "var(--src-slack)",
+              padding: "1px 6px",
+            }}
+          >
+            {totalDone} done
           </span>
         )}
         <input
