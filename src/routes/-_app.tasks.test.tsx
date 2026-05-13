@@ -570,6 +570,47 @@ describe("TasksPage", () => {
     expect(status.textContent).toContain("No tasks match your filter.");
   });
 
+  it("filters tasks to those with days >= 3 when the days filter is ≥3d", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    const select = screen.getByLabelText(
+      "Filter by days",
+    ) as unknown as HTMLSelectElement;
+    expect(select.value).toBe("all");
+    fireEvent.change(select, { target: { value: "3" } });
+    // Stale (days >= 3) in the fixture: DEV-447 (3d), DEV-401 (6d), DEV-360 (4d).
+    expect(screen.queryByRole("article", { name: "DEV-447" })).not.toBeNull();
+    expect(screen.queryByRole("article", { name: "DEV-401" })).not.toBeNull();
+    expect(screen.queryByRole("article", { name: "DEV-360" })).not.toBeNull();
+    // Fresher tasks are hidden.
+    expect(screen.queryByRole("article", { name: "DEV-441" })).toBeNull();
+    expect(screen.queryByRole("article", { name: "DEV-378" })).toBeNull();
+    expect(screen.queryByRole("article", { name: "DEV-432" })).toBeNull();
+  });
+
+  it("shows the filter empty-state when the days filter has no matches", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    fireEvent.change(screen.getByLabelText("Filter by days"), {
+      target: { value: "7" },
+    });
+    // No fixture task has days >= 7.
+    const status = screen.getByRole("status");
+    expect(status.textContent).toContain("No tasks match your filter.");
+  });
+
+  it("composes the days filter with the priority filter", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    fireEvent.change(screen.getByLabelText("Filter by days"), {
+      target: { value: "3" },
+    });
+    fireEvent.change(screen.getByLabelText("Filter by priority"), {
+      target: { value: "P1" },
+    });
+    // Only DEV-360 is P1 with days >= 3.
+    expect(screen.queryByRole("article", { name: "DEV-360" })).not.toBeNull();
+    expect(screen.queryByRole("article", { name: "DEV-447" })).toBeNull();
+    expect(screen.queryByRole("article", { name: "DEV-401" })).toBeNull();
+  });
+
   it("hides the Clear filters button when no filter is active", () => {
     render(<TasksPage tasks={FIXTURE_TASKS} />);
     expect(screen.queryByRole("button", { name: "Clear filters" })).toBeNull();

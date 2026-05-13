@@ -360,6 +360,7 @@ export function TasksPage({
   );
   const [labelFilter, setLabelFilter] = useState<string>("all");
   const [prFilter, setPrFilter] = useState<"all" | "with" | "without">("all");
+  const [daysFilter, setDaysFilter] = useState<"all" | "1" | "3" | "7">("all");
   const [sortBy, setSortBy] = useState<
     "default" | "priority" | "days" | "id" | "title" | "assignee"
   >("default");
@@ -372,13 +373,15 @@ export function TasksPage({
     query !== "" ||
     priorityFilter !== "all" ||
     labelFilter !== "all" ||
-    prFilter !== "all";
+    prFilter !== "all" ||
+    daysFilter !== "all";
   const clearFilters = () => {
     setMineOnly(false);
     setQuery("");
     setPriorityFilter("all");
     setLabelFilter("all");
     setPrFilter("all");
+    setDaysFilter("all");
   };
   const handleKeyboardMove = (id: string, direction: "left" | "right") => {
     if (!onMoveTask) return;
@@ -398,6 +401,7 @@ export function TasksPage({
     if (labelFilter !== "all" && !t.labels.includes(labelFilter)) return false;
     if (prFilter === "with" && t.pr === null) return false;
     if (prFilter === "without" && t.pr !== null) return false;
+    if (daysFilter !== "all" && t.days < Number(daysFilter)) return false;
     if (normalizedQuery === "") return true;
     return (
       t.id.toLowerCase().includes(normalizedQuery) ||
@@ -492,6 +496,21 @@ export function TasksPage({
           <option value="with">Has PR</option>
           <option value="without">No PR</option>
         </select>
+        <select
+          aria-label="Filter by days"
+          value={daysFilter}
+          onChange={(e) =>
+            setDaysFilter(
+              e.currentTarget.value as "all" | "1" | "3" | "7",
+            )
+          }
+          className="ml-2 rounded-[4px] border border-border bg-transparent px-1 py-[3px] font-mono text-[11px] text-muted-foreground"
+        >
+          <option value="all">Any age</option>
+          <option value="1">≥1d</option>
+          <option value="3">≥3d</option>
+          <option value="7">≥7d</option>
+        </select>
         {filtersActive && (
           <button
             type="button"
@@ -558,7 +577,8 @@ export function TasksPage({
           {normalizedQuery !== "" ||
           priorityFilter !== "all" ||
           labelFilter !== "all" ||
-          prFilter !== "all"
+          prFilter !== "all" ||
+          daysFilter !== "all"
             ? "No tasks match your filter."
             : mineOnly
               ? "No tasks assigned to you."
