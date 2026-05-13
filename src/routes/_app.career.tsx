@@ -1204,10 +1204,11 @@ export function CriteriaList({
           }}
           onDrop={handleListDrop}
         >
-          {criteria.map((c) => (
+          {criteria.map((c, i) => (
             <CriterionRow
               key={c.id}
               criterion={c}
+              letter={String.fromCharCode(65 + i)}
               client={client}
               onRename={handleRename}
               onSetTarget={handleSetTarget}
@@ -1280,6 +1281,7 @@ function ScoreDots({
 
 function CriterionRow({
   criterion,
+  letter,
   client,
   onRename,
   onSetTarget,
@@ -1289,6 +1291,7 @@ function CriterionRow({
   onDragEnter,
 }: {
   criterion: StoredCriterion;
+  letter: string;
   client: SupabaseLike;
   onRename: (id: string, name: string) => void;
   onSetTarget: (id: string, target: number) => void;
@@ -1311,6 +1314,12 @@ function CriterionRow({
           aria-hidden="true"
           className="h-3 w-3 shrink-0 text-muted-foreground/60"
         />
+        <span
+          aria-hidden="true"
+          className="inline-flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-xs bg-[var(--surface-strong)] font-bold text-[11px] text-muted-foreground"
+        >
+          {letter}
+        </span>
         <input
           type="text"
           aria-label={`Rename criterion ${criterion.name}`}
