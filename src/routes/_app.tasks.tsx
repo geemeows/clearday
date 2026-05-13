@@ -361,6 +361,7 @@ export function TasksPage({
   const [labelFilter, setLabelFilter] = useState<string>("all");
   const [prFilter, setPrFilter] = useState<"all" | "with" | "without">("all");
   const [daysFilter, setDaysFilter] = useState<"all" | "1" | "3" | "7">("all");
+  const [assigneeFilter, setAssigneeFilter] = useState<string>("all");
   const [sortBy, setSortBy] = useState<
     "default" | "priority" | "days" | "id" | "title" | "assignee"
   >("default");
@@ -368,13 +369,21 @@ export function TasksPage({
   const availableLabels = Array.from(
     new Set(tasks.flatMap((t) => t.labels)),
   ).sort();
+  const availableAssignees = Array.from(
+    new Set(
+      tasks
+        .map((t) => t.assignee)
+        .filter((a): a is string => a !== null),
+    ),
+  ).sort();
   const filtersActive =
     mineOnly ||
     query !== "" ||
     priorityFilter !== "all" ||
     labelFilter !== "all" ||
     prFilter !== "all" ||
-    daysFilter !== "all";
+    daysFilter !== "all" ||
+    assigneeFilter !== "all";
   const clearFilters = () => {
     setMineOnly(false);
     setQuery("");
@@ -382,6 +391,7 @@ export function TasksPage({
     setLabelFilter("all");
     setPrFilter("all");
     setDaysFilter("all");
+    setAssigneeFilter("all");
   };
   const handleKeyboardMove = (id: string, direction: "left" | "right") => {
     if (!onMoveTask) return;
@@ -402,6 +412,13 @@ export function TasksPage({
     if (prFilter === "with" && t.pr === null) return false;
     if (prFilter === "without" && t.pr !== null) return false;
     if (daysFilter !== "all" && t.days < Number(daysFilter)) return false;
+    if (assigneeFilter === "unassigned" && t.assignee !== null) return false;
+    if (
+      assigneeFilter !== "all" &&
+      assigneeFilter !== "unassigned" &&
+      t.assignee !== assigneeFilter
+    )
+      return false;
     if (normalizedQuery === "") return true;
     return (
       t.id.toLowerCase().includes(normalizedQuery) ||
@@ -511,6 +528,20 @@ export function TasksPage({
           <option value="3">≥3d</option>
           <option value="7">≥7d</option>
         </select>
+        <select
+          aria-label="Filter by assignee"
+          value={assigneeFilter}
+          onChange={(e) => setAssigneeFilter(e.currentTarget.value)}
+          className="ml-2 rounded-[4px] border border-border bg-transparent px-1 py-[3px] font-mono text-[11px] text-muted-foreground"
+        >
+          <option value="all">All assignees</option>
+          <option value="unassigned">Unassigned</option>
+          {availableAssignees.map((a) => (
+            <option key={a} value={a}>
+              @{a}
+            </option>
+          ))}
+        </select>
         {filtersActive && (
           <button
             type="button"
@@ -578,7 +609,8 @@ export function TasksPage({
           priorityFilter !== "all" ||
           labelFilter !== "all" ||
           prFilter !== "all" ||
-          daysFilter !== "all"
+          daysFilter !== "all" ||
+          assigneeFilter !== "all"
             ? "No tasks match your filter."
             : mineOnly
               ? "No tasks assigned to you."

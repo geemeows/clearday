@@ -611,6 +611,46 @@ describe("TasksPage", () => {
     expect(screen.queryByRole("article", { name: "DEV-401" })).toBeNull();
   });
 
+  it("filters tasks to unassigned when the assignee filter is Unassigned", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    const select = screen.getByLabelText(
+      "Filter by assignee",
+    ) as unknown as HTMLSelectElement;
+    expect(select.value).toBe("all");
+    fireEvent.change(select, { target: { value: "unassigned" } });
+    // Cards with assignee=null in the fixture: DEV-447, DEV-401, DEV-432,
+    // DEV-455, DEV-460, DEV-388, DEV-378.
+    expect(screen.queryByRole("article", { name: "DEV-447" })).not.toBeNull();
+    expect(screen.queryByRole("article", { name: "DEV-432" })).not.toBeNull();
+    // assigned-to-you fixtures are hidden.
+    expect(screen.queryByRole("article", { name: "DEV-441" })).toBeNull();
+    expect(screen.queryByRole("article", { name: "DEV-360" })).toBeNull();
+  });
+
+  it("filters tasks to a single assignee when picked in the assignee filter", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    fireEvent.change(screen.getByLabelText("Filter by assignee"), {
+      target: { value: "you" },
+    });
+    // Only assignee=you fixtures: DEV-441, DEV-360.
+    expect(screen.queryByRole("article", { name: "DEV-441" })).not.toBeNull();
+    expect(screen.queryByRole("article", { name: "DEV-360" })).not.toBeNull();
+    expect(screen.queryByRole("article", { name: "DEV-447" })).toBeNull();
+  });
+
+  it("composes the assignee filter with the priority filter for the empty-state", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    fireEvent.change(screen.getByLabelText("Filter by assignee"), {
+      target: { value: "you" },
+    });
+    fireEvent.change(screen.getByLabelText("Filter by priority"), {
+      target: { value: "P2" },
+    });
+    // No P2 fixture task is assigned to you.
+    const status = screen.getByRole("status");
+    expect(status.textContent).toContain("No tasks match your filter.");
+  });
+
   it("hides the Clear filters button when no filter is active", () => {
     render(<TasksPage tasks={FIXTURE_TASKS} />);
     expect(screen.queryByRole("button", { name: "Clear filters" })).toBeNull();
