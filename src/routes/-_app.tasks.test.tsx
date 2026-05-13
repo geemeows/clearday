@@ -783,6 +783,19 @@ describe("TasksPage", () => {
     expect(ids).toEqual(["DEV-401", "DEV-441", "DEV-447"]);
   });
 
+  it("sorts cards by label (nulls last) when Sort by label is picked", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    fireEvent.change(screen.getByLabelText("Sort tasks"), {
+      target: { value: "label" },
+    });
+    const inProgress = screen.getByRole("region", { name: "In progress" });
+    const ids = Array.from(inProgress.querySelectorAll("article")).map((n) =>
+      n.getAttribute("aria-label"),
+    );
+    // DEV-447 "infra", DEV-401 "perf", DEV-441 "security" — alphabetic asc.
+    expect(ids).toEqual(["DEV-447", "DEV-401", "DEV-441"]);
+  });
+
   it("hides the sort-direction toggle when sortBy is default", () => {
     render(<TasksPage tasks={FIXTURE_TASKS} />);
     expect(

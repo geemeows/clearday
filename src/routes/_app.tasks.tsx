@@ -363,7 +363,14 @@ export function TasksPage({
   const [daysFilter, setDaysFilter] = useState<"all" | "1" | "3" | "7">("all");
   const [assigneeFilter, setAssigneeFilter] = useState<string>("all");
   const [sortBy, setSortBy] = useState<
-    "default" | "priority" | "days" | "id" | "title" | "assignee" | "pr"
+    | "default"
+    | "priority"
+    | "days"
+    | "id"
+    | "title"
+    | "assignee"
+    | "pr"
+    | "label"
   >("default");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const availableLabels = Array.from(
@@ -453,7 +460,15 @@ export function TasksPage({
                         : b.pr === null
                           ? -1
                           : a.pr.localeCompare(b.pr)
-                      : a.id.localeCompare(b.id);
+                      : sortBy === "label"
+                        ? a.labels.length === 0
+                          ? b.labels.length === 0
+                            ? 0
+                            : 1
+                          : b.labels.length === 0
+                            ? -1
+                            : a.labels[0].localeCompare(b.labels[0])
+                        : a.id.localeCompare(b.id);
           return sortDir === "asc" ? base : -base;
         });
   return (
@@ -580,7 +595,8 @@ export function TasksPage({
                 | "id"
                 | "title"
                 | "assignee"
-                | "pr",
+                | "pr"
+                | "label",
             )
           }
           className="ml-2 rounded-[4px] border border-border bg-transparent px-1 py-[3px] font-mono text-[11px] text-muted-foreground"
@@ -592,6 +608,7 @@ export function TasksPage({
           <option value="title">Sort by title</option>
           <option value="assignee">Sort by assignee</option>
           <option value="pr">Sort by PR</option>
+          <option value="label">Sort by label</option>
         </select>
         {sortBy !== "default" && (
           <button
