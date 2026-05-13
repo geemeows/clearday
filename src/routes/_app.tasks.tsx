@@ -695,6 +695,7 @@ export function TasksPage({
           const items = visibleTasks.filter((t) => t.status === col.id);
           const collapsed = collapsedColumns.has(col.id);
           const p1Count = items.filter((t) => t.p === "P1").length;
+          const staleCount = items.filter((t) => t.days >= 3).length;
           return (
             <section
               key={col.id}
@@ -746,6 +747,19 @@ export function TasksPage({
                     }}
                   >
                     {p1Count} P1
+                  </span>
+                )}
+                {staleCount > 0 && (
+                  <span
+                    aria-label={`Stale count for ${col.label}`}
+                    className="rounded-sm font-mono font-semibold text-[9px]"
+                    style={{
+                      background: "var(--warn-soft)",
+                      color: "var(--warn)",
+                      padding: "1px 6px",
+                    }}
+                  >
+                    {staleCount} ≥3d
                   </span>
                 )}
                 <button

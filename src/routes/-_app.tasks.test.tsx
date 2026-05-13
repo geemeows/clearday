@@ -1050,4 +1050,34 @@ describe("TasksPage", () => {
     });
     expect(screen.getByLabelText("Total P1 count").textContent).toBe("1 P1");
   });
+
+  it("renders a stale count badge in column headers with tasks aged ≥3 days", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    // Fixture: in_progress has DEV-447 (3d) + DEV-401 (6d) = 2 stale.
+    // done has DEV-360 (4d) = 1 stale.
+    expect(
+      screen.getByLabelText("Stale count for In progress").textContent,
+    ).toBe("2 ≥3d");
+    expect(
+      screen.getByLabelText("Stale count for Done this week").textContent,
+    ).toBe("1 ≥3d");
+  });
+
+  it("omits the stale count badge in columns without any stale tasks", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    // To do tasks all have days=0; In review tasks are 1d and 2d.
+    expect(screen.queryByLabelText("Stale count for To do")).toBeNull();
+    expect(screen.queryByLabelText("Stale count for In review")).toBeNull();
+  });
+
+  it("updates the stale count badge when a filter narrows the visible tasks", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    // P3 in In progress is just DEV-401 (6d) — drops to 1 stale.
+    fireEvent.change(screen.getByLabelText("Filter by priority"), {
+      target: { value: "P3" },
+    });
+    expect(
+      screen.getByLabelText("Stale count for In progress").textContent,
+    ).toBe("1 ≥3d");
+  });
 });
