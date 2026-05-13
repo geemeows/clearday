@@ -693,6 +693,23 @@ describe("CareerLevelView", () => {
     fireEvent.click(addBtn);
     expect(screen.getByLabelText("New criterion name")).toBeTruthy();
   });
+
+  it("toggles score controls between dots and chips via the header toggle", async () => {
+    const { client } = makeFakeClient([competency({ id: "c1", name: "Craft" })]);
+    render(<CareerLevelView level={level()} client={client} />);
+    await screen.findByDisplayValue("Craft");
+    const dotsRadio = screen.getByRole("radio", {
+      name: /score display mode: dots/i,
+    });
+    const chipsRadio = screen.getByRole("radio", {
+      name: /score display mode: chips/i,
+    });
+    expect(dotsRadio.getAttribute("aria-checked")).toBe("true");
+    expect(chipsRadio.getAttribute("aria-checked")).toBe("false");
+    fireEvent.click(chipsRadio);
+    expect(chipsRadio.getAttribute("aria-checked")).toBe("true");
+    expect(dotsRadio.getAttribute("aria-checked")).toBe("false");
+  });
 });
 
 describe("LevelSwitcher", () => {

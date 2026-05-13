@@ -8,7 +8,14 @@ import {
   Target,
   Trash2,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { Button } from "#/components/ui/button";
 import { ActionsMenu } from "#/features/career/components/ActionsMenu";
 import { CareerRadar } from "#/features/career/components/CareerRadar";
@@ -355,6 +362,7 @@ export function CareerLevelView({
   );
   const [error, setError] = useState<string | null>(null);
   const [shareOpen, setShareOpen] = useState(false);
+  const [scoreMode, setScoreMode] = useState<ScoreMode>("dots");
   const [sheetId, setSheetId] = useState<string | null>(level.sheet_id);
   const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(
     level.last_synced_at,
@@ -455,6 +463,7 @@ export function CareerLevelView({
   };
 
   return (
+    <ScoreModeContext.Provider value={scoreMode}>
     <section className="mx-auto max-w-7xl p-8">
       <header className="mb-8 flex items-center gap-3">
         <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
@@ -472,6 +481,7 @@ export function CareerLevelView({
             Active level — add competencies to start building your tree.
           </p>
         </div>
+        <ScoreModeToggle mode={scoreMode} onChange={setScoreMode} />
         <CareerSyncControls
           levelId={level.id}
           sheetId={sheetId}
@@ -591,6 +601,7 @@ export function CareerLevelView({
         </aside>
       </div>
     </section>
+    </ScoreModeContext.Provider>
   );
 }
 
@@ -1248,6 +1259,103 @@ export function CriteriaList({
   );
 }
 
+type ScoreMode = "dots" | "chips";
+
+const ScoreModeContext = createContext<ScoreMode>("dots");
+
+function ScoreChips({
+  value,
+  max = 4,
+  onChange,
+  label,
+}: {
+  value: number;
+  max?: number;
+  onChange: (next: number) => void;
+  label: string;
+}) {
+  return (
+    <div
+      role="radiogroup"
+      aria-label={label}
+      className="inline-flex items-center gap-0 rounded-full border border-border bg-[var(--surface-strong)] p-0.5"
+    >
+      {Array.from({ length: max }).map((_, idx) => {
+        const chipValue = idx + 1;
+        const active = chipValue === value;
+        return (
+          <button
+            key={chipValue}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            aria-label={`${label}: ${chipValue}`}
+            onClick={() => {
+              if (chipValue !== value) onChange(chipValue);
+            }}
+            className={
+              active
+                ? "inline-flex h-[22px] min-w-[22px] items-center justify-center rounded-full bg-primary px-1.5 font-semibold text-[11px] text-primary-foreground transition-all"
+                : "inline-flex h-[22px] min-w-[22px] items-center justify-center rounded-full bg-transparent px-1.5 font-semibold text-[11px] text-muted-foreground transition-all"
+            }
+          >
+            {chipValue}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function ScoreControl(props: {
+  value: number;
+  max?: number;
+  onChange: (next: number) => void;
+  label: string;
+}) {
+  const mode = useContext(ScoreModeContext);
+  return mode === "chips" ? <ScoreChips {...props} /> : <ScoreDots {...props} />;
+}
+
+function ScoreModeToggle({
+  mode,
+  onChange,
+}: {
+  mode: ScoreMode;
+  onChange: (next: ScoreMode) => void;
+}) {
+  return (
+    <div
+      role="radiogroup"
+      aria-label="Score display mode"
+      className="inline-flex items-center gap-0 rounded-full border border-border bg-[var(--surface-strong)] p-0.5"
+    >
+      {(["dots", "chips"] as const).map((m) => {
+        const active = m === mode;
+        return (
+          <button
+            key={m}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            aria-label={`Score display mode: ${m}`}
+            onClick={() => {
+              if (m !== mode) onChange(m);
+            }}
+            className={
+              active
+                ? "inline-flex h-[22px] items-center rounded-full bg-primary px-2.5 font-medium text-[11px] text-primary-foreground capitalize transition-all"
+                : "inline-flex h-[22px] items-center rounded-full bg-transparent px-2.5 font-medium text-[11px] text-muted-foreground capitalize transition-all"
+            }
+          >
+            {m}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function ScoreDots({
   value,
   max = 4,
@@ -1365,7 +1473,7 @@ function CriterionRow({
             </span>
           </span>
         )}
-        <ScoreDots
+        <ScoreControl
           value={criterion.target}
           onChange={(next) => onSetTarget(criterion.id, next)}
           label={`Target for ${criterion.name}`}
@@ -1663,7 +1771,7 @@ function IndicatorRow({
         <EvidenceList indicator={indicator} client={client} />
       </div>
       <div className="flex items-center gap-1 pt-px">
-        <ScoreDots
+        <ScoreControl
           value={indicator.score}
           onChange={(next) => onSetScore(indicator.id, next)}
           label={`Score for ${label}`}
