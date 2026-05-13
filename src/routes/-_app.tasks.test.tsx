@@ -729,4 +729,29 @@ describe("TasksPage", () => {
     );
     expect(onCreateTask).not.toHaveBeenCalled();
   });
+
+  it("hides the visible-count caption when no filter is active", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    expect(screen.queryByLabelText("Visible task count")).toBeNull();
+  });
+
+  it("shows the visible-count caption with X of Y when a filter narrows tasks", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    fireEvent.change(screen.getByLabelText("Filter by priority"), {
+      target: { value: "P1" },
+    });
+    const caption = screen.getByLabelText("Visible task count");
+    const visible = FIXTURE_TASKS.filter((t) => t.p === "P1").length;
+    expect(caption.textContent).toBe(`${visible} of ${FIXTURE_TASKS.length}`);
+  });
+
+  it("hides the visible-count caption again after Clear filters", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    fireEvent.change(screen.getByLabelText("Filter by priority"), {
+      target: { value: "P1" },
+    });
+    expect(screen.queryByLabelText("Visible task count")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
+    expect(screen.queryByLabelText("Visible task count")).toBeNull();
+  });
 });

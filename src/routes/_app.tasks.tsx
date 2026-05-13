@@ -492,6 +492,14 @@ export function TasksPage({
             Clear
           </button>
         )}
+        {filtersActive && (
+          <span
+            aria-label="Visible task count"
+            className="ml-2 font-mono text-[11px] text-muted-foreground"
+          >
+            {filteredTasks.length} of {tasks.length}
+          </span>
+        )}
         <select
           aria-label="Sort tasks"
           value={sortBy}
