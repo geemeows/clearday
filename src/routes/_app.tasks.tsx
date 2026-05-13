@@ -497,6 +497,9 @@ export function TasksPage({
   const totalInReview = filteredTasks.filter(
     (t) => t.status === "review",
   ).length;
+  const totalInProgress = filteredTasks.filter(
+    (t) => t.status === "in_progress",
+  ).length;
   return (
     <div className="mx-auto max-w-[1500px] px-9 pt-7 pb-12">
       <header className="mb-[18px] flex items-baseline">
@@ -578,6 +581,19 @@ export function TasksPage({
             }}
           >
             {totalInReview} in review
+          </span>
+        )}
+        {totalInProgress > 0 && (
+          <span
+            aria-label="Total in-progress count"
+            className="ml-2 rounded-sm font-mono font-semibold text-[10px]"
+            style={{
+              background: "var(--brand-blue-soft)",
+              color: "var(--brand-blue)",
+              padding: "1px 6px",
+            }}
+          >
+            {totalInProgress} in progress
           </span>
         )}
         <input

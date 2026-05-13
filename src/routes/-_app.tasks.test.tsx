@@ -1194,4 +1194,32 @@ describe("TasksPage", () => {
     );
     expect(screen.queryByLabelText("Total in-review count")).toBeNull();
   });
+
+  it("renders a header-level total in-progress count badge summing across columns", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    // Fixture: DEV-441 + DEV-447 + DEV-401 are in `in_progress` status → 3 in progress.
+    expect(screen.getByLabelText("Total in-progress count").textContent).toBe(
+      "3 in progress",
+    );
+  });
+
+  it("updates the total in-progress count badge to reflect the filtered set", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    // assigned-to-you narrows to DEV-441 (in_progress) + DEV-360 (done) → 1 in progress.
+    fireEvent.click(
+      screen.getByLabelText("Show only tasks assigned to you"),
+    );
+    expect(screen.getByLabelText("Total in-progress count").textContent).toBe(
+      "1 in progress",
+    );
+  });
+
+  it("hides the total in-progress count badge when no visible task is in progress", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    // ≥7d filter leaves no tasks (max age is DEV-401 at 6d) → 0 in progress.
+    fireEvent.change(screen.getByLabelText("Filter by days"), {
+      target: { value: "7" },
+    });
+    expect(screen.queryByLabelText("Total in-progress count")).toBeNull();
+  });
 });
