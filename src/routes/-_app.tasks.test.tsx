@@ -359,6 +359,56 @@ describe("TasksPage", () => {
     expect(screen.queryByRole("status")).toBeNull();
   });
 
+  it("renders the assigned-to-you caption as a toggle button defaulting to off", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    const toggle = screen.getByRole("button", {
+      name: "Show only tasks assigned to you",
+    });
+    expect(toggle.getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("filters tasks to assignee=you when the toggle is pressed", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    const toggle = screen.getByRole("button", {
+      name: "Show only tasks assigned to you",
+    });
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute("aria-pressed")).toBe("true");
+    // DEV-441 + DEV-360 are the only assignee="you" fixtures.
+    expect(screen.queryByRole("article", { name: "DEV-441" })).not.toBeNull();
+    expect(screen.queryByRole("article", { name: "DEV-360" })).not.toBeNull();
+    expect(screen.queryByRole("article", { name: "DEV-447" })).toBeNull();
+    expect(screen.queryByRole("article", { name: "DEV-401" })).toBeNull();
+    // Column counts reflect the filter.
+    expect(
+      screen.getByRole("region", { name: "In progress" }).textContent,
+    ).toContain("1");
+    expect(
+      screen.getByRole("region", { name: "Done this week" }).textContent,
+    ).toContain("1");
+  });
+
+  it("restores all tasks when the assigned-to-you toggle is pressed again", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    const toggle = screen.getByRole("button", {
+      name: "Show only tasks assigned to you",
+    });
+    fireEvent.click(toggle);
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute("aria-pressed")).toBe("false");
+    expect(screen.queryByRole("article", { name: "DEV-447" })).not.toBeNull();
+  });
+
+  it("shows the mine-only empty-state when the filter has no matches", () => {
+    const noneAssigned = FIXTURE_TASKS.map((t) => ({ ...t, assignee: null }));
+    render(<TasksPage tasks={noneAssigned} />);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Show only tasks assigned to you" }),
+    );
+    const status = screen.getByRole("status");
+    expect(status.textContent).toContain("No tasks assigned to you.");
+  });
+
   it("does not fire onCreateTask when the id or title is empty", () => {
     const onCreateTask = vi.fn();
     render(

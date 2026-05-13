@@ -353,6 +353,7 @@ export function TasksPage({
   // `dragCardIdRef` pattern in src/routes/_app.projects.$projectId.tsx — avoids
   // dataTransfer serialization, keeps the test boundary honest.
   const dragTaskIdRef = useRef<string | null>(null);
+  const [mineOnly, setMineOnly] = useState(false);
   const handleKeyboardMove = (id: string, direction: "left" | "right") => {
     if (!onMoveTask) return;
     const current = COLUMNS.findIndex(
@@ -363,6 +364,10 @@ export function TasksPage({
     if (next < 0 || next >= COLUMNS.length) return;
     onMoveTask(id, COLUMNS[next].id);
   };
+  const assignedToYou = tasks.filter((t) => t.assignee === "you").length;
+  const visibleTasks = mineOnly
+    ? tasks.filter((t) => t.assignee === "you")
+    : tasks;
   return (
     <div className="mx-auto max-w-[1500px] px-9 pt-7 pb-12">
       <header className="mb-[18px] flex items-baseline">
@@ -372,20 +377,29 @@ export function TasksPage({
         >
           Tasks
         </h1>
-        <span className="ml-[14px] text-[13px] text-muted-foreground">
-          {tasks.filter((t) => t.assignee === "you").length} assigned to you · Linear · Sprint 24
-        </span>
+        <button
+          type="button"
+          aria-label="Show only tasks assigned to you"
+          aria-pressed={mineOnly}
+          onClick={() => setMineOnly((v) => !v)}
+          className="ml-[14px] cursor-pointer border-none bg-transparent p-0 text-left text-[13px] text-muted-foreground underline-offset-2 hover:underline aria-pressed:text-foreground aria-pressed:underline"
+        >
+          {assignedToYou} assigned to you · Linear · Sprint 24
+        </button>
       </header>
 
       {onCreateTask && <CreateTaskForm onCreateTask={onCreateTask} />}
 
-      {tasks.length === 0 && (
+      {visibleTasks.length === 0 && (
         <p
           role="status"
           className="mb-3 rounded-lg border border-border bg-card px-3 py-6 text-center text-[13px] text-muted-foreground"
         >
-          No tasks yet.
-          {onCreateTask ? " Use the form above to create your first task." : ""}
+          {mineOnly
+            ? "No tasks assigned to you."
+            : onCreateTask
+              ? "No tasks yet. Use the form above to create your first task."
+              : "No tasks yet."}
         </p>
       )}
 
@@ -394,7 +408,7 @@ export function TasksPage({
         style={{ gridTemplateColumns: "repeat(4, minmax(0, 1fr))" }}
       >
         {COLUMNS.map((col) => {
-          const items = tasks.filter((t) => t.status === col.id);
+          const items = visibleTasks.filter((t) => t.status === col.id);
           return (
             <section
               key={col.id}
