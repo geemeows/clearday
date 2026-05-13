@@ -1166,4 +1166,32 @@ describe("TasksPage", () => {
     });
     expect(screen.queryByLabelText("Total PR-linked count")).toBeNull();
   });
+
+  it("renders a header-level total in-review count badge summing across columns", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    // Fixture: DEV-388 + DEV-378 are in `review` status → 2 in review.
+    expect(screen.getByLabelText("Total in-review count").textContent).toBe(
+      "2 in review",
+    );
+  });
+
+  it("updates the total in-review count badge to reflect the filtered set", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    // P2 priority narrows the review-status set to DEV-388 only.
+    fireEvent.change(screen.getByLabelText("Filter by priority"), {
+      target: { value: "P2" },
+    });
+    expect(screen.getByLabelText("Total in-review count").textContent).toBe(
+      "1 in review",
+    );
+  });
+
+  it("hides the total in-review count badge when no visible task is in review", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    // assigned-to-you toggle leaves only DEV-441 (in_progress) + DEV-360 (done) → 0 in review.
+    fireEvent.click(
+      screen.getByLabelText("Show only tasks assigned to you"),
+    );
+    expect(screen.queryByLabelText("Total in-review count")).toBeNull();
+  });
 });

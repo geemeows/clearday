@@ -494,6 +494,9 @@ export function TasksPage({
     (t) => t.assignee === null,
   ).length;
   const totalPrLinked = filteredTasks.filter((t) => t.pr !== null).length;
+  const totalInReview = filteredTasks.filter(
+    (t) => t.status === "review",
+  ).length;
   return (
     <div className="mx-auto max-w-[1500px] px-9 pt-7 pb-12">
       <header className="mb-[18px] flex items-baseline">
@@ -562,6 +565,19 @@ export function TasksPage({
             }}
           >
             {totalPrLinked} PR
+          </span>
+        )}
+        {totalInReview > 0 && (
+          <span
+            aria-label="Total in-review count"
+            className="ml-2 rounded-sm font-mono font-semibold text-[10px]"
+            style={{
+              background: "var(--brand-lavender-soft)",
+              color: "var(--brand-lavender)",
+              padding: "1px 6px",
+            }}
+          >
+            {totalInReview} in review
           </span>
         )}
         <input
