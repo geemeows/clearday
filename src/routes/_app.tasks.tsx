@@ -15,6 +15,7 @@ import {
   linkTaskPr,
   listTasks,
   setTaskAssignee,
+  setTaskLabels,
   setTaskPriority,
   setTaskTitle,
   updateTaskStatus,
@@ -248,6 +249,18 @@ function TasksRoute() {
     }
   };
 
+  const handleSetLabels = async (id: string, labels: string[]) => {
+    if (tasks === null) return;
+    const prev = tasks;
+    setTasks(tasks.map((t) => (t.id === id ? { ...t, labels } : t)));
+    try {
+      await setTaskLabels(client, id, labels);
+    } catch (e) {
+      setTasks(prev);
+      setError(e instanceof Error ? e.message : "failed to update task labels");
+    }
+  };
+
   const handleAssign = async (id: string, assignee: string | null) => {
     if (tasks === null) return;
     const prev = tasks;
@@ -292,6 +305,7 @@ function TasksRoute() {
       onAssign={handleAssign}
       onSetPriority={handleSetPriority}
       onSetTitle={handleSetTitle}
+      onSetLabels={handleSetLabels}
       onCreateTask={handleCreateTask}
       onDeleteTask={handleDeleteTask}
     />
@@ -305,6 +319,7 @@ export function TasksPage({
   onAssign,
   onSetPriority,
   onSetTitle,
+  onSetLabels,
   onCreateTask,
   onDeleteTask,
 }: {
@@ -314,6 +329,7 @@ export function TasksPage({
   onAssign?: (id: string, assignee: string | null) => void;
   onSetPriority?: (id: string, p: TaskPriority) => void;
   onSetTitle?: (id: string, title: string) => void;
+  onSetLabels?: (id: string, labels: string[]) => void;
   onCreateTask?: (task: Task) => void;
   onDeleteTask?: (id: string) => void;
 }) {
@@ -414,6 +430,7 @@ export function TasksPage({
                       onAssign={onAssign}
                       onSetPriority={onSetPriority}
                       onSetTitle={onSetTitle}
+                      onSetLabels={onSetLabels}
                       onDeleteTask={onDeleteTask}
                       onDragStart={
                         onMoveTask
@@ -446,6 +463,7 @@ function TaskCard({
   onAssign,
   onSetPriority,
   onSetTitle,
+  onSetLabels,
   onDeleteTask,
   onDragStart,
   onKeyboardMove,
@@ -456,6 +474,7 @@ function TaskCard({
   onAssign?: (id: string, assignee: string | null) => void;
   onSetPriority?: (id: string, p: TaskPriority) => void;
   onSetTitle?: (id: string, title: string) => void;
+  onSetLabels?: (id: string, labels: string[]) => void;
   onDeleteTask?: (id: string) => void;
   onDragStart?: () => void;
   onKeyboardMove?: (direction: "left" | "right") => void;
@@ -548,18 +567,22 @@ function TaskCard({
         </div>
       )}
       <div className="flex flex-wrap items-center gap-1">
-        {task.labels.map((l) => (
-          <span
-            key={l}
-            className="rounded-[4px] font-mono font-medium text-[9px] text-muted-foreground"
-            style={{
-              background: "var(--surface-soft)",
-              padding: "1px 6px",
-            }}
-          >
-            {l}
-          </span>
-        ))}
+        {onSetLabels ? (
+          <LabelsInput task={task} onSetLabels={onSetLabels} />
+        ) : (
+          task.labels.map((l) => (
+            <span
+              key={l}
+              className="rounded-[4px] font-mono font-medium text-[9px] text-muted-foreground"
+              style={{
+                background: "var(--surface-soft)",
+                padding: "1px 6px",
+              }}
+            >
+              {l}
+            </span>
+          ))
+        )}
         {task.days > 0 && (
           <span className="ml-auto font-mono text-[9px] text-muted-foreground">
             {task.days}d
@@ -752,6 +775,48 @@ function AssigneeInput({
         }
       }}
       className="w-16 rounded-[4px] border border-border bg-transparent px-1 py-[1px] font-mono text-[10px] text-muted-foreground"
+    />
+  );
+}
+
+function LabelsInput({
+  task,
+  onSetLabels,
+}: {
+  task: Task;
+  onSetLabels: (id: string, labels: string[]) => void;
+}) {
+  const stored = task.labels.join(", ");
+  const [value, setValue] = useState(stored);
+  useEffect(() => {
+    setValue(stored);
+  }, [stored]);
+  const commit = () => {
+    const next = value
+      .split(",")
+      .map((l) => l.trim())
+      .filter((l) => l.length > 0);
+    if (
+      next.length === task.labels.length &&
+      next.every((l, i) => l === task.labels[i])
+    ) {
+      return;
+    }
+    onSetLabels(task.id, next);
+  };
+  return (
+    <input
+      aria-label={`Labels for ${task.id}`}
+      value={value}
+      placeholder="labels"
+      onChange={(e) => setValue(e.currentTarget.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          e.currentTarget.blur();
+        }
+      }}
+      className="flex-1 rounded-[4px] border border-border bg-transparent px-1 py-[1px] font-mono text-[9px] text-muted-foreground"
     />
   );
 }

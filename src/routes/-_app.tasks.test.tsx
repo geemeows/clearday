@@ -224,6 +224,44 @@ describe("TasksPage", () => {
     expect(onSetTitle).not.toHaveBeenCalled();
   });
 
+  it("omits the per-card labels input when no onSetLabels handler is provided", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    expect(screen.queryByLabelText("Labels for DEV-441")).toBeNull();
+  });
+
+  it("fires onSetLabels with the parsed comma-separated values on commit", () => {
+    const onSetLabels = vi.fn();
+    render(<TasksPage tasks={FIXTURE_TASKS} onSetLabels={onSetLabels} />);
+    const input = screen.getByLabelText(
+      "Labels for DEV-441",
+    ) as unknown as HTMLInputElement;
+    expect(input.value).toBe("security");
+    fireEvent.change(input, { target: { value: "security, infra" } });
+    fireEvent.blur(input);
+    expect(onSetLabels).toHaveBeenCalledWith("DEV-441", ["security", "infra"]);
+  });
+
+  it("fires onSetLabels with an empty array when the labels input is cleared", () => {
+    const onSetLabels = vi.fn();
+    render(<TasksPage tasks={FIXTURE_TASKS} onSetLabels={onSetLabels} />);
+    const input = screen.getByLabelText(
+      "Labels for DEV-441",
+    ) as unknown as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "" } });
+    fireEvent.blur(input);
+    expect(onSetLabels).toHaveBeenCalledWith("DEV-441", []);
+  });
+
+  it("does not fire onSetLabels when the labels are unchanged on blur", () => {
+    const onSetLabels = vi.fn();
+    render(<TasksPage tasks={FIXTURE_TASKS} onSetLabels={onSetLabels} />);
+    const input = screen.getByLabelText(
+      "Labels for DEV-441",
+    ) as unknown as HTMLInputElement;
+    fireEvent.blur(input);
+    expect(onSetLabels).not.toHaveBeenCalled();
+  });
+
   it("moves a task to the dropped column when onMoveTask is provided", () => {
     const onMoveTask = vi.fn();
     render(<TasksPage tasks={FIXTURE_TASKS} onMoveTask={onMoveTask} />);

@@ -98,6 +98,18 @@ export async function setTaskTitle(
   if (error) throw new Error(`task title update failed: ${error.message}`);
 }
 
+export async function setTaskLabels(
+  client: SupabaseLike,
+  id: string,
+  labels: string[],
+): Promise<void> {
+  const { error } = await client
+    .from("tasks")
+    .update({ labels } as Record<string, unknown>)
+    .eq("id", id);
+  if (error) throw new Error(`task labels update failed: ${error.message}`);
+}
+
 export async function setTaskPriority(
   client: SupabaseLike,
   id: string,

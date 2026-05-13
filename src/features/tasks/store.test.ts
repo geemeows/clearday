@@ -5,6 +5,7 @@ import {
   linkTaskPr,
   listTasks,
   setTaskAssignee,
+  setTaskLabels,
   setTaskPriority,
   setTaskTitle,
   updateTaskStatus,
@@ -267,6 +268,31 @@ describe("setTaskTitle", () => {
   it("throws when the update errors", async () => {
     const { client } = makeClient({ updateError: { message: "rls denied" } });
     await expect(setTaskTitle(client, "DEV-441", "x")).rejects.toThrow(
+      /rls denied/,
+    );
+  });
+});
+
+describe("setTaskLabels", () => {
+  it("updates the task row matching the given id with the new labels", async () => {
+    const { client, spies } = makeClient({});
+    await setTaskLabels(client, "DEV-441", ["security", "infra"]);
+    expect(spies.from).toHaveBeenCalledWith("tasks");
+    expect(spies.update).toHaveBeenCalledWith({
+      labels: ["security", "infra"],
+    });
+    expect(spies.updateEq).toHaveBeenCalledWith("id", "DEV-441");
+  });
+
+  it("clears the labels when passed an empty array", async () => {
+    const { client, spies } = makeClient({});
+    await setTaskLabels(client, "DEV-441", []);
+    expect(spies.update).toHaveBeenCalledWith({ labels: [] });
+  });
+
+  it("throws when the update errors", async () => {
+    const { client } = makeClient({ updateError: { message: "rls denied" } });
+    await expect(setTaskLabels(client, "DEV-441", ["x"])).rejects.toThrow(
       /rls denied/,
     );
   });
