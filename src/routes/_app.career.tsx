@@ -960,11 +960,17 @@ function CompetencyRow({
       onDragEnter={onDragEnter}
       className="cursor-grab rounded-md border border-border bg-background px-3 py-2 active:cursor-grabbing"
     >
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-3">
         <GripVertical
           aria-hidden="true"
           className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60"
         />
+        <span
+          aria-hidden="true"
+          className="inline-flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-md bg-primary font-bold text-[13px] text-primary-foreground"
+        >
+          {competency.name.charAt(0).toUpperCase()}
+        </span>
         <input
           type="text"
           aria-label={`Rename competency ${competency.name}`}
