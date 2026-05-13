@@ -1244,6 +1244,22 @@ function CardChip({
     >
       {(card.priority || card.due_at || (tickets ?? []).length > 0) && (
       <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
+        {(tickets ?? []).map((t) => (
+          <span
+            key={t.id}
+            data-testid={`card-chip-ticket-${t.id}`}
+            title={t.status ?? "reconnect to refresh"}
+            className="inline-flex items-center gap-1"
+          >
+            <SourceGlyph
+              source={t.source === "github" ? "git" : t.source}
+              size={12}
+            />
+            <span className="font-mono font-semibold text-[10px] text-muted-foreground">
+              {t.ext_id}
+            </span>
+          </span>
+        ))}
         {card.priority && (
           <span
             data-priority={card.priority}
@@ -1252,7 +1268,7 @@ function CardChip({
               card.priority === "P1"
                 ? {
                     background: "var(--danger-soft)",
-                    color: "var(--destructive)",
+                    color: "var(--danger)",
                   }
                 : card.priority === "P2"
                   ? {
@@ -1260,7 +1276,7 @@ function CardChip({
                       color: "var(--warn)",
                     }
                   : {
-                      background: "var(--secondary)",
+                      background: "var(--surface-strong)",
                       color: "var(--muted-foreground)",
                     }
             }
@@ -1291,7 +1307,7 @@ function CardChip({
                   data-due="tomorrow"
                   className="inline-flex items-center rounded-md px-1.5 py-px font-medium text-[9px] leading-[1.4]"
                   style={{
-                    background: "var(--secondary)",
+                    background: "var(--surface-strong)",
                     color: "var(--muted-foreground)",
                   }}
                 >
@@ -1306,22 +1322,6 @@ function CardChip({
               </span>
             );
           })()}
-        {(tickets ?? []).map((t) => (
-          <span
-            key={t.id}
-            data-testid={`card-chip-ticket-${t.id}`}
-            title={t.status ?? "reconnect to refresh"}
-            className="inline-flex items-center gap-1"
-          >
-            <SourceGlyph
-              source={t.source === "github" ? "git" : t.source}
-              size={12}
-            />
-            <span className="font-mono font-semibold text-[10px] text-muted-foreground">
-              {t.ext_id}
-            </span>
-          </span>
-        ))}
       </div>
       )}
       <span className="line-clamp-2 block text-[13px] font-medium leading-[1.35] text-foreground">

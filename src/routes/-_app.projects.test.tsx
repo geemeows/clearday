@@ -477,10 +477,10 @@ describe("ProjectBoardView", () => {
     const p2 = screen.getByText("P2") as HTMLElement;
     const p3 = screen.getByText("P3") as HTMLElement;
     expect(p1.style.background).toContain("--danger-soft");
-    expect(p1.style.color).toContain("--destructive");
+    expect(p1.style.color).toContain("--danger");
     expect(p2.style.background).toContain("--warn-soft");
     expect(p2.style.color).toContain("--warn");
-    expect(p3.style.background).toContain("--secondary");
+    expect(p3.style.background).toContain("--surface-strong");
     expect(p3.style.color).toContain("--muted-foreground");
   });
 
@@ -509,7 +509,7 @@ describe("ProjectBoardView", () => {
       const tomorrowChip = screen.getByText("TOMORROW") as HTMLElement;
       expect(todayChip.style.background).toContain("--primary-disabled");
       expect(todayChip.style.color).toContain("--primary-active");
-      expect(tomorrowChip.style.background).toContain("--secondary");
+      expect(tomorrowChip.style.background).toContain("--surface-strong");
       expect(tomorrowChip.style.color).toContain("--muted-foreground");
       expect(screen.queryByText("DUE TODAY")).toBeTruthy();
       expect(screen.getByText("2026-05-20")).toBeTruthy();
