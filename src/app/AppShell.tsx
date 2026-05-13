@@ -3,7 +3,6 @@ import {
   Calendar,
   FolderKanban,
   Inbox,
-  ListChecks,
   Moon,
   Plus,
   Settings as SettingsIcon,
@@ -54,7 +53,6 @@ import type { Signal, StoredSignal } from "#/shared/signal";
 const PAGES: NavPage[] = [
   { to: "/today", label: "Today", icon: Sun },
   { to: "/inbox", label: "Inbox", icon: Inbox },
-  { to: "/tasks", label: "Tasks", icon: ListChecks },
   { to: "/career", label: "Career", icon: Target },
   { to: "/calendar", label: "Calendar", icon: Calendar },
   { to: "/automations", label: "Automations", icon: Zap },
