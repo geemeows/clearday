@@ -39,7 +39,7 @@ const HOUR_END = 24;
 const HOURS = HOUR_END - HOUR_START;
 const DAY_START_MIN = HOUR_START * 60;
 const DAY_END_MIN = HOUR_END * 60;
-const SLOT_PX = 44;
+const SLOT_PX = 48;
 const GRID_PX = HOURS * SLOT_PX;
 const GRID_MAX_HEIGHT = "min(70vh, 720px)";
 
@@ -281,7 +281,7 @@ function ModeSwitch({
     <div
       role="tablist"
       aria-label="View mode"
-      className="inline-flex items-center gap-1 rounded-full p-0.5"
+      className="inline-flex items-center gap-1 rounded-full p-[3px]"
       style={{ background: "var(--surface-strong, var(--secondary))" }}
     >
       {modes.map((m) => (
@@ -293,7 +293,7 @@ function ModeSwitch({
           data-state={mode === m ? "active" : "inactive"}
           onClick={() => onChange(m)}
           className={cn(
-            "rounded-full px-3.5 py-1 font-medium text-xs capitalize transition-colors",
+            "rounded-full px-3.5 py-[5px] font-medium text-xs capitalize transition-colors",
             mode === m
               ? "text-foreground shadow-sm"
               : "text-muted-foreground hover:text-foreground",
@@ -344,7 +344,7 @@ function WeekGrid({
       <div
         className="grid"
         style={{
-          gridTemplateColumns: "64px repeat(5, 1fr)",
+          gridTemplateColumns: "60px repeat(5, 1fr)",
           borderBottom: "1px solid var(--hairline-soft, var(--border))",
         }}
       >
@@ -387,7 +387,7 @@ function WeekGrid({
         <div
           className="relative grid"
           style={{
-            gridTemplateColumns: "64px repeat(5, 1fr)",
+            gridTemplateColumns: "60px repeat(5, 1fr)",
             height: `${GRID_PX}px`,
           }}
         >
@@ -525,10 +525,10 @@ function EventBlock({
       data-kind={event.kind}
       data-conflict={isConflict || undefined}
       className={cn(
-        "absolute overflow-hidden rounded-md font-semibold text-[11px] leading-tight",
+        "absolute overflow-hidden rounded-lg font-semibold text-[11px] leading-tight",
         compact
           ? "flex items-center gap-1.5 px-2 py-0.5"
-          : "flex flex-col px-2 py-1.5",
+          : "flex flex-col px-2 py-[5px]",
         tone,
         isConflict && "ring-1 ring-destructive/40",
       )}
@@ -587,7 +587,7 @@ function DayGrid({
         <div
           className="relative grid"
           style={{
-            gridTemplateColumns: "64px 1fr",
+            gridTemplateColumns: "60px 1fr",
             height: `${GRID_PX}px`,
           }}
         >
@@ -788,12 +788,13 @@ function ConflictBanner({
               className="inline-flex items-center rounded-sm px-[7px] py-[3px] font-mono text-[10px] uppercase tracking-wider text-primary-foreground"
               style={{ background: "var(--destructive, #c13515)" }}
             >
-              Conflict
+              CONFLICT
             </span>
             <span className="font-semibold text-foreground">
               {dayLabel(weekStart, p.a.day)} · {fmtMinutes(p.a.start)}
             </span>
             <span className="text-foreground">
+              ·{" "}
               <span className="font-medium">{p.a.title}</span> overlaps{" "}
               <span className="font-medium">{p.b.title}</span>
             </span>
