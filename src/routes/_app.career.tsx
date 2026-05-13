@@ -1539,7 +1539,6 @@ export function IndicatorList({
       ) : indicators.length === 0 ? null : (
         <ul
           aria-label="Indicators"
-          className="space-y-1"
           onDragOver={(e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -1607,12 +1606,12 @@ function IndicatorRow({
       draggable
       onDragStart={onDragStart}
       onDragEnter={onDragEnter}
-      className="cursor-grab rounded-md border border-border bg-background px-2 py-1.5 active:cursor-grabbing"
+      className="grid cursor-grab grid-cols-[auto_1fr_auto] items-start gap-3.5 border-[var(--hairline-soft)] border-t py-2.5 pr-3.5 pl-2 active:cursor-grabbing"
     >
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1.5 pt-0.5">
         <GripVertical
           aria-hidden="true"
-          className="h-3 w-3 shrink-0 text-muted-foreground/60"
+          className="h-3.5 w-3.5 shrink-0 text-[var(--muted-soft)] opacity-70"
         />
         <input
           type="text"
@@ -1627,8 +1626,10 @@ function IndicatorRow({
             }
           }}
           placeholder="A"
-          className="w-10 rounded-[4px] border border-transparent bg-secondary px-1.5 py-px text-center font-mono font-semibold text-[11px] text-muted-foreground tracking-[0.3px] outline-none focus:border-border focus:bg-muted focus:text-foreground"
+          className="w-12 rounded-[4px] border border-transparent bg-[var(--surface-strong)] px-1.5 py-px text-center font-mono font-semibold text-[11px] text-muted-foreground tracking-[0.3px] outline-none focus:border-border focus:bg-muted focus:text-foreground"
         />
+      </div>
+      <div className="min-w-0">
         <input
           type="text"
           aria-label={`Description for ${label}`}
@@ -1642,8 +1643,26 @@ function IndicatorRow({
               setDescDraft(indicator.description);
             }
           }}
-          className="min-w-0 flex-1 rounded border border-transparent bg-transparent px-1.5 py-0.5 text-foreground text-xs outline-none focus:border-border focus:bg-muted"
+          className="w-full rounded border border-transparent bg-transparent px-1.5 py-0.5 text-[13px] text-foreground leading-snug outline-none focus:border-border focus:bg-muted"
         />
+        <input
+          type="text"
+          aria-label={`Notes for ${label}`}
+          value={notesDraft}
+          onChange={(e) => setNotesDraft(e.target.value)}
+          onBlur={() => {
+            const trimmed = notesDraft.trim();
+            const next = trimmed === "" ? null : trimmed;
+            if (next !== (indicator.notes ?? null)) {
+              onRename(indicator.id, { notes: next });
+            }
+          }}
+          placeholder="Notes…"
+          className="mt-1 w-full rounded border border-transparent bg-transparent px-1.5 py-0.5 text-[11.5px] text-muted-foreground italic outline-none focus:border-border focus:bg-muted"
+        />
+        <EvidenceList indicator={indicator} client={client} />
+      </div>
+      <div className="flex items-center gap-1 pt-px">
         <ScoreDots
           value={indicator.score}
           onChange={(next) => onSetScore(indicator.id, next)}
@@ -1658,22 +1677,6 @@ function IndicatorRow({
           <Trash2 className="h-3 w-3" />
         </button>
       </div>
-      <input
-        type="text"
-        aria-label={`Notes for ${label}`}
-        value={notesDraft}
-        onChange={(e) => setNotesDraft(e.target.value)}
-        onBlur={() => {
-          const trimmed = notesDraft.trim();
-          const next = trimmed === "" ? null : trimmed;
-          if (next !== (indicator.notes ?? null)) {
-            onRename(indicator.id, { notes: next });
-          }
-        }}
-        placeholder="Notes…"
-        className="mt-1 w-full rounded border border-transparent bg-transparent px-1.5 py-0.5 text-muted-foreground text-xs outline-none focus:border-border focus:bg-muted"
-      />
-      <EvidenceList indicator={indicator} client={client} />
     </li>
   );
 }
