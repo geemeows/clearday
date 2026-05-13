@@ -1,5 +1,7 @@
+import { CheckCheck } from "lucide-react";
 import type { CSSProperties, ReactNode } from "react";
 import { useMemo } from "react";
+import { Button } from "#/components/ui/button";
 import {
   InboxPreviewRow,
   InboxPreviewRowSkeleton,
@@ -177,19 +179,10 @@ export function InboxView({
                 — unread · — total
               </span>
               <span className="flex-1" />
-              <button
-                type="button"
-                disabled
-                className="rounded-md px-3"
-                style={{
-                  height: 30,
-                  fontSize: 12,
-                  color: "var(--ink)",
-                  opacity: 0.5,
-                }}
-              >
+              <Button variant="ghost" size="sm" disabled>
+                <CheckCheck />
                 Mark all read
-              </button>
+              </Button>
             </div>
             <nav
               aria-label="Inbox filters"
@@ -301,13 +294,10 @@ export function InboxView({
               {unread} unread · {total} total
             </span>
             <span className="flex-1" />
-            <button
-              type="button"
-              className="rounded-md px-3 hover:bg-(--surface-soft)"
-              style={{ height: 30, fontSize: 12, color: "var(--ink)" }}
-            >
+            <Button variant="ghost" size="sm">
+              <CheckCheck />
               Mark all read
-            </button>
+            </Button>
           </div>
           {sourceProviders && source && onSourceChange && (
             <SourceFilter
@@ -474,7 +464,7 @@ export function InboxRow({
       data-selected={selected || undefined}
       className={cn((replied || snoozed) && "opacity-60")}
       style={{
-        background: selected ? "var(--surface-soft)" : "transparent",
+        background: selected ? "var(--secondary)" : "transparent",
         borderLeft: `2px solid ${selected ? "var(--primary)" : "transparent"}`,
         borderBottom: "1px solid var(--hairline-soft)",
       }}
@@ -482,7 +472,10 @@ export function InboxRow({
       <button
         type="button"
         onClick={onSelect}
-        className="block w-full"
+        className={cn(
+          "block w-full",
+          !selected && "hover:bg-[var(--surface-soft)]",
+        )}
         style={{ padding: "2px 6px" }}
       >
         <InboxPreviewRow
