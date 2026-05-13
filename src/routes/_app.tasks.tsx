@@ -505,6 +505,9 @@ export function TasksPage({
   ).length;
   const totalTodo = filteredTasks.filter((t) => t.status === "todo").length;
   const totalFresh = filteredTasks.filter((t) => t.days === 0).length;
+  const totalAssigned = filteredTasks.filter(
+    (t) => t.assignee !== null,
+  ).length;
   return (
     <div className="mx-auto max-w-[1500px] px-9 pt-7 pb-12">
       <header className="mb-[18px] flex items-baseline">
@@ -664,6 +667,19 @@ export function TasksPage({
             }}
           >
             {totalFresh} fresh
+          </span>
+        )}
+        {totalAssigned > 0 && (
+          <span
+            aria-label="Total assigned count"
+            className="ml-2 rounded-sm font-mono font-semibold text-[10px]"
+            style={{
+              background: "var(--brand-blue-tint)",
+              color: "var(--primary-active)",
+              padding: "1px 6px",
+            }}
+          >
+            {totalAssigned} assigned
           </span>
         )}
         <input

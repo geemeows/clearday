@@ -1354,4 +1354,34 @@ describe("TasksPage", () => {
     });
     expect(screen.queryByLabelText("Total fresh count")).toBeNull();
   });
+
+  it("renders a header-level total assigned count badge summing across columns", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    // Fixture: 2 tasks with a non-null assignee (DEV-441 + DEV-360, both `you`).
+    expect(screen.getByLabelText("Total assigned count").textContent).toBe(
+      "2 assigned",
+    );
+  });
+
+  it("updates the total assigned count badge to reflect the filtered set", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    // ≥3d days filter narrows the 2 assigned tasks to DEV-360 (4d) only —
+    // DEV-441 is assigned but only 1d old.
+    fireEvent.change(screen.getByLabelText("Filter by days"), {
+      target: { value: "3" },
+    });
+    expect(screen.getByLabelText("Total assigned count").textContent).toBe(
+      "1 assigned",
+    );
+  });
+
+  it("hides the total assigned count badge when every visible task is unassigned", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    // P2 priority filter leaves DEV-447 + DEV-432 + DEV-455 + DEV-388 — all
+    // unassigned in the fixture → badge hides.
+    fireEvent.change(screen.getByLabelText("Filter by priority"), {
+      target: { value: "P2" },
+    });
+    expect(screen.queryByLabelText("Total assigned count")).toBeNull();
+  });
 });
