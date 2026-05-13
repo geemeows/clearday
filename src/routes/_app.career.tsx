@@ -583,6 +583,11 @@ export function LevelSwitcher({
   const viewingIsActive = viewing.id === active.id;
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
+  // Mockup splits the title on `·` so the lead segment (e.g. "L5") gets the
+  // large bold treatment and the trailing segment (e.g. "Staff") sits next to
+  // it in muted body type. Titles without `·` collapse to lead-only.
+  const [titleLead, ...titleRest] = viewing.title.split("·");
+  const titleTail = titleRest.join("·").trim();
 
   useEffect(() => {
     if (!open) return;
@@ -614,8 +619,13 @@ export function LevelSwitcher({
         className="inline-flex items-center gap-2 rounded-md border border-border bg-card py-[5px] pr-2.5 pl-3 text-foreground hover:bg-muted"
       >
         <span className="font-bold text-lg leading-none tracking-tight">
-          {viewing.title}
+          {titleLead?.trim()}
         </span>
+        {titleTail && (
+          <span className="font-medium text-[13px] text-muted-foreground leading-none">
+            {titleTail}
+          </span>
+        )}
         {viewingIsActive ? (
           <span
             className="rounded-full px-[7px] py-px font-bold text-[10px] uppercase tracking-wider"

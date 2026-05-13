@@ -692,10 +692,11 @@ describe("LevelSwitcher", () => {
         onNewBlankLevel={vi.fn()}
       />,
     );
-    expect(
-      screen.getByRole("button", { name: /switch level/i }),
-    ).toBeTruthy();
-    expect(screen.getByText("L5 · Staff")).toBeTruthy();
+    const trigger = screen.getByRole("button", { name: /switch level/i });
+    expect(trigger).toBeTruthy();
+    // Mockup splits the title on `·`: lead segment large-bold, trail muted.
+    expect(screen.getByText("L5")).toBeTruthy();
+    expect(screen.getByText("Staff")).toBeTruthy();
     expect(screen.getByText(/active/i)).toBeTruthy();
   });
 
