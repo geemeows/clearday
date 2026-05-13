@@ -1440,4 +1440,32 @@ describe("TasksPage", () => {
     });
     expect(screen.queryByLabelText("Total mine count")).toBeNull();
   });
+
+  it("renders a header-level total not-mine count badge summing across columns", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    // Fixture: 9 tasks − 2 assigned to "you" (DEV-441 + DEV-360) = 7 not mine.
+    expect(screen.getByLabelText("Total not-mine count").textContent).toBe(
+      "7 not mine",
+    );
+  });
+
+  it("updates the total not-mine count badge to reflect the filtered set", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    // P1 priority filter keeps DEV-441 (you) + DEV-360 (you); both are mine,
+    // so the not-mine count drops to 0 and the badge hides.
+    fireEvent.change(screen.getByLabelText("Filter by priority"), {
+      target: { value: "P1" },
+    });
+    expect(screen.queryByLabelText("Total not-mine count")).toBeNull();
+  });
+
+  it("hides the total not-mine count badge when only mine tasks remain", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    // assigned-to-you toggle pins to assignee === "you", which leaves only
+    // mine tasks → not-mine count = 0 → badge hides.
+    fireEvent.click(
+      screen.getByLabelText("Show only tasks assigned to you"),
+    );
+    expect(screen.queryByLabelText("Total not-mine count")).toBeNull();
+  });
 });

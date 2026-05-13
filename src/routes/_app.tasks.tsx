@@ -510,6 +510,7 @@ export function TasksPage({
   ).length;
   const totalDone = filteredTasks.filter((t) => t.status === "done").length;
   const totalMine = filteredTasks.filter((t) => t.assignee === "you").length;
+  const totalNotMine = filteredTasks.filter((t) => t.assignee !== "you").length;
   return (
     <div className="mx-auto max-w-[1500px] px-9 pt-7 pb-12">
       <header className="mb-[18px] flex items-baseline">
@@ -708,6 +709,19 @@ export function TasksPage({
             }}
           >
             {totalMine} mine
+          </span>
+        )}
+        {totalNotMine > 0 && (
+          <span
+            aria-label="Total not-mine count"
+            className="ml-2 rounded-sm font-mono font-semibold text-[10px]"
+            style={{
+              background: "var(--src-git-bg)",
+              color: "var(--src-git)",
+              padding: "1px 6px",
+            }}
+          >
+            {totalNotMine} not mine
           </span>
         )}
         <input
