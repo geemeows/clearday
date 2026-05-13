@@ -952,6 +952,7 @@ function CompetencyRow({
   onDragEnter?: () => void;
 }) {
   const [draft, setDraft] = useState(competency.name);
+  const [criteriaCount, setCriteriaCount] = useState<number | null>(null);
 
   return (
     <li
@@ -977,21 +978,28 @@ function CompetencyRow({
         >
           {competency.name.charAt(0).toUpperCase()}
         </span>
-        <input
-          type="text"
-          aria-label={`Rename competency ${competency.name}`}
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onBlur={() => {
-            const trimmed = draft.trim();
-            if (trimmed && trimmed !== competency.name) {
-              onRename(competency.id, trimmed);
-            } else if (!trimmed) {
-              setDraft(competency.name);
-            }
-          }}
-          className="min-w-0 flex-1 rounded border border-transparent bg-transparent px-1.5 py-0.5 font-semibold text-[14.5px] text-foreground outline-none focus:border-border focus:bg-muted"
-        />
+        <div className="flex min-w-0 flex-1 flex-col">
+          <input
+            type="text"
+            aria-label={`Rename competency ${competency.name}`}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={() => {
+              const trimmed = draft.trim();
+              if (trimmed && trimmed !== competency.name) {
+                onRename(competency.id, trimmed);
+              } else if (!trimmed) {
+                setDraft(competency.name);
+              }
+            }}
+            className="min-w-0 rounded border border-transparent bg-transparent px-1.5 py-0.5 font-semibold text-[14.5px] text-foreground outline-none focus:border-border focus:bg-muted"
+          />
+          {criteriaCount !== null && criteriaCount > 0 && (
+            <div className="mt-px px-1.5 text-[11.5px] text-muted-foreground">
+              {criteriaCount} {criteriaCount === 1 ? "criterion" : "criteria"}
+            </div>
+          )}
+        </div>
         <button
           type="button"
           aria-label={`Delete competency ${competency.name}`}
@@ -1002,7 +1010,11 @@ function CompetencyRow({
         </button>
       </header>
       <div className="px-1 pb-3.5">
-        <CriteriaList competency={competency} client={client} />
+        <CriteriaList
+          competency={competency}
+          client={client}
+          onCriteriaCountChange={setCriteriaCount}
+        />
       </div>
     </li>
   );
@@ -1011,9 +1023,11 @@ function CompetencyRow({
 export function CriteriaList({
   competency,
   client,
+  onCriteriaCountChange,
 }: {
   competency: StoredCompetency;
   client: SupabaseLike;
+  onCriteriaCountChange?: (count: number) => void;
 }) {
   const [criteria, setCriteria] = useState<StoredCriterion[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -1031,6 +1045,10 @@ export function CriteriaList({
       cancelled = true;
     };
   }, [client, competency.id]);
+
+  useEffect(() => {
+    if (criteria !== null) onCriteriaCountChange?.(criteria.length);
+  }, [criteria, onCriteriaCountChange]);
 
   const handleAdd = async (name: string) => {
     const id = crypto.randomUUID();

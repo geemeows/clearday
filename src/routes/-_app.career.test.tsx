@@ -982,6 +982,30 @@ describe("CriteriaList", () => {
     expect(screen.queryByDisplayValue("Mentoring")).toBeNull();
   });
 
+  it("notifies parent of the criteria count after load and after add", async () => {
+    const { client } = makeFakeClient(
+      [competency({ id: "c1", name: "Craft" })],
+      [
+        criterion({ id: "cr1", competency_id: "c1", name: "Review depth" }),
+        criterion({ id: "cr2", competency_id: "c1", name: "Design tradeoffs" }),
+      ],
+    );
+    const onCountChange = vi.fn();
+    render(
+      <CriteriaList
+        competency={competency({ id: "c1", name: "Craft" })}
+        client={client}
+        onCriteriaCountChange={onCountChange}
+      />,
+    );
+    await waitFor(() => expect(onCountChange).toHaveBeenCalledWith(2));
+    fireEvent.change(screen.getByLabelText("New criterion name"), {
+      target: { value: "Mentoring" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /add criterion/i }));
+    await waitFor(() => expect(onCountChange).toHaveBeenCalledWith(3));
+  });
+
   it("adds a criterion via the form with target default 1", async () => {
     const { client, store } = makeFakeClient([
       competency({ id: "c1", name: "Craft" }),
