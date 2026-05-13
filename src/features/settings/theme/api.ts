@@ -1,29 +1,25 @@
 // Pure module behind /api/theme GET/PUT.
 //
-// Theme fields live on the singleton user_preferences row (theme, density,
-// accent). Like profile-api, the worker injects a store so this module
-// stays free of Supabase imports and is testable in isolation.
+// Theme fields live on the singleton user_preferences row (theme, density).
+// Like profile-api, the worker injects a store so this module stays free of
+// Supabase imports and is testable in isolation.
 
 export const THEME_UPDATED_EVENT = "clearday:theme-updated";
 
 export const THEMES = ["light", "dark", "system"] as const;
 export const DENSITIES = ["comfortable", "compact"] as const;
-export const ACCENTS = ["rausch", "ocean", "forest", "plum"] as const;
 
 export type Theme = (typeof THEMES)[number];
 export type Density = (typeof DENSITIES)[number];
-export type Accent = (typeof ACCENTS)[number];
 
 export type ThemeView = {
   theme: Theme;
   density: Density;
-  accent: Accent;
 };
 
 export const DEFAULT_THEME: ThemeView = {
   theme: "system",
   density: "comfortable",
-  accent: "rausch",
 };
 
 export type ThemeStore = {
@@ -34,7 +30,6 @@ export type ThemeStore = {
 export type ThemePutBody = {
   theme?: unknown;
   density?: unknown;
-  accent?: unknown;
 };
 
 function checkOneOf<T extends string>(
@@ -73,11 +68,6 @@ export async function putTheme(
     if (!r.ok) return r;
     patch.density = r.value;
   }
-  if (body.accent !== undefined) {
-    const r = checkOneOf("accent", body.accent, ACCENTS);
-    if (!r.ok) return r;
-    patch.accent = r.value;
-  }
   const theme = await store.save(patch);
   return { ok: true, theme };
 }
@@ -104,5 +94,4 @@ export function applyThemeToDocument(
   const effective = resolveEffectiveTheme(view.theme, prefersDark);
   root.dataset.theme = effective;
   root.dataset.density = view.density;
-  root.dataset.accent = view.accent;
 }

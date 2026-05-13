@@ -28,7 +28,7 @@ function setPrefersDark(matches: boolean) {
 }
 
 function viewOf(theme: ThemeView["theme"]): ThemeView {
-  return { theme, density: "comfortable", accent: "rausch" };
+  return { theme, density: "comfortable" };
 }
 
 describe("useTheme", () => {

@@ -45,7 +45,6 @@ describe("ProfilePanel", () => {
     mockApi.mockResolvedValue({
       theme: "light",
       density: "comfortable",
-      accent: "rausch",
     });
   });
 

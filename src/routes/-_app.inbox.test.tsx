@@ -218,7 +218,7 @@ describe("InboxView", () => {
     expect(screen.getByText("Rule")).toBeTruthy();
   });
 
-  it("marks the selected row with a Rausch left-border accent (data-selected)", () => {
+  it("marks the selected row with a primary left-border accent (data-selected)", () => {
     render(
       <InboxView
         filter="all"

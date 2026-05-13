@@ -381,31 +381,6 @@ html[data-theme="dark"] {
   --row-pad-x: 12px;
 }
 
-/*
- * Accent presets — override --primary so buttons / focus rings / active
- * states pick up the user's chosen accent.
- */
-html[data-accent="rausch"] {
-  --primary: #ff385c;
-  --primary-active: #e00b41;
-  --primary-disabled: #ffd1da;
-}
-html[data-accent="ocean"] {
-  --primary: #0066ff;
-  --primary-active: #0050cc;
-  --primary-disabled: #c9dcff;
-}
-html[data-accent="forest"] {
-  --primary: #10b981;
-  --primary-active: #0e9971;
-  --primary-disabled: #c8efe1;
-}
-html[data-accent="plum"] {
-  --primary: #92174d;
-  --primary-active: #75123e;
-  --primary-disabled: #e7c4d3;
-}
-
 body {
   background-color: var(--background);
   color: var(--foreground);

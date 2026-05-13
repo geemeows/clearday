@@ -13,7 +13,7 @@ import { router } from "#/router";
 import "#/styles.css";
 
 // Boot-time + on-update theme application. Reads the saved preference and
-// stamps data-theme/data-density/data-accent on <html>; also subscribes to
+// stamps data-theme/data-density on <html>; also subscribes to
 // system color-scheme changes so theme="system" tracks the OS live, and to
 // the THEME_UPDATED_EVENT so saves in Settings apply without reload.
 //
@@ -27,7 +27,7 @@ function readCachedTheme(): ThemeView | null {
     const raw = localStorage.getItem(THEME_STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<ThemeView>;
-    if (!parsed.theme || !parsed.density || !parsed.accent) return null;
+    if (!parsed.theme || !parsed.density) return null;
     return parsed as ThemeView;
   } catch {
     return null;

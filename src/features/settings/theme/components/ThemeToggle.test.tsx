@@ -40,7 +40,6 @@ describe("ThemeToggle", () => {
     mockApi.mockResolvedValueOnce({
       theme: "light",
       density: "comfortable",
-      accent: "rausch",
     } satisfies ThemeView);
     render(<ThemeToggle />);
     await waitFor(() => {
@@ -56,7 +55,6 @@ describe("ThemeToggle", () => {
     mockApi.mockResolvedValueOnce({
       theme: "dark",
       density: "comfortable",
-      accent: "rausch",
     } satisfies ThemeView);
     render(<ThemeToggle />);
     await waitFor(() => {
@@ -70,12 +68,10 @@ describe("ThemeToggle", () => {
     mockApi.mockResolvedValueOnce({
       theme: "light",
       density: "comfortable",
-      accent: "rausch",
     } satisfies ThemeView);
     const saved: ThemeView = {
       theme: "dark",
       density: "comfortable",
-      accent: "rausch",
     };
     mockApi.mockResolvedValueOnce({ ok: true, theme: saved });
 
@@ -107,7 +103,6 @@ describe("ThemeToggle", () => {
     mockApi.mockResolvedValueOnce({
       theme: "system",
       density: "comfortable",
-      accent: "rausch",
     } satisfies ThemeView);
     render(<ThemeToggle />);
     await waitFor(() => {

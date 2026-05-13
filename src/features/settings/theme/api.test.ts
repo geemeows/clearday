@@ -25,12 +25,10 @@ describe("getTheme", () => {
     const store = makeStore({
       theme: "dark",
       density: "compact",
-      accent: "ocean",
     });
     expect(await getTheme(store)).toEqual({
       theme: "dark",
       density: "compact",
-      accent: "ocean",
     });
   });
 });
@@ -41,20 +39,17 @@ describe("putTheme", () => {
     const out = await putTheme({ theme: "dark" }, store);
     expect(out).toEqual({
       ok: true,
-      theme: { theme: "dark", density: "comfortable", accent: "rausch" },
+      theme: { theme: "dark", density: "comfortable" },
     });
     expect(store.save).toHaveBeenCalledWith({ theme: "dark" });
   });
 
-  it("accepts every documented theme / density / accent", async () => {
+  it("accepts every documented theme / density", async () => {
     const store = makeStore();
-    const out = await putTheme(
-      { theme: "system", density: "compact", accent: "plum" },
-      store,
-    );
+    const out = await putTheme({ theme: "system", density: "compact" }, store);
     expect(out).toEqual({
       ok: true,
-      theme: { theme: "system", density: "compact", accent: "plum" },
+      theme: { theme: "system", density: "compact" },
     });
   });
 
@@ -93,22 +88,18 @@ describe("resolveEffectiveTheme", () => {
 });
 
 describe("applyThemeToDocument", () => {
-  it("sets data attributes for theme, density, accent", () => {
+  it("sets data attributes for theme and density", () => {
     const root = document.createElement("html");
-    applyThemeToDocument(
-      { theme: "dark", density: "compact", accent: "ocean" },
-      root,
-      false,
-    );
+    applyThemeToDocument({ theme: "dark", density: "compact" }, root, false);
     expect(root.dataset.theme).toBe("dark");
     expect(root.dataset.density).toBe("compact");
-    expect(root.dataset.accent).toBe("ocean");
+    expect(root.dataset.accent).toBeUndefined();
   });
 
   it("resolves system theme against the OS preference", () => {
     const root = document.createElement("html");
     applyThemeToDocument(
-      { theme: "system", density: "comfortable", accent: "rausch" },
+      { theme: "system", density: "comfortable" },
       root,
       true,
     );

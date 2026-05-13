@@ -12,8 +12,6 @@ import {
   type RetentionView,
 } from "#/features/settings/data-privacy/api";
 import {
-  ACCENTS,
-  type Accent,
   DEFAULT_THEME,
   DENSITIES,
   type Density,
@@ -2801,20 +2799,6 @@ type ThemeSaveResult =
   | { ok: true; theme: ThemeView }
   | { ok: false; error: string };
 
-const ACCENT_LABELS: Record<Accent, string> = {
-  rausch: "Rausch",
-  ocean: "Ocean",
-  forest: "Forest",
-  plum: "Plum",
-};
-
-const ACCENT_SWATCHES: Record<Accent, string> = {
-  rausch: "#ff385c",
-  ocean: "#0066ff",
-  forest: "#10b981",
-  plum: "#92174d",
-};
-
 export function ThemePanel({
   loader,
   saver,
@@ -2857,7 +2841,7 @@ export function ThemePanel({
   return (
     <SettingsPanel
       title="Theme & layout"
-      desc="Light / dark / system, density, and accent color. Changes apply immediately without a reload."
+      desc="Light / dark / system and density. Changes apply immediately without a reload."
       error={error}
       busy={busy && !data}
     >
@@ -2912,39 +2896,6 @@ export function ThemePanel({
                     onChange={() => persist({ density: d })}
                   />
                   {d}
-                </label>
-              ))}
-            </div>
-          </fieldset>
-
-          <fieldset>
-            <legend className="font-medium text-foreground text-sm">
-              Accent color
-            </legend>
-            <div className="mt-2 flex gap-2">
-              {ACCENTS.map((a: Accent) => (
-                <label
-                  key={a}
-                  aria-label={ACCENT_LABELS[a]}
-                  className={`flex cursor-pointer items-center gap-2 rounded-md border px-3 py-1.5 text-sm ${
-                    current.accent === a
-                      ? "border-primary"
-                      : "border-border hover:bg-muted/50"
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="accent"
-                    className="sr-only"
-                    checked={current.accent === a}
-                    onChange={() => persist({ accent: a })}
-                  />
-                  <span
-                    aria-hidden="true"
-                    className="inline-block h-4 w-4 rounded-full"
-                    style={{ backgroundColor: ACCENT_SWATCHES[a] }}
-                  />
-                  {ACCENT_LABELS[a]}
                 </label>
               ))}
             </div>

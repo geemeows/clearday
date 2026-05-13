@@ -3,7 +3,7 @@
 //
 // Pure presentational deep module: takes the initial remaining seconds
 // and the session total, ticks its own internal countdown each second,
-// and renders mm:ss + a thin Rausch progress bar + the "Slack DND on ·
+// and renders mm:ss + a thin primary progress bar + the "Slack DND on ·
 // Calendar busy" caption. Reaching zero is bounded — the parent owns
 // session lifecycle and will swap this component back to the CTA on
 // completion.

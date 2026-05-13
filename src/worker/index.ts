@@ -1962,7 +1962,7 @@ function profileStore(service: SupabaseService): ProfileStore {
   };
 }
 
-const THEME_COLUMNS = "theme, density, accent";
+const THEME_COLUMNS = "theme, density";
 
 function themeStore(service: SupabaseService): ThemeStore {
   const read = async (): Promise<ThemeView> => {
@@ -1976,7 +1976,6 @@ function themeStore(service: SupabaseService): ThemeStore {
     return {
       theme: row.theme ?? DEFAULT_THEME.theme,
       density: row.density ?? DEFAULT_THEME.density,
-      accent: row.accent ?? DEFAULT_THEME.accent,
     };
   };
   return {

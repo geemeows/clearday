@@ -31,10 +31,10 @@ const EMPTY_FIELDS: ProfileFields = {
   githubHandle: null,
 };
 
-// Mock's pink gradient — used as a constant for now. A stable per-user
-// gradient (hash user-id → palette index) is the natural follow-up; the
-// mock itself hard-codes the pink, so this matches design verbatim.
-const AVATAR_GRADIENT = "linear-gradient(135deg, #ffd1da, #ff385c)";
+// Devy brand gradient — used as a constant for now. A stable per-user
+// gradient (hash user-id → palette index) is the natural follow-up.
+const AVATAR_GRADIENT =
+  "linear-gradient(135deg, var(--brand-blue-soft), var(--brand-blue))";
 
 export function useProfile(
   loader: () => Promise<ProfileFields> = loadProfileFields,

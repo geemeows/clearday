@@ -1115,7 +1115,6 @@ describe("ThemePanel", () => {
   const initial: ThemeView = {
     theme: "system",
     density: "comfortable",
-    accent: "rausch",
   };
 
   it("loads the saved theme and reflects it in the radios", async () => {
@@ -1124,7 +1123,6 @@ describe("ThemePanel", () => {
         ({
           theme: "dark",
           density: "compact",
-          accent: "ocean",
         }) as ThemeView,
     );
     render(<ThemePanel loader={loader} />);
@@ -1153,7 +1151,6 @@ describe("ThemePanel", () => {
       expect(saver).toHaveBeenCalledWith({
         theme: "dark",
         density: "comfortable",
-        accent: "rausch",
       });
       await waitFor(() => expect(onUpdate).toHaveBeenCalled());
     } finally {
@@ -1161,7 +1158,7 @@ describe("ThemePanel", () => {
     }
   });
 
-  it("persists density + accent independently", async () => {
+  it("persists density independently", async () => {
     const loader = vi.fn(async () => initial);
     const saver = vi.fn(async (patch: ThemeView) => ({
       ok: true as const,
@@ -1175,16 +1172,6 @@ describe("ThemePanel", () => {
     await waitFor(() =>
       expect(saver).toHaveBeenLastCalledWith(
         expect.objectContaining({ density: "compact" }),
-      ),
-    );
-
-    const oceanRadio = (await screen.findByRole("radio", {
-      name: /ocean/i,
-    })) as HTMLInputElement;
-    fireEvent.click(oceanRadio);
-    await waitFor(() =>
-      expect(saver).toHaveBeenLastCalledWith(
-        expect.objectContaining({ accent: "ocean" }),
       ),
     );
   });
