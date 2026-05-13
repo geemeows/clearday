@@ -624,6 +624,55 @@ describe("TasksPage", () => {
     expect(ids).toEqual(["DEV-401", "DEV-441", "DEV-447"]);
   });
 
+  it("hides the sort-direction toggle when sortBy is default", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    expect(
+      screen.queryByRole("button", { name: "Toggle sort direction" }),
+    ).toBeNull();
+  });
+
+  it("reveals the sort-direction toggle when a non-default sort is picked", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    fireEvent.change(screen.getByLabelText("Sort tasks"), {
+      target: { value: "id" },
+    });
+    const toggle = screen.getByRole("button", {
+      name: "Toggle sort direction",
+    });
+    expect(toggle.getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("reverses the sort order when the direction toggle is pressed", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    fireEvent.change(screen.getByLabelText("Sort tasks"), {
+      target: { value: "id" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Toggle sort direction" }),
+    );
+    const inProgress = screen.getByRole("region", { name: "In progress" });
+    const ids = Array.from(inProgress.querySelectorAll("article")).map((n) =>
+      n.getAttribute("aria-label"),
+    );
+    expect(ids).toEqual(["DEV-447", "DEV-441", "DEV-401"]);
+  });
+
+  it("reverses the days sort (default desc) into ascending when toggled", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    fireEvent.change(screen.getByLabelText("Sort tasks"), {
+      target: { value: "days" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Toggle sort direction" }),
+    );
+    const inProgress = screen.getByRole("region", { name: "In progress" });
+    const ids = Array.from(inProgress.querySelectorAll("article")).map((n) =>
+      n.getAttribute("aria-label"),
+    );
+    // ascending toggle flips the default desc: 1d, 3d, 6d
+    expect(ids).toEqual(["DEV-441", "DEV-447", "DEV-401"]);
+  });
+
   it("does not fire onCreateTask when the id or title is empty", () => {
     const onCreateTask = vi.fn();
     render(

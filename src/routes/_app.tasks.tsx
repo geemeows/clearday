@@ -362,6 +362,7 @@ export function TasksPage({
   const [sortBy, setSortBy] = useState<"default" | "priority" | "days" | "id">(
     "default",
   );
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const availableLabels = Array.from(
     new Set(tasks.flatMap((t) => t.labels)),
   ).sort();
@@ -403,10 +404,13 @@ export function TasksPage({
     sortBy === "default"
       ? filteredTasks
       : [...filteredTasks].sort((a, b) => {
-          if (sortBy === "priority")
-            return PRIORITY_ORDER[a.p] - PRIORITY_ORDER[b.p];
-          if (sortBy === "days") return b.days - a.days;
-          return a.id.localeCompare(b.id);
+          const base =
+            sortBy === "priority"
+              ? PRIORITY_ORDER[a.p] - PRIORITY_ORDER[b.p]
+              : sortBy === "days"
+                ? b.days - a.days
+                : a.id.localeCompare(b.id);
+          return sortDir === "asc" ? base : -base;
         });
   return (
     <div className="mx-auto max-w-[1500px] px-9 pt-7 pb-12">
@@ -488,6 +492,19 @@ export function TasksPage({
           <option value="days">Sort by days</option>
           <option value="id">Sort by id</option>
         </select>
+        {sortBy !== "default" && (
+          <button
+            type="button"
+            aria-label="Toggle sort direction"
+            aria-pressed={sortDir === "desc"}
+            onClick={() =>
+              setSortDir((d) => (d === "asc" ? "desc" : "asc"))
+            }
+            className="ml-2 rounded-[4px] border border-border bg-transparent px-2 py-[3px] font-mono text-[11px] text-muted-foreground"
+          >
+            {sortDir === "asc" ? "↑" : "↓"}
+          </button>
+        )}
       </header>
 
       {onCreateTask && <CreateTaskForm onCreateTask={onCreateTask} />}
