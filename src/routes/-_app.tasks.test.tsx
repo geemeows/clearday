@@ -1410,4 +1410,34 @@ describe("TasksPage", () => {
     });
     expect(screen.queryByLabelText("Total done count")).toBeNull();
   });
+
+  it("renders a header-level total mine count badge summing across columns", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    // Fixture: 2 tasks with assignee === "you" (DEV-441 + DEV-360).
+    expect(screen.getByLabelText("Total mine count").textContent).toBe(
+      "2 mine",
+    );
+  });
+
+  it("updates the total mine count badge to reflect the filtered set", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    // ≥3d days filter narrows the 2 mine tasks to DEV-360 (days=4) only —
+    // DEV-441 is mine but only 1d old.
+    fireEvent.change(screen.getByLabelText("Filter by days"), {
+      target: { value: "3" },
+    });
+    expect(screen.getByLabelText("Total mine count").textContent).toBe(
+      "1 mine",
+    );
+  });
+
+  it("hides the total mine count badge when no visible task is mine", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    // P2 priority filter leaves tasks none of which are assigned to "you"
+    // (DEV-441 + DEV-360 are P1) → badge hides.
+    fireEvent.change(screen.getByLabelText("Filter by priority"), {
+      target: { value: "P2" },
+    });
+    expect(screen.queryByLabelText("Total mine count")).toBeNull();
+  });
 });

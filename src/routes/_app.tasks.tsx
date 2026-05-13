@@ -509,6 +509,7 @@ export function TasksPage({
     (t) => t.assignee !== null,
   ).length;
   const totalDone = filteredTasks.filter((t) => t.status === "done").length;
+  const totalMine = filteredTasks.filter((t) => t.assignee === "you").length;
   return (
     <div className="mx-auto max-w-[1500px] px-9 pt-7 pb-12">
       <header className="mb-[18px] flex items-baseline">
@@ -694,6 +695,19 @@ export function TasksPage({
             }}
           >
             {totalDone} done
+          </span>
+        )}
+        {totalMine > 0 && (
+          <span
+            aria-label="Total mine count"
+            className="ml-2 rounded-sm font-mono font-semibold text-[10px]"
+            style={{
+              background: "var(--src-task-bg)",
+              color: "var(--src-task)",
+              padding: "1px 6px",
+            }}
+          >
+            {totalMine} mine
           </span>
         )}
         <input
