@@ -878,6 +878,38 @@ describe("TasksPage", () => {
     expect(caption.textContent).toBe(`${visible} of ${FIXTURE_TASKS.length}`);
   });
 
+  it("renders an expanded collapse toggle per column by default", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    for (const label of ["To do", "In progress", "In review", "Done this week"]) {
+      const button = screen.getByRole("button", { name: `Collapse ${label}` });
+      expect(button.getAttribute("aria-pressed")).toBe("false");
+    }
+  });
+
+  it("hides cards in a column when its collapse toggle is pressed", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    expect(screen.queryByRole("article", { name: "DEV-441" })).not.toBeNull();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Collapse In progress" }),
+    );
+    expect(screen.queryByRole("article", { name: "DEV-441" })).toBeNull();
+    const inProgress = screen.getByRole("region", { name: "In progress" });
+    expect(inProgress.textContent).toContain("3");
+    expect(
+      screen.getByRole("button", { name: "Collapse In progress" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
+  });
+
+  it("restores cards when the collapse toggle is pressed again", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    const toggle = screen.getByRole("button", { name: "Collapse In progress" });
+    fireEvent.click(toggle);
+    fireEvent.click(toggle);
+    expect(screen.queryByRole("article", { name: "DEV-441" })).not.toBeNull();
+    expect(toggle.getAttribute("aria-pressed")).toBe("false");
+  });
+
   it("hides the visible-count caption again after Clear filters", () => {
     render(<TasksPage tasks={FIXTURE_TASKS} />);
     fireEvent.change(screen.getByLabelText("Filter by priority"), {

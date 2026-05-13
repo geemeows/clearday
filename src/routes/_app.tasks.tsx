@@ -373,6 +373,17 @@ export function TasksPage({
     | "label"
   >("default");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [collapsedColumns, setCollapsedColumns] = useState<Set<TaskStatus>>(
+    () => new Set(),
+  );
+  const toggleColumnCollapsed = (id: TaskStatus) => {
+    setCollapsedColumns((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
   const availableLabels = Array.from(
     new Set(tasks.flatMap((t) => t.labels)),
   ).sort();
@@ -653,6 +664,7 @@ export function TasksPage({
       >
         {COLUMNS.map((col) => {
           const items = visibleTasks.filter((t) => t.status === col.id);
+          const collapsed = collapsedColumns.has(col.id);
           return (
             <section
               key={col.id}
@@ -693,7 +705,17 @@ export function TasksPage({
                 <span className="ml-auto font-mono text-[11px] text-muted-foreground">
                   {items.length}
                 </span>
+                <button
+                  type="button"
+                  aria-label={`Collapse ${col.label}`}
+                  aria-pressed={collapsed}
+                  onClick={() => toggleColumnCollapsed(col.id)}
+                  className="rounded-[4px] border border-border bg-transparent px-1 py-[1px] font-mono text-[9px] text-muted-foreground"
+                >
+                  {collapsed ? "+" : "−"}
+                </button>
               </header>
+              {!collapsed && (
               <ul className="flex flex-col gap-2 pt-2.5">
                 {items.map((t) => (
                   <li key={t.id}>
@@ -723,6 +745,7 @@ export function TasksPage({
                   </li>
                 ))}
               </ul>
+              )}
             </section>
           );
         })}
