@@ -1222,4 +1222,32 @@ describe("TasksPage", () => {
     });
     expect(screen.queryByLabelText("Total in-progress count")).toBeNull();
   });
+
+  it("renders a header-level total to-do count badge summing across columns", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    // Fixture: 3 tasks in `todo` (Privacy redactor + Settings shell + VAPID rotation).
+    expect(screen.getByLabelText("Total to-do count").textContent).toBe(
+      "3 to do",
+    );
+  });
+
+  it("updates the total to-do count badge to reflect the filtered set", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    // P2 priority filter narrows the 3 todo tasks to the 2 P2 ones.
+    fireEvent.change(screen.getByLabelText("Filter by priority"), {
+      target: { value: "P2" },
+    });
+    expect(screen.getByLabelText("Total to-do count").textContent).toBe(
+      "2 to do",
+    );
+  });
+
+  it("hides the total to-do count badge when no visible task is in to-do", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    // No fixture task is both P1 and `todo` → 0 to do.
+    fireEvent.change(screen.getByLabelText("Filter by priority"), {
+      target: { value: "P1" },
+    });
+    expect(screen.queryByLabelText("Total to-do count")).toBeNull();
+  });
 });
