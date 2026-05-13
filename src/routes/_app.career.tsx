@@ -10,8 +10,8 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "#/components/ui/button";
+import { CareerRadar } from "#/features/career/components/CareerRadar";
 import { CareerSyncControls } from "#/features/career/components/CareerSyncControls";
-import { CareerWheel } from "#/features/career/components/CareerWheel";
 import { ShareLinkDialog } from "#/features/career/components/ShareLinkDialog";
 import { reorderWithinParent } from "#/features/career/order";
 import {
@@ -556,10 +556,10 @@ export function CareerLevelView({
         </section>
 
         <aside
-          aria-label="Career wheel"
+          aria-label="Career radar"
           className="lg:sticky lg:top-8 lg:self-start"
         >
-          <CareerWheel level={level} client={client} />
+          <CareerRadar level={level} client={client} />
         </aside>
       </div>
     </section>

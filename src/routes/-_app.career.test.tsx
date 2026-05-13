@@ -564,19 +564,21 @@ describe("CareerLevelView", () => {
     expect(screen.getByText("Staff Engineer")).toBeTruthy();
   });
 
-  it("renders the tree and wheel side-by-side", async () => {
-    const { client } = makeFakeClient([
-      competency({ id: "c1", name: "Craft" }),
-    ]);
+  it("renders the tree and radar side-by-side", async () => {
+    const { client } = makeFakeClient(
+      [competency({ id: "c1", name: "Craft" })],
+      [criterion({ id: "cr1", competency_id: "c1", name: "Code review" })],
+    );
     render(<CareerLevelView level={level()} client={client} />);
     await waitFor(() => {
       expect(screen.getByDisplayValue("Craft")).toBeTruthy();
     });
     // Both panels are present at once — no view toggle in this slice.
     await waitFor(() => {
-      expect(screen.getByRole("img", { name: /career wheel/i })).toBeTruthy();
+      expect(screen.getByRole("img", { name: /career radar/i })).toBeTruthy();
     });
     expect(screen.getByDisplayValue("Craft")).toBeTruthy();
+    expect(screen.queryByRole("tab", { name: /radar/i })).toBeNull();
     expect(screen.queryByRole("tab", { name: /wheel/i })).toBeNull();
     expect(screen.queryByRole("tab", { name: /tree/i })).toBeNull();
   });
