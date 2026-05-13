@@ -409,6 +409,46 @@ describe("TasksPage", () => {
     expect(status.textContent).toContain("No tasks assigned to you.");
   });
 
+  it("filters tasks by id substring when the filter input is typed into", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    const input = screen.getByLabelText("Filter tasks") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "DEV-44" } });
+    expect(screen.queryByRole("article", { name: "DEV-441" })).not.toBeNull();
+    expect(screen.queryByRole("article", { name: "DEV-447" })).not.toBeNull();
+    expect(screen.queryByRole("article", { name: "DEV-360" })).toBeNull();
+    expect(screen.queryByRole("article", { name: "DEV-401" })).toBeNull();
+  });
+
+  it("filters tasks by title substring (case-insensitive)", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    const input = screen.getByLabelText("Filter tasks") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "calendar" } });
+    expect(screen.queryByRole("article", { name: "DEV-378" })).not.toBeNull();
+    expect(screen.queryByRole("article", { name: "DEV-441" })).toBeNull();
+  });
+
+  it("composes the filter with the assigned-to-you toggle", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Show only tasks assigned to you" }),
+    );
+    fireEvent.change(screen.getByLabelText("Filter tasks"), {
+      target: { value: "auth" },
+    });
+    // DEV-360 (assignee=you) matches "auth"; DEV-441 (assignee=you) does not.
+    expect(screen.queryByRole("article", { name: "DEV-360" })).not.toBeNull();
+    expect(screen.queryByRole("article", { name: "DEV-441" })).toBeNull();
+  });
+
+  it("shows the filter empty-state when no tasks match the query", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    fireEvent.change(screen.getByLabelText("Filter tasks"), {
+      target: { value: "xxxxxxx-no-match" },
+    });
+    const status = screen.getByRole("status");
+    expect(status.textContent).toContain("No tasks match your filter.");
+  });
+
   it("does not fire onCreateTask when the id or title is empty", () => {
     const onCreateTask = vi.fn();
     render(

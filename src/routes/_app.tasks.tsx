@@ -354,6 +354,7 @@ export function TasksPage({
   // dataTransfer serialization, keeps the test boundary honest.
   const dragTaskIdRef = useRef<string | null>(null);
   const [mineOnly, setMineOnly] = useState(false);
+  const [query, setQuery] = useState("");
   const handleKeyboardMove = (id: string, direction: "left" | "right") => {
     if (!onMoveTask) return;
     const current = COLUMNS.findIndex(
@@ -365,9 +366,15 @@ export function TasksPage({
     onMoveTask(id, COLUMNS[next].id);
   };
   const assignedToYou = tasks.filter((t) => t.assignee === "you").length;
-  const visibleTasks = mineOnly
-    ? tasks.filter((t) => t.assignee === "you")
-    : tasks;
+  const normalizedQuery = query.trim().toLowerCase();
+  const visibleTasks = tasks.filter((t) => {
+    if (mineOnly && t.assignee !== "you") return false;
+    if (normalizedQuery === "") return true;
+    return (
+      t.id.toLowerCase().includes(normalizedQuery) ||
+      t.title.toLowerCase().includes(normalizedQuery)
+    );
+  });
   return (
     <div className="mx-auto max-w-[1500px] px-9 pt-7 pb-12">
       <header className="mb-[18px] flex items-baseline">
@@ -386,6 +393,13 @@ export function TasksPage({
         >
           {assignedToYou} assigned to you · Linear · Sprint 24
         </button>
+        <input
+          aria-label="Filter tasks"
+          value={query}
+          onChange={(e) => setQuery(e.currentTarget.value)}
+          placeholder="Filter by id or title"
+          className="ml-auto w-56 rounded-[4px] border border-border bg-transparent px-2 py-[3px] text-[12px] text-foreground"
+        />
       </header>
 
       {onCreateTask && <CreateTaskForm onCreateTask={onCreateTask} />}
@@ -395,11 +409,13 @@ export function TasksPage({
           role="status"
           className="mb-3 rounded-lg border border-border bg-card px-3 py-6 text-center text-[13px] text-muted-foreground"
         >
-          {mineOnly
-            ? "No tasks assigned to you."
-            : onCreateTask
-              ? "No tasks yet. Use the form above to create your first task."
-              : "No tasks yet."}
+          {normalizedQuery !== ""
+            ? "No tasks match your filter."
+            : mineOnly
+              ? "No tasks assigned to you."
+              : onCreateTask
+                ? "No tasks yet. Use the form above to create your first task."
+                : "No tasks yet."}
         </p>
       )}
 
