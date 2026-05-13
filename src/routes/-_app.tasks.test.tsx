@@ -531,6 +531,45 @@ describe("TasksPage", () => {
     }
   });
 
+  it("filters tasks to only those with a PR when Has PR is picked", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    const select = screen.getByLabelText(
+      "Filter by PR",
+    ) as unknown as HTMLSelectElement;
+    expect(select.value).toBe("all");
+    fireEvent.change(select, { target: { value: "with" } });
+    // PR-linked fixture tasks remain visible.
+    expect(screen.queryByRole("article", { name: "DEV-441" })).not.toBeNull();
+    expect(screen.queryByRole("article", { name: "DEV-401" })).not.toBeNull();
+    // Tasks without a PR are hidden.
+    expect(screen.queryByRole("article", { name: "DEV-447" })).toBeNull();
+    expect(screen.queryByRole("article", { name: "DEV-432" })).toBeNull();
+  });
+
+  it("filters tasks to only those without a PR when No PR is picked", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    fireEvent.change(screen.getByLabelText("Filter by PR"), {
+      target: { value: "without" },
+    });
+    expect(screen.queryByRole("article", { name: "DEV-447" })).not.toBeNull();
+    expect(screen.queryByRole("article", { name: "DEV-432" })).not.toBeNull();
+    expect(screen.queryByRole("article", { name: "DEV-441" })).toBeNull();
+    expect(screen.queryByRole("article", { name: "DEV-401" })).toBeNull();
+  });
+
+  it("composes the PR filter with the priority filter for the empty-state", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    fireEvent.change(screen.getByLabelText("Filter by PR"), {
+      target: { value: "without" },
+    });
+    fireEvent.change(screen.getByLabelText("Filter by priority"), {
+      target: { value: "P1" },
+    });
+    // No P1 fixture task lacks a PR.
+    const status = screen.getByRole("status");
+    expect(status.textContent).toContain("No tasks match your filter.");
+  });
+
   it("hides the Clear filters button when no filter is active", () => {
     render(<TasksPage tasks={FIXTURE_TASKS} />);
     expect(screen.queryByRole("button", { name: "Clear filters" })).toBeNull();

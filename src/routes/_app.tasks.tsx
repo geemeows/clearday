@@ -359,6 +359,7 @@ export function TasksPage({
     "all",
   );
   const [labelFilter, setLabelFilter] = useState<string>("all");
+  const [prFilter, setPrFilter] = useState<"all" | "with" | "without">("all");
   const [sortBy, setSortBy] = useState<"default" | "priority" | "days" | "id">(
     "default",
   );
@@ -370,12 +371,14 @@ export function TasksPage({
     mineOnly ||
     query !== "" ||
     priorityFilter !== "all" ||
-    labelFilter !== "all";
+    labelFilter !== "all" ||
+    prFilter !== "all";
   const clearFilters = () => {
     setMineOnly(false);
     setQuery("");
     setPriorityFilter("all");
     setLabelFilter("all");
+    setPrFilter("all");
   };
   const handleKeyboardMove = (id: string, direction: "left" | "right") => {
     if (!onMoveTask) return;
@@ -393,6 +396,8 @@ export function TasksPage({
     if (mineOnly && t.assignee !== "you") return false;
     if (priorityFilter !== "all" && t.p !== priorityFilter) return false;
     if (labelFilter !== "all" && !t.labels.includes(labelFilter)) return false;
+    if (prFilter === "with" && t.pr === null) return false;
+    if (prFilter === "without" && t.pr !== null) return false;
     if (normalizedQuery === "") return true;
     return (
       t.id.toLowerCase().includes(normalizedQuery) ||
@@ -463,6 +468,20 @@ export function TasksPage({
             </option>
           ))}
         </select>
+        <select
+          aria-label="Filter by PR"
+          value={prFilter}
+          onChange={(e) =>
+            setPrFilter(
+              e.currentTarget.value as "all" | "with" | "without",
+            )
+          }
+          className="ml-2 rounded-[4px] border border-border bg-transparent px-1 py-[3px] font-mono text-[11px] text-muted-foreground"
+        >
+          <option value="all">All PR states</option>
+          <option value="with">Has PR</option>
+          <option value="without">No PR</option>
+        </select>
         {filtersActive && (
           <button
             type="button"
@@ -514,7 +533,10 @@ export function TasksPage({
           role="status"
           className="mb-3 rounded-lg border border-border bg-card px-3 py-6 text-center text-[13px] text-muted-foreground"
         >
-          {normalizedQuery !== "" || priorityFilter !== "all" || labelFilter !== "all"
+          {normalizedQuery !== "" ||
+          priorityFilter !== "all" ||
+          labelFilter !== "all" ||
+          prFilter !== "all"
             ? "No tasks match your filter."
             : mineOnly
               ? "No tasks assigned to you."
