@@ -918,7 +918,7 @@ export function TodaySchedule({
                     <span className="truncate">{e.signal.title}</span>
                     {isNow && (
                       <span
-                        className="inline-flex shrink-0 items-center rounded-full px-2 py-px font-semibold text-[10px] uppercase tracking-wider"
+                        className="inline-flex shrink-0 items-center rounded-md px-2 py-px font-medium text-[10px] leading-[1.4]"
                         style={{
                           background:
                             "var(--primary-disabled, var(--secondary))",
