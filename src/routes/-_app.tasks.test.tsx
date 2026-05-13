@@ -910,6 +910,56 @@ describe("TasksPage", () => {
     expect(toggle.getAttribute("aria-pressed")).toBe("false");
   });
 
+  it("collapses every column when the Collapse all button is pressed", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    expect(screen.queryByRole("article", { name: "DEV-441" })).not.toBeNull();
+    expect(screen.queryByRole("article", { name: "DEV-432" })).not.toBeNull();
+    const toggle = screen.getByRole("button", { name: "Collapse all columns" });
+    expect(toggle.getAttribute("aria-pressed")).toBe("false");
+    expect(toggle.textContent).toBe("Collapse all");
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute("aria-pressed")).toBe("true");
+    expect(toggle.textContent).toBe("Expand all");
+    expect(screen.queryByRole("article", { name: "DEV-441" })).toBeNull();
+    expect(screen.queryByRole("article", { name: "DEV-432" })).toBeNull();
+    for (const label of ["To do", "In progress", "In review", "Done this week"]) {
+      expect(
+        screen
+          .getByRole("button", { name: `Collapse ${label}` })
+          .getAttribute("aria-pressed"),
+      ).toBe("true");
+    }
+  });
+
+  it("expands every column when Expand all is pressed after a collapse-all", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    const toggle = screen.getByRole("button", { name: "Collapse all columns" });
+    fireEvent.click(toggle);
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute("aria-pressed")).toBe("false");
+    expect(toggle.textContent).toBe("Collapse all");
+    expect(screen.queryByRole("article", { name: "DEV-441" })).not.toBeNull();
+    for (const label of ["To do", "In progress", "In review", "Done this week"]) {
+      expect(
+        screen
+          .getByRole("button", { name: `Collapse ${label}` })
+          .getAttribute("aria-pressed"),
+      ).toBe("false");
+    }
+  });
+
+  it("flips Collapse all to pressed once every column has been individually collapsed", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    const allToggle = screen.getByRole("button", {
+      name: "Collapse all columns",
+    });
+    for (const label of ["To do", "In progress", "In review", "Done this week"]) {
+      fireEvent.click(screen.getByRole("button", { name: `Collapse ${label}` }));
+    }
+    expect(allToggle.getAttribute("aria-pressed")).toBe("true");
+    expect(allToggle.textContent).toBe("Expand all");
+  });
+
   it("hides the visible-count caption again after Clear filters", () => {
     render(<TasksPage tasks={FIXTURE_TASKS} />);
     fireEvent.change(screen.getByLabelText("Filter by priority"), {

@@ -384,6 +384,12 @@ export function TasksPage({
       return next;
     });
   };
+  const allCollapsed = collapsedColumns.size === COLUMNS.length;
+  const toggleAllColumnsCollapsed = () => {
+    setCollapsedColumns(
+      allCollapsed ? new Set() : new Set(COLUMNS.map((c) => c.id)),
+    );
+  };
   const availableLabels = Array.from(
     new Set(tasks.flatMap((t) => t.labels)),
   ).sort();
@@ -634,6 +640,15 @@ export function TasksPage({
             {sortDir === "asc" ? "↑" : "↓"}
           </button>
         )}
+        <button
+          type="button"
+          aria-label="Collapse all columns"
+          aria-pressed={allCollapsed}
+          onClick={toggleAllColumnsCollapsed}
+          className="ml-2 rounded-[4px] border border-border bg-transparent px-2 py-[3px] font-mono text-[11px] text-muted-foreground"
+        >
+          {allCollapsed ? "Expand all" : "Collapse all"}
+        </button>
       </header>
 
       {onCreateTask && <CreateTaskForm onCreateTask={onCreateTask} />}
