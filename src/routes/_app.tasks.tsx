@@ -488,6 +488,7 @@ export function TasksPage({
                         : a.id.localeCompare(b.id);
           return sortDir === "asc" ? base : -base;
         });
+  const totalP1 = filteredTasks.filter((t) => t.p === "P1").length;
   return (
     <div className="mx-auto max-w-[1500px] px-9 pt-7 pb-12">
       <header className="mb-[18px] flex items-baseline">
@@ -506,6 +507,19 @@ export function TasksPage({
         >
           {assignedToYou} assigned to you · Linear · Sprint 24
         </button>
+        {totalP1 > 0 && (
+          <span
+            aria-label="Total P1 count"
+            className="ml-2 rounded-sm font-mono font-semibold text-[10px]"
+            style={{
+              background: "var(--danger-soft)",
+              color: "var(--danger)",
+              padding: "1px 6px",
+            }}
+          >
+            {totalP1} P1
+          </span>
+        )}
         <input
           aria-label="Filter tasks"
           value={query}

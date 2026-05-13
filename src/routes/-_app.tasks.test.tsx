@@ -1026,4 +1026,28 @@ describe("TasksPage", () => {
     fireEvent.click(screen.getByLabelText("Collapse To do"));
     expect(screen.queryByLabelText("No tasks in To do")).toBeNull();
   });
+
+  it("renders a header-level total P1 count badge summing across columns", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    // Fixture has DEV-441 (in_progress) + DEV-360 (done) = 2 P1s total.
+    const badge = screen.getByLabelText("Total P1 count");
+    expect(badge.textContent).toBe("2 P1");
+  });
+
+  it("hides the total P1 count badge when filters remove every P1", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    fireEvent.change(screen.getByLabelText("Filter by priority"), {
+      target: { value: "P2" },
+    });
+    expect(screen.queryByLabelText("Total P1 count")).toBeNull();
+  });
+
+  it("updates the total P1 count badge to reflect the filtered set", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    // Days filter ≥3d drops DEV-441 (1d P1) but keeps DEV-360 (4d P1).
+    fireEvent.change(screen.getByLabelText("Filter by days"), {
+      target: { value: "3" },
+    });
+    expect(screen.getByLabelText("Total P1 count").textContent).toBe("1 P1");
+  });
 });
