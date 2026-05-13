@@ -399,24 +399,52 @@ function useEffectiveTheme(): {
   return { effective, toggle };
 }
 
+// Pulls name / email / avatar from the signed-in Google account
+// (Supabase session user_metadata) so the sidebar account row matches
+// what ProfilePanel renders. No DB profile read — what you see is what
+// Google sent at sign-in.
 function useProfile(): NavProfile {
-  const [profile, setProfile] = useState<ProfileView | null>(null);
+  const [profile, setProfile] = useState<NavProfile>({
+    displayName: null,
+    email: null,
+    avatarUrl: null,
+  });
 
   useEffect(() => {
     let cancelled = false;
     const refresh = () =>
-      (apiFetch("/api/profile") as Promise<ProfileView>)
-        .then((p) => {
-          if (!cancelled) setProfile(p);
+      supabase.auth
+        .getSession()
+        .then(({ data }) => {
+          if (cancelled) return;
+          const user = data.session?.user;
+          const meta = (user?.user_metadata ?? {}) as Record<string, unknown>;
+          const str = (k: string): string | null => {
+            const v = meta[k];
+            return typeof v === "string" && v.length > 0 ? v : null;
+          };
+          setProfile({
+            displayName: str("full_name") ?? str("name") ?? null,
+            email: user?.email ?? str("email") ?? null,
+            avatarUrl: str("avatar_url") ?? str("picture") ?? null,
+          });
         })
         .catch(() => {
-          // Leave profile null; sidebar shows the generic fallback.
+          // Pre-auth or session error: keep the generic fallback.
         });
     refresh();
     const onUpdate = (e: Event) => {
       const detail = (e as CustomEvent<ProfileView>).detail;
-      if (detail) setProfile(detail);
-      else refresh();
+      // Profile updates from settings still apply over the Google base.
+      if (detail) {
+        setProfile((prev) => ({
+          displayName: detail.display_name ?? prev.displayName,
+          email: prev.email,
+          avatarUrl: detail.avatar_url ?? prev.avatarUrl,
+        }));
+      } else {
+        refresh();
+      }
     };
     window.addEventListener(PROFILE_UPDATED_EVENT, onUpdate);
     return () => {
@@ -425,11 +453,7 @@ function useProfile(): NavProfile {
     };
   }, []);
 
-  return {
-    displayName: profile?.display_name ?? null,
-    email: null,
-    avatarUrl: profile?.avatar_url ?? null,
-  };
+  return profile;
 }
 
 function useNavBadges(): { inboxBadge: number } {

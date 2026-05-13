@@ -401,7 +401,8 @@ function AccountRow({
   profile: NavProfile;
   onOpenSettings: () => void;
 }) {
-  const name = profile.displayName?.trim() || "Account";
+  const emailLocal = profile.email?.split("@")[0] ?? null;
+  const name = profile.displayName?.trim() || emailLocal?.trim() || "Account";
   const initials = (name.match(/\b\w/g) ?? [name[0] ?? "A"])
     .slice(0, 2)
     .join("")
