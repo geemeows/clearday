@@ -489,6 +489,7 @@ export function TasksPage({
           return sortDir === "asc" ? base : -base;
         });
   const totalP1 = filteredTasks.filter((t) => t.p === "P1").length;
+  const totalP2 = filteredTasks.filter((t) => t.p === "P2").length;
   const totalStale = filteredTasks.filter((t) => t.days >= 3).length;
   const totalUnassigned = filteredTasks.filter(
     (t) => t.assignee === null,
@@ -530,6 +531,19 @@ export function TasksPage({
             }}
           >
             {totalP1} P1
+          </span>
+        )}
+        {totalP2 > 0 && (
+          <span
+            aria-label="Total P2 count"
+            className="ml-2 rounded-sm font-mono font-semibold text-[10px]"
+            style={{
+              background: "var(--brand-navy-soft)",
+              color: "var(--brand-navy)",
+              padding: "1px 6px",
+            }}
+          >
+            {totalP2} P2
           </span>
         )}
         {totalStale > 0 && (
