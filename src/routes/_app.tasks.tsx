@@ -16,6 +16,7 @@ import {
   listTasks,
   setTaskAssignee,
   setTaskPriority,
+  setTaskTitle,
   updateTaskStatus,
 } from "#/features/tasks/store";
 import { supabase } from "#/lib/supabase";
@@ -235,6 +236,18 @@ function TasksRoute() {
     }
   };
 
+  const handleSetTitle = async (id: string, title: string) => {
+    if (tasks === null) return;
+    const prev = tasks;
+    setTasks(tasks.map((t) => (t.id === id ? { ...t, title } : t)));
+    try {
+      await setTaskTitle(client, id, title);
+    } catch (e) {
+      setTasks(prev);
+      setError(e instanceof Error ? e.message : "failed to update task title");
+    }
+  };
+
   const handleAssign = async (id: string, assignee: string | null) => {
     if (tasks === null) return;
     const prev = tasks;
@@ -278,6 +291,7 @@ function TasksRoute() {
       onLinkPr={handleLinkPr}
       onAssign={handleAssign}
       onSetPriority={handleSetPriority}
+      onSetTitle={handleSetTitle}
       onCreateTask={handleCreateTask}
       onDeleteTask={handleDeleteTask}
     />
@@ -290,6 +304,7 @@ export function TasksPage({
   onLinkPr,
   onAssign,
   onSetPriority,
+  onSetTitle,
   onCreateTask,
   onDeleteTask,
 }: {
@@ -298,6 +313,7 @@ export function TasksPage({
   onLinkPr?: (id: string, pr: string | null) => void;
   onAssign?: (id: string, assignee: string | null) => void;
   onSetPriority?: (id: string, p: TaskPriority) => void;
+  onSetTitle?: (id: string, title: string) => void;
   onCreateTask?: (task: Task) => void;
   onDeleteTask?: (id: string) => void;
 }) {
@@ -397,6 +413,7 @@ export function TasksPage({
                       onLinkPr={onLinkPr}
                       onAssign={onAssign}
                       onSetPriority={onSetPriority}
+                      onSetTitle={onSetTitle}
                       onDeleteTask={onDeleteTask}
                       onDragStart={
                         onMoveTask
@@ -428,6 +445,7 @@ function TaskCard({
   onLinkPr,
   onAssign,
   onSetPriority,
+  onSetTitle,
   onDeleteTask,
   onDragStart,
   onKeyboardMove,
@@ -437,6 +455,7 @@ function TaskCard({
   onLinkPr?: (id: string, pr: string | null) => void;
   onAssign?: (id: string, assignee: string | null) => void;
   onSetPriority?: (id: string, p: TaskPriority) => void;
+  onSetTitle?: (id: string, title: string) => void;
   onDeleteTask?: (id: string) => void;
   onDragStart?: () => void;
   onKeyboardMove?: (direction: "left" | "right") => void;
@@ -521,9 +540,13 @@ function TaskCard({
           )
         )}
       </div>
-      <div className="mb-1.5 font-medium text-[13px] text-foreground leading-[1.35]">
-        {task.title}
-      </div>
+      {onSetTitle ? (
+        <TitleInput task={task} onSetTitle={onSetTitle} />
+      ) : (
+        <div className="mb-1.5 font-medium text-[13px] text-foreground leading-[1.35]">
+          {task.title}
+        </div>
+      )}
       <div className="flex flex-wrap items-center gap-1">
         {task.labels.map((l) => (
           <span
@@ -662,6 +685,41 @@ function CreateTaskForm({
         Add task
       </button>
     </form>
+  );
+}
+
+function TitleInput({
+  task,
+  onSetTitle,
+}: {
+  task: Task;
+  onSetTitle: (id: string, title: string) => void;
+}) {
+  const [value, setValue] = useState(task.title);
+  useEffect(() => {
+    setValue(task.title);
+  }, [task.title]);
+  const commit = () => {
+    const next = value.trim();
+    if (next === "" || next === task.title) {
+      setValue(task.title);
+      return;
+    }
+    onSetTitle(task.id, next);
+  };
+  return (
+    <input
+      aria-label={`Title for ${task.id}`}
+      value={value}
+      onChange={(e) => setValue(e.currentTarget.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          e.currentTarget.blur();
+        }
+      }}
+      className="mb-1.5 w-full rounded-[4px] border border-transparent bg-transparent px-1 py-[1px] font-medium text-[13px] text-foreground leading-[1.35] hover:border-border focus:border-border"
+    />
   );
 }
 

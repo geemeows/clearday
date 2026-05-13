@@ -192,6 +192,38 @@ describe("TasksPage", () => {
     expect(onSetPriority).toHaveBeenCalledWith("DEV-441", "P2");
   });
 
+  it("omits the per-card title input when no onSetTitle handler is provided", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    expect(screen.queryByLabelText("Title for DEV-441")).toBeNull();
+  });
+
+  it("fires onSetTitle with the trimmed value when the title input is committed", () => {
+    const onSetTitle = vi.fn();
+    render(<TasksPage tasks={FIXTURE_TASKS} onSetTitle={onSetTitle} />);
+    const input = screen.getByLabelText(
+      "Title for DEV-441",
+    ) as unknown as HTMLInputElement;
+    expect(input.value).toBe(
+      "Add timestamp-replay rejection to slack-webhook",
+    );
+    fireEvent.change(input, { target: { value: "Reject replays" } });
+    fireEvent.blur(input);
+    expect(onSetTitle).toHaveBeenCalledWith("DEV-441", "Reject replays");
+  });
+
+  it("does not fire onSetTitle when the title is unchanged or empty", () => {
+    const onSetTitle = vi.fn();
+    render(<TasksPage tasks={FIXTURE_TASKS} onSetTitle={onSetTitle} />);
+    const input = screen.getByLabelText(
+      "Title for DEV-441",
+    ) as unknown as HTMLInputElement;
+    fireEvent.blur(input);
+    expect(onSetTitle).not.toHaveBeenCalled();
+    fireEvent.change(input, { target: { value: "   " } });
+    fireEvent.blur(input);
+    expect(onSetTitle).not.toHaveBeenCalled();
+  });
+
   it("moves a task to the dropped column when onMoveTask is provided", () => {
     const onMoveTask = vi.fn();
     render(<TasksPage tasks={FIXTURE_TASKS} onMoveTask={onMoveTask} />);

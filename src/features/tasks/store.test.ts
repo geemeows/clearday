@@ -6,6 +6,7 @@ import {
   listTasks,
   setTaskAssignee,
   setTaskPriority,
+  setTaskTitle,
   updateTaskStatus,
 } from "#/features/tasks/store";
 import type { SupabaseLike } from "#/shared/db";
@@ -249,6 +250,23 @@ describe("setTaskPriority", () => {
   it("throws when the update errors", async () => {
     const { client } = makeClient({ updateError: { message: "rls denied" } });
     await expect(setTaskPriority(client, "DEV-441", "P2")).rejects.toThrow(
+      /rls denied/,
+    );
+  });
+});
+
+describe("setTaskTitle", () => {
+  it("updates the task row matching the given id with the new title", async () => {
+    const { client, spies } = makeClient({});
+    await setTaskTitle(client, "DEV-441", "New title");
+    expect(spies.from).toHaveBeenCalledWith("tasks");
+    expect(spies.update).toHaveBeenCalledWith({ title: "New title" });
+    expect(spies.updateEq).toHaveBeenCalledWith("id", "DEV-441");
+  });
+
+  it("throws when the update errors", async () => {
+    const { client } = makeClient({ updateError: { message: "rls denied" } });
+    await expect(setTaskTitle(client, "DEV-441", "x")).rejects.toThrow(
       /rls denied/,
     );
   });
