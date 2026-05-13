@@ -1496,4 +1496,36 @@ describe("TasksPage", () => {
     );
     expect(screen.queryByLabelText("Total labeled count")).toBeNull();
   });
+
+  it("hides the total unlabeled count badge when every visible task is labeled", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    // Fixture: all 9 tasks have at least one label → no unlabeled rows.
+    expect(screen.queryByLabelText("Total unlabeled count")).toBeNull();
+  });
+
+  it("renders a header-level total unlabeled count badge summing across columns", () => {
+    render(
+      <TasksPage
+        tasks={FIXTURE_TASKS.map((t) => ({ ...t, labels: [] }))}
+      />,
+    );
+    expect(screen.getByLabelText("Total unlabeled count").textContent).toBe(
+      "9 unlabeled",
+    );
+  });
+
+  it("updates the total unlabeled count badge to reflect the filtered set", () => {
+    render(
+      <TasksPage
+        tasks={FIXTURE_TASKS.map((t) => ({ ...t, labels: [] }))}
+      />,
+    );
+    // P1 priority filter keeps DEV-441 + DEV-360, both now unlabeled → 2.
+    fireEvent.change(screen.getByLabelText("Filter by priority"), {
+      target: { value: "P1" },
+    });
+    expect(screen.getByLabelText("Total unlabeled count").textContent).toBe(
+      "2 unlabeled",
+    );
+  });
 });

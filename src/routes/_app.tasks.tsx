@@ -512,6 +512,9 @@ export function TasksPage({
   const totalMine = filteredTasks.filter((t) => t.assignee === "you").length;
   const totalNotMine = filteredTasks.filter((t) => t.assignee !== "you").length;
   const totalLabeled = filteredTasks.filter((t) => t.labels.length > 0).length;
+  const totalUnlabeled = filteredTasks.filter(
+    (t) => t.labels.length === 0,
+  ).length;
   return (
     <div className="mx-auto max-w-[1500px] px-9 pt-7 pb-12">
       <header className="mb-[18px] flex items-baseline">
@@ -736,6 +739,19 @@ export function TasksPage({
             }}
           >
             {totalLabeled} labeled
+          </span>
+        )}
+        {totalUnlabeled > 0 && (
+          <span
+            aria-label="Total unlabeled count"
+            className="ml-2 rounded-sm font-mono font-semibold text-[10px]"
+            style={{
+              background: "var(--src-ai-bg)",
+              color: "var(--src-ai)",
+              padding: "1px 6px",
+            }}
+          >
+            {totalUnlabeled} unlabeled
           </span>
         )}
         <input
