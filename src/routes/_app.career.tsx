@@ -954,6 +954,7 @@ function CompetencyRow({
   const [draft, setDraft] = useState(competency.name);
   const [criteriaCount, setCriteriaCount] = useState<number | null>(null);
   const [indicatorCount, setIndicatorCount] = useState<number | null>(null);
+  const [showAddForm, setShowAddForm] = useState(false);
 
   return (
     <li
@@ -1010,6 +1011,14 @@ function CompetencyRow({
         </div>
         <button
           type="button"
+          aria-label={`Add criterion to ${competency.name}`}
+          onClick={() => setShowAddForm(true)}
+          className="inline-flex items-center gap-1.5 rounded-sm border border-border bg-background px-2.5 py-1 text-[12px] text-foreground hover:bg-muted"
+        >
+          <Plus aria-hidden="true" className="h-3 w-3" /> Criterion
+        </button>
+        <button
+          type="button"
           aria-label={`Delete competency ${competency.name}`}
           onClick={() => onDelete(competency.id)}
           className="flex h-7 w-7 items-center justify-center rounded text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
@@ -1021,6 +1030,7 @@ function CompetencyRow({
         <CriteriaList
           competency={competency}
           client={client}
+          showAddForm={showAddForm}
           onCriteriaCountChange={setCriteriaCount}
           onIndicatorCountChange={setIndicatorCount}
         />
@@ -1032,11 +1042,13 @@ function CompetencyRow({
 export function CriteriaList({
   competency,
   client,
+  showAddForm,
   onCriteriaCountChange,
   onIndicatorCountChange,
 }: {
   competency: StoredCompetency;
   client: SupabaseLike;
+  showAddForm?: boolean;
   onCriteriaCountChange?: (count: number) => void;
   onIndicatorCountChange?: (count: number) => void;
 }) {
@@ -1182,6 +1194,8 @@ export function CriteriaList({
     handleReorder(draggedId, afterId);
   };
 
+  const addFormVisible = showAddForm ?? true;
+
   return (
     <div className="mt-2 ml-4 space-y-2 border-border border-l pl-4">
       {error && (
@@ -1192,6 +1206,7 @@ export function CriteriaList({
           {error}
         </p>
       )}
+      {addFormVisible && <AddCriterionForm onAdd={handleAdd} />}
       {criteria === null ? (
         <p className="text-muted-foreground text-xs">Loading…</p>
       ) : criteria.length === 0 ? null : (
@@ -1229,7 +1244,6 @@ export function CriteriaList({
           ))}
         </ul>
       )}
-      <AddCriterionForm onAdd={handleAdd} />
     </div>
   );
 }

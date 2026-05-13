@@ -681,6 +681,18 @@ describe("CareerLevelView", () => {
     expect(store.update).not.toHaveBeenCalled();
     expect(screen.getByDisplayValue("Craft")).toBeTruthy();
   });
+
+  it("hides the AddCriterionForm until the header '+ Criterion' button is clicked", async () => {
+    const { client } = makeFakeClient([competency({ id: "c1", name: "Craft" })]);
+    render(<CareerLevelView level={level()} client={client} />);
+    await screen.findByDisplayValue("Craft");
+    expect(screen.queryByLabelText("New criterion name")).toBeNull();
+    const addBtn = screen.getByRole("button", {
+      name: /add criterion to craft/i,
+    });
+    fireEvent.click(addBtn);
+    expect(screen.getByLabelText("New criterion name")).toBeTruthy();
+  });
 });
 
 describe("LevelSwitcher", () => {
