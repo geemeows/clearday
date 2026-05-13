@@ -504,6 +504,7 @@ export function TasksPage({
     (t) => t.status === "in_progress",
   ).length;
   const totalTodo = filteredTasks.filter((t) => t.status === "todo").length;
+  const totalFresh = filteredTasks.filter((t) => t.days === 0).length;
   return (
     <div className="mx-auto max-w-[1500px] px-9 pt-7 pb-12">
       <header className="mb-[18px] flex items-baseline">
@@ -650,6 +651,19 @@ export function TasksPage({
             }}
           >
             {totalTodo} to do
+          </span>
+        )}
+        {totalFresh > 0 && (
+          <span
+            aria-label="Total fresh count"
+            className="ml-2 rounded-sm font-mono font-semibold text-[10px]"
+            style={{
+              background: "var(--hairline-soft)",
+              color: "var(--info)",
+              padding: "1px 6px",
+            }}
+          >
+            {totalFresh} fresh
           </span>
         )}
         <input

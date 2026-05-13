@@ -1325,4 +1325,33 @@ describe("TasksPage", () => {
     });
     expect(screen.queryByLabelText("Total no-PR count")).toBeNull();
   });
+
+  it("renders a header-level total fresh count badge summing across columns", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    // Fixture: 3 tasks at days=0 (DEV-432 + DEV-455 + DEV-460).
+    expect(screen.getByLabelText("Total fresh count").textContent).toBe(
+      "3 fresh",
+    );
+  });
+
+  it("updates the total fresh count badge to reflect the filtered set", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    // P2 priority filter narrows the 3 fresh tasks to DEV-432 + DEV-455
+    // (DEV-447 is P2 but days=3; DEV-460 is days=0 but P3).
+    fireEvent.change(screen.getByLabelText("Filter by priority"), {
+      target: { value: "P2" },
+    });
+    expect(screen.getByLabelText("Total fresh count").textContent).toBe(
+      "2 fresh",
+    );
+  });
+
+  it("hides the total fresh count badge when no visible task is fresh", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    // `≥3d` days filter leaves only stale tasks → 0 fresh.
+    fireEvent.change(screen.getByLabelText("Filter by days"), {
+      target: { value: "3" },
+    });
+    expect(screen.queryByLabelText("Total fresh count")).toBeNull();
+  });
 });
