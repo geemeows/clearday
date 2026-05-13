@@ -744,7 +744,15 @@ export function TasksPage({
                   {collapsed ? "+" : "−"}
                 </button>
               </header>
-              {!collapsed && (
+              {!collapsed && items.length === 0 && (
+                <p
+                  aria-label={`No tasks in ${col.label}`}
+                  className="pt-3 pb-1 text-center font-mono text-[10px] text-muted-foreground"
+                >
+                  No tasks
+                </p>
+              )}
+              {!collapsed && items.length > 0 && (
               <ul className="flex flex-col gap-2 pt-2.5">
                 {items.map((t) => (
                   <li key={t.id}>

@@ -994,4 +994,36 @@ describe("TasksPage", () => {
     });
     expect(screen.queryByLabelText("P1 count for In progress")).toBeNull();
   });
+
+  it("shows a per-column empty placeholder when a filter empties a single column", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    // P1 has matches in In progress + Done; To do and In review become empty.
+    fireEvent.change(screen.getByLabelText("Filter by priority"), {
+      target: { value: "P1" },
+    });
+    expect(screen.getByLabelText("No tasks in To do")).toBeTruthy();
+    expect(screen.getByLabelText("No tasks in In review")).toBeTruthy();
+    // Columns with matches do not get the placeholder.
+    expect(screen.queryByLabelText("No tasks in In progress")).toBeNull();
+    expect(screen.queryByLabelText("No tasks in Done this week")).toBeNull();
+    // Page-level empty-state is not shown — some columns still have matches.
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("omits the per-column empty placeholder for columns with at least one task", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    for (const label of ["To do", "In progress", "In review", "Done this week"]) {
+      expect(screen.queryByLabelText(`No tasks in ${label}`)).toBeNull();
+    }
+  });
+
+  it("hides the per-column empty placeholder when the column is collapsed", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    fireEvent.change(screen.getByLabelText("Filter by priority"), {
+      target: { value: "P1" },
+    });
+    expect(screen.getByLabelText("No tasks in To do")).toBeTruthy();
+    fireEvent.click(screen.getByLabelText("Collapse To do"));
+    expect(screen.queryByLabelText("No tasks in To do")).toBeNull();
+  });
 });
