@@ -15,7 +15,11 @@ Tracer bullets comes from the Pragmatic Programmer. When building systems, you w
 
 TL;DR - build a tiny, end-to-end slice of the feature first, then expand it out.
 
-**Exception — redesign work.** If the selected issue has the `redesign` label, or its title starts with `Redesign v`, tracer bullets do **not** apply. Visual ports are wholesale by nature — splitting a page into one-badge-per-commit shipments produces a polish trail, not a redesign. For these issues: complete the full scope of the issue in one pass and ship it as a single commit. If the scope is too large to finish in one loop, leave a progress comment on the issue and do **not** commit — wait for the next loop to finish the job. The "one logical change per commit" rule in the COMMIT section is overridden for redesign issues: one commit per issue, however large the diff.
+**Exception — redesign work.** If the selected issue has the `redesign` label, or its title starts with `Redesign v`, tracer bullets do **not** apply. Visual ports are wholesale by nature — splitting a page into one-badge-per-commit shipments produces a polish trail, not a redesign.
+
+Prefer one commit per redesign issue: complete the full scope in one pass and ship it as a single commit. The "one logical change per commit" rule in the COMMIT section is overridden — one commit per issue, however large the diff.
+
+If the scope genuinely exceeds one loop, split along **structural boundaries** (e.g. shell → list → detail → builder; or per-tab for tabbed surfaces) and commit each sub-slice with a `RALPH: Slice N.M —` prefix. Pick the largest coherent sub-slice you can finish *and verify clean* (typecheck + tests + biome) this loop, commit it, then leave a progress comment listing the remaining sub-slices. **Never leave a loop with zero commits if a coherent sub-slice is shippable** — a scope-audit comment without a commit is only acceptable when no sub-slice can be landed cleanly (e.g. the shell itself is entangled with the detail pane). State that reason explicitly in the comment when it applies.
 
 3. Polish and quick wins
 4. Refactors
