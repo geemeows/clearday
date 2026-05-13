@@ -1080,4 +1080,34 @@ describe("TasksPage", () => {
       screen.getByLabelText("Stale count for In progress").textContent,
     ).toBe("1 ≥3d");
   });
+
+  it("renders a header-level total stale count badge summing across columns", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    // Fixture: DEV-447 (3d) + DEV-401 (6d) + DEV-360 (4d) = 3 stale total.
+    expect(screen.getByLabelText("Total stale count").textContent).toBe(
+      "3 ≥3d",
+    );
+  });
+
+  it("hides the total stale count badge when filters remove every stale task", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    // Filtering to To do leaves only fresh (days=0) tasks.
+    fireEvent.change(screen.getByLabelText("Filter by assignee"), {
+      target: { value: "you" },
+    });
+    // DEV-441 (in_progress, 1d) + DEV-360 (done, 4d) are the assigned-to-you set.
+    // Only DEV-360 is stale (≥3d) → badge shows 1.
+    expect(screen.getByLabelText("Total stale count").textContent).toBe(
+      "1 ≥3d",
+    );
+  });
+
+  it("updates the total stale count badge to reflect the filtered set", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    // ≥7d filter has no matches in the fixture — badge hides.
+    fireEvent.change(screen.getByLabelText("Filter by days"), {
+      target: { value: "7" },
+    });
+    expect(screen.queryByLabelText("Total stale count")).toBeNull();
+  });
 });

@@ -489,6 +489,7 @@ export function TasksPage({
           return sortDir === "asc" ? base : -base;
         });
   const totalP1 = filteredTasks.filter((t) => t.p === "P1").length;
+  const totalStale = filteredTasks.filter((t) => t.days >= 3).length;
   return (
     <div className="mx-auto max-w-[1500px] px-9 pt-7 pb-12">
       <header className="mb-[18px] flex items-baseline">
@@ -518,6 +519,19 @@ export function TasksPage({
             }}
           >
             {totalP1} P1
+          </span>
+        )}
+        {totalStale > 0 && (
+          <span
+            aria-label="Total stale count"
+            className="ml-2 rounded-sm font-mono font-semibold text-[10px]"
+            style={{
+              background: "var(--warn-soft)",
+              color: "var(--warn)",
+              padding: "1px 6px",
+            }}
+          >
+            {totalStale} ≥3d
           </span>
         )}
         <input
