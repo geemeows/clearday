@@ -1006,6 +1006,35 @@ describe("CriteriaList", () => {
     await waitFor(() => expect(onCountChange).toHaveBeenCalledWith(3));
   });
 
+  it("notifies parent of the aggregated indicator count across criteria", async () => {
+    const { client } = makeFakeClient(
+      [competency({ id: "c1", name: "Craft" })],
+      [
+        criterion({ id: "cr1", competency_id: "c1", name: "Review depth" }),
+        criterion({ id: "cr2", competency_id: "c1", name: "Design tradeoffs" }),
+      ],
+      [
+        indicator({ id: "i1", criterion_id: "cr1", description: "A" }),
+        indicator({
+          id: "i2",
+          criterion_id: "cr1",
+          description: "B",
+          position: 1024,
+        }),
+        indicator({ id: "i3", criterion_id: "cr2", description: "C" }),
+      ],
+    );
+    const onIndicatorChange = vi.fn();
+    render(
+      <CriteriaList
+        competency={competency({ id: "c1", name: "Craft" })}
+        client={client}
+        onIndicatorCountChange={onIndicatorChange}
+      />,
+    );
+    await waitFor(() => expect(onIndicatorChange).toHaveBeenCalledWith(3));
+  });
+
   it("adds a criterion via the form with target default 1", async () => {
     const { client, store } = makeFakeClient([
       competency({ id: "c1", name: "Craft" }),

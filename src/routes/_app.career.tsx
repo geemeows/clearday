@@ -8,7 +8,7 @@ import {
   Target,
   Trash2,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "#/components/ui/button";
 import { ActionsMenu } from "#/features/career/components/ActionsMenu";
 import { CareerRadar } from "#/features/career/components/CareerRadar";
@@ -953,6 +953,7 @@ function CompetencyRow({
 }) {
   const [draft, setDraft] = useState(competency.name);
   const [criteriaCount, setCriteriaCount] = useState<number | null>(null);
+  const [indicatorCount, setIndicatorCount] = useState<number | null>(null);
 
   return (
     <li
@@ -997,6 +998,13 @@ function CompetencyRow({
           {criteriaCount !== null && criteriaCount > 0 && (
             <div className="mt-px px-1.5 text-[11.5px] text-muted-foreground">
               {criteriaCount} {criteriaCount === 1 ? "criterion" : "criteria"}
+              {indicatorCount !== null && indicatorCount > 0 && (
+                <>
+                  {" · "}
+                  {indicatorCount}{" "}
+                  {indicatorCount === 1 ? "indicator" : "indicators"}
+                </>
+              )}
             </div>
           )}
         </div>
@@ -1014,6 +1022,7 @@ function CompetencyRow({
           competency={competency}
           client={client}
           onCriteriaCountChange={setCriteriaCount}
+          onIndicatorCountChange={setIndicatorCount}
         />
       </div>
     </li>
@@ -1024,13 +1033,18 @@ export function CriteriaList({
   competency,
   client,
   onCriteriaCountChange,
+  onIndicatorCountChange,
 }: {
   competency: StoredCompetency;
   client: SupabaseLike;
   onCriteriaCountChange?: (count: number) => void;
+  onIndicatorCountChange?: (count: number) => void;
 }) {
   const [criteria, setCriteria] = useState<StoredCriterion[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [indicatorCounts, setIndicatorCounts] = useState<
+    Record<string, number>
+  >({});
 
   useEffect(() => {
     let cancelled = false;
@@ -1049,6 +1063,33 @@ export function CriteriaList({
   useEffect(() => {
     if (criteria !== null) onCriteriaCountChange?.(criteria.length);
   }, [criteria, onCriteriaCountChange]);
+
+  useEffect(() => {
+    if (criteria === null) return;
+    const ids = new Set(criteria.map((c) => c.id));
+    setIndicatorCounts((prev) => {
+      let changed = false;
+      const next: Record<string, number> = {};
+      for (const [id, count] of Object.entries(prev)) {
+        if (ids.has(id)) next[id] = count;
+        else changed = true;
+      }
+      return changed ? next : prev;
+    });
+  }, [criteria]);
+
+  useEffect(() => {
+    if (criteria === null) return;
+    const sum = criteria.reduce(
+      (acc, c) => acc + (indicatorCounts[c.id] ?? 0),
+      0,
+    );
+    onIndicatorCountChange?.(sum);
+  }, [criteria, indicatorCounts, onIndicatorCountChange]);
+
+  const reportIndicatorCount = useCallback((id: string, count: number) => {
+    setIndicatorCounts((prev) => (prev[id] === count ? prev : { ...prev, [id]: count }));
+  }, []);
 
   const handleAdd = async (name: string) => {
     const id = crypto.randomUUID();
@@ -1171,6 +1212,9 @@ export function CriteriaList({
               onRename={handleRename}
               onSetTarget={handleSetTarget}
               onDelete={handleDelete}
+              onIndicatorCountChange={(count) =>
+                reportIndicatorCount(c.id, count)
+              }
               onDragStart={() => {
                 dragIdRef.current = c.id;
                 dropTargetIdRef.current = null;
@@ -1240,6 +1284,7 @@ function CriterionRow({
   onRename,
   onSetTarget,
   onDelete,
+  onIndicatorCountChange,
   onDragStart,
   onDragEnter,
 }: {
@@ -1248,6 +1293,7 @@ function CriterionRow({
   onRename: (id: string, name: string) => void;
   onSetTarget: (id: string, target: number) => void;
   onDelete: (id: string) => void;
+  onIndicatorCountChange?: (count: number) => void;
   onDragStart?: () => void;
   onDragEnter?: () => void;
 }) {
@@ -1294,7 +1340,11 @@ function CriterionRow({
           <Trash2 className="h-3 w-3" />
         </button>
       </div>
-      <IndicatorList criterion={criterion} client={client} />
+      <IndicatorList
+        criterion={criterion}
+        client={client}
+        onIndicatorCountChange={onIndicatorCountChange}
+      />
     </li>
   );
 }
@@ -1302,9 +1352,11 @@ function CriterionRow({
 export function IndicatorList({
   criterion,
   client,
+  onIndicatorCountChange,
 }: {
   criterion: StoredCriterion;
   client: SupabaseLike;
+  onIndicatorCountChange?: (count: number) => void;
 }) {
   const [indicators, setIndicators] = useState<StoredIndicator[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -1322,6 +1374,10 @@ export function IndicatorList({
       cancelled = true;
     };
   }, [client, criterion.id]);
+
+  useEffect(() => {
+    if (indicators !== null) onIndicatorCountChange?.(indicators.length);
+  }, [indicators, onIndicatorCountChange]);
 
   const handleAdd = async (description: string) => {
     const id = crypto.randomUUID();
