@@ -488,6 +488,49 @@ describe("TasksPage", () => {
     expect(status.textContent).toContain("No tasks match your filter.");
   });
 
+  it("filters tasks by label when the label select changes", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    const select = screen.getByLabelText(
+      "Filter by label",
+    ) as unknown as HTMLSelectElement;
+    expect(select.value).toBe("all");
+    fireEvent.change(select, { target: { value: "security" } });
+    // Only the two "security"-labeled tasks remain (DEV-441 + DEV-360).
+    expect(screen.queryByRole("article", { name: "DEV-441" })).not.toBeNull();
+    expect(screen.queryByRole("article", { name: "DEV-360" })).not.toBeNull();
+    expect(screen.queryByRole("article", { name: "DEV-447" })).toBeNull();
+  });
+
+  it("composes the label filter with the priority filter", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    fireEvent.change(screen.getByLabelText("Filter by label"), {
+      target: { value: "security" },
+    });
+    fireEvent.change(screen.getByLabelText("Filter by priority"), {
+      target: { value: "P2" },
+    });
+    // No security-labeled task is P2 in the fixture.
+    expect(screen.queryByRole("article", { name: "DEV-441" })).toBeNull();
+    expect(screen.queryByRole("article", { name: "DEV-360" })).toBeNull();
+    const status = screen.getByRole("status");
+    expect(status.textContent).toContain("No tasks match your filter.");
+  });
+
+  it("populates the label filter options from the tasks' labels", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    const select = screen.getByLabelText(
+      "Filter by label",
+    ) as unknown as HTMLSelectElement;
+    const values = Array.from(select.options).map((o) => o.value);
+    expect(values[0]).toBe("all");
+    const expected = Array.from(
+      new Set(FIXTURE_TASKS.flatMap((t) => t.labels)),
+    ).sort();
+    for (const l of expected) {
+      expect(values).toContain(l);
+    }
+  });
+
   it("does not fire onCreateTask when the id or title is empty", () => {
     const onCreateTask = vi.fn();
     render(

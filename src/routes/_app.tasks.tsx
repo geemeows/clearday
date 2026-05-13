@@ -358,6 +358,10 @@ export function TasksPage({
   const [priorityFilter, setPriorityFilter] = useState<TaskPriority | "all">(
     "all",
   );
+  const [labelFilter, setLabelFilter] = useState<string>("all");
+  const availableLabels = Array.from(
+    new Set(tasks.flatMap((t) => t.labels)),
+  ).sort();
   const handleKeyboardMove = (id: string, direction: "left" | "right") => {
     if (!onMoveTask) return;
     const current = COLUMNS.findIndex(
@@ -373,6 +377,7 @@ export function TasksPage({
   const visibleTasks = tasks.filter((t) => {
     if (mineOnly && t.assignee !== "you") return false;
     if (priorityFilter !== "all" && t.p !== priorityFilter) return false;
+    if (labelFilter !== "all" && !t.labels.includes(labelFilter)) return false;
     if (normalizedQuery === "") return true;
     return (
       t.id.toLowerCase().includes(normalizedQuery) ||
@@ -417,6 +422,19 @@ export function TasksPage({
           <option value="P2">P2</option>
           <option value="P3">P3</option>
         </select>
+        <select
+          aria-label="Filter by label"
+          value={labelFilter}
+          onChange={(e) => setLabelFilter(e.currentTarget.value)}
+          className="ml-2 rounded-[4px] border border-border bg-transparent px-1 py-[3px] font-mono text-[11px] text-muted-foreground"
+        >
+          <option value="all">All labels</option>
+          {availableLabels.map((l) => (
+            <option key={l} value={l}>
+              {l}
+            </option>
+          ))}
+        </select>
       </header>
 
       {onCreateTask && <CreateTaskForm onCreateTask={onCreateTask} />}
@@ -426,7 +444,7 @@ export function TasksPage({
           role="status"
           className="mb-3 rounded-lg border border-border bg-card px-3 py-6 text-center text-[13px] text-muted-foreground"
         >
-          {normalizedQuery !== "" || priorityFilter !== "all"
+          {normalizedQuery !== "" || priorityFilter !== "all" || labelFilter !== "all"
             ? "No tasks match your filter."
             : mineOnly
               ? "No tasks assigned to you."
