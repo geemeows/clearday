@@ -969,4 +969,29 @@ describe("TasksPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
     expect(screen.queryByLabelText("Visible task count")).toBeNull();
   });
+
+  it("renders a P1 count badge in column headers that contain at least one P1", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    // Fixture has DEV-441 (P1, in_progress) and DEV-360 (P1, done).
+    const inProgressBadge = screen.getByLabelText("P1 count for In progress");
+    expect(inProgressBadge.textContent).toBe("1 P1");
+    const doneBadge = screen.getByLabelText("P1 count for Done this week");
+    expect(doneBadge.textContent).toBe("1 P1");
+  });
+
+  it("omits the P1 count badge in columns without any P1 tasks", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    // Fixture has no P1 tasks in todo or review columns.
+    expect(screen.queryByLabelText("P1 count for To do")).toBeNull();
+    expect(screen.queryByLabelText("P1 count for In review")).toBeNull();
+  });
+
+  it("updates the P1 count badge when a filter narrows the visible tasks", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    expect(screen.getByLabelText("P1 count for In progress")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Filter by priority"), {
+      target: { value: "P2" },
+    });
+    expect(screen.queryByLabelText("P1 count for In progress")).toBeNull();
+  });
 });

@@ -680,6 +680,7 @@ export function TasksPage({
         {COLUMNS.map((col) => {
           const items = visibleTasks.filter((t) => t.status === col.id);
           const collapsed = collapsedColumns.has(col.id);
+          const p1Count = items.filter((t) => t.p === "P1").length;
           return (
             <section
               key={col.id}
@@ -720,6 +721,19 @@ export function TasksPage({
                 <span className="ml-auto font-mono text-[11px] text-muted-foreground">
                   {items.length}
                 </span>
+                {p1Count > 0 && (
+                  <span
+                    aria-label={`P1 count for ${col.label}`}
+                    className="rounded-sm font-mono font-semibold text-[9px]"
+                    style={{
+                      background: "var(--danger-soft)",
+                      color: "var(--danger)",
+                      padding: "1px 6px",
+                    }}
+                  >
+                    {p1Count} P1
+                  </span>
+                )}
                 <button
                   type="button"
                   aria-label={`Collapse ${col.label}`}
