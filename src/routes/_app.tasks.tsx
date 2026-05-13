@@ -15,6 +15,7 @@ import {
   linkTaskPr,
   listTasks,
   setTaskAssignee,
+  setTaskDays,
   setTaskLabels,
   setTaskPriority,
   setTaskTitle,
@@ -249,6 +250,18 @@ function TasksRoute() {
     }
   };
 
+  const handleSetDays = async (id: string, days: number) => {
+    if (tasks === null) return;
+    const prev = tasks;
+    setTasks(tasks.map((t) => (t.id === id ? { ...t, days } : t)));
+    try {
+      await setTaskDays(client, id, days);
+    } catch (e) {
+      setTasks(prev);
+      setError(e instanceof Error ? e.message : "failed to update task days");
+    }
+  };
+
   const handleSetLabels = async (id: string, labels: string[]) => {
     if (tasks === null) return;
     const prev = tasks;
@@ -306,6 +319,7 @@ function TasksRoute() {
       onSetPriority={handleSetPriority}
       onSetTitle={handleSetTitle}
       onSetLabels={handleSetLabels}
+      onSetDays={handleSetDays}
       onCreateTask={handleCreateTask}
       onDeleteTask={handleDeleteTask}
     />
@@ -320,6 +334,7 @@ export function TasksPage({
   onSetPriority,
   onSetTitle,
   onSetLabels,
+  onSetDays,
   onCreateTask,
   onDeleteTask,
 }: {
@@ -330,6 +345,7 @@ export function TasksPage({
   onSetPriority?: (id: string, p: TaskPriority) => void;
   onSetTitle?: (id: string, title: string) => void;
   onSetLabels?: (id: string, labels: string[]) => void;
+  onSetDays?: (id: string, days: number) => void;
   onCreateTask?: (task: Task) => void;
   onDeleteTask?: (id: string) => void;
 }) {
@@ -431,6 +447,7 @@ export function TasksPage({
                       onSetPriority={onSetPriority}
                       onSetTitle={onSetTitle}
                       onSetLabels={onSetLabels}
+                      onSetDays={onSetDays}
                       onDeleteTask={onDeleteTask}
                       onDragStart={
                         onMoveTask
@@ -464,6 +481,7 @@ function TaskCard({
   onSetPriority,
   onSetTitle,
   onSetLabels,
+  onSetDays,
   onDeleteTask,
   onDragStart,
   onKeyboardMove,
@@ -475,6 +493,7 @@ function TaskCard({
   onSetPriority?: (id: string, p: TaskPriority) => void;
   onSetTitle?: (id: string, title: string) => void;
   onSetLabels?: (id: string, labels: string[]) => void;
+  onSetDays?: (id: string, days: number) => void;
   onDeleteTask?: (id: string) => void;
   onDragStart?: () => void;
   onKeyboardMove?: (direction: "left" | "right") => void;
@@ -583,10 +602,14 @@ function TaskCard({
             </span>
           ))
         )}
-        {task.days > 0 && (
-          <span className="ml-auto font-mono text-[9px] text-muted-foreground">
-            {task.days}d
-          </span>
+        {onSetDays ? (
+          <DaysInput task={task} onSetDays={onSetDays} />
+        ) : (
+          task.days > 0 && (
+            <span className="ml-auto font-mono text-[9px] text-muted-foreground">
+              {task.days}d
+            </span>
+          )
         )}
         {onDeleteTask && (
           <button
@@ -594,7 +617,7 @@ function TaskCard({
             aria-label={`Delete ${task.id}`}
             onClick={() => onDeleteTask(task.id)}
             className={
-              task.days > 0
+              onSetDays || task.days > 0
                 ? "ml-1 rounded-[4px] border border-border bg-transparent px-1 py-[1px] font-mono text-[9px] text-muted-foreground"
                 : "ml-auto rounded-[4px] border border-border bg-transparent px-1 py-[1px] font-mono text-[9px] text-muted-foreground"
             }
@@ -610,7 +633,7 @@ function TaskCard({
               onMoveTask(task.id, e.currentTarget.value as TaskStatus)
             }
             className={
-              task.days > 0 || onDeleteTask
+              onSetDays || task.days > 0 || onDeleteTask
                 ? "ml-1.5 rounded-[4px] border border-border bg-transparent px-1 py-[1px] font-mono text-[9px] text-muted-foreground"
                 : "ml-auto rounded-[4px] border border-border bg-transparent px-1 py-[1px] font-mono text-[9px] text-muted-foreground"
             }
@@ -817,6 +840,45 @@ function LabelsInput({
         }
       }}
       className="flex-1 rounded-[4px] border border-border bg-transparent px-1 py-[1px] font-mono text-[9px] text-muted-foreground"
+    />
+  );
+}
+
+function DaysInput({
+  task,
+  onSetDays,
+}: {
+  task: Task;
+  onSetDays: (id: string, days: number) => void;
+}) {
+  const stored = String(task.days);
+  const [value, setValue] = useState(stored);
+  useEffect(() => {
+    setValue(stored);
+  }, [stored]);
+  const commit = () => {
+    const trimmed = value.trim();
+    const next = trimmed === "" ? 0 : Number(trimmed);
+    if (!Number.isFinite(next) || !Number.isInteger(next) || next < 0) {
+      setValue(stored);
+      return;
+    }
+    if (next === task.days) return;
+    onSetDays(task.id, next);
+  };
+  return (
+    <input
+      aria-label={`Days for ${task.id}`}
+      value={value}
+      inputMode="numeric"
+      onChange={(e) => setValue(e.currentTarget.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          e.currentTarget.blur();
+        }
+      }}
+      className="ml-auto w-10 rounded-[4px] border border-border bg-transparent px-1 py-[1px] text-right font-mono text-[9px] text-muted-foreground"
     />
   );
 }

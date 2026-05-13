@@ -110,6 +110,18 @@ export async function setTaskLabels(
   if (error) throw new Error(`task labels update failed: ${error.message}`);
 }
 
+export async function setTaskDays(
+  client: SupabaseLike,
+  id: string,
+  days: number,
+): Promise<void> {
+  const { error } = await client
+    .from("tasks")
+    .update({ days } as Record<string, unknown>)
+    .eq("id", id);
+  if (error) throw new Error(`task days update failed: ${error.message}`);
+}
+
 export async function setTaskPriority(
   client: SupabaseLike,
   id: string,

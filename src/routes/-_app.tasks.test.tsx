@@ -262,6 +262,39 @@ describe("TasksPage", () => {
     expect(onSetLabels).not.toHaveBeenCalled();
   });
 
+  it("omits the per-card days input when no onSetDays handler is provided", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    expect(screen.queryByLabelText("Days for DEV-441")).toBeNull();
+  });
+
+  it("fires onSetDays with the parsed number when the days input is committed", () => {
+    const onSetDays = vi.fn();
+    render(<TasksPage tasks={FIXTURE_TASKS} onSetDays={onSetDays} />);
+    const input = screen.getByLabelText(
+      "Days for DEV-441",
+    ) as unknown as HTMLInputElement;
+    expect(input.value).toBe("1");
+    fireEvent.change(input, { target: { value: "4" } });
+    fireEvent.blur(input);
+    expect(onSetDays).toHaveBeenCalledWith("DEV-441", 4);
+  });
+
+  it("does not fire onSetDays when the value is unchanged or invalid", () => {
+    const onSetDays = vi.fn();
+    render(<TasksPage tasks={FIXTURE_TASKS} onSetDays={onSetDays} />);
+    const input = screen.getByLabelText(
+      "Days for DEV-441",
+    ) as unknown as HTMLInputElement;
+    fireEvent.blur(input);
+    expect(onSetDays).not.toHaveBeenCalled();
+    fireEvent.change(input, { target: { value: "not-a-number" } });
+    fireEvent.blur(input);
+    expect(onSetDays).not.toHaveBeenCalled();
+    fireEvent.change(input, { target: { value: "-2" } });
+    fireEvent.blur(input);
+    expect(onSetDays).not.toHaveBeenCalled();
+  });
+
   it("moves a task to the dropped column when onMoveTask is provided", () => {
     const onMoveTask = vi.fn();
     render(<TasksPage tasks={FIXTURE_TASKS} onMoveTask={onMoveTask} />);

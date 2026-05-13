@@ -5,6 +5,7 @@ import {
   linkTaskPr,
   listTasks,
   setTaskAssignee,
+  setTaskDays,
   setTaskLabels,
   setTaskPriority,
   setTaskTitle,
@@ -293,6 +294,23 @@ describe("setTaskLabels", () => {
   it("throws when the update errors", async () => {
     const { client } = makeClient({ updateError: { message: "rls denied" } });
     await expect(setTaskLabels(client, "DEV-441", ["x"])).rejects.toThrow(
+      /rls denied/,
+    );
+  });
+});
+
+describe("setTaskDays", () => {
+  it("updates the task row matching the given id with the new days", async () => {
+    const { client, spies } = makeClient({});
+    await setTaskDays(client, "DEV-441", 5);
+    expect(spies.from).toHaveBeenCalledWith("tasks");
+    expect(spies.update).toHaveBeenCalledWith({ days: 5 });
+    expect(spies.updateEq).toHaveBeenCalledWith("id", "DEV-441");
+  });
+
+  it("throws when the update errors", async () => {
+    const { client } = makeClient({ updateError: { message: "rls denied" } });
+    await expect(setTaskDays(client, "DEV-441", 2)).rejects.toThrow(
       /rls denied/,
     );
   });
