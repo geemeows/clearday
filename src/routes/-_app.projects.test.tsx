@@ -145,7 +145,7 @@ describe("OnboardingView", () => {
 describe("ProjectBoardView", () => {
   const noop = () => {};
 
-  it("renders project name in the heading", () => {
+  it("renders the 'Projects' page heading and shows the active project name", () => {
     render(
       <ProjectBoardView
         project={project({ name: "Sprint 7" })}
@@ -156,7 +156,8 @@ describe("ProjectBoardView", () => {
         onAddCard={noop}
       />,
     );
-    expect(screen.getByRole("heading", { name: "Sprint 7" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Projects" })).toBeTruthy();
+    expect(screen.getByText("Sprint 7")).toBeTruthy();
   });
 
   it("renders each column as an article with the column name", () => {
@@ -1194,23 +1195,15 @@ describe("ProjectBoardView — project switcher", () => {
     project({ id: "p2", name: "Sprint 7" }),
   ];
 
-  it("shows a button with the project name and chevron when allProjects is provided", () => {
-    render(
-      <ProjectBoardView
-        project={project({ id: "p1", name: "My Project" })}
-        allProjects={twoProjects}
-        columns={[]}
-        cards={[]}
-        loading={false}
-        error={null}
-        onAddCard={noop}
-      />,
-    );
-    const switcher = screen.getByRole("button", { name: /my project/i });
-    expect(switcher.getAttribute("aria-haspopup")).toBe("listbox");
-  });
+  const fiveProjects: StoredProject[] = [
+    project({ id: "p1", name: "My Project" }),
+    project({ id: "p2", name: "Sprint 7" }),
+    project({ id: "p3", name: "Platform" }),
+    project({ id: "p4", name: "Personal" }),
+    project({ id: "p5", name: "Inbox triage" }),
+  ];
 
-  it("opens the project list on click and shows all projects", () => {
+  it("renders a pill row when there are ≤4 projects, with the active pill marked aria-selected", () => {
     render(
       <ProjectBoardView
         project={project({ id: "p1", name: "My Project" })}
@@ -1222,13 +1215,18 @@ describe("ProjectBoardView — project switcher", () => {
         onAddCard={noop}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: /my project/i }));
     const listbox = screen.getByRole("listbox", { name: /switch project/i });
-    expect(within(listbox).getByText("My Project")).toBeTruthy();
-    expect(within(listbox).getByText("Sprint 7")).toBeTruthy();
+    const activePill = within(listbox).getByRole("option", {
+      name: /my project/i,
+    });
+    expect(activePill.getAttribute("aria-selected")).toBe("true");
+    const inactivePill = within(listbox).getByRole("option", {
+      name: /sprint 7/i,
+    });
+    expect(inactivePill.getAttribute("aria-selected")).toBe("false");
   });
 
-  it("calls onNavigateToProject when a project is selected", () => {
+  it("calls onNavigateToProject when a pill is clicked (≤4 case)", () => {
     const onNavigateToProject = vi.fn();
     render(
       <ProjectBoardView
@@ -1242,17 +1240,74 @@ describe("ProjectBoardView — project switcher", () => {
         onNavigateToProject={onNavigateToProject}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: /my project/i }));
-    fireEvent.click(screen.getByRole("option", { name: "Sprint 7" }));
+    fireEvent.click(screen.getByRole("option", { name: /sprint 7/i }));
     expect(onNavigateToProject).toHaveBeenCalledWith("p2");
   });
 
-  it("calls onNewProject when New project is clicked in the switcher", () => {
+  it("renders a dropdown trigger when there are >4 projects, opens listbox with all projects", () => {
+    render(
+      <ProjectBoardView
+        project={project({ id: "p1", name: "My Project" })}
+        allProjects={fiveProjects}
+        columns={[]}
+        cards={[]}
+        loading={false}
+        error={null}
+        onAddCard={noop}
+      />,
+    );
+    const trigger = screen.getByRole("button", { name: /my project/i });
+    expect(trigger.getAttribute("aria-haspopup")).toBe("listbox");
+    fireEvent.click(trigger);
+    const listbox = screen.getByRole("listbox", { name: /switch project/i });
+    expect(within(listbox).getByRole("option", { name: /sprint 7/i })).toBeTruthy();
+    expect(within(listbox).getByRole("option", { name: /platform/i })).toBeTruthy();
+    expect(within(listbox).getByRole("option", { name: /inbox triage/i })).toBeTruthy();
+  });
+
+  it("calls onNavigateToProject when a dropdown option is selected (>4 case)", () => {
+    const onNavigateToProject = vi.fn();
+    render(
+      <ProjectBoardView
+        project={project({ id: "p1", name: "My Project" })}
+        allProjects={fiveProjects}
+        columns={[]}
+        cards={[]}
+        loading={false}
+        error={null}
+        onAddCard={noop}
+        onNavigateToProject={onNavigateToProject}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /my project/i }));
+    fireEvent.click(screen.getByRole("option", { name: /sprint 7/i }));
+    expect(onNavigateToProject).toHaveBeenCalledWith("p2");
+  });
+
+  it("calls onNewProject from the pill row 'New project' button (≤4 case)", () => {
     const onNewProject = vi.fn();
     render(
       <ProjectBoardView
         project={project({ id: "p1", name: "My Project" })}
         allProjects={twoProjects}
+        columns={[]}
+        cards={[]}
+        loading={false}
+        error={null}
+        onAddCard={noop}
+        onNewProject={onNewProject}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /new project/i }));
+    expect(onNewProject).toHaveBeenCalledTimes(1);
+  });
+
+  it("calls onNewProject from the dropdown footer 'New project' (>4 case)", () => {
+    const onNewProject = vi.fn();
+    render(
+      <ProjectBoardView
+        project={project({ id: "p1", name: "My Project" })}
+        allProjects={fiveProjects}
         columns={[]}
         cards={[]}
         loading={false}

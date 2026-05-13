@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { z } from "zod";
+import { Button } from "#/components/ui/button";
 import { CardDetailPane } from "#/features/projects/CardDetailPane";
 import { SourceGlyph } from "#/features/signals/components/SourceGlyph";
 import {
@@ -540,83 +541,148 @@ export function ProjectBoardView({
   // browser clipboard security boundary).
   const dragCardIdRef = useRef<string | null>(null);
 
+  const useDropdownSwitcher = (allProjects?.length ?? 0) > 4;
+
   return (
     <section className="flex h-full flex-col overflow-hidden">
-      <header className="flex shrink-0 items-center gap-x-3 border-b border-border px-6 py-4">
+      <header className="flex shrink-0 flex-wrap items-center gap-x-3.5 gap-y-2 border-b border-[var(--hairline-soft)] px-9 pt-6 pb-4">
+        <h1
+          className="m-0 font-semibold text-[28px] text-foreground leading-[1.15]"
+          style={{ letterSpacing: "-0.6px" }}
+        >
+          Projects
+        </h1>
+        <div
+          aria-hidden="true"
+          className="mx-1.5 h-[22px] w-px bg-[var(--hairline)]"
+        />
         {allProjects && allProjects.length > 0 ? (
-          <div className="relative">
-            <button
-              type="button"
-              aria-haspopup="listbox"
-              aria-expanded={switcherOpen}
-              onClick={() => setSwitcherOpen((o) => !o)}
-              className="flex items-center gap-1.5 rounded-md px-1 py-0.5 font-semibold text-[30px] text-foreground leading-[1.2] hover:bg-accent"
-              style={{ letterSpacing: "-0.6px" }}
-            >
-              {project?.name ?? "Project"}
-              <ChevronDown className="h-5 w-5 text-muted-foreground" />
-            </button>
-            {switcherOpen && (
-              <div
-                role="listbox"
-                aria-label="Switch project"
-                className="absolute left-0 top-full z-50 mt-1 min-w-48 max-h-64 overflow-y-auto rounded-lg border border-border bg-popover py-1 shadow-lg"
+          useDropdownSwitcher ? (
+            <div className="relative">
+              <button
+                type="button"
+                aria-haspopup="listbox"
+                aria-expanded={switcherOpen}
+                onClick={() => setSwitcherOpen((o) => !o)}
+                className="inline-flex min-w-[220px] items-center gap-2.5 rounded-md border border-[var(--hairline-soft)] bg-[var(--surface-strong)] px-3.5 py-2 text-left font-semibold text-[13px] text-foreground"
               >
-                {allProjects.map((p) => (
+                <span
+                  aria-hidden="true"
+                  className="h-2 w-2 rounded-full bg-primary"
+                />
+                <span className="flex-1 truncate">
+                  {project?.name ?? "Project"}
+                </span>
+                <ChevronDown className="h-3 w-3 text-muted-foreground" />
+              </button>
+              {switcherOpen && (
+                <>
+                  <button
+                    type="button"
+                    aria-label="Close project switcher"
+                    onClick={() => setSwitcherOpen(false)}
+                    className="fixed inset-0 z-20 cursor-default"
+                  />
+                  <div
+                    className="absolute left-0 z-30 mt-1 flex max-h-[420px] w-80 flex-col overflow-hidden rounded-[10px] border border-[var(--hairline)] bg-card shadow-[0_12px_36px_rgba(0,0,0,0.18)]"
+                    style={{ top: "calc(100% + 4px)" }}
+                  >
+                    <ul
+                      role="listbox"
+                      aria-label="Switch project"
+                      className="flex-1 list-none overflow-y-auto p-1"
+                    >
+                      {allProjects.map((p) => (
+                        <li key={p.id}>
+                          <button
+                            role="option"
+                            aria-selected={p.id === project?.id}
+                            type="button"
+                            onClick={() => {
+                              onNavigateToProject?.(p.id);
+                              setSwitcherOpen(false);
+                            }}
+                            className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-[13px] text-foreground hover:bg-[var(--surface-soft)] aria-selected:bg-[var(--surface-strong)] aria-selected:font-semibold"
+                          >
+                            <span
+                              aria-hidden="true"
+                              className="h-2 w-2 shrink-0 rounded-full bg-primary"
+                            />
+                            <span className="flex-1 truncate">{p.name}</span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSwitcherOpen(false);
+                        onNewProject?.();
+                      }}
+                      className="border-[var(--hairline-soft)] border-t px-3.5 py-2.5 text-left font-semibold text-[12px] text-primary"
+                    >
+                      + New project
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          ) : (
+            <div
+              role="listbox"
+              aria-label="Switch project"
+              className="flex flex-wrap items-center gap-1"
+            >
+              {allProjects.map((p) => {
+                const active = p.id === project?.id;
+                return (
                   <button
                     key={p.id}
                     role="option"
-                    aria-selected={p.id === project?.id}
+                    aria-selected={active}
                     type="button"
-                    onClick={() => {
-                      onNavigateToProject?.(p.id);
-                      setSwitcherOpen(false);
-                    }}
-                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-accent aria-selected:font-medium"
+                    onClick={() => onNavigateToProject?.(p.id)}
+                    className={
+                      active
+                        ? "inline-flex items-center gap-2 rounded-lg bg-[var(--surface-strong)] px-3 py-1.5 font-semibold text-[13px] text-foreground"
+                        : "inline-flex items-center gap-2 rounded-lg bg-transparent px-3 py-1.5 font-medium text-[13px] text-muted-foreground hover:bg-[var(--surface-soft)]"
+                    }
                   >
+                    <span
+                      aria-hidden="true"
+                      className="h-2 w-2 rounded-full bg-primary"
+                    />
                     {p.name}
                   </button>
-                ))}
-                <div className="my-1 border-t border-border" />
-                <button
-                  type="button"
-                  onClick={() => {
-                    onNewProject?.();
-                    setSwitcherOpen(false);
-                  }}
-                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-muted-foreground text-sm hover:bg-accent hover:text-foreground"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  New project
-                </button>
-              </div>
-            )}
-          </div>
+                );
+              })}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => onNewProject?.()}
+                className="gap-1.5"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                New project
+              </Button>
+            </div>
+          )
         ) : (
-          <h1
-            className="font-semibold text-[30px] text-foreground leading-[1.2]"
-            style={{ letterSpacing: "-0.6px" }}
-          >
+          <span className="font-semibold text-[13px] text-foreground">
             {project?.name ?? "Project"}
-          </h1>
+          </span>
         )}
-        <div
-          aria-hidden="true"
-          className="h-[22px] w-px bg-border"
-        />
         <span className="ml-auto text-[12px] text-muted-foreground leading-[1.3]">
           {cards.length} cards · {columns.length} columns
         </span>
-        <div>
-          <button
-            type="button"
-            aria-label="Column settings"
-            onClick={() => setSettingsOpen(true)}
-            className="flex h-7 w-7 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
-          >
-            <Settings className="h-4 w-4" />
-          </button>
-        </div>
+        <button
+          type="button"
+          aria-label="Column settings"
+          onClick={() => setSettingsOpen(true)}
+          className="flex h-7 w-7 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
+        >
+          <Settings className="h-4 w-4" />
+        </button>
       </header>
 
       {error && (
