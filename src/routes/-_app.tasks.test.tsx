@@ -676,6 +676,19 @@ describe("TasksPage", () => {
     expect(ids).toEqual(["DEV-378", "DEV-388"]);
   });
 
+  it("sorts cards by assignee (nulls last) when Sort by assignee is picked", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    fireEvent.change(screen.getByLabelText("Sort tasks"), {
+      target: { value: "assignee" },
+    });
+    const inProgress = screen.getByRole("region", { name: "In progress" });
+    const ids = Array.from(inProgress.querySelectorAll("article")).map((n) =>
+      n.getAttribute("aria-label"),
+    );
+    // DEV-441 has assignee="you"; DEV-447, DEV-401 are null (stable order).
+    expect(ids).toEqual(["DEV-441", "DEV-447", "DEV-401"]);
+  });
+
   it("hides the sort-direction toggle when sortBy is default", () => {
     render(<TasksPage tasks={FIXTURE_TASKS} />);
     expect(
