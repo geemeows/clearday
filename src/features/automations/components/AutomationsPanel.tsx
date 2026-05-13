@@ -7,6 +7,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "#/components/ui/dialog";
+import { Switch } from "#/components/ui/switch";
 import type { AlertChannel } from "#/features/alerts/dispatcher";
 import { ACTION_LIST, ACTIONS } from "#/features/automations/actions";
 import type { AutomationRunRow } from "#/features/automations/api";
@@ -845,15 +846,12 @@ function AutomationRow({
         <p className="min-w-0 flex-1 truncate font-semibold text-[14px] text-[var(--ink)]">
           {automation.name}
         </p>
-        <label className="inline-flex items-center">
-          <input
-            type="checkbox"
-            aria-label={`${automation.name} enabled`}
-            checked={automation.enabled}
-            onChange={(e) => onToggle(e.target.checked)}
-            disabled={busy}
-          />
-        </label>
+        <Switch
+          aria-label={`${automation.name} enabled`}
+          checked={automation.enabled}
+          onCheckedChange={(checked) => onToggle(checked)}
+          disabled={busy}
+        />
       </div>
       <div className="flex flex-wrap items-center gap-1.5">
         <span className="rounded bg-[var(--surface-strong)] px-1.5 py-px font-mono text-[9.5px] tracking-[0.04em] text-[var(--muted)] uppercase">
