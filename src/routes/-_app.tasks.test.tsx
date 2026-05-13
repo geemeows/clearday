@@ -1110,4 +1110,32 @@ describe("TasksPage", () => {
     });
     expect(screen.queryByLabelText("Total stale count")).toBeNull();
   });
+
+  it("renders a header-level total unassigned count badge summing across columns", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    // Fixture: 9 tasks total, 2 assigned to "you" (DEV-441, DEV-360) → 7 unassigned.
+    expect(screen.getByLabelText("Total unassigned count").textContent).toBe(
+      "7 unassigned",
+    );
+  });
+
+  it("updates the total unassigned count badge to reflect the filtered set", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    // P3 filter: DEV-401, DEV-460, DEV-378 — all unassigned → badge shows 3.
+    fireEvent.change(screen.getByLabelText("Filter by priority"), {
+      target: { value: "P3" },
+    });
+    expect(screen.getByLabelText("Total unassigned count").textContent).toBe(
+      "3 unassigned",
+    );
+  });
+
+  it("hides the total unassigned count badge when every visible task has an assignee", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    // assigned-to-you toggle leaves only DEV-441 + DEV-360, both assigned.
+    fireEvent.click(
+      screen.getByLabelText("Show only tasks assigned to you"),
+    );
+    expect(screen.queryByLabelText("Total unassigned count")).toBeNull();
+  });
 });

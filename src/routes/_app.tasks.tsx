@@ -490,6 +490,9 @@ export function TasksPage({
         });
   const totalP1 = filteredTasks.filter((t) => t.p === "P1").length;
   const totalStale = filteredTasks.filter((t) => t.days >= 3).length;
+  const totalUnassigned = filteredTasks.filter(
+    (t) => t.assignee === null,
+  ).length;
   return (
     <div className="mx-auto max-w-[1500px] px-9 pt-7 pb-12">
       <header className="mb-[18px] flex items-baseline">
@@ -532,6 +535,19 @@ export function TasksPage({
             }}
           >
             {totalStale} ≥3d
+          </span>
+        )}
+        {totalUnassigned > 0 && (
+          <span
+            aria-label="Total unassigned count"
+            className="ml-2 rounded-sm font-mono font-semibold text-[10px]"
+            style={{
+              background: "var(--surface-strong)",
+              color: "var(--muted-foreground)",
+              padding: "1px 6px",
+            }}
+          >
+            {totalUnassigned} unassigned
           </span>
         )}
         <input
