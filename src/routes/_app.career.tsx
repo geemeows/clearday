@@ -4,6 +4,8 @@ import {
   ArrowUp,
   ChevronDown,
   GripVertical,
+  LayoutGrid,
+  Link2,
   Plus,
   Target,
   Trash2,
@@ -1798,6 +1800,7 @@ export function EvidenceList({
 }) {
   const [evidence, setEvidence] = useState<StoredEvidence[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -1905,49 +1908,104 @@ export function EvidenceList({
   };
 
   return (
-    <div className="mt-2 ml-3 space-y-1.5 border-border border-l pl-3">
+    <div className="mt-1.5">
       {error && (
         <p
           role="alert"
-          className="rounded-sm border border-destructive/30 bg-destructive/10 p-2 text-destructive text-xs"
+          className="mb-1.5 rounded-sm border border-destructive/30 bg-destructive/10 p-2 text-destructive text-xs"
         >
           {error}
         </p>
       )}
-      {evidence === null ? (
-        <p className="text-muted-foreground text-xs">Loading…</p>
-      ) : evidence.length === 0 ? null : (
-        <ul
-          aria-label="Evidence"
-          className="space-y-1"
-          onDragOver={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-          }}
-          onDrop={handleListDrop}
-        >
-          {evidence.map((ev) => (
-            <EvidenceRow
-              key={ev.id}
-              evidence={ev}
-              client={client}
-              onUpdate={handleUpdate}
-              onDelete={handleDelete}
-              onDragStart={() => {
-                dragIdRef.current = ev.id;
-                dropTargetIdRef.current = null;
+      <div className="flex flex-wrap items-center gap-1.5">
+        {evidence === null ? (
+          <p className="text-muted-foreground text-xs">Loading…</p>
+        ) : (
+          <>
+            {evidence.map((ev) => (
+              <EvidenceChip key={ev.id} ev={ev} />
+            ))}
+            <button
+              type="button"
+              onClick={() => setOpen((o) => !o)}
+              aria-expanded={open}
+              aria-label={
+                open ? "Hide evidence editor" : "Show evidence editor"
+              }
+              className="inline-flex items-center gap-1 rounded-full border border-[var(--border-strong)] border-dashed bg-transparent px-1.5 py-px text-[11.5px] text-muted-foreground hover:bg-muted"
+            >
+              <Plus aria-hidden="true" className="h-2.5 w-2.5" />
+              Evidence
+            </button>
+          </>
+        )}
+      </div>
+      {open && evidence !== null && (
+        <div className="mt-2 ml-3 space-y-1.5 border-border border-l pl-3">
+          {evidence.length > 0 && (
+            <ul
+              aria-label="Evidence"
+              className="space-y-1"
+              onDragOver={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
               }}
-              onDragEnter={() => {
-                if (dragIdRef.current && dragIdRef.current !== ev.id) {
-                  dropTargetIdRef.current = ev.id;
-                }
-              }}
-            />
-          ))}
-        </ul>
+              onDrop={handleListDrop}
+            >
+              {evidence.map((ev) => (
+                <EvidenceRow
+                  key={ev.id}
+                  evidence={ev}
+                  client={client}
+                  onUpdate={handleUpdate}
+                  onDelete={handleDelete}
+                  onDragStart={() => {
+                    dragIdRef.current = ev.id;
+                    dropTargetIdRef.current = null;
+                  }}
+                  onDragEnter={() => {
+                    if (dragIdRef.current && dragIdRef.current !== ev.id) {
+                      dropTargetIdRef.current = ev.id;
+                    }
+                  }}
+                />
+              ))}
+            </ul>
+          )}
+          <AddEvidenceForm onAdd={handleAdd} />
+        </div>
       )}
-      <AddEvidenceForm onAdd={handleAdd} />
     </div>
+  );
+}
+
+function EvidenceChip({ ev }: { ev: StoredEvidence }) {
+  const IconComp = ev.card_id ? LayoutGrid : Link2;
+  const chipClass =
+    "inline-flex max-w-[240px] items-center gap-1.5 truncate rounded-full border border-[var(--hairline)] bg-[var(--surface-strong)] px-1.5 py-px font-medium text-[11.5px] text-foreground no-underline";
+  const inner = (
+    <>
+      <IconComp aria-hidden="true" className="h-2.5 w-2.5 shrink-0" />
+      <span className="truncate">{ev.title}</span>
+    </>
+  );
+  if (ev.url) {
+    return (
+      <a
+        href={ev.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        title={ev.title}
+        className={chipClass}
+      >
+        {inner}
+      </a>
+    );
+  }
+  return (
+    <span title={ev.title} className={chipClass}>
+      {inner}
+    </span>
   );
 }
 

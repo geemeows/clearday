@@ -1577,8 +1577,8 @@ describe("EvidenceList", () => {
     );
     render(<EvidenceList indicator={indicatorFixture()} client={client} />);
     await waitFor(() => {
-      expect(screen.getByDisplayValue("Postmortem")).toBeTruthy();
-      expect(screen.getByDisplayValue("Design doc")).toBeTruthy();
+      expect(screen.getByText("Postmortem")).toBeTruthy();
+      expect(screen.getByText("Design doc")).toBeTruthy();
     });
   });
 
@@ -1593,18 +1593,21 @@ describe("EvidenceList", () => {
       ],
     );
     render(<EvidenceList indicator={indicatorFixture()} client={client} />);
-    await waitFor(() => expect(screen.getByDisplayValue("Mine")).toBeTruthy());
-    expect(screen.queryByDisplayValue("Other")).toBeNull();
+    await waitFor(() => expect(screen.getByText("Mine")).toBeTruthy());
+    expect(screen.queryByText("Other")).toBeNull();
   });
 
   it("adds an evidence row via the form with title-only payload", async () => {
     const { client, store } = makeFakeClient();
     render(<EvidenceList indicator={indicatorFixture()} client={client} />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: /show evidence editor/i }),
+    );
     const input = await screen.findByLabelText("New evidence title");
     fireEvent.change(input, { target: { value: "  Postmortem  " } });
     fireEvent.click(screen.getByRole("button", { name: /add evidence/i }));
     await waitFor(() =>
-      expect(screen.getByDisplayValue("Postmortem")).toBeTruthy(),
+      expect(screen.getByText("Postmortem")).toBeTruthy(),
     );
     expect(store.upsertEv).toHaveBeenCalledTimes(1);
     const args = store.upsertEv.mock.calls[0]?.[0] as Record<string, unknown>;
@@ -1624,6 +1627,9 @@ describe("EvidenceList", () => {
       [evidenceRow({ id: "e1", indicator_id: "i1", title: "Old" })],
     );
     render(<EvidenceList indicator={indicatorFixture()} client={client} />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: /show evidence editor/i }),
+    );
     const input = (await screen.findByDisplayValue("Old")) as HTMLInputElement;
     fireEvent.change(input, { target: { value: "New" } });
     fireEvent.blur(input);
@@ -1640,6 +1646,9 @@ describe("EvidenceList", () => {
       [evidenceRow({ id: "e1", indicator_id: "i1", title: "Postmortem" })],
     );
     render(<EvidenceList indicator={indicatorFixture()} client={client} />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: /show evidence editor/i }),
+    );
     const url = (await screen.findByLabelText(
       "URL for Postmortem",
     )) as HTMLInputElement;
@@ -1660,6 +1669,9 @@ describe("EvidenceList", () => {
       [evidenceRow({ id: "e1", indicator_id: "i1", title: "Postmortem" })],
     );
     render(<EvidenceList indicator={indicatorFixture()} client={client} />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: /show evidence editor/i }),
+    );
     const url = (await screen.findByLabelText(
       "URL for Postmortem",
     )) as HTMLInputElement;
@@ -1677,6 +1689,9 @@ describe("EvidenceList", () => {
       [{ id: "card-1", title: "Q4 launch retro" }],
     );
     render(<EvidenceList indicator={indicatorFixture()} client={client} />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: /show evidence editor/i }),
+    );
     const search = (await screen.findByLabelText(
       "Search project cards for Postmortem",
     )) as HTMLInputElement;
@@ -1705,6 +1720,9 @@ describe("EvidenceList", () => {
       ],
     );
     render(<EvidenceList indicator={indicatorFixture()} client={client} />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: /show evidence editor/i }),
+    );
     const unlink = await screen.findByRole("button", {
       name: /unlink card from postmortem/i,
     });
@@ -1722,6 +1740,9 @@ describe("EvidenceList", () => {
       [evidenceRow({ id: "e1", indicator_id: "i1", title: "Postmortem" })],
     );
     render(<EvidenceList indicator={indicatorFixture()} client={client} />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: /show evidence editor/i }),
+    );
     const deleteBtn = await screen.findByRole("button", {
       name: /delete evidence postmortem/i,
     });
@@ -1729,9 +1750,7 @@ describe("EvidenceList", () => {
     await waitFor(() => expect(store.updateEv).toHaveBeenCalledTimes(1));
     const arg = store.updateEv.mock.calls[0]?.[0] as Record<string, unknown>;
     expect(typeof arg.deleted_at).toBe("string");
-    await waitFor(() =>
-      expect(screen.queryByDisplayValue("Postmortem")).toBeNull(),
-    );
+    await waitFor(() => expect(screen.queryByText("Postmortem")).toBeNull());
   });
 
   it("does not delete when the user cancels the confirm prompt", async () => {
@@ -1743,12 +1762,15 @@ describe("EvidenceList", () => {
       [evidenceRow({ id: "e1", indicator_id: "i1", title: "Postmortem" })],
     );
     render(<EvidenceList indicator={indicatorFixture()} client={client} />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: /show evidence editor/i }),
+    );
     const deleteBtn = await screen.findByRole("button", {
       name: /delete evidence postmortem/i,
     });
     fireEvent.click(deleteBtn);
     expect(store.updateEv).not.toHaveBeenCalled();
-    expect(screen.getByDisplayValue("Postmortem")).toBeTruthy();
+    expect(screen.getByText("Postmortem")).toBeTruthy();
   });
 });
 
