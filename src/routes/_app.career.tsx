@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "#/components/ui/button";
+import { ActionsMenu } from "#/features/career/components/ActionsMenu";
 import { CareerRadar } from "#/features/career/components/CareerRadar";
 import { CareerSyncControls } from "#/features/career/components/CareerSyncControls";
 import { ShareLinkDialog } from "#/features/career/components/ShareLinkDialog";
@@ -471,15 +472,6 @@ export function CareerLevelView({
             Active level — add competencies to start building your tree.
           </p>
         </div>
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          aria-label="Generate share link"
-          onClick={() => setShareOpen(true)}
-        >
-          Generate share link
-        </Button>
         <CareerSyncControls
           levelId={level.id}
           sheetId={sheetId}
@@ -493,6 +485,7 @@ export function CareerLevelView({
             setLastSyncedAt(next.lastSyncedAt);
           }}
         />
+        <ActionsMenu onShare={() => setShareOpen(true)} />
       </header>
 
       <ShareLinkDialog
