@@ -1074,6 +1074,29 @@ describe("TasksPage", () => {
     expect(screen.queryByLabelText("Total P2 count")).toBeNull();
   });
 
+  it("renders a header-level total P3 count badge summing across columns", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    // Fixture: DEV-401 + DEV-460 + DEV-378 = 3 P3s total.
+    expect(screen.getByLabelText("Total P3 count").textContent).toBe("3 P3");
+  });
+
+  it("updates the total P3 count badge to reflect the filtered set", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    // ≥3d filter keeps only DEV-401 (6d) among P3s; DEV-460 (0d) + DEV-378 (2d) drop.
+    fireEvent.change(screen.getByLabelText("Filter by days"), {
+      target: { value: "3" },
+    });
+    expect(screen.getByLabelText("Total P3 count").textContent).toBe("1 P3");
+  });
+
+  it("hides the total P3 count badge when no visible task is P3", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    fireEvent.change(screen.getByLabelText("Filter by priority"), {
+      target: { value: "P1" },
+    });
+    expect(screen.queryByLabelText("Total P3 count")).toBeNull();
+  });
+
   it("renders a stale count badge in column headers with tasks aged ≥3 days", () => {
     render(<TasksPage tasks={FIXTURE_TASKS} />);
     // Fixture: in_progress has DEV-447 (3d) + DEV-401 (6d) = 2 stale.

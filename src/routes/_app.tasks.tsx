@@ -490,6 +490,7 @@ export function TasksPage({
         });
   const totalP1 = filteredTasks.filter((t) => t.p === "P1").length;
   const totalP2 = filteredTasks.filter((t) => t.p === "P2").length;
+  const totalP3 = filteredTasks.filter((t) => t.p === "P3").length;
   const totalStale = filteredTasks.filter((t) => t.days >= 3).length;
   const totalUnassigned = filteredTasks.filter(
     (t) => t.assignee === null,
@@ -544,6 +545,19 @@ export function TasksPage({
             }}
           >
             {totalP2} P2
+          </span>
+        )}
+        {totalP3 > 0 && (
+          <span
+            aria-label="Total P3 count"
+            className="ml-2 rounded-sm font-mono font-semibold text-[10px]"
+            style={{
+              background: "var(--brand-lavender-tint)",
+              color: "var(--luxe)",
+              padding: "1px 6px",
+            }}
+          >
+            {totalP3} P3
           </span>
         )}
         {totalStale > 0 && (
