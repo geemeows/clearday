@@ -555,7 +555,7 @@ export function CareerLevelView({
           ) : (
             <ul
               aria-label="Competencies"
-              className="mb-4 space-y-2"
+              className="mb-4 space-y-3.5"
               onDragOver={(e) => e.preventDefault()}
               onDrop={handleListDrop}
             >
@@ -958,9 +958,15 @@ function CompetencyRow({
       draggable
       onDragStart={onDragStart}
       onDragEnter={onDragEnter}
-      className="cursor-grab rounded-md border border-border bg-background px-3 py-2 active:cursor-grabbing"
+      className="cursor-grab overflow-hidden rounded-lg border border-border bg-surface-card active:cursor-grabbing"
     >
-      <div className="flex items-center gap-3">
+      <header
+        className="flex items-center gap-3 border-[var(--hairline)] border-b px-4 py-3"
+        style={{
+          background:
+            "linear-gradient(180deg, var(--surface-soft) 0%, var(--surface-card) 100%)",
+        }}
+      >
         <GripVertical
           aria-hidden="true"
           className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60"
@@ -984,7 +990,7 @@ function CompetencyRow({
               setDraft(competency.name);
             }
           }}
-          className="min-w-0 flex-1 rounded border border-transparent bg-transparent px-1.5 py-0.5 text-foreground text-sm outline-none focus:border-border focus:bg-muted"
+          className="min-w-0 flex-1 rounded border border-transparent bg-transparent px-1.5 py-0.5 font-semibold text-[14.5px] text-foreground outline-none focus:border-border focus:bg-muted"
         />
         <button
           type="button"
@@ -994,8 +1000,10 @@ function CompetencyRow({
         >
           <Trash2 className="h-3.5 w-3.5" />
         </button>
+      </header>
+      <div className="px-1 pb-3.5">
+        <CriteriaList competency={competency} client={client} />
       </div>
-      <CriteriaList competency={competency} client={client} />
     </li>
   );
 }
