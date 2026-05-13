@@ -15,6 +15,8 @@ Tracer bullets comes from the Pragmatic Programmer. When building systems, you w
 
 TL;DR - build a tiny, end-to-end slice of the feature first, then expand it out.
 
+**Exception — redesign work.** If the selected issue has the `redesign` label, or its title starts with `Redesign v`, tracer bullets do **not** apply. Visual ports are wholesale by nature — splitting a page into one-badge-per-commit shipments produces a polish trail, not a redesign. For these issues: complete the full scope of the issue in one pass and ship it as a single commit. If the scope is too large to finish in one loop, leave a progress comment on the issue and do **not** commit — wait for the next loop to finish the job. The "one logical change per commit" rule in the COMMIT section is overridden for redesign issues: one commit per issue, however large the diff.
+
 3. Polish and quick wins
 4. Refactors
 
