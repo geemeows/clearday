@@ -449,6 +449,45 @@ describe("TasksPage", () => {
     expect(status.textContent).toContain("No tasks match your filter.");
   });
 
+  it("filters tasks by priority when the priority select changes", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    const select = screen.getByLabelText(
+      "Filter by priority",
+    ) as unknown as HTMLSelectElement;
+    expect(select.value).toBe("all");
+    fireEvent.change(select, { target: { value: "P1" } });
+    // Only P1 tasks remain visible (DEV-441 + DEV-360).
+    expect(screen.queryByRole("article", { name: "DEV-441" })).not.toBeNull();
+    expect(screen.queryByRole("article", { name: "DEV-360" })).not.toBeNull();
+    expect(screen.queryByRole("article", { name: "DEV-447" })).toBeNull();
+    expect(screen.queryByRole("article", { name: "DEV-401" })).toBeNull();
+  });
+
+  it("composes the priority filter with the assigned-to-you toggle", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Show only tasks assigned to you" }),
+    );
+    fireEvent.change(screen.getByLabelText("Filter by priority"), {
+      target: { value: "P2" },
+    });
+    // No assignee=you task is P2 in the fixture.
+    expect(screen.queryByRole("article", { name: "DEV-441" })).toBeNull();
+    expect(screen.queryByRole("article", { name: "DEV-360" })).toBeNull();
+    const status = screen.getByRole("status");
+    expect(status.textContent).toContain("No tasks match your filter.");
+  });
+
+  it("shows the filter empty-state when no tasks match the priority filter", () => {
+    render(<TasksPage tasks={[FIXTURE_TASKS[1]]} />);
+    fireEvent.change(screen.getByLabelText("Filter by priority"), {
+      target: { value: "P1" },
+    });
+    // The single P2 task doesn't match P1.
+    const status = screen.getByRole("status");
+    expect(status.textContent).toContain("No tasks match your filter.");
+  });
+
   it("does not fire onCreateTask when the id or title is empty", () => {
     const onCreateTask = vi.fn();
     render(

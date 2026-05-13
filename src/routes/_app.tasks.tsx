@@ -355,6 +355,9 @@ export function TasksPage({
   const dragTaskIdRef = useRef<string | null>(null);
   const [mineOnly, setMineOnly] = useState(false);
   const [query, setQuery] = useState("");
+  const [priorityFilter, setPriorityFilter] = useState<TaskPriority | "all">(
+    "all",
+  );
   const handleKeyboardMove = (id: string, direction: "left" | "right") => {
     if (!onMoveTask) return;
     const current = COLUMNS.findIndex(
@@ -369,6 +372,7 @@ export function TasksPage({
   const normalizedQuery = query.trim().toLowerCase();
   const visibleTasks = tasks.filter((t) => {
     if (mineOnly && t.assignee !== "you") return false;
+    if (priorityFilter !== "all" && t.p !== priorityFilter) return false;
     if (normalizedQuery === "") return true;
     return (
       t.id.toLowerCase().includes(normalizedQuery) ||
@@ -400,6 +404,19 @@ export function TasksPage({
           placeholder="Filter by id or title"
           className="ml-auto w-56 rounded-[4px] border border-border bg-transparent px-2 py-[3px] text-[12px] text-foreground"
         />
+        <select
+          aria-label="Filter by priority"
+          value={priorityFilter}
+          onChange={(e) =>
+            setPriorityFilter(e.currentTarget.value as TaskPriority | "all")
+          }
+          className="ml-2 rounded-[4px] border border-border bg-transparent px-1 py-[3px] font-mono text-[11px] text-muted-foreground"
+        >
+          <option value="all">All priorities</option>
+          <option value="P1">P1</option>
+          <option value="P2">P2</option>
+          <option value="P3">P3</option>
+        </select>
       </header>
 
       {onCreateTask && <CreateTaskForm onCreateTask={onCreateTask} />}
@@ -409,7 +426,7 @@ export function TasksPage({
           role="status"
           className="mb-3 rounded-lg border border-border bg-card px-3 py-6 text-center text-[13px] text-muted-foreground"
         >
-          {normalizedQuery !== ""
+          {normalizedQuery !== "" || priorityFilter !== "all"
             ? "No tasks match your filter."
             : mineOnly
               ? "No tasks assigned to you."
