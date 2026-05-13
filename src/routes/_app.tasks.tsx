@@ -360,9 +360,9 @@ export function TasksPage({
   );
   const [labelFilter, setLabelFilter] = useState<string>("all");
   const [prFilter, setPrFilter] = useState<"all" | "with" | "without">("all");
-  const [sortBy, setSortBy] = useState<"default" | "priority" | "days" | "id">(
-    "default",
-  );
+  const [sortBy, setSortBy] = useState<
+    "default" | "priority" | "days" | "id" | "title"
+  >("default");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const availableLabels = Array.from(
     new Set(tasks.flatMap((t) => t.labels)),
@@ -414,7 +414,9 @@ export function TasksPage({
               ? PRIORITY_ORDER[a.p] - PRIORITY_ORDER[b.p]
               : sortBy === "days"
                 ? b.days - a.days
-                : a.id.localeCompare(b.id);
+                : sortBy === "title"
+                  ? a.title.localeCompare(b.title)
+                  : a.id.localeCompare(b.id);
           return sortDir === "asc" ? base : -base;
         });
   return (
@@ -509,7 +511,8 @@ export function TasksPage({
                 | "default"
                 | "priority"
                 | "days"
-                | "id",
+                | "id"
+                | "title",
             )
           }
           className="ml-2 rounded-[4px] border border-border bg-transparent px-1 py-[3px] font-mono text-[11px] text-muted-foreground"
@@ -518,6 +521,7 @@ export function TasksPage({
           <option value="priority">Sort by priority</option>
           <option value="days">Sort by days</option>
           <option value="id">Sort by id</option>
+          <option value="title">Sort by title</option>
         </select>
         {sortBy !== "default" && (
           <button

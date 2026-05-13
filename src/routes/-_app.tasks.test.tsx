@@ -663,6 +663,19 @@ describe("TasksPage", () => {
     expect(ids).toEqual(["DEV-401", "DEV-441", "DEV-447"]);
   });
 
+  it("sorts cards alphabetically by title when Sort by title is picked", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    fireEvent.change(screen.getByLabelText("Sort tasks"), {
+      target: { value: "title" },
+    });
+    const review = screen.getByRole("region", { name: "In review" });
+    const ids = Array.from(review.querySelectorAll("article")).map((n) =>
+      n.getAttribute("aria-label"),
+    );
+    // DEV-378 ("Calendar adapter..."), DEV-388 ("Onboarding...")
+    expect(ids).toEqual(["DEV-378", "DEV-388"]);
+  });
+
   it("hides the sort-direction toggle when sortBy is default", () => {
     render(<TasksPage tasks={FIXTURE_TASKS} />);
     expect(
