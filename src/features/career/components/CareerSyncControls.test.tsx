@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { CareerSyncControls } from "./CareerSyncControls";
 
 function jsonResponse(body: unknown, init: { status?: number } = {}): Response {
@@ -8,11 +8,6 @@ function jsonResponse(body: unknown, init: { status?: number } = {}): Response {
     headers: { "content-type": "application/json" },
   });
 }
-
-const originalConfirm = window.confirm;
-afterEach(() => {
-  window.confirm = originalConfirm;
-});
 
 describe("CareerSyncControls — never synced", () => {
   it("shows the 'Sync to Google Sheet' button and no status pill", () => {
@@ -96,7 +91,7 @@ describe("CareerSyncControls — never synced", () => {
 });
 
 describe("CareerSyncControls — already synced", () => {
-  it("renders the SyncPill with 'Synced Xm ago' and a Sync-now trigger + Unlink", () => {
+  it("renders the SyncPill with 'Synced Xm ago' and a Sync-now trigger", () => {
     const now = new Date("2026-05-10T12:30:00Z");
     render(
       <CareerSyncControls
@@ -111,53 +106,7 @@ describe("CareerSyncControls — already synced", () => {
       "Synced 5m ago",
     );
     expect(screen.getByRole("button", { name: /sync now/i })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /unlink/i })).toBeTruthy();
-  });
-
-  it("unlink confirms, POSTs /api/career/unlink, and notifies onChanged with nulls", async () => {
-    window.confirm = vi.fn(() => true);
-    const fetchImpl = vi.fn(async () =>
-      jsonResponse({ ok: true }),
-    ) as unknown as typeof fetch;
-    const onChanged = vi.fn();
-    render(
-      <CareerSyncControls
-        levelId="lvl-1"
-        sheetId="ssid-1"
-        lastSyncedAt="2026-05-10T12:25:00Z"
-        onChanged={onChanged}
-        fetchImpl={fetchImpl}
-      />,
-    );
-    fireEvent.click(screen.getByRole("button", { name: /unlink/i }));
-    await waitFor(() => expect(onChanged).toHaveBeenCalled());
-    expect(onChanged).toHaveBeenCalledWith({
-      spreadsheetUrl: null,
-      lastSyncedAt: null,
-    });
-    expect(fetchImpl).toHaveBeenCalledWith(
-      "/api/career/unlink",
-      expect.objectContaining({ method: "POST" }),
-    );
-  });
-
-  it("unlink does nothing when the user cancels the confirm prompt", () => {
-    window.confirm = vi.fn(() => false);
-    const fetchImpl = vi.fn(async () =>
-      jsonResponse({ ok: true }),
-    ) as unknown as typeof fetch;
-    const onChanged = vi.fn();
-    render(
-      <CareerSyncControls
-        levelId="lvl-1"
-        sheetId="ssid-1"
-        lastSyncedAt={null}
-        onChanged={onChanged}
-        fetchImpl={fetchImpl}
-      />,
-    );
-    fireEvent.click(screen.getByRole("button", { name: /unlink/i }));
-    expect(fetchImpl).not.toHaveBeenCalled();
-    expect(onChanged).not.toHaveBeenCalled();
+    // Unlink lives in ActionsMenu now — not inline next to the pill.
+    expect(screen.queryByRole("button", { name: /unlink/i })).toBeNull();
   });
 });

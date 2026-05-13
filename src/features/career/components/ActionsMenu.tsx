@@ -1,14 +1,8 @@
 // Overflow menu for Career level actions. Composed from coss Popover + a
 // list of buttons per CLAUDE.md (no `dropdown-menu` primitive). Mirrors
 // docs/design/devy-ui/career.jsx:390-425 (the `…` button next to Share).
-//
-// Slice 7.4 scope: surface the existing "Generate share link" affordance
-// + placeholder "Clone as starting template" / "Archive this level"
-// entries. The mockup's "Unlink Google Sheet" item is deferred to 7.5,
-// when the SyncPill chrome reshape consolidates Unlink out of
-// CareerSyncControls (its existing inline tests pin the current shape).
 
-import { Archive, Copy, MoreHorizontal, Share2 } from "lucide-react";
+import { Archive, Copy, Link2Off, MoreHorizontal, Share2 } from "lucide-react";
 import {
   Popover,
   PopoverPopup,
@@ -19,9 +13,15 @@ export type ActionsMenuProps = {
   onShare: () => void;
   onClone?: () => void;
   onArchive?: () => void;
+  onUnlink?: () => void;
 };
 
-export function ActionsMenu({ onShare, onClone, onArchive }: ActionsMenuProps) {
+export function ActionsMenu({
+  onShare,
+  onClone,
+  onArchive,
+  onUnlink,
+}: ActionsMenuProps) {
   return (
     <Popover>
       <PopoverTrigger
@@ -41,6 +41,12 @@ export function ActionsMenu({ onShare, onClone, onArchive }: ActionsMenuProps) {
           label="Clone as starting template"
           onSelect={onClone}
           disabled={!onClone}
+        />
+        <MenuItem
+          icon={<Link2Off className="h-3.5 w-3.5" />}
+          label="Unlink Google Sheet"
+          onSelect={onUnlink}
+          disabled={!onUnlink}
         />
         <MenuItem
           icon={<Archive className="h-3.5 w-3.5" />}

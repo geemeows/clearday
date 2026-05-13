@@ -1,16 +1,10 @@
-// "Sync to Google Sheet" pill in the level header. Wraps three actions
-// against the worker route in src/worker/index.ts:
+// "Sync to Google Sheet" pill in the level header. Wraps the worker route
 //   POST /api/career/sync   { level_id }   → { spreadsheetUrl, last_synced_at }
-//   POST /api/career/unlink { level_id }
 //
-// Slice 7.5.1 reshape: the chrome here matches the mockup's `SyncPill`
-// (docs/design/devy-ui/career.jsx:353-385) — a single pill button with a
-// green "S" badge, status label, hairline divider, and "Sync now" trigger.
-// The mockup's `SyncDialog` (line 430+) is not yet ported; until it is, the
-// inline "Open sheet" link in the success output preserves the affordance
-// to reach the new sheet, and the inline "Unlink" ghost button stays put
-// (its consolidation into `ActionsMenu` is the next sub-slice — would
-// rewire the unlink mutation across two surfaces in one pass).
+// Chrome matches the mockup's `SyncPill` (docs/design/devy-ui/career.jsx:353-385)
+// — a single pill button with a green "S" badge, status label, hairline divider,
+// and "Sync now" trigger. The "Unlink Google Sheet" affordance has moved into
+// `ActionsMenu` (mockup line 420) — its mutation now lives in the parent route.
 //
 // On success the parent re-fetches the level row so the "Synced Xm ago" pill
 // reflects the new last_synced_at. The worker response includes
@@ -19,15 +13,12 @@
 
 import { RefreshCw } from "lucide-react";
 import { useState } from "react";
-import { Button } from "#/components/ui/button";
 
 export type CareerSyncControlsProps = {
   levelId: string;
   lastSyncedAt: string | null;
   sheetId: string | null;
-  // Called after a successful sync or unlink so the parent can re-fetch the
-  // level row. The new spreadsheetUrl is forwarded on sync (null on unlink)
-  // for callers that want to render an "Open sheet" link.
+  // Called after a successful sync so the parent can re-fetch the level row.
   onChanged: (next: {
     spreadsheetUrl: string | null;
     lastSyncedAt: string | null;
@@ -95,92 +86,44 @@ export function CareerSyncControls(props: CareerSyncControlsProps) {
     }
   };
 
-  const handleUnlink = async () => {
-    if (
-      !confirm("Unlink the Google Sheet? You can re-sync to create a new one.")
-    ) {
-      return;
-    }
-    try {
-      const res = await fetchImpl("/api/career/unlink", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ level_id: props.levelId }),
-      });
-      if (!res.ok) {
-        const body = (await res.json().catch(() => ({}))) as { error?: string };
-        setStatus({
-          kind: "error",
-          message: body.error ?? `unlink failed (HTTP ${res.status})`,
-          needs_reauth: false,
-        });
-        return;
-      }
-      setStatus({ kind: "idle" });
-      props.onChanged({ spreadsheetUrl: null, lastSyncedAt: null });
-    } catch (err) {
-      setStatus({
-        kind: "error",
-        message: err instanceof Error ? err.message : String(err),
-        needs_reauth: false,
-      });
-    }
-  };
-
   const syncing = status.kind === "syncing";
   const pillLabel = isSynced ? "Sync now" : "Sync to Google Sheet";
 
   return (
     <div className="flex flex-col items-end gap-1">
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          onClick={handleSync}
-          disabled={syncing}
-          aria-label={pillLabel}
-          className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-border bg-card py-[5px] pr-2.5 pl-2 text-foreground disabled:cursor-default disabled:opacity-70"
+      <button
+        type="button"
+        onClick={handleSync}
+        disabled={syncing}
+        aria-label={pillLabel}
+        className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-border bg-card py-[5px] pr-2.5 pl-2 text-foreground disabled:cursor-default disabled:opacity-70"
+      >
+        <span
+          aria-hidden="true"
+          className="inline-flex h-[18px] w-[18px] items-center justify-center rounded font-bold text-[11px] text-white"
+          style={{ background: "#0F9D58" }}
         >
-          <span
-            aria-hidden="true"
-            className="inline-flex h-[18px] w-[18px] items-center justify-center rounded font-bold text-[11px] text-white"
-            style={{ background: "#0F9D58" }}
-          >
-            S
-          </span>
-          {isSynced && props.lastSyncedAt ? (
-            <>
-              <span
-                data-testid="career-sync-status"
-                className="text-[12.5px]"
-              >
-                Synced{" "}
-                <span className="text-muted-foreground">
-                  {relativeTime(props.lastSyncedAt, now())}
-                </span>
+          S
+        </span>
+        {isSynced && props.lastSyncedAt ? (
+          <>
+            <span data-testid="career-sync-status" className="text-[12.5px]">
+              Synced{" "}
+              <span className="text-muted-foreground">
+                {relativeTime(props.lastSyncedAt, now())}
               </span>
-              <span className="inline-flex items-center gap-1 border-hairline border-l pl-1.5 font-semibold text-[12.5px] text-primary">
-                <RefreshCw aria-hidden="true" className="h-[11px] w-[11px]" />
-                {syncing ? "Syncing…" : "Sync now"}
-              </span>
-            </>
-          ) : (
-            <span className="font-semibold text-[12.5px] text-primary">
-              {syncing ? "Syncing…" : "Sync to Google Sheet"}
             </span>
-          )}
-        </button>
-        {isSynced && (
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            onClick={handleUnlink}
-            aria-label="Unlink Google Sheet"
-          >
-            Unlink
-          </Button>
+            <span className="inline-flex items-center gap-1 border-hairline border-l pl-1.5 font-semibold text-[12.5px] text-primary">
+              <RefreshCw aria-hidden="true" className="h-[11px] w-[11px]" />
+              {syncing ? "Syncing…" : "Sync now"}
+            </span>
+          </>
+        ) : (
+          <span className="font-semibold text-[12.5px] text-primary">
+            {syncing ? "Syncing…" : "Sync to Google Sheet"}
+          </span>
         )}
-      </div>
+      </button>
       {status.kind === "success" && (
         <output className="text-emerald-600 text-xs dark:text-emerald-400">
           Synced —{" "}

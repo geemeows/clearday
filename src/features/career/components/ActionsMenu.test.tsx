@@ -17,7 +17,7 @@ describe("ActionsMenu", () => {
     expect(onShare).toHaveBeenCalledTimes(1);
   });
 
-  it("renders Clone and Archive placeholder items disabled when no handler is wired", async () => {
+  it("renders Clone, Unlink, and Archive placeholder items disabled when no handler is wired", async () => {
     render(<ActionsMenu onShare={() => {}} />);
 
     fireEvent.click(screen.getByRole("button", { name: /level actions/i }));
@@ -25,11 +25,15 @@ describe("ActionsMenu", () => {
     const clone = await screen.findByRole("button", {
       name: /clone as starting template/i,
     });
+    const unlink = await screen.findByRole("button", {
+      name: /unlink google sheet/i,
+    });
     const archive = await screen.findByRole("button", {
       name: /archive this level/i,
     });
 
     expect((clone as HTMLButtonElement).disabled).toBe(true);
+    expect((unlink as HTMLButtonElement).disabled).toBe(true);
     expect((archive as HTMLButtonElement).disabled).toBe(true);
   });
 
@@ -43,6 +47,16 @@ describe("ActionsMenu", () => {
       }),
     );
     await waitFor(() => expect(onClone).toHaveBeenCalledTimes(1));
+  });
+
+  it("fires onUnlink when wired", async () => {
+    const onUnlink = vi.fn();
+    render(<ActionsMenu onShare={() => {}} onUnlink={onUnlink} />);
+    fireEvent.click(screen.getByRole("button", { name: /level actions/i }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: /unlink google sheet/i }),
+    );
+    await waitFor(() => expect(onUnlink).toHaveBeenCalledTimes(1));
   });
 
   it("fires onArchive when wired", async () => {

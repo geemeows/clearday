@@ -485,7 +485,42 @@ export function CareerLevelView({
             setLastSyncedAt(next.lastSyncedAt);
           }}
         />
-        <ActionsMenu onShare={() => setShareOpen(true)} />
+        <ActionsMenu
+          onShare={() => setShareOpen(true)}
+          onUnlink={
+            sheetId
+              ? async () => {
+                  if (
+                    !confirm(
+                      "Unlink the Google Sheet? You can re-sync to create a new one.",
+                    )
+                  ) {
+                    return;
+                  }
+                  try {
+                    const res = await fetch("/api/career/unlink", {
+                      method: "POST",
+                      headers: { "content-type": "application/json" },
+                      body: JSON.stringify({ level_id: level.id }),
+                    });
+                    if (!res.ok) {
+                      const body = (await res.json().catch(() => ({}))) as {
+                        error?: string;
+                      };
+                      setError(
+                        body.error ?? `unlink failed (HTTP ${res.status})`,
+                      );
+                      return;
+                    }
+                    setSheetId(null);
+                    setLastSyncedAt(null);
+                  } catch (e) {
+                    setError(e instanceof Error ? e.message : String(e));
+                  }
+                }
+              : undefined
+          }
+        />
       </header>
 
       <ShareLinkDialog
