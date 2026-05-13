@@ -362,6 +362,17 @@ export function TasksPage({
   const availableLabels = Array.from(
     new Set(tasks.flatMap((t) => t.labels)),
   ).sort();
+  const filtersActive =
+    mineOnly ||
+    query !== "" ||
+    priorityFilter !== "all" ||
+    labelFilter !== "all";
+  const clearFilters = () => {
+    setMineOnly(false);
+    setQuery("");
+    setPriorityFilter("all");
+    setLabelFilter("all");
+  };
   const handleKeyboardMove = (id: string, direction: "left" | "right") => {
     if (!onMoveTask) return;
     const current = COLUMNS.findIndex(
@@ -435,6 +446,16 @@ export function TasksPage({
             </option>
           ))}
         </select>
+        {filtersActive && (
+          <button
+            type="button"
+            aria-label="Clear filters"
+            onClick={clearFilters}
+            className="ml-2 rounded-[4px] border border-border bg-transparent px-2 py-[3px] font-mono text-[11px] text-muted-foreground"
+          >
+            Clear
+          </button>
+        )}
       </header>
 
       {onCreateTask && <CreateTaskForm onCreateTask={onCreateTask} />}

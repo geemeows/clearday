@@ -531,6 +531,53 @@ describe("TasksPage", () => {
     }
   });
 
+  it("hides the Clear filters button when no filter is active", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    expect(screen.queryByRole("button", { name: "Clear filters" })).toBeNull();
+  });
+
+  it("shows the Clear filters button once any filter is active", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    fireEvent.change(screen.getByLabelText("Filter by priority"), {
+      target: { value: "P1" },
+    });
+    expect(
+      screen.queryByRole("button", { name: "Clear filters" }),
+    ).not.toBeNull();
+  });
+
+  it("resets all four filters when Clear filters is clicked", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Show only tasks assigned to you" }),
+    );
+    fireEvent.change(screen.getByLabelText("Filter tasks"), {
+      target: { value: "auth" },
+    });
+    fireEvent.change(screen.getByLabelText("Filter by priority"), {
+      target: { value: "P1" },
+    });
+    fireEvent.change(screen.getByLabelText("Filter by label"), {
+      target: { value: "security" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
+    expect(
+      (screen.getByLabelText("Filter tasks") as HTMLInputElement).value,
+    ).toBe("");
+    expect(
+      (screen.getByLabelText("Filter by priority") as unknown as HTMLSelectElement).value,
+    ).toBe("all");
+    expect(
+      (screen.getByLabelText("Filter by label") as unknown as HTMLSelectElement).value,
+    ).toBe("all");
+    expect(
+      screen
+        .getByRole("button", { name: "Show only tasks assigned to you" })
+        .getAttribute("aria-pressed"),
+    ).toBe("false");
+    expect(screen.queryByRole("button", { name: "Clear filters" })).toBeNull();
+  });
+
   it("does not fire onCreateTask when the id or title is empty", () => {
     const onCreateTask = vi.fn();
     render(
