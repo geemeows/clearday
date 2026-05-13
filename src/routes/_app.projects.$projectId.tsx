@@ -1056,7 +1056,7 @@ function KanbanColumn({
     <article
       aria-label={column.name}
       data-drag-over={isDragOver ? "true" : undefined}
-      className="flex w-64 shrink-0 flex-col rounded-lg border border-transparent bg-muted transition-colors"
+      className="flex w-[282px] shrink-0 flex-col rounded-xl border border-transparent bg-[var(--surface-soft)] transition-colors"
       style={
         isDragOver
           ? {
@@ -1106,7 +1106,7 @@ function KanbanColumn({
 
       <ul
         aria-label={`${column.name} cards`}
-        className="flex flex-1 flex-col gap-1.5 overflow-y-auto px-2 pb-2"
+        className="flex flex-1 flex-col gap-2 overflow-y-auto px-2 pb-2"
       >
         {sorted.map((card) => (
           <li
@@ -1142,7 +1142,7 @@ function KanbanColumn({
         {sorted.length === 0 && !composing && (
           <li
             aria-hidden="true"
-            className="px-2 py-4 text-center text-[11px] text-muted-foreground/70"
+            className="px-2 py-4 text-center text-[11px] text-[var(--muted-soft)]"
           >
             Empty · drop cards here
           </li>

@@ -263,7 +263,7 @@ describe("ProjectBoardView", () => {
       />,
     );
     const col = screen.getByRole("article", { name: "Backlog" });
-    expect(col.className).toContain("bg-muted");
+    expect(col.className).toContain("bg-[var(--surface-soft)]");
     expect(col.className).toContain("border-transparent");
     expect(col.className).not.toContain("bg-card");
   });
