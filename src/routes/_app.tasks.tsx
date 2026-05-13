@@ -493,6 +493,7 @@ export function TasksPage({
   const totalUnassigned = filteredTasks.filter(
     (t) => t.assignee === null,
   ).length;
+  const totalPrLinked = filteredTasks.filter((t) => t.pr !== null).length;
   return (
     <div className="mx-auto max-w-[1500px] px-9 pt-7 pb-12">
       <header className="mb-[18px] flex items-baseline">
@@ -548,6 +549,19 @@ export function TasksPage({
             }}
           >
             {totalUnassigned} unassigned
+          </span>
+        )}
+        {totalPrLinked > 0 && (
+          <span
+            aria-label="Total PR-linked count"
+            className="ml-2 rounded-sm font-mono font-semibold text-[10px]"
+            style={{
+              background: "var(--good-soft)",
+              color: "var(--good)",
+              padding: "1px 6px",
+            }}
+          >
+            {totalPrLinked} PR
           </span>
         )}
         <input

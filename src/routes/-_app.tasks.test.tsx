@@ -1138,4 +1138,32 @@ describe("TasksPage", () => {
     );
     expect(screen.queryByLabelText("Total unassigned count")).toBeNull();
   });
+
+  it("renders a header-level total PR-linked count badge summing across columns", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    // Fixture: 5 tasks have a PR linked (DEV-441, DEV-401, DEV-388, DEV-378, DEV-360).
+    expect(screen.getByLabelText("Total PR-linked count").textContent).toBe(
+      "5 PR",
+    );
+  });
+
+  it("updates the total PR-linked count badge to reflect the filtered set", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    // P1 filter narrows to DEV-441 (#421) + DEV-360 (#372) → 2 PR-linked.
+    fireEvent.change(screen.getByLabelText("Filter by priority"), {
+      target: { value: "P1" },
+    });
+    expect(screen.getByLabelText("Total PR-linked count").textContent).toBe(
+      "2 PR",
+    );
+  });
+
+  it("hides the total PR-linked count badge when no visible task has a PR", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    // No-PR filter leaves only unlinked tasks → badge hides.
+    fireEvent.change(screen.getByLabelText("Filter by PR"), {
+      target: { value: "without" },
+    });
+    expect(screen.queryByLabelText("Total PR-linked count")).toBeNull();
+  });
 });
