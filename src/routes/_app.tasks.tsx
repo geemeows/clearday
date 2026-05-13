@@ -496,6 +496,7 @@ export function TasksPage({
     (t) => t.assignee === null,
   ).length;
   const totalPrLinked = filteredTasks.filter((t) => t.pr !== null).length;
+  const totalNoPr = filteredTasks.filter((t) => t.pr === null).length;
   const totalInReview = filteredTasks.filter(
     (t) => t.status === "review",
   ).length;
@@ -597,6 +598,19 @@ export function TasksPage({
             }}
           >
             {totalPrLinked} PR
+          </span>
+        )}
+        {totalNoPr > 0 && (
+          <span
+            aria-label="Total no-PR count"
+            className="ml-2 rounded-sm font-mono font-semibold text-[10px]"
+            style={{
+              background: "var(--secondary)",
+              color: "var(--secondary-foreground)",
+              padding: "1px 6px",
+            }}
+          >
+            {totalNoPr} no PR
           </span>
         )}
         {totalInReview > 0 && (

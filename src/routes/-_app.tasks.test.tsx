@@ -1296,4 +1296,33 @@ describe("TasksPage", () => {
     });
     expect(screen.queryByLabelText("Total to-do count")).toBeNull();
   });
+
+  it("renders a header-level total no-PR count badge summing across columns", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    // Fixture: 4 tasks have no PR (DEV-447, DEV-432, DEV-455, DEV-460).
+    expect(screen.getByLabelText("Total no-PR count").textContent).toBe(
+      "4 no PR",
+    );
+  });
+
+  it("updates the total no-PR count badge to reflect the filtered set", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    // P3 priority filter narrows the 4 no-PR set to DEV-460 only
+    // (DEV-401 is P3 but has #410 linked).
+    fireEvent.change(screen.getByLabelText("Filter by priority"), {
+      target: { value: "P3" },
+    });
+    expect(screen.getByLabelText("Total no-PR count").textContent).toBe(
+      "1 no PR",
+    );
+  });
+
+  it("hides the total no-PR count badge when every visible task has a PR", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    // `with PR` filter leaves only linked tasks → badge hides.
+    fireEvent.change(screen.getByLabelText("Filter by PR"), {
+      target: { value: "with" },
+    });
+    expect(screen.queryByLabelText("Total no-PR count")).toBeNull();
+  });
 });
