@@ -249,24 +249,21 @@ describe("CardDetailPane body", () => {
   });
 });
 
-// ─── column ──────────────────────────────────────────────────────────────────
+// ─── breadcrumb ──────────────────────────────────────────────────────────────
 
-describe("CardDetailPane column", () => {
-  it("calls onChange with new column_id when select changes", () => {
-    const onChange = vi.fn();
+describe("CardDetailPane breadcrumb", () => {
+  it("renders project · column breadcrumb when projectName is provided", () => {
     render(
       <CardDetailPane
         card={makeCard({ column_id: "col1" })}
         columns={columns}
-        onChange={onChange}
+        projectName="Platform Q2"
+        onChange={vi.fn()}
         onDelete={vi.fn()}
         onClose={vi.fn()}
       />,
     );
-    fireEvent.change(screen.getByRole("combobox", { name: "Column" }), {
-      target: { value: "col2" },
-    });
-    expect(onChange).toHaveBeenCalledWith({ column_id: "col2" });
+    expect(screen.getByText("Platform Q2 · Backlog")).toBeTruthy();
   });
 });
 
@@ -406,7 +403,7 @@ describe("CardDetailPane tags", () => {
 // ─── delete ──────────────────────────────────────────────────────────────────
 
 describe("CardDetailPane delete", () => {
-  it("shows confirm step when Delete card is clicked", () => {
+  it("shows confirm step when Delete card is clicked from overflow menu", async () => {
     render(
       <CardDetailPane
         card={makeCard()}
@@ -416,7 +413,11 @@ describe("CardDetailPane delete", () => {
         onClose={vi.fn()}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: /delete card/i }));
+    fireEvent.click(screen.getByRole("button", { name: /more actions/i }));
+    const deleteBtn = await screen.findByRole("button", {
+      name: /delete card/i,
+    });
+    fireEvent.click(deleteBtn);
     expect(screen.getByText(/delete this card/i)).toBeTruthy();
   });
 
@@ -431,12 +432,16 @@ describe("CardDetailPane delete", () => {
         onClose={vi.fn()}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: /delete card/i }));
+    fireEvent.click(screen.getByRole("button", { name: /more actions/i }));
+    const deleteBtn = await screen.findByRole("button", {
+      name: /delete card/i,
+    });
+    fireEvent.click(deleteBtn);
     fireEvent.click(screen.getByRole("button", { name: /confirm delete/i }));
     await waitFor(() => expect(onDelete).toHaveBeenCalled());
   });
 
-  it("cancels delete when Cancel is clicked", () => {
+  it("cancels delete when Cancel is clicked", async () => {
     const onDelete = vi.fn();
     render(
       <CardDetailPane
@@ -447,7 +452,11 @@ describe("CardDetailPane delete", () => {
         onClose={vi.fn()}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: /delete card/i }));
+    fireEvent.click(screen.getByRole("button", { name: /more actions/i }));
+    const deleteBtn = await screen.findByRole("button", {
+      name: /delete card/i,
+    });
+    fireEvent.click(deleteBtn);
     fireEvent.click(screen.getByRole("button", { name: /cancel/i }));
     expect(onDelete).not.toHaveBeenCalled();
     expect(screen.queryByText(/delete this card/i)).toBeNull();

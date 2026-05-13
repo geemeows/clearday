@@ -728,6 +728,7 @@ export function ProjectBoardView({
         <CardDetailPane
           card={selectedCard}
           columns={columns}
+          projectName={project?.name}
           tickets={selectedTickets}
           onLinkGithub={
             onLinkGithub

@@ -1,11 +1,17 @@
-// Card detail pane: editable surface for a single card. Renders as a fixed
-// right-side panel with a backdrop overlay. Each field change calls
-// onChange synchronously; the parent owns persistence (debounced via the
-// store). Title saves on blur to avoid spamming writes per keystroke.
+// Card detail pane: editable surface for a single card. Renders as a centered
+// modal over a backdrop overlay, per the projects.jsx mockup. Each field
+// change calls onChange synchronously; the parent owns persistence (debounced
+// via the store). Title saves on blur to avoid spamming writes per keystroke.
 
-import { RefreshCw, X } from "lucide-react";
+import { MoreHorizontal, RefreshCw, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { RichEditor } from "#/components/rich-editor";
+import { SourceGlyph } from "#/features/signals/components/SourceGlyph";
+import {
+  Popover,
+  PopoverPopup,
+  PopoverTrigger,
+} from "#/components/ui/popover";
 import type {
   CardPatch,
   StoredCard,
@@ -16,6 +22,7 @@ import type {
 export type CardDetailPaneProps = {
   card: StoredCard;
   columns: StoredColumn[];
+  projectName?: string;
   onChange: (patch: CardPatch) => void;
   onDelete: () => void;
   onClose: () => void;
@@ -40,9 +47,24 @@ const PRIORITIES: Array<{ value: string; label: string }> = [
   { value: "p3", label: "P3" },
 ];
 
+function priorityChipStyle(priority: string | null): React.CSSProperties {
+  const p = (priority ?? "").toLowerCase();
+  if (p === "p0" || p === "p1") {
+    return { background: "var(--danger-soft)", color: "var(--danger)" };
+  }
+  if (p === "p2") {
+    return { background: "var(--warn-soft)", color: "var(--warn)" };
+  }
+  return {
+    background: "var(--surface-strong)",
+    color: "var(--muted-foreground)",
+  };
+}
+
 export function CardDetailPane({
   card,
   columns,
+  projectName,
   onChange,
   onDelete,
   onClose,
@@ -89,11 +111,6 @@ export function CardDetailPane({
     },
     [card.body, onChange],
   );
-
-  const handleColumnChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const next = e.target.value;
-    if (next !== card.column_id) onChange({ column_id: next });
-  };
 
   const handlePriorityChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const next = e.target.value;
@@ -150,216 +167,313 @@ export function CardDetailPane({
     setLinkDraft("");
   };
 
+  const columnName = columns.find((c) => c.id === card.column_id)?.name ?? "";
+  const breadcrumb = projectName
+    ? `${projectName} · ${columnName}`
+    : columnName;
+  const linkedTickets = tickets ?? [];
+  const linkedCount = linkedTickets.length;
+
   return (
     <div
       role="dialog"
       aria-label="Card details"
       aria-modal="true"
-      className="fixed inset-0 z-40 flex"
+      className="fixed inset-0 z-40 flex items-start justify-center px-5 pt-[8vh]"
     >
       <button
         type="button"
         aria-label="Close card details"
         onClick={onClose}
-        className="flex-1 bg-black/30"
+        className="absolute inset-0 bg-black/40"
       />
-      <aside
-        className="flex h-full w-full max-w-md flex-col overflow-y-auto border-l border-border bg-background shadow-xl"
+      <div
+        className="relative flex max-h-[80vh] w-[640px] max-w-[calc(100vw-2.5rem)] flex-col overflow-y-auto rounded-[14px] p-6 shadow-[0_20px_60px_rgba(0,0,0,0.25)]"
+        style={{ background: "var(--canvas)" }}
         onKeyDown={(e) => e.stopPropagation()}
       >
-        <header className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
-          <input
-            ref={titleRef}
-            aria-label="Card title"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            onBlur={commitTitle}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                (e.target as HTMLInputElement).blur();
-              }
-            }}
-            className="flex-1 bg-transparent font-semibold text-[22px] text-foreground outline-none placeholder:text-muted-foreground"
-            placeholder="Card title"
-          />
+        <header className="mb-3 flex items-center gap-2">
+          {linkedTickets[0] && (
+            <span
+              className="inline-flex items-center gap-1.5 rounded-md px-2 py-[3px]"
+              style={{ background: "var(--surface-strong)" }}
+            >
+              <SourceGlyph
+                source={
+                  linkedTickets[0].source === "github"
+                    ? "git"
+                    : linkedTickets[0].source
+                }
+                size={14}
+              />
+              <span
+                className="font-mono font-semibold text-[11px]"
+                style={{ color: "var(--ink, var(--foreground))" }}
+              >
+                {linkedTickets[0].ext_id}
+              </span>
+              <span
+                className="font-mono text-[10px]"
+                style={{ color: "var(--muted-foreground)" }}
+              >
+                linked
+              </span>
+            </span>
+          )}
+          {card.priority && (
+            <span
+              className="inline-flex items-center rounded-md px-2 py-[2px] font-medium text-[10px] leading-[1.4]"
+              style={priorityChipStyle(card.priority)}
+            >
+              {card.priority.toUpperCase()}
+            </span>
+          )}
+          <span className="flex-1" />
+          {breadcrumb && (
+            <span
+              className="font-mono text-[11px]"
+              style={{ color: "var(--muted-foreground)" }}
+            >
+              {breadcrumb}
+            </span>
+          )}
+          <Popover>
+            <PopoverTrigger
+              aria-label="More actions"
+              className="flex h-7 w-7 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
+            >
+              <MoreHorizontal className="h-4 w-4" />
+            </PopoverTrigger>
+            <PopoverPopup
+              align="end"
+              className="w-44 p-1"
+            >
+              {confirmingDelete ? (
+                <div className="flex flex-col gap-1">
+                  <p className="px-2 py-1 text-muted-foreground text-xs">
+                    Delete this card?
+                  </p>
+                  <div className="flex justify-end gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setConfirmingDelete(false)}
+                      className="rounded px-2 py-1 text-muted-foreground text-xs hover:bg-accent"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      aria-label="Confirm delete"
+                      onClick={() => {
+                        setConfirmingDelete(false);
+                        onDelete();
+                      }}
+                      className="rounded bg-destructive px-2 py-1 text-destructive-foreground text-xs"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setConfirmingDelete(true)}
+                  className="flex w-full items-center rounded px-2 py-1 text-destructive text-xs hover:bg-destructive/10"
+                >
+                  Delete card
+                </button>
+              )}
+            </PopoverPopup>
+          </Popover>
           <button
             type="button"
             onClick={onClose}
             aria-label="Close"
             className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
           >
-            <X className="h-4 w-4" />
+            <X className="h-[18px] w-[18px]" />
           </button>
         </header>
 
-        <div className="flex flex-col gap-5 px-5 py-4">
-          <Field label="Description">
-            <RichEditor
-              ariaLabel="Card body"
-              value={body}
-              onChange={setBody}
-              onBlur={commitBody}
-              placeholder="Add details…"
-              minHeight={96}
-            />
-          </Field>
+        <input
+          ref={titleRef}
+          aria-label="Card title"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          onBlur={commitTitle}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              (e.target as HTMLInputElement).blur();
+            }
+          }}
+          className="mb-3.5 w-full bg-transparent py-1 font-semibold text-[22px] text-foreground outline-none placeholder:text-muted-foreground"
+          placeholder="Card title"
+        />
 
-          <Field label="Column">
-            <select
-              aria-label="Column"
-              value={card.column_id}
-              onChange={handleColumnChange}
-              className="w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-sm text-foreground outline-none focus:border-primary"
-            >
-              {columns.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          </Field>
-
-          <Field label="Priority">
-            <select
-              aria-label="Priority"
-              value={card.priority ?? ""}
-              onChange={handlePriorityChange}
-              className="w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-sm text-foreground outline-none focus:border-primary"
-            >
-              {PRIORITIES.map((p) => (
-                <option key={p.value} value={p.value}>
-                  {p.label}
-                </option>
-              ))}
-            </select>
-          </Field>
-
-          <Field label="Due date">
+        <div
+          className="mb-[18px] grid items-center text-[13px]"
+          style={{
+            gridTemplateColumns: "100px 1fr",
+            columnGap: "14px",
+            rowGap: "10px",
+          }}
+        >
+          <span className="text-muted-foreground">Priority</span>
+          <select
+            aria-label="Priority"
+            value={card.priority ?? ""}
+            onChange={handlePriorityChange}
+            className="w-20 rounded-md border px-2 py-1 text-[12px] outline-none"
+            style={{
+              borderColor: "var(--hairline)",
+              background: "var(--canvas)",
+              color: "var(--foreground)",
+            }}
+          >
+            {PRIORITIES.map((p) => (
+              <option key={p.value} value={p.value}>
+                {p.label}
+              </option>
+            ))}
+          </select>
+          <span className="text-muted-foreground">Due</span>
+          <input
+            type="date"
+            aria-label="Due date"
+            value={dueValue}
+            onChange={handleDueChange}
+            className="w-[160px] rounded-md border px-2 py-1 text-[12px] outline-none focus:border-primary"
+            style={{
+              borderColor: "var(--hairline)",
+              background: "var(--canvas)",
+              color: "var(--foreground)",
+            }}
+          />
+          <span className="text-muted-foreground">Labels</span>
+          <div className="flex flex-wrap items-center gap-1">
+            {card.tags.map((t) => (
+              <span
+                key={t}
+                className="inline-flex items-center gap-1 rounded-[4px] px-[7px] py-[2px] font-mono font-medium text-[10px]"
+                style={{
+                  background: "var(--surface-soft)",
+                  color: "var(--muted-foreground)",
+                }}
+              >
+                {t}
+                <button
+                  type="button"
+                  aria-label={`Remove tag ${t}`}
+                  onClick={() => removeTag(t)}
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            ))}
             <input
-              type="date"
-              aria-label="Due date"
-              value={dueValue}
-              onChange={handleDueChange}
-              className="w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-sm text-foreground outline-none focus:border-primary"
+              aria-label="Add tag"
+              value={tagDraft}
+              onChange={(e) => setTagDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === ",") {
+                  e.preventDefault();
+                  addTag();
+                }
+              }}
+              onBlur={addTag}
+              placeholder="Add label…"
+              className="min-w-[6rem] flex-1 bg-transparent px-1 py-0.5 text-foreground text-xs outline-none placeholder:text-muted-foreground"
             />
-          </Field>
+          </div>
+        </div>
 
-          {onLinkGithub && (
-            <Field label="Linked tickets">
-              <div className="flex flex-col gap-1.5">
-                {(tickets ?? []).map((t) => (
+        <p className="mb-1.5 font-semibold text-[10px] text-muted-foreground uppercase tracking-[0.4px]">
+          Description
+        </p>
+        <div className="mb-[18px]">
+          <RichEditor
+            ariaLabel="Card body"
+            value={body}
+            onChange={setBody}
+            onBlur={commitBody}
+            placeholder="Notes, context, links…"
+            minHeight={92}
+          />
+        </div>
+
+        {onLinkGithub && (
+          <>
+            <div className="mb-1.5 flex items-baseline gap-1.5">
+              <span className="font-semibold text-[10px] text-muted-foreground uppercase tracking-[0.4px]">
+                Linked signals
+              </span>
+              <span
+                className="font-mono text-[11px]"
+                style={{ color: "var(--muted-foreground)" }}
+              >
+                {linkedCount}
+              </span>
+            </div>
+            {linkedCount > 0 ? (
+              <div
+                className="mb-3 flex flex-col overflow-hidden rounded-lg border"
+                style={{ borderColor: "var(--hairline-soft)" }}
+              >
+                {linkedTickets.map((t, i) => (
                   <TicketChip
                     key={t.id}
                     ticket={t}
                     onRefresh={onRefreshTicket}
                     onUnlink={onUnlinkTicket}
+                    isLast={i === linkedTickets.length - 1}
                   />
                 ))}
-                <div className="flex gap-1.5">
-                  <input
-                    aria-label="Link GitHub"
-                    value={linkDraft}
-                    onChange={(e) => setLinkDraft(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        submitLink();
-                      }
-                    }}
-                    placeholder="GitHub URL or owner/repo#N"
-                    className="flex-1 rounded-md border border-border bg-background px-2.5 py-1.5 text-foreground text-sm outline-none focus:border-primary"
-                  />
-                  <button
-                    type="button"
-                    onClick={submitLink}
-                    disabled={linkSubmitting || !linkDraft.trim()}
-                    className="rounded-md bg-primary px-2.5 py-1.5 text-primary-foreground text-xs disabled:opacity-50"
-                  >
-                    Link
-                  </button>
-                </div>
-                {linkError && (
-                  <p role="alert" className="text-destructive text-xs">
-                    {linkError}
-                  </p>
-                )}
               </div>
-            </Field>
-          )}
-
-          <Field label="Tags">
-            <div className="flex flex-wrap items-center gap-1.5">
-              {card.tags.map((t) => (
-                <span
-                  key={t}
-                  className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-foreground text-xs"
-                >
-                  {t}
-                  <button
-                    type="button"
-                    aria-label={`Remove tag ${t}`}
-                    onClick={() => removeTag(t)}
-                    className="text-muted-foreground hover:text-foreground"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </span>
-              ))}
+            ) : (
+              <div
+                className="mb-3 rounded-lg border border-dashed px-3 py-2.5 text-center text-[12px]"
+                style={{
+                  borderColor: "var(--hairline)",
+                  color: "var(--muted-soft, var(--muted-foreground))",
+                }}
+              >
+                No signals linked. PRs, mentions, and tickets you connect here
+                will keep this card in context.
+              </div>
+            )}
+            <div className="mb-1 flex gap-1.5">
               <input
-                aria-label="Add tag"
-                value={tagDraft}
-                onChange={(e) => setTagDraft(e.target.value)}
+                aria-label="Link GitHub"
+                value={linkDraft}
+                onChange={(e) => setLinkDraft(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === ",") {
+                  if (e.key === "Enter") {
                     e.preventDefault();
-                    addTag();
+                    submitLink();
                   }
                 }}
-                onBlur={addTag}
-                placeholder="Add tag…"
-                className="min-w-[6rem] flex-1 bg-transparent px-1 py-0.5 text-foreground text-sm outline-none placeholder:text-muted-foreground"
+                placeholder="GitHub URL or owner/repo#N"
+                className="flex-1 rounded-md border border-border bg-background px-2.5 py-1.5 text-foreground text-sm outline-none focus:border-primary"
               />
+              <button
+                type="button"
+                onClick={submitLink}
+                disabled={linkSubmitting || !linkDraft.trim()}
+                className="rounded-md bg-primary px-2.5 py-1.5 text-primary-foreground text-xs disabled:opacity-50"
+              >
+                Link
+              </button>
             </div>
-          </Field>
-        </div>
-
-        <footer className="mt-auto flex items-center justify-end gap-2 border-t border-border px-5 py-3">
-          {confirmingDelete ? (
-            <>
-              <span className="mr-auto text-muted-foreground text-xs">
-                Delete this card?
-              </span>
-              <button
-                type="button"
-                onClick={() => setConfirmingDelete(false)}
-                className="rounded px-2 py-1 text-muted-foreground text-xs hover:bg-accent"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                aria-label="Confirm delete"
-                onClick={() => {
-                  setConfirmingDelete(false);
-                  onDelete();
-                }}
-                className="rounded bg-destructive px-2 py-1 text-destructive-foreground text-xs"
-              >
-                Delete
-              </button>
-            </>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setConfirmingDelete(true)}
-              className="rounded px-2 py-1 text-destructive text-xs hover:bg-destructive/10"
-            >
-              Delete card
-            </button>
-          )}
-        </footer>
-      </aside>
+            {linkError && (
+              <p role="alert" className="text-destructive text-xs">
+                {linkError}
+              </p>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -368,10 +482,12 @@ function TicketChip({
   ticket,
   onRefresh,
   onUnlink,
+  isLast,
 }: {
   ticket: StoredCardTicket;
   onRefresh?: (id: string) => void;
   onUnlink?: (id: string) => void;
+  isLast?: boolean;
 }) {
   const isDegraded = ticket.last_seen_at == null;
   const statusLabel =
@@ -379,7 +495,10 @@ function TicketChip({
   return (
     <div
       data-testid={`ticket-chip-${ticket.id}`}
-      className="flex flex-wrap items-center gap-1.5 rounded-md border border-border bg-muted/40 px-2 py-1 text-xs"
+      className="flex flex-wrap items-center gap-1.5 px-3 py-2.5 text-xs"
+      style={{
+        borderBottom: isLast ? "none" : "1px solid var(--hairline-soft)",
+      }}
     >
       <a
         href={isDegraded ? "/settings/integrations" : ticket.url}
@@ -418,23 +537,5 @@ function TicketChip({
         )}
       </div>
     </div>
-  );
-}
-
-function Field({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    // biome-ignore lint/a11y/noLabelWithoutControl: this Field wrapper takes the form control via {children}; biome can't see it through props.
-    <label className="flex flex-col gap-1.5">
-      <span className="font-semibold text-[10px] text-muted-foreground uppercase tracking-[0.4px]">
-        {label}
-      </span>
-      {children}
-    </label>
   );
 }
