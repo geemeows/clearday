@@ -180,7 +180,7 @@ export function CardDetailPane({
                 (e.target as HTMLInputElement).blur();
               }
             }}
-            className="flex-1 bg-transparent font-semibold text-foreground text-lg outline-none placeholder:text-muted-foreground"
+            className="flex-1 bg-transparent font-semibold text-[22px] text-foreground outline-none placeholder:text-muted-foreground"
             placeholder="Card title"
           />
           <button
@@ -431,7 +431,7 @@ function Field({
   return (
     // biome-ignore lint/a11y/noLabelWithoutControl: this Field wrapper takes the form control via {children}; biome can't see it through props.
     <label className="flex flex-col gap-1.5">
-      <span className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
+      <span className="font-semibold text-[10px] text-muted-foreground uppercase tracking-[0.4px]">
         {label}
       </span>
       {children}
