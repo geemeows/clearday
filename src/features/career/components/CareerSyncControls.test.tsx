@@ -96,7 +96,7 @@ describe("CareerSyncControls — never synced", () => {
 });
 
 describe("CareerSyncControls — already synced", () => {
-  it("shows 'Synced Xm ago', Sync now, Open, and Unlink", () => {
+  it("renders the SyncPill with 'Synced Xm ago' and a Sync-now trigger + Unlink", () => {
     const now = new Date("2026-05-10T12:30:00Z");
     render(
       <CareerSyncControls
@@ -111,10 +111,6 @@ describe("CareerSyncControls — already synced", () => {
       "Synced 5m ago",
     );
     expect(screen.getByRole("button", { name: /sync now/i })).toBeTruthy();
-    const open = screen.getByRole("link", { name: /open google sheet/i });
-    expect(open.getAttribute("href")).toBe(
-      "https://docs.google.com/spreadsheets/d/ssid-1/edit",
-    );
     expect(screen.getByRole("button", { name: /unlink/i })).toBeTruthy();
   });
 

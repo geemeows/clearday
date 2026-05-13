@@ -1,14 +1,23 @@
-// "Sync to Google Sheet" controls in the level header. Wraps three actions
+// "Sync to Google Sheet" pill in the level header. Wraps three actions
 // against the worker route in src/worker/index.ts:
 //   POST /api/career/sync   { level_id }   → { spreadsheetUrl, last_synced_at }
 //   POST /api/career/unlink { level_id }
+//
+// Slice 7.5.1 reshape: the chrome here matches the mockup's `SyncPill`
+// (docs/design/devy-ui/career.jsx:353-385) — a single pill button with a
+// green "S" badge, status label, hairline divider, and "Sync now" trigger.
+// The mockup's `SyncDialog` (line 430+) is not yet ported; until it is, the
+// inline "Open sheet" link in the success output preserves the affordance
+// to reach the new sheet, and the inline "Unlink" ghost button stays put
+// (its consolidation into `ActionsMenu` is the next sub-slice — would
+// rewire the unlink mutation across two surfaces in one pass).
 //
 // On success the parent re-fetches the level row so the "Synced Xm ago" pill
 // reflects the new last_synced_at. The worker response includes
 // `needs_reauth` when Google returns 401/403 — the panel surfaces a hint
 // pointing the user at /integrations to re-grant the new Sheets/Drive scopes.
 
-import { ExternalLink } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { useState } from "react";
 import { Button } from "#/components/ui/button";
 
@@ -48,9 +57,6 @@ export function CareerSyncControls(props: CareerSyncControlsProps) {
   const [status, setStatus] = useState<Status>({ kind: "idle" });
 
   const isSynced = !!props.sheetId;
-  const sheetUrl = props.sheetId
-    ? `https://docs.google.com/spreadsheets/d/${encodeURIComponent(props.sheetId)}/edit`
-    : null;
 
   const handleSync = async () => {
     setStatus({ kind: "syncing" });
@@ -121,42 +127,48 @@ export function CareerSyncControls(props: CareerSyncControlsProps) {
     }
   };
 
+  const syncing = status.kind === "syncing";
+  const pillLabel = isSynced ? "Sync now" : "Sync to Google Sheet";
+
   return (
     <div className="flex flex-col items-end gap-1">
       <div className="flex items-center gap-2">
-        {isSynced && props.lastSyncedAt && (
-          <span
-            data-testid="career-sync-status"
-            className="text-muted-foreground text-xs"
-          >
-            Synced {relativeTime(props.lastSyncedAt, now())}
-          </span>
-        )}
-        <Button
+        <button
           type="button"
-          size="sm"
-          variant="outline"
           onClick={handleSync}
-          disabled={status.kind === "syncing"}
-          aria-label={isSynced ? "Sync now" : "Sync to Google Sheet"}
+          disabled={syncing}
+          aria-label={pillLabel}
+          className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-border bg-card py-[5px] pr-2.5 pl-2 text-foreground disabled:cursor-default disabled:opacity-70"
         >
-          {status.kind === "syncing"
-            ? "Syncing…"
-            : isSynced
-              ? "Sync now"
-              : "Sync to Google Sheet"}
-        </Button>
-        {isSynced && sheetUrl && (
-          <a
-            href={sheetUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-muted-foreground text-xs hover:text-foreground"
-            aria-label="Open Google Sheet"
+          <span
+            aria-hidden="true"
+            className="inline-flex h-[18px] w-[18px] items-center justify-center rounded font-bold text-[11px] text-white"
+            style={{ background: "#0F9D58" }}
           >
-            Open <ExternalLink className="h-3 w-3" />
-          </a>
-        )}
+            S
+          </span>
+          {isSynced && props.lastSyncedAt ? (
+            <>
+              <span
+                data-testid="career-sync-status"
+                className="text-[12.5px]"
+              >
+                Synced{" "}
+                <span className="text-muted-foreground">
+                  {relativeTime(props.lastSyncedAt, now())}
+                </span>
+              </span>
+              <span className="inline-flex items-center gap-1 border-hairline border-l pl-1.5 font-semibold text-[12.5px] text-primary">
+                <RefreshCw aria-hidden="true" className="h-[11px] w-[11px]" />
+                {syncing ? "Syncing…" : "Sync now"}
+              </span>
+            </>
+          ) : (
+            <span className="font-semibold text-[12.5px] text-primary">
+              {syncing ? "Syncing…" : "Sync to Google Sheet"}
+            </span>
+          )}
+        </button>
         {isSynced && (
           <Button
             type="button"
