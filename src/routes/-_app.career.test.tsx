@@ -1035,6 +1035,37 @@ describe("CriteriaList", () => {
     await waitFor(() => expect(onIndicatorChange).toHaveBeenCalledWith(3));
   });
 
+  it("renders a per-criterion satisfaction badge with avg / target", async () => {
+    const { client } = makeFakeClient(
+      [competency({ id: "c1", name: "Craft" })],
+      [
+        criterion({
+          id: "cr1",
+          competency_id: "c1",
+          name: "Review depth",
+          target: 4,
+        }),
+      ],
+      [
+        indicator({ id: "i1", criterion_id: "cr1", description: "A", score: 2 }),
+        indicator({
+          id: "i2",
+          criterion_id: "cr1",
+          description: "B",
+          score: 3,
+          position: 1024,
+        }),
+      ],
+    );
+    render(
+      <CriteriaList
+        competency={competency({ id: "c1", name: "Craft" })}
+        client={client}
+      />,
+    );
+    await screen.findByLabelText("Criterion satisfaction 2.5 of 4");
+  });
+
   it("adds a criterion via the form with target default 1", async () => {
     const { client, store } = makeFakeClient([
       competency({ id: "c1", name: "Craft" }),

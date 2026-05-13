@@ -1301,6 +1301,11 @@ function CriterionRow({
   onDragEnter?: () => void;
 }) {
   const [draft, setDraft] = useState(criterion.name);
+  const [indicatorScores, setIndicatorScores] = useState<number[]>([]);
+  const avg =
+    indicatorScores.length > 0
+      ? indicatorScores.reduce((s, v) => s + v, 0) / indicatorScores.length
+      : null;
 
   return (
     <li
@@ -1335,6 +1340,17 @@ function CriterionRow({
           }}
           className="min-w-0 flex-1 rounded border border-transparent bg-transparent px-1.5 py-0.5 text-foreground text-sm outline-none focus:border-border focus:bg-muted"
         />
+        {avg !== null && (
+          <span
+            aria-label={`Criterion satisfaction ${avg.toFixed(1)} of ${criterion.target}`}
+            className="inline-flex shrink-0 items-center rounded-xs border border-[var(--hairline)] bg-[var(--surface-strong)] px-1.5 py-px font-mono font-semibold text-[10.5px] text-muted-foreground"
+          >
+            {avg.toFixed(1)}
+            <span className="ml-1 text-[var(--muted-soft)]">
+              / {criterion.target}
+            </span>
+          </span>
+        )}
         <ScoreDots
           value={criterion.target}
           onChange={(next) => onSetTarget(criterion.id, next)}
@@ -1353,6 +1369,7 @@ function CriterionRow({
         criterion={criterion}
         client={client}
         onIndicatorCountChange={onIndicatorCountChange}
+        onIndicatorScoresChange={setIndicatorScores}
       />
     </li>
   );
@@ -1362,10 +1379,12 @@ export function IndicatorList({
   criterion,
   client,
   onIndicatorCountChange,
+  onIndicatorScoresChange,
 }: {
   criterion: StoredCriterion;
   client: SupabaseLike;
   onIndicatorCountChange?: (count: number) => void;
+  onIndicatorScoresChange?: (scores: number[]) => void;
 }) {
   const [indicators, setIndicators] = useState<StoredIndicator[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -1385,8 +1404,11 @@ export function IndicatorList({
   }, [client, criterion.id]);
 
   useEffect(() => {
-    if (indicators !== null) onIndicatorCountChange?.(indicators.length);
-  }, [indicators, onIndicatorCountChange]);
+    if (indicators !== null) {
+      onIndicatorCountChange?.(indicators.length);
+      onIndicatorScoresChange?.(indicators.map((i) => i.score));
+    }
+  }, [indicators, onIndicatorCountChange, onIndicatorScoresChange]);
 
   const handleAdd = async (description: string) => {
     const id = crypto.randomUUID();
