@@ -536,32 +536,34 @@ export function AutomationsPanel({
               className="h-9 w-full rounded-md border border-border bg-background py-1 pr-3 pl-8 text-sm placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
             />
           </div>
-          <div className="space-y-3 rounded-lg border border-border bg-card p-3">
-            {automations.length === 0 && (
-              <EmptyState
-                busy={busy}
-                onNew={openNew}
-                onBrowseTemplates={openTemplates}
-              />
-            )}
-            {automations.length > 0 && filtered.length === 0 && (
-              <p className="text-muted-foreground text-sm">
-                No matches for “{q}”
-              </p>
-            )}
-            {filtered.map((a) => (
-              <AutomationRow
-                key={a.id}
-                automation={a}
-                busy={busy}
-                latestFailure={latestFailures.get(a.id) ?? null}
-                onToggle={(enabled) => onToggle(a.id, enabled)}
-                onEdit={() => openEdit(a)}
-                onDelete={() => requestDelete(a.id)}
-                onViewRuns={() => openRuns(a)}
-              />
-            ))}
-          </div>
+          {automations.length === 0 && (
+            <EmptyState
+              busy={busy}
+              onNew={openNew}
+              onBrowseTemplates={openTemplates}
+            />
+          )}
+          {automations.length > 0 && filtered.length === 0 && (
+            <p className="text-muted-foreground text-sm">
+              No matches for “{q}”
+            </p>
+          )}
+          {filtered.length > 0 && (
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-2.5">
+              {filtered.map((a) => (
+                <AutomationRow
+                  key={a.id}
+                  automation={a}
+                  busy={busy}
+                  latestFailure={latestFailures.get(a.id) ?? null}
+                  onToggle={(enabled) => onToggle(a.id, enabled)}
+                  onEdit={() => openEdit(a)}
+                  onDelete={() => requestDelete(a.id)}
+                  onViewRuns={() => openRuns(a)}
+                />
+              ))}
+            </div>
+          )}
         </>
       )}
 
@@ -831,100 +833,106 @@ function AutomationRow({
         ? "bg-[var(--warn)]"
         : "bg-[var(--good)]";
   return (
-    <div className="flex items-center gap-3 rounded-[10px] border border-[var(--hairline-soft)] bg-[var(--surface-card)] px-4 py-3.5 transition-colors hover:border-primary">
-      <label className="flex items-center gap-2 text-xs text-muted-foreground">
-        <input
-          type="checkbox"
-          aria-label={`${automation.name} enabled`}
-          checked={automation.enabled}
-          onChange={(e) => onToggle(e.target.checked)}
-          disabled={busy}
+    <div
+      className={`flex flex-col gap-2 rounded-[10px] border border-[var(--hairline-soft)] bg-[var(--surface-card)] px-4 py-3.5 transition-colors hover:border-primary ${automation.enabled ? "" : "opacity-70"}`}
+    >
+      <div className="flex items-center gap-2">
+        <output
+          aria-label={`Last run ${dotLabel}`}
+          title={dotLabel}
+          className={`inline-block size-[7px] shrink-0 rounded-full ${dotClass}`}
         />
-        Enabled
-      </label>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <output
-            aria-label={`Last run ${dotLabel}`}
-            title={dotLabel}
-            className={`inline-block size-[7px] shrink-0 rounded-full ${dotClass}`}
+        <p className="min-w-0 flex-1 truncate font-semibold text-[14px] text-[var(--ink)]">
+          {automation.name}
+        </p>
+        <label className="inline-flex items-center">
+          <input
+            type="checkbox"
+            aria-label={`${automation.name} enabled`}
+            checked={automation.enabled}
+            onChange={(e) => onToggle(e.target.checked)}
+            disabled={busy}
           />
-          <p className="truncate font-medium text-sm">{automation.name}</p>
-          {dryRun && (
-            <span
-              aria-label={`${automation.name} dry-run`}
-              className="rounded bg-[var(--warn-soft)] px-1.5 py-px font-mono text-[9px] tracking-[0.04em] text-[var(--warn)] uppercase"
-            >
-              Dry-run
-            </span>
-          )}
-          {deferred && (
-            <span
-              aria-label="Includes a not-yet-wired capability"
-              title="Includes a not-yet-wired capability"
-              className="rounded bg-[var(--surface-strong)] px-1.5 py-px font-mono text-[9px] tracking-[0.04em] text-[var(--muted)] uppercase"
-            >
-              Deferred
-            </span>
-          )}
-          {failed && (
-            <span
-              aria-label="Last run failed"
-              className="rounded bg-[var(--danger-soft)] px-1.5 py-px font-mono text-[9px] tracking-[0.04em] text-[var(--danger)] uppercase"
-            >
-              Fail
-            </span>
-          )}
-        </div>
-        <div className="mt-0.5 flex items-center gap-1.5">
-          <span className="rounded bg-[var(--surface-strong)] px-1.5 py-px font-mono text-[9.5px] tracking-[0.04em] text-[var(--muted)] uppercase">
-            {TRIGGERS[automation.trigger_kind]?.label ??
-              automation.trigger_kind}
-          </span>
-          <span className="font-mono text-[10px] text-muted-foreground">→</span>
-          <span className="truncate font-mono text-[10.5px] text-foreground">
-            {automation.actions.length === 1
-              ? (ACTIONS[automation.actions[0]?.type ?? ""]?.label ??
-                automation.actions[0]?.type)
-              : `${automation.actions.length} actions`}
-          </span>
-        </div>
-        {latestFailure && (
-          <p
-            aria-label={`Last failure for ${automation.name}`}
-            role="note"
-            className="mt-1 truncate font-mono text-[10px] text-[var(--danger)]"
+        </label>
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="rounded bg-[var(--surface-strong)] px-1.5 py-px font-mono text-[9.5px] tracking-[0.04em] text-[var(--muted)] uppercase">
+          {TRIGGERS[automation.trigger_kind]?.label ?? automation.trigger_kind}
+        </span>
+        <span className="font-mono text-[10px] text-muted-foreground">→</span>
+        <span className="truncate font-mono text-[10.5px] text-foreground">
+          {automation.actions.length === 1
+            ? (ACTIONS[automation.actions[0]?.type ?? ""]?.label ??
+              automation.actions[0]?.type)
+            : `${automation.actions.length} actions`}
+        </span>
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5 text-[10.5px] text-[var(--muted)]">
+        <span className="flex-1" />
+        {dryRun && (
+          <span
+            aria-label={`${automation.name} dry-run`}
+            className="rounded bg-[var(--warn-soft)] px-1.5 py-px font-mono text-[9px] tracking-[0.04em] text-[var(--warn)] uppercase"
           >
-            Last failure: {latestFailure.error ?? "unknown error"}
-          </p>
+            Dry-run
+          </span>
+        )}
+        {deferred && (
+          <span
+            aria-label="Includes a not-yet-wired capability"
+            title="Includes a not-yet-wired capability"
+            className="rounded bg-[var(--surface-strong)] px-1.5 py-px font-mono text-[9px] tracking-[0.04em] text-[var(--muted)] uppercase"
+          >
+            Deferred
+          </span>
+        )}
+        {failed && (
+          <span
+            aria-label="Last run failed"
+            className="rounded bg-[var(--danger-soft)] px-1.5 py-px font-mono text-[9px] tracking-[0.04em] text-[var(--danger)] uppercase"
+          >
+            Fail
+          </span>
         )}
       </div>
-      <button
-        type="button"
-        aria-label={`View runs for ${automation.name}`}
-        onClick={onViewRuns}
-        disabled={busy}
-        className="rounded border border-border bg-background px-2 py-1 text-xs disabled:opacity-50"
-      >
-        Runs
-      </button>
-      <button
-        type="button"
-        onClick={onEdit}
-        disabled={busy}
-        className="rounded border border-border bg-background px-2 py-1 text-xs disabled:opacity-50"
-      >
-        Edit
-      </button>
-      <button
-        type="button"
-        aria-label={`Delete ${automation.name}`}
-        onClick={onDelete}
-        disabled={busy}
-        className="rounded border border-destructive/40 bg-background px-2 py-1 text-destructive text-xs hover:bg-destructive/10 disabled:opacity-50"
-      >
-        Delete
-      </button>
+      {latestFailure && (
+        <p
+          aria-label={`Last failure for ${automation.name}`}
+          role="note"
+          className="truncate font-mono text-[10px] text-[var(--danger)]"
+        >
+          Last failure: {latestFailure.error ?? "unknown error"}
+        </p>
+      )}
+      <div className="mt-1 flex items-center gap-1.5 border-[var(--hairline-soft)] border-t pt-2">
+        <button
+          type="button"
+          aria-label={`View runs for ${automation.name}`}
+          onClick={onViewRuns}
+          disabled={busy}
+          className="rounded border border-border bg-background px-2 py-1 text-xs disabled:opacity-50"
+        >
+          Runs
+        </button>
+        <button
+          type="button"
+          onClick={onEdit}
+          disabled={busy}
+          className="rounded border border-border bg-background px-2 py-1 text-xs disabled:opacity-50"
+        >
+          Edit
+        </button>
+        <span className="flex-1" />
+        <button
+          type="button"
+          aria-label={`Delete ${automation.name}`}
+          onClick={onDelete}
+          disabled={busy}
+          className="rounded border border-destructive/40 bg-background px-2 py-1 text-destructive text-xs hover:bg-destructive/10 disabled:opacity-50"
+        >
+          Delete
+        </button>
+      </div>
     </div>
   );
 }
