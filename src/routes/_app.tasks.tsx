@@ -359,6 +359,9 @@ export function TasksPage({
     "all",
   );
   const [labelFilter, setLabelFilter] = useState<string>("all");
+  const [sortBy, setSortBy] = useState<"default" | "priority" | "days" | "id">(
+    "default",
+  );
   const availableLabels = Array.from(
     new Set(tasks.flatMap((t) => t.labels)),
   ).sort();
@@ -385,7 +388,7 @@ export function TasksPage({
   };
   const assignedToYou = tasks.filter((t) => t.assignee === "you").length;
   const normalizedQuery = query.trim().toLowerCase();
-  const visibleTasks = tasks.filter((t) => {
+  const filteredTasks = tasks.filter((t) => {
     if (mineOnly && t.assignee !== "you") return false;
     if (priorityFilter !== "all" && t.p !== priorityFilter) return false;
     if (labelFilter !== "all" && !t.labels.includes(labelFilter)) return false;
@@ -395,6 +398,16 @@ export function TasksPage({
       t.title.toLowerCase().includes(normalizedQuery)
     );
   });
+  const PRIORITY_ORDER: Record<TaskPriority, number> = { P1: 0, P2: 1, P3: 2 };
+  const visibleTasks =
+    sortBy === "default"
+      ? filteredTasks
+      : [...filteredTasks].sort((a, b) => {
+          if (sortBy === "priority")
+            return PRIORITY_ORDER[a.p] - PRIORITY_ORDER[b.p];
+          if (sortBy === "days") return b.days - a.days;
+          return a.id.localeCompare(b.id);
+        });
   return (
     <div className="mx-auto max-w-[1500px] px-9 pt-7 pb-12">
       <header className="mb-[18px] flex items-baseline">
@@ -456,6 +469,25 @@ export function TasksPage({
             Clear
           </button>
         )}
+        <select
+          aria-label="Sort tasks"
+          value={sortBy}
+          onChange={(e) =>
+            setSortBy(
+              e.currentTarget.value as
+                | "default"
+                | "priority"
+                | "days"
+                | "id",
+            )
+          }
+          className="ml-2 rounded-[4px] border border-border bg-transparent px-1 py-[3px] font-mono text-[11px] text-muted-foreground"
+        >
+          <option value="default">Default order</option>
+          <option value="priority">Sort by priority</option>
+          <option value="days">Sort by days</option>
+          <option value="id">Sort by id</option>
+        </select>
       </header>
 
       {onCreateTask && <CreateTaskForm onCreateTask={onCreateTask} />}

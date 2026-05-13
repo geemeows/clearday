@@ -578,6 +578,52 @@ describe("TasksPage", () => {
     expect(screen.queryByRole("button", { name: "Clear filters" })).toBeNull();
   });
 
+  it("renders cards in default insertion order when sortBy is default", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    const inProgress = screen.getByRole("region", { name: "In progress" });
+    const ids = Array.from(inProgress.querySelectorAll("article")).map((n) =>
+      n.getAttribute("aria-label"),
+    );
+    expect(ids).toEqual(["DEV-441", "DEV-447", "DEV-401"]);
+  });
+
+  it("sorts cards by priority (P1 first) when Sort by priority is picked", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    fireEvent.change(screen.getByLabelText("Sort tasks"), {
+      target: { value: "priority" },
+    });
+    const inProgress = screen.getByRole("region", { name: "In progress" });
+    const ids = Array.from(inProgress.querySelectorAll("article")).map((n) =>
+      n.getAttribute("aria-label"),
+    );
+    expect(ids).toEqual(["DEV-441", "DEV-447", "DEV-401"]);
+  });
+
+  it("sorts cards by days descending when Sort by days is picked", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    fireEvent.change(screen.getByLabelText("Sort tasks"), {
+      target: { value: "days" },
+    });
+    const inProgress = screen.getByRole("region", { name: "In progress" });
+    const ids = Array.from(inProgress.querySelectorAll("article")).map((n) =>
+      n.getAttribute("aria-label"),
+    );
+    // DEV-401 (6d), DEV-447 (3d), DEV-441 (1d)
+    expect(ids).toEqual(["DEV-401", "DEV-447", "DEV-441"]);
+  });
+
+  it("sorts cards alphabetically by id when Sort by id is picked", () => {
+    render(<TasksPage tasks={FIXTURE_TASKS} />);
+    fireEvent.change(screen.getByLabelText("Sort tasks"), {
+      target: { value: "id" },
+    });
+    const inProgress = screen.getByRole("region", { name: "In progress" });
+    const ids = Array.from(inProgress.querySelectorAll("article")).map((n) =>
+      n.getAttribute("aria-label"),
+    );
+    expect(ids).toEqual(["DEV-401", "DEV-441", "DEV-447"]);
+  });
+
   it("does not fire onCreateTask when the id or title is empty", () => {
     const onCreateTask = vi.fn();
     render(
