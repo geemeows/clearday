@@ -6,6 +6,7 @@
 import {
   type Automation,
   type AutomationAction,
+  type AutomationRunStats,
   type PlannedAutomation,
   validateAutomations,
 } from "#/features/automations/engine";
@@ -59,13 +60,26 @@ export const RUNS_PAGE_LIMIT_DEFAULT = 25;
 export const RUNS_PAGE_LIMIT_MAX = 100;
 export const FAILURES_PAGE_LIMIT = 100;
 
+/** Reads per-automation run aggregates from the server (backed by #175's DB function). */
+export type AutomationRunStatsReader = {
+  batchStats: (ids: string[]) => Promise<Map<string, AutomationRunStats>>;
+};
+
 export type GetResult = { automations: Automation[] };
 
 export async function getAutomations(
   store: AutomationsStore,
+  statsReader?: AutomationRunStatsReader,
 ): Promise<GetResult> {
   const automations = await store.load();
-  return { automations };
+  if (!statsReader || automations.length === 0) return { automations };
+  const statsMap = await statsReader.batchStats(automations.map((a) => a.id));
+  return {
+    automations: automations.map((a) => ({
+      ...a,
+      run_stats: statsMap.get(a.id),
+    })),
+  };
 }
 
 export type PutResult =

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   type AutomationRunRow,
+  type AutomationRunStatsReader,
   type AutomationRunsReader,
   dryRunAutomation,
   getAutomations,
@@ -10,7 +11,7 @@ import {
   RUNS_PAGE_LIMIT_DEFAULT,
   RUNS_PAGE_LIMIT_MAX,
 } from "#/features/automations/api";
-import type { Automation } from "#/features/automations/engine";
+import type { Automation, AutomationRunStats } from "#/features/automations/engine";
 import type {
   AutomationRunInsert,
   AutomationRunsStore,
@@ -41,6 +42,39 @@ describe("getAutomations", () => {
   it("returns the loaded automations", async () => {
     const store = memoryStore([valid]);
     expect(await getAutomations(store)).toEqual({ automations: [valid] });
+  });
+
+  it("merges run_stats when a stats reader is provided", async () => {
+    const stats: AutomationRunStats = {
+      total_runs: 12,
+      last_run_at: "2026-05-14T00:00:00Z",
+      fail_7d: 2,
+    };
+    const statsReader: AutomationRunStatsReader = {
+      batchStats: vi.fn(async () => new Map([["a-1", stats]])),
+    };
+    const store = memoryStore([valid]);
+    const result = await getAutomations(store, statsReader);
+    expect(result.automations[0].run_stats).toEqual(stats);
+    expect(statsReader.batchStats).toHaveBeenCalledWith(["a-1"]);
+  });
+
+  it("omits run_stats for automations with no stats row", async () => {
+    const statsReader: AutomationRunStatsReader = {
+      batchStats: vi.fn(async () => new Map()),
+    };
+    const store = memoryStore([valid]);
+    const result = await getAutomations(store, statsReader);
+    expect(result.automations[0].run_stats).toBeUndefined();
+  });
+
+  it("skips stats reader call when there are no automations", async () => {
+    const statsReader: AutomationRunStatsReader = {
+      batchStats: vi.fn(async () => new Map()),
+    };
+    const store = memoryStore([]);
+    await getAutomations(store, statsReader);
+    expect(statsReader.batchStats).not.toHaveBeenCalled();
   });
 });
 

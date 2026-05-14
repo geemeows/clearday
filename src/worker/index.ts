@@ -41,13 +41,17 @@ import {
   type AutomationRunRow,
   type AutomationRunsReader,
   type AutomationsStore,
+  type AutomationRunStatsReader,
   dryRunAutomation,
   getAutomations,
   listAutomationRuns,
   listLatestFailures,
   putAutomations,
 } from "#/features/automations/api";
-import type { Automation } from "#/features/automations/engine";
+import type {
+  Automation,
+  AutomationRunStats,
+} from "#/features/automations/engine";
 import type {
   AutomationRunInsert,
   AutomationRunStatus,
@@ -363,7 +367,7 @@ export default {
     if (url.pathname === "/api/automations") {
       const store = automationsStore(service);
       if (request.method === "GET") {
-        return json(await getAutomations(store));
+        return json(await getAutomations(store, automationRunStatsReader(service)));
       }
       if (request.method === "PUT") {
         let body: unknown;
@@ -2687,6 +2691,33 @@ function automationRunsReader(service: SupabaseService): AutomationRunsReader {
         started_at: r.started_at,
         finished_at: r.finished_at,
       }));
+    },
+  };
+}
+
+function automationRunStatsReader(service: SupabaseService): AutomationRunStatsReader {
+  return {
+    batchStats: async (ids) => {
+      if (ids.length === 0) return new Map();
+      const { data, error } = await service.rpc("automation_run_stats");
+      if (error) throw new Error(error.message);
+      const map = new Map<string, AutomationRunStats>();
+      const rows = (data ?? []) as Array<{
+        automation_id: string;
+        total_runs: number;
+        last_run_at: string | null;
+        fail_7d: number;
+      }>;
+      for (const r of rows) {
+        if (ids.includes(r.automation_id)) {
+          map.set(r.automation_id, {
+            total_runs: Number(r.total_runs),
+            last_run_at: r.last_run_at,
+            fail_7d: Number(r.fail_7d),
+          });
+        }
+      }
+      return map;
     },
   };
 }
