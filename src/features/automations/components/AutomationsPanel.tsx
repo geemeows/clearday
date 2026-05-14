@@ -100,6 +100,37 @@ function newId(): string {
   return `automation-${Math.random().toString(36).slice(2)}`;
 }
 
+type BreadcrumbCrumb = { label: string; onClick?: (() => void) | undefined };
+
+function Breadcrumb({ crumbs }: { crumbs: BreadcrumbCrumb[] }) {
+  return (
+    <nav
+      aria-label="Automations breadcrumb"
+      className="flex items-center gap-1.5 text-[13px]"
+    >
+      {crumbs.map((c, i) => (
+        // biome-ignore lint/suspicious/noArrayIndexKey: breadcrumb chain is short and stable per mode/selection
+        <span key={i} className="flex items-center gap-1.5">
+          {i > 0 && <span className="text-muted-foreground">/</span>}
+          {c.onClick ? (
+            <button
+              type="button"
+              onClick={c.onClick}
+              className="border-none bg-transparent p-0 font-medium text-[13px] text-primary"
+            >
+              {c.label}
+            </button>
+          ) : (
+            <span className="font-semibold text-[13px] text-[var(--ink)]">
+              {c.label}
+            </span>
+          )}
+        </span>
+      ))}
+    </nav>
+  );
+}
+
 function emptyAutomation(): Automation {
   return {
     id: newId(),
@@ -209,7 +240,6 @@ export function AutomationsPanel({
   const [previewSignals, setPreviewSignals] = useState<StoredSignal[] | null>(
     null,
   );
-  const [builderOpen, setBuilderOpen] = useState(false);
   const [editing, setEditing] = useState<Automation | null>(null);
   const [templatesOpen, setTemplatesOpen] = useState(false);
 
@@ -292,7 +322,6 @@ export function AutomationsPanel({
 
   const openNew = useCallback(() => {
     setEditing(emptyAutomation());
-    setBuilderOpen(true);
   }, []);
 
   const openTemplates = useCallback(() => {
@@ -305,17 +334,14 @@ export function AutomationsPanel({
 
   const applyTemplate = useCallback((tpl: AutomationTemplate) => {
     setEditing({ ...tpl.automation, id: newId() });
-    setBuilderOpen(true);
     setTemplatesOpen(false);
   }, []);
 
   const openEdit = useCallback((a: Automation) => {
     setEditing({ ...a });
-    setBuilderOpen(true);
   }, []);
 
   const closeBuilder = useCallback(() => {
-    setBuilderOpen(false);
     setEditing(null);
   }, []);
 
@@ -454,17 +480,60 @@ export function AutomationsPanel({
     [automations],
   );
 
+  const mode: "list" | "builder" | "runs" = editing
+    ? "builder"
+    : runsAutomation
+      ? "runs"
+      : "list";
+
+  const builderIsNew =
+    editing !== null && !(automations ?? []).some((a) => a.id === editing.id);
+
   return (
     <section aria-label="Automations" className="space-y-[18px]">
-      <div>
-        <h2 className="font-semibold text-xl leading-[1.25] tracking-[-0.2px]">
-          Automations
-        </h2>
-        <p className="mt-1 text-muted-foreground text-sm leading-[1.5]">
-          When something happens, do something. Spans GitHub, Slack, Calendar,
-          and Focus.
-        </p>
-      </div>
+      {mode === "list" && (
+        <div>
+          <h2 className="font-semibold text-xl leading-[1.25] tracking-[-0.2px]">
+            Automations
+          </h2>
+          <p className="mt-1 text-muted-foreground text-sm leading-[1.5]">
+            When something happens, do something. Spans GitHub, Slack, Calendar,
+            and Focus.
+          </p>
+        </div>
+      )}
+      {mode !== "list" && (
+        <Breadcrumb
+          crumbs={[
+            {
+              label: "Automations",
+              onClick:
+                mode === "builder"
+                  ? closeBuilder
+                  : mode === "runs"
+                    ? closeRuns
+                    : undefined,
+            },
+            {
+              label:
+                mode === "builder"
+                  ? builderIsNew
+                    ? "New"
+                    : (editing?.name ?? "")
+                  : (runsAutomation?.name ?? ""),
+              onClick:
+                mode === "runs"
+                  ? () => {
+                      // Runs has no detail view yet (Slice 8.3); back to list.
+                      closeRuns();
+                    }
+                  : undefined,
+            },
+            ...(mode === "runs" ? [{ label: "Runs" }] : []),
+          ]}
+        />
+      )}
+      {mode === "list" && (
       <div className="flex flex-wrap items-center gap-2.5">
         {buckets && automations && automations.length > 0 ? (
           <p
@@ -497,6 +566,7 @@ export function AutomationsPanel({
           New automation
         </button>
       </div>
+      )}
 
       {error && (
         <p
@@ -511,7 +581,7 @@ export function AutomationsPanel({
         <p className="text-muted-foreground text-sm">Loading…</p>
       )}
 
-      {automations && demo && showEmptyPreview && (
+      {mode === "list" && automations && demo && showEmptyPreview && (
         <div className="space-y-3 rounded-lg border border-border bg-card p-3">
           <EmptyState
             busy={busy}
@@ -521,7 +591,7 @@ export function AutomationsPanel({
         </div>
       )}
 
-      {automations && !(demo && showEmptyPreview) && (
+      {mode === "list" && automations && !(demo && showEmptyPreview) && (
         <>
           <div className="relative max-w-[360px]">
             <Search
@@ -568,7 +638,7 @@ export function AutomationsPanel({
         </>
       )}
 
-      {automations && previewSignals && (
+      {mode === "list" && automations && previewSignals && (
         <AutomationsPreview
           automations={automations}
           signals={previewSignals}
@@ -609,23 +679,21 @@ export function AutomationsPanel({
         </DialogContent>
       </Dialog>
 
-      <Dialog open={builderOpen} onOpenChange={setBuilderOpen}>
-        <DialogContent className="sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>
-              {editing && automations?.some((a) => a.id === editing.id)
-                ? "Edit automation"
-                : "New automation"}
-            </DialogTitle>
-          </DialogHeader>
-          {editing && (
+      {mode === "builder" && editing && (
+        <div className="flex min-h-[600px] flex-col overflow-hidden rounded-xl border border-[var(--hairline-soft)] bg-[var(--surface-card)]">
+          <div className="flex items-center gap-3 border-[var(--hairline-soft)] border-b px-5 py-3.5">
+            <h3 className="m-0 font-semibold text-[var(--ink)] text-base">
+              {builderIsNew ? "New automation" : "Edit automation"}
+            </h3>
+          </div>
+          <div className="flex flex-1 flex-col gap-4 overflow-y-auto p-5">
             <AutomationBuilder
               automation={editing}
               onChange={setEditing}
               signals={previewSignals ?? []}
             />
-          )}
-          <DialogFooter>
+          </div>
+          <div className="flex justify-end gap-2 border-[var(--hairline-soft)] border-t px-5 py-3">
             <button
               type="button"
               onClick={closeBuilder}
@@ -641,32 +709,31 @@ export function AutomationsPanel({
             >
               Save
             </button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </div>
+        </div>
+      )}
 
-      <Dialog
-        open={runsAutomation !== null}
-        onOpenChange={(open) => {
-          if (!open) closeRuns();
-        }}
-      >
-        <DialogContent className="sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Runs · {runsAutomation?.name ?? ""}</DialogTitle>
-          </DialogHeader>
-          {runs && runs.length > 0 && <RunsHistogram runs={runs} />}
-          <RunsList runs={runs} error={runsError} />
-          {dryRunMessage && (
-            <p
-              aria-label="Dry-run result"
-              role="note"
-              className="rounded border border-border bg-muted/40 px-3 py-2 font-mono text-[11px] text-muted-foreground"
-            >
-              {dryRunMessage}
-            </p>
-          )}
-          <DialogFooter>
+      {mode === "runs" && runsAutomation && (
+        <div className="flex min-h-[600px] flex-col overflow-hidden rounded-xl border border-[var(--hairline-soft)] bg-[var(--surface-card)]">
+          <div className="flex items-center gap-3 border-[var(--hairline-soft)] border-b px-5 py-3.5">
+            <h3 className="m-0 font-semibold text-[var(--ink)] text-base">
+              Runs · {runsAutomation.name}
+            </h3>
+          </div>
+          <div className="flex flex-1 flex-col gap-4 overflow-y-auto p-5">
+            {runs && runs.length > 0 && <RunsHistogram runs={runs} />}
+            <RunsList runs={runs} error={runsError} />
+            {dryRunMessage && (
+              <p
+                aria-label="Dry-run result"
+                role="note"
+                className="rounded border border-border bg-muted/40 px-3 py-2 font-mono text-[11px] text-muted-foreground"
+              >
+                {dryRunMessage}
+              </p>
+            )}
+          </div>
+          <div className="flex justify-end gap-2 border-[var(--hairline-soft)] border-t px-5 py-3">
             <button
               type="button"
               aria-label="Test automation in dry-run mode"
@@ -683,9 +750,9 @@ export function AutomationsPanel({
             >
               Close
             </button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </div>
+        </div>
+      )}
 
       <Dialog open={templatesOpen} onOpenChange={setTemplatesOpen}>
         <DialogContent className="sm:max-w-2xl">
