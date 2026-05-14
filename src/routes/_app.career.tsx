@@ -1755,22 +1755,22 @@ function IndicatorRow({
           }}
           className="w-full rounded border border-transparent bg-transparent px-1.5 py-0.5 text-[13px] text-foreground leading-snug outline-none focus:border-border focus:bg-muted"
         />
-        <input
-          type="text"
-          aria-label={`Notes for ${label}`}
-          value={notesDraft}
-          onChange={(e) => setNotesDraft(e.target.value)}
-          onBlur={() => {
-            const trimmed = notesDraft.trim();
-            const next = trimmed === "" ? null : trimmed;
-            if (next !== (indicator.notes ?? null)) {
-              onRename(indicator.id, { notes: next });
-            }
+        <EvidenceList
+          indicator={indicator}
+          client={client}
+          notes={{
+            value: notesDraft,
+            onChange: setNotesDraft,
+            onBlur: () => {
+              const trimmed = notesDraft.trim();
+              const next = trimmed === "" ? null : trimmed;
+              if (next !== (indicator.notes ?? null)) {
+                onRename(indicator.id, { notes: next });
+              }
+            },
+            label: `Notes for ${label}`,
           }}
-          placeholder="Notes…"
-          className="mt-1 w-full rounded border border-transparent bg-transparent px-1.5 py-0.5 text-[11.5px] text-muted-foreground italic outline-none focus:border-border focus:bg-muted"
         />
-        <EvidenceList indicator={indicator} client={client} />
       </div>
       <div className="flex items-center gap-1 pt-px">
         <ScoreControl
@@ -1794,9 +1794,16 @@ function IndicatorRow({
 export function EvidenceList({
   indicator,
   client,
+  notes,
 }: {
   indicator: StoredIndicator;
   client: SupabaseLike;
+  notes?: {
+    value: string;
+    onChange: (v: string) => void;
+    onBlur: () => void;
+    label: string;
+  };
 }) {
   const [evidence, setEvidence] = useState<StoredEvidence[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -1937,6 +1944,20 @@ export function EvidenceList({
               <Plus aria-hidden="true" className="h-2.5 w-2.5" />
               Evidence
             </button>
+            {notes && (
+              <label className="ml-0.5 inline-flex min-w-0 flex-1 items-baseline gap-1 text-[11.5px] text-muted-foreground italic">
+                <span aria-hidden="true">—</span>
+                <input
+                  type="text"
+                  aria-label={notes.label}
+                  value={notes.value}
+                  onChange={(e) => notes.onChange(e.target.value)}
+                  onBlur={notes.onBlur}
+                  placeholder="Notes…"
+                  className="min-w-0 flex-1 rounded border border-transparent bg-transparent px-1 py-px text-[11.5px] text-muted-foreground italic outline-none focus:border-border focus:bg-muted"
+                />
+              </label>
+            )}
           </>
         )}
       </div>
