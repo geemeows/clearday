@@ -944,6 +944,61 @@ describe("AutomationsPanel detail mode (Slice 8.3)", () => {
     expect(recent.textContent).toMatch(/Hasn't fired yet/);
   });
 
+  it("renders the LIVE PREVIEW pane against the open automation's predicates", async () => {
+    const signals: StoredSignal[] = [
+      {
+        provider: "slack",
+        kind: "mention",
+        source_id: "s-1",
+        title: "Mention from Alice",
+        url: null,
+        payload: {},
+        requires_action: false,
+        source_created_at: null,
+        id: "row-1",
+        unread_count: 0,
+        created_at: "2026-05-07T00:00:00Z",
+        updated_at: "2026-05-07T00:00:00Z",
+        dismissed_at: null,
+        priority: null,
+        snoozed_until: null,
+        alert_channels_override: null,
+        tags: null,
+      },
+      {
+        provider: "github",
+        kind: "pr_review_requested",
+        source_id: "s-2",
+        title: "PR review on repo/x",
+        url: null,
+        payload: {},
+        requires_action: false,
+        source_created_at: null,
+        id: "row-2",
+        unread_count: 0,
+        created_at: "2026-05-07T00:00:00Z",
+        updated_at: "2026-05-07T00:00:00Z",
+        dismissed_at: null,
+        priority: null,
+        snoozed_until: null,
+        alert_channels_override: null,
+        tags: null,
+      },
+    ];
+    renderPanel({ signalsLoader: vi.fn(async () => signals) });
+    fireEvent.click(await screen.findByLabelText("Open Snooze deps"));
+    const pane = await screen.findByLabelText(
+      "Live preview for Snooze deps",
+    );
+    expect(pane.textContent).toMatch(/Last 2 signals/);
+    expect(pane.textContent).toMatch(/1 match/);
+    // The mention row matches "kind is mention"; the PR row does not.
+    const matchRow = screen.getByLabelText("Live preview Mention from Alice");
+    expect(matchRow.textContent).toMatch(/MATCH/);
+    const missRow = screen.getByLabelText("Live preview PR review on repo/x");
+    expect(missRow.textContent).toMatch(/no match/);
+  });
+
   it("Full history link enters runs mode from detail", async () => {
     const runsLoader = vi.fn(async () => ({ runs: [] }));
     renderPanel({ runsLoader });

@@ -810,6 +810,7 @@ export function AutomationsPanel({
           busy={busy}
           recentRuns={runs}
           runsError={runsError}
+          previewSignals={previewSignals ?? []}
           onToggleEnabled={(enabled) => onToggle(detailAutomation.id, enabled)}
           onToggleDryRun={() => onToggleDryRun(detailAutomation.id)}
           onEdit={() => openEdit(detailAutomation)}
@@ -1114,6 +1115,7 @@ function AutomationDetail({
   busy,
   recentRuns,
   runsError,
+  previewSignals,
   onToggleEnabled,
   onToggleDryRun,
   onEdit,
@@ -1125,6 +1127,7 @@ function AutomationDetail({
   busy: boolean;
   recentRuns: AutomationRunRow[] | null;
   runsError: string | null;
+  previewSignals: StoredSignal[];
   onToggleEnabled: (enabled: boolean) => void;
   onToggleDryRun: () => void;
   onEdit: () => void;
@@ -1280,6 +1283,14 @@ function AutomationDetail({
           </div>
           <RecentRunsStrip runs={recentRuns} error={runsError} />
         </div>
+
+        <div aria-label={`Live preview for ${automation.name}`}>
+          <DetailLabel>LIVE PREVIEW</DetailLabel>
+          <LivePreviewPane
+            automation={automation}
+            signals={previewSignals}
+          />
+        </div>
       </div>
       <div className="flex items-center gap-2 border-[var(--hairline-soft)] border-t px-[22px] py-3">
         <p className="font-mono text-[11px] text-muted-foreground">
@@ -1307,6 +1318,78 @@ function AutomationDetail({
           {dryRun ? "Exit dry-run" : "Switch to dry-run"}
         </button>
       </div>
+    </div>
+  );
+}
+
+function LivePreviewPane({
+  automation,
+  signals,
+}: {
+  automation: Automation;
+  signals: StoredSignal[];
+}) {
+  const display = useMemo(() => signals.slice(0, 6), [signals]);
+  const matched = useMemo(() => {
+    const set = new Set<string>();
+    for (const row of previewAutomations(display, [automation])) {
+      set.add(row.signal.source_id);
+    }
+    return set;
+  }, [automation, display]);
+  if (display.length === 0) {
+    return (
+      <div className="rounded-lg border border-[var(--hairline)] border-dashed px-3 py-4 text-center text-[12px] text-[var(--muted-soft)]">
+        No recent Signals to evaluate.
+      </div>
+    );
+  }
+  const matchCount = matched.size;
+  return (
+    <div className="overflow-hidden rounded-lg border border-[var(--hairline-soft)]">
+      <div className="flex items-center gap-2 border-[var(--hairline-soft)] border-b bg-[var(--surface-soft)] px-3 py-2">
+        <span className="font-mono text-[10.5px] text-[var(--muted)]">
+          Last {display.length} signals ·{" "}
+          <span
+            className={`font-semibold ${matchCount > 0 ? "text-[var(--good)]" : "text-[var(--muted)]"}`}
+          >
+            {matchCount} match
+          </span>
+        </span>
+      </div>
+      {display.map((s, i) => {
+        const isMatch = matched.has(s.source_id);
+        return (
+          <div
+            key={s.id}
+            aria-label={`Live preview ${s.title}`}
+            className={`grid grid-cols-[1fr_auto] items-center gap-3 px-3 py-2 ${
+              i === display.length - 1
+                ? ""
+                : "border-[var(--hairline-soft)] border-b"
+            } ${isMatch ? "bg-[var(--good-soft)]" : ""}`}
+          >
+            <div className="min-w-0">
+              <div className="overflow-hidden text-ellipsis whitespace-nowrap text-[12px] text-[var(--ink)]">
+                {s.title}
+              </div>
+              <div className="mt-px font-mono text-[10px] text-[var(--muted)]">
+                {s.kind}
+                {s.provider ? ` · ${s.provider}` : ""}
+              </div>
+            </div>
+            <span
+              className={`font-semibold text-[10px] ${isMatch ? "text-[var(--good)]" : "text-[var(--muted-soft)]"}`}
+            >
+              {isMatch
+                ? "✓ MATCH"
+                : automation.predicates.length === 0
+                  ? "—"
+                  : "no match"}
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }
