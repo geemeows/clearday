@@ -13,6 +13,16 @@ vi.mock("#/lib/supabase", () => ({
         data: { subscription: { unsubscribe: vi.fn() } },
       }),
     },
+    from: vi.fn().mockReturnValue({
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+    }),
+    channel: vi.fn().mockReturnValue({
+      on: vi.fn().mockReturnThis(),
+      subscribe: vi.fn(),
+    }),
+    removeChannel: vi.fn(),
   },
 }));
 
@@ -46,6 +56,14 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
   };
 });
 
+vi.mock("#/features/signals/realtime", () => ({
+  useSignalsLive: vi.fn(),
+}));
+
+vi.mock("#/features/signals/store", () => ({
+  listSignals: vi.fn().mockResolvedValue([]),
+}));
+
 // ── Component imports (after mocks) ─────────────────────────────────────────
 
 import { FocusModal } from "#/features/focus/components/FocusModal";
@@ -55,34 +73,68 @@ import { BriefingCard } from "#/features/today/components/BriefingCard";
 import type { NowSignal } from "#/features/today/components/MeetingCountdownNow";
 import { NextUpHero } from "#/features/today/components/NextUpHero";
 import { PulseCard } from "#/features/today/components/PulseCard";
+import type { TodayViewModel } from "#/features/today/loader";
 import { TodayPage } from "./\_app.today";
+
+// ── Fake loader payload ───────────────────────────────────────────────────────
+
+const EMPTY_VM: TodayViewModel = {
+  nextUp: null,
+  schedule: [],
+  inboxPreview: [],
+  inProgress: [],
+  weekStats: {
+    prs_reviewed: 0,
+    tickets_shipped: 0,
+    focus_hours: 0,
+    inbox_zero_days: 0,
+  },
+  sourceMix: [],
+  reviewLatency: [],
+  shipByDay: [],
+  briefing: null,
+  hasAiConnected: false,
+};
 
 // ── TodayPage smoke ──────────────────────────────────────────────────────────
 
 describe("TodayPage", () => {
   it("renders the greeting with first name", () => {
-    render(<TodayPage />);
+    render(<TodayPage {...EMPTY_VM} />);
     expect(screen.getByText(/Good morning, Erin/i)).toBeTruthy();
   });
 
   it("renders the Pulse section", () => {
-    render(<TodayPage />);
+    render(<TodayPage {...EMPTY_VM} />);
     expect(screen.getByText("Pulse")).toBeTruthy();
   });
 
   it("renders the schedule section", () => {
-    render(<TodayPage />);
+    render(<TodayPage {...EMPTY_VM} />);
     expect(screen.getByText("Today")).toBeTruthy();
   });
 
   it("renders the in-progress section", () => {
-    render(<TodayPage />);
+    render(<TodayPage {...EMPTY_VM} />);
     expect(screen.getByText("In progress")).toBeTruthy();
   });
 
   it("renders the needs-you inbox preview section", () => {
-    render(<TodayPage />);
+    render(<TodayPage {...EMPTY_VM} />);
     expect(screen.getByText("Needs you")).toBeTruthy();
+  });
+
+  it("shows meeting count from schedule in sub-heading", () => {
+    const vm: TodayViewModel = {
+      ...EMPTY_VM,
+      schedule: [
+        { t: "10:00", end: "10:30", title: "Standup", kind: "meeting" },
+        { t: "14:00", end: "15:00", title: "Design review", kind: "meeting" },
+        { t: "09:00", end: "09:45", title: "Deep work", kind: "focus" },
+      ],
+    };
+    render(<TodayPage {...vm} />);
+    expect(screen.getByText(/2 meetings today/i)).toBeTruthy();
   });
 });
 

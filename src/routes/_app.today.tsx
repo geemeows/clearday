@@ -3,242 +3,118 @@ import { ArrowRightIcon } from "lucide-react";
 import { useEffect } from "react";
 import { Button } from "#/components/ui/button";
 import { useAuth } from "#/features/auth/auth";
-import type { PreviewSignal } from "#/features/signals/components/InboxPreviewRow";
+import type { BriefingCacheEntry } from "#/features/briefing/morning-briefing";
+import { supabase } from "#/lib/supabase";
+import { listSignals } from "#/features/signals/store";
+import { useSignalsLive } from "#/features/signals/realtime";
 import { InboxPreviewRow } from "#/features/signals/components/InboxPreviewRow";
-import type { BriefingData } from "#/features/today/components/BriefingCard";
 import { BriefingCard } from "#/features/today/components/BriefingCard";
-import type { InProgressTicket } from "#/features/today/components/InProgressCard";
 import { InProgressCard } from "#/features/today/components/InProgressCard";
-import type { NowSignal } from "#/features/today/components/MeetingCountdownNow";
 import { NextUpHero } from "#/features/today/components/NextUpHero";
-import type { WeekStats } from "#/features/today/components/PulseCard";
 import { PulseCard } from "#/features/today/components/PulseCard";
-import type { ScheduleBlock } from "#/features/today/components/TodaySchedule";
 import { TodaySchedule } from "#/features/today/components/TodaySchedule";
+import {
+  composeTodayViewModel,
+  type TodayViewModel,
+} from "#/features/today/loader";
+import type { SupabaseLike } from "#/shared/db";
 
-// ── Fixture data ─────────────────────────────────────────────────────────────
-// Real data wiring (signals store, briefing API, calendar events) is a
-// follow-up once the page shape is validated.
+const db = supabase as unknown as SupabaseLike;
 
-const NOW = new Date();
-const minsFromNow = (m: number) =>
-  new Date(NOW.getTime() + m * 60_000).toISOString();
-const minsAgo = (m: number) =>
-  new Date(NOW.getTime() - m * 60_000).toISOString();
+async function loadBriefingEntry(): Promise<BriefingCacheEntry | null> {
+  const { data } = await supabase
+    .from("user_preferences")
+    .select("briefing")
+    .eq("id", true)
+    .maybeSingle();
+  const cached = (data as { briefing?: unknown } | null)?.briefing;
+  if (
+    !cached ||
+    typeof (cached as Record<string, unknown>).text !== "string"
+  ) {
+    return null;
+  }
+  return cached as BriefingCacheEntry;
+}
 
-const NEXT_UP: NowSignal = {
-  title: "Standup — Platform team",
-  when: minsFromNow(13),
-  agenda: [
-    "#4821 — Token refresh edge case",
-    "Slack adapter retry budget",
-    "Incident postmortem followup",
-  ],
-  join: "meet.google.com/abc-defg-hij",
-};
+// ── Route ─────────────────────────────────────────────────────────────────────
 
-const BRIEFING: BriefingData = {
-  model: "haiku 4.5",
-  duration: "7s",
-  generatedAt: "07:42",
-  headline: "Three things stand out this morning.",
-  items: [
-    {
-      id: "b1",
-      priority: "high",
-      source: "git",
-      tag: "REVIEW",
-      reason: "13 min until standup",
-      title: "#421 — Priya · order-cache TTL",
-      body: "Your highest-leverage review. Pinged in #platform-eng, diff is small enough to land before standup.",
-      cta: { label: "Open #421", icon: "external-link" },
-    },
-    {
-      id: "b2",
-      priority: "watch",
-      source: "git",
-      tag: "CI",
-      reason: "8 min ago",
-      title: "main · signal-store integration failed",
-      body: "30s timeout on the idempotency test. Looks flaky — re-run before merging anything new.",
-      cta: { label: "Re-run job", icon: "refresh-cw" },
-    },
-    {
-      id: "b3",
-      priority: "plan",
-      source: "calendar",
-      tag: "FOCUS",
-      reason: "after standup",
-      title: "DEV-441 · 75-minute deep block",
-      body: "Quiet hours armed. Slack DND, calendar busy, and Inbox autosuppress will engage at 10:30.",
-      cta: { label: "Adjust block", icon: "calendar" },
-    },
-    {
-      id: "b4",
-      priority: "skip",
-      source: "git",
-      tag: "AUTO",
-      reason: "rule: dependabot",
-      title: "#430 — dependabot bumps",
-      body: "Your auto-merge rule will land this on green CI. No action needed.",
-      cta: { label: "View rule", icon: "settings" },
-    },
-  ],
-};
+export const Route = createFileRoute("/_app/today")({
+  loader: async (): Promise<TodayViewModel> => {
+    const now = new Date();
+    const [signals, briefingEntry] = await Promise.all([
+      listSignals(db, { includeDismissed: false, includeSnoozed: false }),
+      loadBriefingEntry(),
+    ]);
+    return composeTodayViewModel(signals, briefingEntry, now);
+  },
+  component: TodayRoute,
+  errorComponent: TodayErrorPage,
+});
 
-const PREVIEW_SIGNALS: PreviewSignal[] = [
-  {
-    id: "s2",
-    source: "git",
-    title: "feat(signals): batch upsert path for slack webhook",
-    repo: "clearday/worker",
-    num: "#421",
-    author: "priya-w",
-    age: minsAgo(22),
-    unread: 3,
-  },
-  {
-    id: "s3",
-    source: "git",
-    title: "fix(auth-proxy): reject expired state token",
-    repo: "clearday/auth-proxy",
-    num: "#88",
-    author: "you",
-    age: minsAgo(48),
-    unread: 2,
-  },
-  {
-    id: "s5",
-    source: "git",
-    title: "CI failed — integration suite (signal-store)",
-    repo: "clearday/worker",
-    num: "main",
-    author: "ci",
-    age: minsAgo(8),
-    unread: 1,
-  },
-  {
-    id: "s6",
-    source: "slack",
-    title: "@you in #platform-eng",
-    sub: "priya: hey — can you take a look at #421 before standup?",
-    age: minsAgo(7),
-    unread: 1,
-  },
-  {
-    id: "s7",
-    source: "slack",
-    title: "DM — Rahul M.",
-    sub: "rahulm: re: auth-proxy state token — you mentioned a 5min ttl, was that the spec?",
-    age: minsAgo(31),
-    unread: 2,
-  },
-  {
-    id: "s10",
-    source: "task",
-    title: "DEV-441 — Add timestamp-replay rejection to slack-webhook",
-    sub: "P1 · In progress · Sprint 24",
-    age: minsAgo(360),
-    unread: 0,
-  },
-];
+function TodayErrorPage() {
+  return (
+    <main className="flex-1 overflow-auto" aria-label="Today">
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          height: "100%",
+          flexDirection: "column",
+          gap: 12,
+          color: "var(--muted-foreground)",
+        }}
+      >
+        <div style={{ fontSize: 32 }}>⚠️</div>
+        <div style={{ fontSize: 15, fontWeight: 500 }}>
+          Failed to load Today
+        </div>
+        <div style={{ fontSize: 13 }}>
+          Check your connection and try refreshing.
+        </div>
+      </div>
+    </main>
+  );
+}
 
-const IN_PROGRESS: InProgressTicket[] = [
-  {
-    id: "DEV-441",
-    title: "Add timestamp-replay rejection to slack-webhook",
-    p: "P1",
-    days: 1,
-    pr: "#421",
-  },
-  {
-    id: "DEV-447",
-    title: "Cron orchestrator: idempotent retry tick",
-    p: "P2",
-    days: 3,
-    pr: null,
-  },
-  {
-    id: "DEV-401",
-    title: "Signal-store upsert benchmarks",
-    p: "P3",
-    days: 6,
-    pr: "#410",
-  },
-];
-
-const WEEK_STATS: WeekStats = {
-  prs_reviewed: 12,
-  tickets_shipped: 4,
-  focus_hours: 14.5,
-  inbox_zero_days: 3,
-};
-
-const TODAY_SCHEDULE: ScheduleBlock[] = [
-  {
-    t: "09:00",
-    end: "09:45",
-    title: "Deep work — Slack adapter",
-    kind: "focus",
-  },
-  {
-    t: "10:00",
-    end: "10:15",
-    title: "Standup — Platform team",
-    kind: "meeting",
-    join: true,
-  },
-  { t: "10:30", end: "10:45", title: "Slack thread cleanup", kind: "buffer" },
-  {
-    t: "11:00",
-    end: "11:30",
-    title: "1:1 — Maria",
-    kind: "meeting",
-    join: true,
-  },
-  {
-    t: "11:45",
-    end: "13:00",
-    title: "Deep work — DEV-441 replay rejection",
-    kind: "focus",
-  },
-  { t: "13:00", end: "14:00", title: "Lunch", kind: "break" },
-  {
-    t: "14:00",
-    end: "14:45",
-    title: "Design review — onboarding flow",
-    kind: "meeting",
-    join: true,
-  },
-  {
-    t: "15:00",
-    end: "16:30",
-    title: "Deep work — briefing prompt review",
-    kind: "focus",
-  },
-  { t: "16:30", end: "17:00", title: "Inbox + ship reviews", kind: "buffer" },
-];
+function TodayRoute() {
+  const vm = Route.useLoaderData();
+  useSignalsLive();
+  return <TodayPage {...vm} />;
+}
 
 // ── Page component ────────────────────────────────────────────────────────────
 
-export function TodayPage() {
+export function TodayPage({
+  nextUp,
+  schedule,
+  inboxPreview,
+  inProgress,
+  weekStats,
+  sourceMix,
+  reviewLatency,
+  shipByDay,
+  briefing,
+  hasAiConnected,
+}: TodayViewModel) {
   const navigate = useNavigate();
   const { session, loading } = useAuth();
 
-  // Soft gate: redirect to /onboarding until the user completes setup.
-  // Real wiring: replace with a route loader that calls decideOnboardingGate().
+  // Soft gate: redirect to /onboarding until setup is complete.
   useEffect(() => {
     if (!loading && session && !localStorage.getItem("devy:onboarded")) {
       void navigate({ to: "/onboarding" });
     }
   }, [loading, session, navigate]);
+
   const firstName =
     (
       (session?.user?.user_metadata?.full_name as string | undefined) ?? ""
     ).split(" ")[0] || "there";
 
-  const previewRows = PREVIEW_SIGNALS.slice(0, 6);
-  const unreadCount = previewRows.filter((s) => s.unread > 0).length;
+  const unreadCount = inboxPreview.filter((s) => s.unread > 0).length;
+  const meetingCount = schedule.filter((b) => b.kind === "meeting").length;
 
   return (
     <main className="flex-1 overflow-auto" aria-label="Today">
@@ -271,27 +147,47 @@ export function TodayPage() {
               color: "var(--muted-foreground)",
             }}
           >
-            {unreadCount} things need you · 3 meetings today · quiet hours end
-            at 09:00
+            {unreadCount > 0 ? `${unreadCount} things need you · ` : ""}
+            {meetingCount > 0 ? `${meetingCount} meetings today` : "No meetings today"}
           </div>
         </header>
 
         {/* Pulse */}
-        <PulseCard stats={WEEK_STATS} />
+        <PulseCard
+          stats={weekStats}
+          empty={
+            weekStats.prs_reviewed === 0 &&
+            weekStats.tickets_shipped === 0 &&
+            weekStats.focus_hours === 0
+          }
+          sourceMix={sourceMix}
+          reviewLatency={reviewLatency}
+          shipByDay={shipByDay}
+        />
 
         {/* Next up hero */}
-        <NextUpHero
-          signal={NEXT_UP}
-          onStartFocus={() =>
-            window.dispatchEvent(new CustomEvent("devy:open-focus-modal"))
-          }
-          onJoin={() => window.open(NEXT_UP.join, "_blank")}
-        />
+        {nextUp && (
+          <NextUpHero
+            signal={nextUp}
+            onStartFocus={() =>
+              window.dispatchEvent(new CustomEvent("devy:open-focus-modal"))
+            }
+            onJoin={
+              nextUp.join ? () => window.open(nextUp.join, "_blank") : undefined
+            }
+          />
+        )}
 
         {/* Morning briefing */}
         <BriefingCard
-          data={BRIEFING}
-          aiConnected={true}
+          data={briefing ?? {
+            model: "",
+            duration: "",
+            generatedAt: "",
+            headline: "",
+            items: [],
+          }}
+          aiConnected={hasAiConnected}
           onConnect={() => void navigate({ to: "/settings" })}
         />
 
@@ -344,27 +240,36 @@ export function TodayPage() {
                 <ArrowRightIcon size={13} />
               </Button>
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
-              {previewRows.map((s) => (
-                <InboxPreviewRow
-                  key={s.id}
-                  signal={s}
-                  onOpen={() => void navigate({ to: "/inbox" })}
-                />
-              ))}
-            </div>
+            {inboxPreview.length === 0 ? (
+              <div
+                style={{
+                  padding: "24px 12px",
+                  fontSize: 13,
+                  color: "var(--muted-foreground)",
+                  textAlign: "center",
+                }}
+              >
+                All caught up.
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+                {inboxPreview.map((s) => (
+                  <InboxPreviewRow
+                    key={s.id}
+                    signal={s}
+                    onOpen={() => void navigate({ to: "/inbox" })}
+                  />
+                ))}
+              </div>
+            )}
           </div>
 
-          <InProgressCard tickets={IN_PROGRESS} />
+          <InProgressCard tickets={inProgress} />
         </div>
 
         {/* Schedule */}
-        <TodaySchedule schedule={TODAY_SCHEDULE} />
+        <TodaySchedule schedule={schedule} />
       </div>
     </main>
   );
 }
-
-export const Route = createFileRoute("/_app/today")({
-  component: TodayPage,
-});

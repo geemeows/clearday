@@ -60,6 +60,20 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
 import { OnboardingPage } from "./onboarding";
 import { OnboardingFlow } from "#/features/onboarding/components/OnboardingFlow";
 import { TodayPage } from "./_app.today";
+import type { TodayViewModel } from "#/features/today/loader";
+
+const EMPTY_TODAY_VM: TodayViewModel = {
+  nextUp: null,
+  schedule: [],
+  inboxPreview: [],
+  inProgress: [],
+  weekStats: { prs_reviewed: 0, tickets_shipped: 0, focus_hours: 0, inbox_zero_days: 0 },
+  sourceMix: [],
+  reviewLatency: [],
+  shipByDay: [],
+  briefing: null,
+  hasAiConnected: false,
+};
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -332,7 +346,7 @@ describe("Today soft gate", () => {
   it("redirects to /onboarding when devy:onboarded is not set", async () => {
     localStorage.removeItem("devy:onboarded");
     await act(async () => {
-      render(<TodayPage />);
+      render(<TodayPage {...EMPTY_TODAY_VM} />);
     });
     await waitFor(() =>
       expect(mockNavigate).toHaveBeenCalledWith({ to: "/onboarding" }),
@@ -342,7 +356,7 @@ describe("Today soft gate", () => {
   it("does not redirect to /onboarding when devy:onboarded is set", async () => {
     localStorage.setItem("devy:onboarded", "1");
     await act(async () => {
-      render(<TodayPage />);
+      render(<TodayPage {...EMPTY_TODAY_VM} />);
     });
     // Let effects settle
     await new Promise((r) => setTimeout(r, 0));
