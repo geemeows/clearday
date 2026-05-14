@@ -245,12 +245,12 @@ function FocusReadyNow({
       className="grid grid-cols-1 items-center gap-6 rounded-[20px] border border-[var(--hairline-soft)] bg-card px-7 py-7 md:grid-cols-[1fr_auto]"
     >
       <div>
-        <span className="font-semibold text-[10px] text-muted-foreground uppercase tracking-[0.6px]">
+        <span className="font-semibold text-[10px] text-muted-foreground uppercase tracking-[0.4px]">
           RIGHT NOW
         </span>
         <div
-          className="mt-1.5 mb-2 font-semibold text-[28px] text-foreground leading-[1.15]"
-          style={{ letterSpacing: "-0.4px" }}
+          className="mt-1.5 mb-2 font-semibold text-[20px] text-foreground leading-[1.25]"
+          style={{ letterSpacing: "-0.2px" }}
         >
           Clear runway — {minutesUntil}m until{" "}
           {signal.title.split("—")[0]?.trim() ?? "next meeting"}
