@@ -1,4 +1,4 @@
-// Projects page — smoke, board, card, and modal tests.
+// Projects page — integration tests against fake loader payload + unit tests.
 
 import { render, screen, fireEvent } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
@@ -13,6 +13,25 @@ vi.mock("#/lib/supabase", () => ({
         data: { subscription: { unsubscribe: vi.fn() } },
       }),
     },
+    from: vi.fn(() => {
+      const chain: Record<string, unknown> = {
+        is: vi.fn(() => chain),
+        in: vi.fn(() => chain),
+        ilike: vi.fn(() => chain),
+        or: vi.fn(() => chain),
+        gte: vi.fn(() => chain),
+        lt: vi.fn(() => chain),
+        eq: vi.fn(() => chain),
+        order: vi.fn(() => chain),
+        limit: vi.fn().mockResolvedValue({ data: [], error: null }),
+      };
+      return {
+        upsert: vi.fn().mockResolvedValue({ error: null }),
+        update: vi.fn(() => ({ eq: vi.fn().mockResolvedValue({ error: null }) })),
+        delete: vi.fn(() => ({ eq: vi.fn().mockResolvedValue({ error: null }) })),
+        select: vi.fn(() => chain),
+      };
+    }),
   },
 }));
 
@@ -48,6 +67,7 @@ import {
   KanbanColumn,
   KanbanCard,
   NewProjectDialog,
+  EditColumnsDialog,
   CardDetailDialog,
   SignalLinkPickerDialog,
 } from "#/features/projects/components/ProjectsPage";
@@ -55,6 +75,7 @@ import type {
   ProjectCard,
   ProjectDef,
   KanbanColumnDef,
+  FixtureSignal,
 } from "#/features/projects/components/ProjectsPage";
 import { Dialog } from "#/components/ui/dialog";
 
@@ -91,36 +112,67 @@ function makeProject(overrides: Partial<ProjectDef> = {}): ProjectDef {
   };
 }
 
-// ── ProjectsPage smoke tests ──────────────────────────────────────────────────
+const FAKE_SIGNALS: FixtureSignal[] = [
+  { id: "sig-1", source: "git", title: "Add retry logic", repo: "platform", num: "#214" },
+  { id: "sig-2", source: "slack", title: "Standup reminder", sub: "#eng" },
+  { id: "sig-3", source: "cal", title: "Sprint planning", sub: "Today 2pm" },
+];
+
+// ── ProjectsPage — integration tests against fake loader payload ──────────────
 
 describe("ProjectsPage", () => {
   it("renders the board heading with active project name", () => {
-    render(<ProjectsPage />);
+    const project = makeProject({ name: "Platform Q2" });
+    render(<ProjectsPage initialProjects={[project]} />);
     expect(screen.getByLabelText(/Active project: Platform Q2/i)).toBeTruthy();
   });
 
   it("renders the kanban board region", () => {
-    render(<ProjectsPage />);
+    render(<ProjectsPage initialProjects={[makeProject()]} />);
     expect(screen.getByLabelText(/kanban board/i)).toBeTruthy();
   });
 
-  it("renders fixture columns", () => {
-    render(<ProjectsPage />);
+  it("renders columns from fake loader payload", () => {
+    const project = makeProject({
+      columns: [
+        { id: "c1", name: "Backlog" },
+        { id: "c2", name: "In progress" },
+        { id: "c3", name: "Shipped" },
+      ],
+      cards: [],
+    });
+    render(<ProjectsPage initialProjects={[project]} />);
     expect(screen.getByLabelText(/Backlog column/i)).toBeTruthy();
     expect(screen.getByLabelText(/In progress column/i)).toBeTruthy();
-    expect(screen.getByLabelText(/In review column/i)).toBeTruthy();
     expect(screen.getByLabelText(/Shipped column/i)).toBeTruthy();
   });
 
-  it("renders fixture cards in their columns", () => {
-    render(<ProjectsPage />);
-    expect(screen.getByLabelText("Slack adapter retry budget")).toBeTruthy();
-    expect(screen.getByLabelText("Auth-proxy state token TTL audit")).toBeTruthy();
+  it("renders cards from fake loader payload", () => {
+    const project = makeProject({
+      columns: [{ id: "col1", name: "Doing" }],
+      cards: [
+        makeCard({ id: "c1", title: "Real card alpha", col: "col1" }),
+        makeCard({ id: "c2", title: "Real card beta", col: "col1" }),
+      ],
+    });
+    render(<ProjectsPage initialProjects={[project]} />);
+    expect(screen.getByLabelText("Real card alpha")).toBeTruthy();
+    expect(screen.getByLabelText("Real card beta")).toBeTruthy();
   });
 
   it("shows project stats in header", () => {
-    render(<ProjectsPage />);
+    render(<ProjectsPage initialProjects={[makeProject()]} />);
     expect(screen.getByLabelText(/project stats/i)).toBeTruthy();
+  });
+
+  it("shows empty state when no projects", () => {
+    render(<ProjectsPage initialProjects={[]} />);
+    expect(screen.getByText(/No projects yet/i)).toBeTruthy();
+  });
+
+  it("shows 'Edit columns' button", () => {
+    render(<ProjectsPage initialProjects={[makeProject()]} />);
+    expect(screen.getByLabelText("Edit columns")).toBeTruthy();
   });
 });
 
@@ -186,7 +238,6 @@ describe("KanbanColumn", () => {
         onOpen={vi.fn()}
       />,
     );
-    // active column has an indicator with title
     expect(
       screen.getByTitle("Active column — surfaces on Today"),
     ).toBeTruthy();
@@ -278,6 +329,94 @@ describe("NewProjectDialog", () => {
   });
 });
 
+// ── EditColumnsDialog unit tests ──────────────────────────────────────────────
+
+describe("EditColumnsDialog", () => {
+  const project = makeProject({
+    columns: [
+      { id: "col1", name: "Backlog" },
+      { id: "col2", name: "Doing" },
+    ],
+    activeCol: "col2",
+  });
+
+  it("renders column names", () => {
+    render(
+      <Dialog open>
+        <EditColumnsDialog
+          project={project}
+          onClose={vi.fn()}
+          onSave={vi.fn()}
+        />
+      </Dialog>,
+    );
+    expect(screen.getByDisplayValue("Backlog")).toBeTruthy();
+    expect(screen.getByDisplayValue("Doing")).toBeTruthy();
+  });
+
+  it("calls onSave with updated columns when Save columns is clicked", () => {
+    const onSave = vi.fn();
+    render(
+      <Dialog open>
+        <EditColumnsDialog
+          project={project}
+          onClose={vi.fn()}
+          onSave={onSave}
+        />
+      </Dialog>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /save columns/i }));
+    expect(onSave).toHaveBeenCalledOnce();
+    expect(onSave.mock.calls[0][0]).toHaveLength(2);
+  });
+
+  it("calls onClose on cancel", () => {
+    const onClose = vi.fn();
+    render(
+      <Dialog open>
+        <EditColumnsDialog
+          project={project}
+          onClose={onClose}
+          onSave={vi.fn()}
+        />
+      </Dialog>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /cancel/i }));
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it("can add a new column", () => {
+    render(
+      <Dialog open>
+        <EditColumnsDialog
+          project={project}
+          onClose={vi.fn()}
+          onSave={vi.fn()}
+        />
+      </Dialog>,
+    );
+    fireEvent.click(screen.getByLabelText("Add column to list"));
+    // Now 3 column inputs should exist
+    const inputs = screen.getAllByLabelText(/Column \d+ name/);
+    expect(inputs).toHaveLength(3);
+  });
+
+  it("can remove a column", () => {
+    render(
+      <Dialog open>
+        <EditColumnsDialog
+          project={project}
+          onClose={vi.fn()}
+          onSave={vi.fn()}
+        />
+      </Dialog>,
+    );
+    fireEvent.click(screen.getByLabelText("Remove column Backlog"));
+    const inputs = screen.getAllByLabelText(/Column \d+ name/);
+    expect(inputs).toHaveLength(1);
+  });
+});
+
 // ── CardDetailDialog unit tests ───────────────────────────────────────────────
 
 describe("CardDetailDialog", () => {
@@ -363,6 +502,22 @@ describe("CardDetailDialog", () => {
     expect(screen.getByText(/EXTERNAL SOURCE/i)).toBeTruthy();
     expect(screen.getAllByText(/DEV-441/).length).toBeGreaterThan(0);
   });
+
+  it("renders linked signal rows when allSignals are provided", () => {
+    const card = makeCard({ linkedSignals: ["sig-1"] });
+    render(
+      <Dialog open>
+        <CardDetailDialog
+          card={card}
+          project={project}
+          allSignals={FAKE_SIGNALS}
+          onUpdate={vi.fn()}
+          onLinkSignal={vi.fn()}
+        />
+      </Dialog>,
+    );
+    expect(screen.getByText("Add retry logic")).toBeTruthy();
+  });
 });
 
 // ── SignalLinkPickerDialog unit tests ─────────────────────────────────────────
@@ -371,7 +526,11 @@ describe("SignalLinkPickerDialog", () => {
   it("renders the dialog title and signal list", () => {
     render(
       <Dialog open>
-        <SignalLinkPickerDialog alreadyLinked={[]} onPick={vi.fn()} />
+        <SignalLinkPickerDialog
+          signals={FAKE_SIGNALS}
+          alreadyLinked={[]}
+          onPick={vi.fn()}
+        />
       </Dialog>,
     );
     expect(screen.getByText("Link a signal")).toBeTruthy();
@@ -381,32 +540,41 @@ describe("SignalLinkPickerDialog", () => {
   it("lists available signals", () => {
     render(
       <Dialog open>
-        <SignalLinkPickerDialog alreadyLinked={[]} onPick={vi.fn()} />
+        <SignalLinkPickerDialog
+          signals={FAKE_SIGNALS}
+          alreadyLinked={[]}
+          onPick={vi.fn()}
+        />
       </Dialog>,
     );
-    expect(
-      screen.getByText("Add retry logic to Slack adapter"),
-    ).toBeTruthy();
+    expect(screen.getByText("Add retry logic")).toBeTruthy();
+    expect(screen.getByText("Standup reminder")).toBeTruthy();
   });
 
   it("filters signals by query", () => {
     render(
       <Dialog open>
-        <SignalLinkPickerDialog alreadyLinked={[]} onPick={vi.fn()} />
+        <SignalLinkPickerDialog
+          signals={FAKE_SIGNALS}
+          alreadyLinked={[]}
+          onPick={vi.fn()}
+        />
       </Dialog>,
     );
     const input = screen.getByLabelText(/search signals/i);
     fireEvent.change(input, { target: { value: "standup" } });
-    expect(screen.getByText(/@here standup reminder/i)).toBeTruthy();
-    expect(
-      screen.queryByText("Add retry logic to Slack adapter"),
-    ).toBeNull();
+    expect(screen.getByText(/standup reminder/i)).toBeTruthy();
+    expect(screen.queryByText("Add retry logic")).toBeNull();
   });
 
   it("shows no-match message when filter yields nothing", () => {
     render(
       <Dialog open>
-        <SignalLinkPickerDialog alreadyLinked={[]} onPick={vi.fn()} />
+        <SignalLinkPickerDialog
+          signals={FAKE_SIGNALS}
+          alreadyLinked={[]}
+          onPick={vi.fn()}
+        />
       </Dialog>,
     );
     const input = screen.getByLabelText(/search signals/i);
@@ -418,21 +586,41 @@ describe("SignalLinkPickerDialog", () => {
     const onPick = vi.fn();
     render(
       <Dialog open>
-        <SignalLinkPickerDialog alreadyLinked={[]} onPick={onPick} />
+        <SignalLinkPickerDialog
+          signals={FAKE_SIGNALS}
+          alreadyLinked={[]}
+          onPick={onPick}
+        />
       </Dialog>,
     );
-    fireEvent.click(screen.getByText("Add retry logic to Slack adapter"));
-    expect(onPick).toHaveBeenCalledWith("s1");
+    fireEvent.click(screen.getByText("Add retry logic"));
+    expect(onPick).toHaveBeenCalledWith("sig-1");
   });
 
   it("hides already-linked signals", () => {
     render(
       <Dialog open>
-        <SignalLinkPickerDialog alreadyLinked={["s1"]} onPick={vi.fn()} />
+        <SignalLinkPickerDialog
+          signals={FAKE_SIGNALS}
+          alreadyLinked={["sig-1"]}
+          onPick={vi.fn()}
+        />
       </Dialog>,
     );
-    expect(
-      screen.queryByText("Add retry logic to Slack adapter"),
-    ).toBeNull();
+    expect(screen.queryByText("Add retry logic")).toBeNull();
+    expect(screen.getByText("Standup reminder")).toBeTruthy();
+  });
+
+  it("shows empty state when signals array is empty", () => {
+    render(
+      <Dialog open>
+        <SignalLinkPickerDialog
+          signals={[]}
+          alreadyLinked={[]}
+          onPick={vi.fn()}
+        />
+      </Dialog>,
+    );
+    expect(screen.getByText(/No matching signals/i)).toBeTruthy();
   });
 });

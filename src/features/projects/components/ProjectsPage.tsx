@@ -1,7 +1,13 @@
-// ProjectsPage — Redesign v5 / Projects (#181)
-// Kanban board: board view, project switcher, card detail pane, signal linking.
+// ProjectsPage — Redesign v5 / Wire data — Projects (#191)
+// Kanban board: board view, project switcher, column CRUD, card detail, signal linking.
 
-import { ChevronDownIcon, LinkIcon, PlusIcon, XIcon } from "lucide-react";
+import {
+  ChevronDownIcon,
+  LinkIcon,
+  PlusIcon,
+  SettingsIcon,
+  XIcon,
+} from "lucide-react";
 import { useMemo, useState } from "react";
 import { Button } from "#/components/ui/button";
 import {
@@ -18,6 +24,19 @@ import {
 } from "#/components/ui/popover";
 import { Textarea } from "#/components/ui/textarea";
 import { SourceGlyph } from "#/features/signals/components/SourceGlyph";
+import { supabase } from "#/lib/supabase";
+import type { SupabaseLike } from "#/shared/db";
+import {
+  createProject,
+  createColumn,
+  createCard,
+  updateCard as storeUpdateCard,
+  updateColumn as storeUpdateColumn,
+  deleteColumn as storeDeleteColumn,
+  linkSignalToCard,
+  unlinkSignal as storeUnlinkSignal,
+  type CardPatch,
+} from "#/features/projects/store";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -65,176 +84,7 @@ export type FixtureSignal = {
   sub?: string;
 };
 
-// ── Fixture data ──────────────────────────────────────────────────────────────
-
-const FIXTURE_SIGNALS: FixtureSignal[] = [
-  {
-    id: "s1",
-    source: "git",
-    title: "Add retry logic to Slack adapter",
-    repo: "platform",
-    num: "PR #214",
-  },
-  {
-    id: "s2",
-    source: "git",
-    title: "Fix auth-proxy token TTL edge case",
-    repo: "platform",
-    num: "PR #218",
-  },
-  {
-    id: "s3",
-    source: "slack",
-    title: "@here standup reminder",
-    sub: "#eng-platform",
-  },
-  {
-    id: "s4",
-    source: "slack",
-    title: "Review cron idempotency PR",
-    sub: "DM from Joon",
-  },
-  { id: "s5", source: "cal", title: "Sprint planning", sub: "Today 2:00 PM" },
-  {
-    id: "s6",
-    source: "git",
-    title: "ci: bump actions/checkout to v4",
-    repo: "platform",
-    num: "PR #215",
-  },
-  {
-    id: "s7",
-    source: "task",
-    title: "DEV-441: Slack adapter retry budget",
-    sub: "In review",
-  },
-  {
-    id: "s8",
-    source: "task",
-    title: "DEV-447: Cron idempotent retry tick",
-    sub: "Review",
-  },
-];
-
-const INITIAL_PROJECTS: ProjectDef[] = [
-  {
-    id: "p-platform",
-    name: "Platform Q2",
-    color: "var(--primary)",
-    activeCol: "doing",
-    columns: [
-      { id: "backlog", name: "Backlog" },
-      { id: "doing", name: "In progress" },
-      { id: "review", name: "In review" },
-      { id: "shipped", name: "Shipped" },
-    ],
-    cards: [
-      {
-        id: "c1",
-        col: "doing",
-        title: "Slack adapter retry budget",
-        desc: "Cap retries at 3 with jitter; emit metric on bail.",
-        priority: "P1",
-        labels: ["infra"],
-        due: "today",
-        linked: { source: "task", id: "DEV-441", repo: "linear" },
-        linkedSignals: ["s2", "s6"],
-      },
-      {
-        id: "c2",
-        col: "doing",
-        title: "Auth-proxy state token TTL audit",
-        desc: "",
-        priority: "P1",
-        labels: ["security"],
-        due: "tomorrow",
-        linked: null,
-        linkedSignals: ["s7"],
-      },
-      {
-        id: "c3",
-        col: "review",
-        title: "Cron orchestrator: idempotent retry tick",
-        desc: "PR up — awaiting CI.",
-        priority: "P2",
-        labels: ["infra"],
-        due: null,
-        linked: { source: "task", id: "DEV-447", repo: "linear" },
-        linkedSignals: [],
-      },
-      {
-        id: "c4",
-        col: "backlog",
-        title: "Signal-store upsert benchmarks",
-        desc: "",
-        priority: "P3",
-        labels: ["perf"],
-        due: null,
-        linked: { source: "task", id: "DEV-401", repo: "linear" },
-        linkedSignals: [],
-      },
-      {
-        id: "c5",
-        col: "backlog",
-        title: "Web-push VAPID key rotation flow",
-        desc: "Document rotation cadence.",
-        priority: "P3",
-        labels: ["alerts"],
-        due: null,
-        linked: null,
-        linkedSignals: [],
-      },
-      {
-        id: "c6",
-        col: "shipped",
-        title: "Onboarding: Slack-channel allowlist step",
-        desc: "",
-        priority: "P2",
-        labels: ["onboarding"],
-        due: null,
-        linked: { source: "task", id: "DEV-388", repo: "linear" },
-        linkedSignals: [],
-      },
-    ],
-  },
-  {
-    id: "p-personal",
-    name: "Personal",
-    color: "#7c3aed",
-    activeCol: "doing",
-    columns: [
-      { id: "ideas", name: "Ideas" },
-      { id: "doing", name: "Doing" },
-      { id: "done", name: "Done" },
-    ],
-    cards: [
-      {
-        id: "c7",
-        col: "doing",
-        title: "Read 'A Philosophy of Software Design'",
-        desc: "Ch 4–6 this week.",
-        priority: "P3",
-        labels: ["reading"],
-        due: null,
-        linked: null,
-        linkedSignals: [],
-      },
-      {
-        id: "c8",
-        col: "ideas",
-        title: "Refactor home dotfiles",
-        desc: "",
-        priority: "P3",
-        labels: [],
-        due: null,
-        linked: null,
-        linkedSignals: [],
-      },
-    ],
-  },
-];
-
-// ── Helper ────────────────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function priorityStyle(p: CardPriority): { bg: string; color: string } {
   if (p === "P1") return { bg: "var(--danger-soft)", color: "var(--danger)" };
@@ -242,13 +92,31 @@ function priorityStyle(p: CardPriority): { bg: string; color: string } {
   return { bg: "var(--surface-strong)", color: "var(--muted-foreground)" };
 }
 
+function dueToDueAt(due: CardDue): string | null {
+  if (!due) return null;
+  const d = new Date();
+  d.setHours(12, 0, 0, 0);
+  if (due === "tomorrow") d.setDate(d.getDate() + 1);
+  else if (due === "this-week") d.setDate(d.getDate() + 3);
+  return d.toISOString();
+}
+
 // ── ProjectsPage ──────────────────────────────────────────────────────────────
 
-export function ProjectsPage() {
-  const [projects, setProjects] = useState<ProjectDef[]>(INITIAL_PROJECTS);
-  const [activeId, setActiveId] = useState("p-platform");
+export function ProjectsPage({
+  initialProjects = [],
+  availableSignals = [],
+}: {
+  initialProjects?: ProjectDef[];
+  availableSignals?: FixtureSignal[];
+} = {}) {
+  const db = supabase as unknown as SupabaseLike;
+
+  const [projects, setProjects] = useState<ProjectDef[]>(initialProjects);
+  const [activeId, setActiveId] = useState(initialProjects[0]?.id ?? "");
   const [openCardId, setOpenCardId] = useState<string | null>(null);
   const [creatingProject, setCreatingProject] = useState(false);
+  const [editingColumns, setEditingColumns] = useState(false);
   const [linkPickerCardId, setLinkPickerCardId] = useState<string | null>(null);
 
   const project = projects.find((p) => p.id === activeId) ?? projects[0];
@@ -256,38 +124,60 @@ export function ProjectsPage() {
   const updateProject = (id: string, fn: (p: ProjectDef) => ProjectDef) =>
     setProjects((ps) => ps.map((p) => (p.id === id ? fn(p) : p)));
 
-  const moveCard = (cardId: string, toCol: string) =>
+  const handleMoveCard = (cardId: string, toCol: string) => {
     updateProject(activeId, (p) => ({
       ...p,
       cards: p.cards.map((c) => (c.id === cardId ? { ...c, col: toCol } : c)),
     }));
+    storeUpdateCard(db, cardId, { column_id: toCol }).catch(console.error);
+  };
 
-  const addCard = (colId: string) =>
+  const handleAddCard = (colId: string) => {
+    const newId = crypto.randomUUID();
+    const proj = projects.find((p) => p.id === activeId);
+    if (!proj) return;
+    const newCard: ProjectCard = {
+      id: newId,
+      col: colId,
+      title: "Untitled",
+      desc: "",
+      priority: "P3",
+      labels: [],
+      due: null,
+      linked: null,
+      linkedSignals: [],
+    };
     updateProject(activeId, (p) => ({
       ...p,
-      cards: [
-        ...p.cards,
-        {
-          id: `c${Date.now()}`,
-          col: colId,
-          title: "Untitled",
-          desc: "",
-          priority: "P3" as CardPriority,
-          labels: [],
-          due: null,
-          linked: null,
-          linkedSignals: [],
-        },
-      ],
+      cards: [...p.cards, newCard],
     }));
+    createCard(db, {
+      id: newId,
+      project_id: activeId,
+      column_id: colId,
+      order: proj.cards.length,
+      title: "Untitled",
+    }).catch(console.error);
+  };
 
-  const updateCard = (cardId: string, patch: Partial<ProjectCard>) =>
+  const handleUpdateCard = (cardId: string, patch: Partial<ProjectCard>) => {
     updateProject(activeId, (p) => ({
       ...p,
       cards: p.cards.map((c) => (c.id === cardId ? { ...c, ...patch } : c)),
     }));
+    const storePatch: CardPatch = {};
+    if (patch.title !== undefined) storePatch.title = patch.title;
+    if (patch.desc !== undefined) storePatch.body = patch.desc;
+    if (patch.priority !== undefined) storePatch.priority = patch.priority;
+    if (patch.labels !== undefined) storePatch.tags = patch.labels;
+    if (patch.due !== undefined) storePatch.due_at = dueToDueAt(patch.due);
+    if (patch.col !== undefined) storePatch.column_id = patch.col;
+    if (Object.keys(storePatch).length > 0) {
+      storeUpdateCard(db, cardId, storePatch).catch(console.error);
+    }
+  };
 
-  const linkSignal = (cardId: string, sigId: string) =>
+  const handleLinkSignal = (cardId: string, sigId: string) => {
     updateProject(activeId, (p) => ({
       ...p,
       cards: p.cards.map((c) =>
@@ -301,8 +191,108 @@ export function ProjectsPage() {
           : c,
       ),
     }));
+    linkSignalToCard(db, sigId, cardId, activeId).catch(console.error);
+  };
 
-  const openCard = project.cards.find((c) => c.id === openCardId) ?? null;
+  const handleUnlinkSignal = (cardId: string, sigId: string) => {
+    updateProject(activeId, (p) => ({
+      ...p,
+      cards: p.cards.map((c) =>
+        c.id === cardId
+          ? { ...c, linkedSignals: c.linkedSignals.filter((s) => s !== sigId) }
+          : c,
+      ),
+    }));
+    storeUnlinkSignal(db, sigId).catch(console.error);
+  };
+
+  const handleSaveColumns = (newCols: KanbanColumnDef[]) => {
+    const proj = projects.find((p) => p.id === activeId);
+    if (!proj) return;
+    const oldCols = proj.columns;
+    const newColIds = new Set(newCols.map((c) => c.id));
+    const deletedCols = oldCols.filter((c) => !newColIds.has(c.id));
+
+    updateProject(activeId, (p) => ({
+      ...p,
+      columns: newCols,
+      // cards whose column was deleted fall to first remaining column
+      cards: p.cards.map((c) =>
+        newColIds.has(c.col)
+          ? c
+          : { ...c, col: newCols[0]?.id ?? c.col },
+      ),
+    }));
+    setEditingColumns(false);
+
+    for (const c of deletedCols) {
+      storeDeleteColumn(db, c.id).catch(console.error);
+    }
+    newCols.forEach((c, i) => {
+      const existing = oldCols.find((old) => old.id === c.id);
+      if (!existing) {
+        createColumn(db, {
+          id: c.id,
+          project_id: activeId,
+          name: c.name,
+          order: i,
+        }).catch(console.error);
+      } else if (existing.name !== c.name || oldCols.indexOf(existing) !== i) {
+        storeUpdateColumn(db, c.id, { name: c.name, order: i }).catch(
+          console.error,
+        );
+      }
+    });
+  };
+
+  const openCard = project?.cards.find((c) => c.id === openCardId) ?? null;
+
+  // Empty state — no projects loaded yet
+  if (projects.length === 0) {
+    return (
+      <div
+        style={{
+          flex: 1,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          flexDirection: "column",
+          gap: 16,
+          height: "100%",
+        }}
+      >
+        <p style={{ color: "var(--muted-foreground)", fontSize: 14 }}>
+          No projects yet. Create one to get started.
+        </p>
+        <Button onClick={() => setCreatingProject(true)} type="button">
+          <PlusIcon size={14} aria-hidden />
+          New project
+        </Button>
+
+        <Dialog open={creatingProject} onOpenChange={setCreatingProject}>
+          <NewProjectDialog
+            onClose={() => setCreatingProject(false)}
+            onCreate={(np) => {
+              setProjects([np]);
+              setActiveId(np.id);
+              setCreatingProject(false);
+              createProject(db, { id: np.id, name: np.name }).catch(
+                console.error,
+              );
+              np.columns.forEach((col, i) =>
+                createColumn(db, {
+                  id: col.id,
+                  project_id: np.id,
+                  name: col.name,
+                  order: i,
+                }).catch(console.error),
+              );
+            }}
+          />
+        </Dialog>
+      </div>
+    );
+  }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
@@ -322,9 +312,23 @@ export function ProjectsPage() {
           setActiveId={setActiveId}
           onNew={() => setCreatingProject(true)}
         />
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setEditingColumns(true)}
+          type="button"
+          aria-label="Edit columns"
+        >
+          <SettingsIcon size={13} aria-hidden />
+          Edit columns
+        </Button>
         <span style={{ flex: 1 }} />
-        <span style={{ fontSize: 12, color: "var(--muted-foreground)" }}>
-          {project.cards.length} cards · {project.columns.length} columns
+        <span
+          style={{ fontSize: 12, color: "var(--muted-foreground)" }}
+          aria-label="project stats"
+        >
+          {project?.cards.length ?? 0} cards ·{" "}
+          {project?.columns.length ?? 0} columns
         </span>
       </div>
 
@@ -336,26 +340,53 @@ export function ProjectsPage() {
           overflowY: "hidden",
           padding: "20px 20px 28px",
         }}
+        aria-label="kanban board"
       >
         <div
           style={{
             display: "flex",
             gap: 12,
             height: "100%",
-            minWidth: project.columns.length * 294,
+            minWidth: (project?.columns.length ?? 0) * 294,
           }}
         >
-          {project.columns.map((col) => (
+          {project?.columns.map((col) => (
             <KanbanColumn
               key={col.id}
               col={col}
               project={project}
               cards={project.cards.filter((c) => c.col === col.id)}
-              onMove={moveCard}
-              onAdd={() => addCard(col.id)}
+              onMove={handleMoveCard}
+              onAdd={() => handleAddCard(col.id)}
               onOpen={(c) => setOpenCardId(c.id)}
             />
           ))}
+          {/* Add column button */}
+          <button
+            type="button"
+            onClick={() => setEditingColumns(true)}
+            aria-label="Add column"
+            style={{
+              flexShrink: 0,
+              width: 180,
+              alignSelf: "flex-start",
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              padding: "10px 14px",
+              borderRadius: 12,
+              border: "1.5px dashed var(--border)",
+              background: "transparent",
+              color: "var(--muted-foreground)",
+              fontSize: 13,
+              fontWeight: 500,
+              cursor: "pointer",
+            }}
+            className="hover:bg-accent"
+          >
+            <PlusIcon size={13} aria-hidden />
+            Add column
+          </button>
         </div>
       </div>
 
@@ -367,9 +398,31 @@ export function ProjectsPage() {
             setProjects((ps) => [...ps, np]);
             setActiveId(np.id);
             setCreatingProject(false);
+            createProject(db, { id: np.id, name: np.name }).catch(
+              console.error,
+            );
+            np.columns.forEach((col, i) =>
+              createColumn(db, {
+                id: col.id,
+                project_id: np.id,
+                name: col.name,
+                order: i,
+              }).catch(console.error),
+            );
           }}
         />
       </Dialog>
+
+      {/* Edit columns dialog */}
+      {project && (
+        <Dialog open={editingColumns} onOpenChange={setEditingColumns}>
+          <EditColumnsDialog
+            project={project}
+            onClose={() => setEditingColumns(false)}
+            onSave={handleSaveColumns}
+          />
+        </Dialog>
+      )}
 
       {/* Card detail dialog */}
       <Dialog
@@ -378,15 +431,17 @@ export function ProjectsPage() {
           if (!open) setOpenCardId(null);
         }}
       >
-        {openCard && (
+        {openCard && project && (
           <CardDetailDialog
             card={openCard}
             project={project}
-            onUpdate={(patch) => updateCard(openCard.id, patch)}
+            allSignals={availableSignals}
+            onUpdate={(patch) => handleUpdateCard(openCard.id, patch)}
             onLinkSignal={() => {
               setLinkPickerCardId(openCard.id);
               setOpenCardId(null);
             }}
+            onUnlinkSignal={(sigId) => handleUnlinkSignal(openCard.id, sigId)}
           />
         )}
       </Dialog>
@@ -398,14 +453,15 @@ export function ProjectsPage() {
           if (!open) setLinkPickerCardId(null);
         }}
       >
-        {linkPickerCardId && (
+        {linkPickerCardId && project && (
           <SignalLinkPickerDialog
+            signals={availableSignals}
             alreadyLinked={
               project.cards.find((c) => c.id === linkPickerCardId)
                 ?.linkedSignals ?? []
             }
             onPick={(sigId) => {
-              linkSignal(linkPickerCardId, sigId);
+              handleLinkSignal(linkPickerCardId, sigId);
               setLinkPickerCardId(null);
             }}
           />
@@ -447,21 +503,21 @@ export function ProjectSwitcher({
               border: "1px solid var(--border)",
               color: "var(--foreground)",
             }}
-            aria-label={`Active project: ${active.name}`}
+            aria-label={`Active project: ${active?.name ?? ""}`}
           >
             <span
               style={{
                 width: 8,
                 height: 8,
                 borderRadius: 999,
-                background: active.color,
+                background: active?.color ?? "var(--primary)",
                 flexShrink: 0,
               }}
             />
             <span
               style={{ fontSize: 17, fontWeight: 700, letterSpacing: -0.4 }}
             >
-              {active.name}
+              {active?.name ?? ""}
             </span>
             <span
               style={{
@@ -474,7 +530,7 @@ export function ProjectSwitcher({
                 fontVariantNumeric: "tabular-nums",
               }}
             >
-              {active.cards.length}
+              {active?.cards.length ?? 0}
             </span>
             <ChevronDownIcon size={13} aria-hidden />
           </button>
@@ -508,7 +564,7 @@ export function ProjectSwitcher({
                 width: 8,
                 height: 8,
                 borderRadius: 999,
-                background: active.color,
+                background: active?.color ?? "var(--primary)",
                 flexShrink: 0,
               }}
             />
@@ -520,10 +576,11 @@ export function ProjectSwitcher({
                   color: "var(--foreground)",
                 }}
               >
-                {active.name}
+                {active?.name ?? ""}
               </div>
               <div style={{ fontSize: 11.5, color: "var(--muted-foreground)" }}>
-                {active.cards.length} cards · {active.columns.length} columns
+                {active?.cards.length ?? 0} cards ·{" "}
+                {active?.columns.length ?? 0} columns
               </div>
             </div>
           </div>
@@ -930,6 +987,189 @@ export function KanbanCard({
   );
 }
 
+// ── ColumnEditor (shared by NewProjectDialog and EditColumnsDialog) ────────────
+
+function ColumnEditor({
+  columns,
+  activeCol,
+  onChange,
+  onActiveColChange,
+  showActiveCol = true,
+}: {
+  columns: KanbanColumnDef[];
+  activeCol: string;
+  onChange: (cols: KanbanColumnDef[]) => void;
+  onActiveColChange: (id: string) => void;
+  showActiveCol?: boolean;
+}) {
+  const updateCol = (i: number, val: string) =>
+    onChange(
+      columns.map((c, idx) => (idx === i ? { ...c, name: val } : c)),
+    );
+
+  const removeCol = (i: number) =>
+    onChange(columns.length > 1 ? columns.filter((_, idx) => idx !== i) : columns);
+
+  const addCol = () =>
+    onChange([...columns, { id: crypto.randomUUID(), name: "New column" }]);
+
+  const moveCol = (i: number, dir: -1 | 1) => {
+    const j = i + dir;
+    if (j < 0 || j >= columns.length) return;
+    const next = [...columns];
+    [next[i], next[j]] = [next[j], next[i]];
+    onChange(next);
+  };
+
+  return (
+    <div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        {columns.map((c, i) => (
+          <div
+            key={c.id}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              padding: 6,
+              background: "var(--muted)",
+              borderRadius: 8,
+              opacity: 0.9,
+            }}
+          >
+            <span
+              style={{
+                fontSize: 11,
+                color: "var(--muted-foreground)",
+                width: 18,
+                textAlign: "center",
+                fontVariantNumeric: "tabular-nums",
+              }}
+            >
+              {i + 1}
+            </span>
+            <input
+              value={c.name}
+              onChange={(e) => updateCol(i, e.target.value)}
+              aria-label={`Column ${i + 1} name`}
+              style={{
+                flex: 1,
+                padding: "5px 9px",
+                borderRadius: 6,
+                border: "1px solid var(--border)",
+                fontSize: 13,
+                outline: "none",
+                background: "var(--background)",
+                color: "var(--foreground)",
+              }}
+            />
+            {showActiveCol && (
+              <label
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 5,
+                  fontSize: 11,
+                  color:
+                    activeCol === c.id
+                      ? "var(--primary)"
+                      : "var(--muted-foreground)",
+                  cursor: "pointer",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                <input
+                  type="radio"
+                  checked={activeCol === c.id}
+                  onChange={() => onActiveColChange(c.id)}
+                  aria-label={`Set ${c.name} as active column`}
+                />
+                Active
+              </label>
+            )}
+            <button
+              type="button"
+              onClick={() => moveCol(i, -1)}
+              disabled={i === 0}
+              aria-label="Move column up"
+              style={{
+                border: "none",
+                background: "transparent",
+                color: "var(--muted-foreground)",
+                cursor: i === 0 ? "default" : "pointer",
+                padding: 4,
+                opacity: i === 0 ? 0.3 : 1,
+              }}
+            >
+              ↑
+            </button>
+            <button
+              type="button"
+              onClick={() => moveCol(i, 1)}
+              disabled={i === columns.length - 1}
+              aria-label="Move column down"
+              style={{
+                border: "none",
+                background: "transparent",
+                color: "var(--muted-foreground)",
+                cursor: i === columns.length - 1 ? "default" : "pointer",
+                padding: 4,
+                opacity: i === columns.length - 1 ? 0.3 : 1,
+              }}
+            >
+              ↓
+            </button>
+            <button
+              type="button"
+              onClick={() => removeCol(i)}
+              aria-label={`Remove column ${c.name}`}
+              style={{
+                border: "none",
+                background: "transparent",
+                color: "var(--muted-foreground)",
+                cursor: "pointer",
+                fontSize: 16,
+                padding: 4,
+                lineHeight: 1,
+              }}
+            >
+              <XIcon size={14} />
+            </button>
+          </div>
+        ))}
+      </div>
+      <button
+        type="button"
+        onClick={addCol}
+        aria-label="Add column to list"
+        style={{
+          marginTop: 8,
+          border: "1px dashed var(--border)",
+          background: "transparent",
+          padding: "5px 12px",
+          borderRadius: 6,
+          color: "var(--muted-foreground)",
+          fontSize: 12,
+          fontWeight: 500,
+          cursor: "pointer",
+        }}
+      >
+        + Add column
+      </button>
+      <p
+        style={{
+          fontSize: 10,
+          color: "var(--muted-foreground)",
+          marginTop: 6,
+        }}
+      >
+        Active column = the one that surfaces on the Today page's "In progress"
+        widget.
+      </p>
+    </div>
+  );
+}
+
 // ── NewProjectDialog ──────────────────────────────────────────────────────────
 
 export function NewProjectDialog({
@@ -941,36 +1181,16 @@ export function NewProjectDialog({
 }) {
   const [name, setName] = useState("");
   const [columns, setColumns] = useState<KanbanColumnDef[]>([
-    { id: "todo", name: "To do" },
-    { id: "doing", name: "Doing" },
-    { id: "done", name: "Done" },
+    { id: crypto.randomUUID(), name: "To do" },
+    { id: crypto.randomUUID(), name: "Doing" },
+    { id: crypto.randomUUID(), name: "Done" },
   ]);
-  const [activeCol, setActiveCol] = useState("doing");
-
-  const updateCol = (i: number, val: string) =>
-    setColumns((cs) =>
-      cs.map((c, idx) => (idx === i ? { ...c, name: val } : c)),
-    );
-
-  const removeCol = (i: number) =>
-    setColumns((cs) => (cs.length > 1 ? cs.filter((_, idx) => idx !== i) : cs));
-
-  const addCol = () =>
-    setColumns((cs) => [...cs, { id: `col${Date.now()}`, name: "New column" }]);
-
-  const moveCol = (i: number, dir: -1 | 1) =>
-    setColumns((cs) => {
-      const j = i + dir;
-      if (j < 0 || j >= cs.length) return cs;
-      const next = [...cs];
-      [next[i], next[j]] = [next[j], next[i]];
-      return next;
-    });
+  const [activeCol, setActiveCol] = useState(columns[1]?.id ?? "");
 
   const handleCreate = () => {
     if (!name.trim() || columns.length === 0) return;
     onCreate({
-      id: `p-${Date.now()}`,
+      id: crypto.randomUUID(),
       name: name.trim(),
       color: "#0a8754",
       activeCol,
@@ -1030,146 +1250,12 @@ export function NewProjectDialog({
           >
             COLUMNS · IN ORDER
           </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            {columns.map((c, i) => (
-              <div
-                key={c.id}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 8,
-                  padding: 6,
-                  background: "var(--muted)",
-                  borderRadius: 8,
-                  opacity: 0.9,
-                }}
-              >
-                <span
-                  style={{
-                    fontSize: 11,
-                    color: "var(--muted-foreground)",
-                    width: 18,
-                    textAlign: "center",
-                    fontVariantNumeric: "tabular-nums",
-                  }}
-                >
-                  {i + 1}
-                </span>
-                <input
-                  value={c.name}
-                  onChange={(e) => updateCol(i, e.target.value)}
-                  aria-label={`Column ${i + 1} name`}
-                  style={{
-                    flex: 1,
-                    padding: "5px 9px",
-                    borderRadius: 6,
-                    border: "1px solid var(--border)",
-                    fontSize: 13,
-                    outline: "none",
-                    background: "var(--background)",
-                    color: "var(--foreground)",
-                  }}
-                />
-                <label
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 5,
-                    fontSize: 11,
-                    color:
-                      activeCol === c.id
-                        ? "var(--primary)"
-                        : "var(--muted-foreground)",
-                    cursor: "pointer",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  <input
-                    type="radio"
-                    checked={activeCol === c.id}
-                    onChange={() => setActiveCol(c.id)}
-                    aria-label={`Set ${c.name} as active column`}
-                  />
-                  Active
-                </label>
-                <button
-                  type="button"
-                  onClick={() => moveCol(i, -1)}
-                  disabled={i === 0}
-                  aria-label="Move column up"
-                  style={{
-                    border: "none",
-                    background: "transparent",
-                    color: "var(--muted-foreground)",
-                    cursor: i === 0 ? "default" : "pointer",
-                    padding: 4,
-                    opacity: i === 0 ? 0.3 : 1,
-                  }}
-                >
-                  ↑
-                </button>
-                <button
-                  type="button"
-                  onClick={() => moveCol(i, 1)}
-                  disabled={i === columns.length - 1}
-                  aria-label="Move column down"
-                  style={{
-                    border: "none",
-                    background: "transparent",
-                    color: "var(--muted-foreground)",
-                    cursor: i === columns.length - 1 ? "default" : "pointer",
-                    padding: 4,
-                    opacity: i === columns.length - 1 ? 0.3 : 1,
-                  }}
-                >
-                  ↓
-                </button>
-                <button
-                  type="button"
-                  onClick={() => removeCol(i)}
-                  aria-label={`Remove column ${c.name}`}
-                  style={{
-                    border: "none",
-                    background: "transparent",
-                    color: "var(--muted-foreground)",
-                    cursor: "pointer",
-                    fontSize: 16,
-                    padding: 4,
-                    lineHeight: 1,
-                  }}
-                >
-                  <XIcon size={14} />
-                </button>
-              </div>
-            ))}
-          </div>
-          <button
-            type="button"
-            onClick={addCol}
-            style={{
-              marginTop: 8,
-              border: "1px dashed var(--border)",
-              background: "transparent",
-              padding: "5px 12px",
-              borderRadius: 6,
-              color: "var(--muted-foreground)",
-              fontSize: 12,
-              fontWeight: 500,
-              cursor: "pointer",
-            }}
-          >
-            + Add column
-          </button>
-          <p
-            style={{
-              fontSize: 10,
-              color: "var(--muted-foreground)",
-              marginTop: 6,
-            }}
-          >
-            Active column = the one that surfaces on the Today page's "In
-            progress" widget.
-          </p>
+          <ColumnEditor
+            columns={columns}
+            activeCol={activeCol}
+            onChange={setColumns}
+            onActiveColChange={setActiveCol}
+          />
         </div>
       </div>
 
@@ -1197,22 +1283,77 @@ export function NewProjectDialog({
   );
 }
 
+// ── EditColumnsDialog ─────────────────────────────────────────────────────────
+
+export function EditColumnsDialog({
+  project,
+  onClose,
+  onSave,
+}: {
+  project: ProjectDef;
+  onClose: () => void;
+  onSave: (cols: KanbanColumnDef[]) => void;
+}) {
+  const [columns, setColumns] = useState<KanbanColumnDef[]>(project.columns);
+  const [activeCol, setActiveCol] = useState(project.activeCol);
+
+  return (
+    <DialogContent className="sm:max-w-lg" showCloseButton={false}>
+      <DialogHeader>
+        <DialogTitle>Edit columns — {project.name}</DialogTitle>
+      </DialogHeader>
+
+      <ColumnEditor
+        columns={columns}
+        activeCol={activeCol}
+        onChange={setColumns}
+        onActiveColChange={setActiveCol}
+      />
+
+      <div
+        style={{
+          display: "flex",
+          gap: 8,
+          justifyContent: "flex-end",
+          marginTop: 8,
+        }}
+      >
+        <Button variant="ghost" onClick={onClose} type="button">
+          Cancel
+        </Button>
+        <Button
+          variant="default"
+          onClick={() => onSave(columns)}
+          disabled={columns.length === 0}
+          type="button"
+        >
+          Save columns
+        </Button>
+      </div>
+    </DialogContent>
+  );
+}
+
 // ── CardDetailDialog ──────────────────────────────────────────────────────────
 
 export function CardDetailDialog({
   card,
   project,
+  allSignals = [],
   onUpdate,
   onLinkSignal,
+  onUnlinkSignal,
 }: {
   card: ProjectCard;
   project: ProjectDef;
+  allSignals?: FixtureSignal[];
   onUpdate: (patch: Partial<ProjectCard>) => void;
   onLinkSignal: () => void;
+  onUnlinkSignal?: (sigId: string) => void;
 }) {
   const sigsById = useMemo(
-    () => Object.fromEntries(FIXTURE_SIGNALS.map((s) => [s.id, s])),
-    [],
+    () => Object.fromEntries(allSignals.map((s) => [s.id, s])),
+    [allSignals],
   );
   const ps = priorityStyle(card.priority);
   const colName = project.columns.find((c) => c.id === card.col)?.name ?? "";
@@ -1505,13 +1646,14 @@ export function CardDetailDialog({
                 </div>
                 <button
                   type="button"
-                  onClick={() =>
+                  onClick={() => {
                     onUpdate({
                       linkedSignals: card.linkedSignals.filter(
                         (x) => x !== sid,
                       ),
-                    })
-                  }
+                    });
+                    onUnlinkSignal?.(sid);
+                  }}
                   aria-label={`Unlink ${s.title}`}
                   style={{
                     border: "none",
@@ -1592,15 +1734,17 @@ export function CardDetailDialog({
 // ── SignalLinkPickerDialog ─────────────────────────────────────────────────────
 
 export function SignalLinkPickerDialog({
+  signals = [],
   alreadyLinked,
   onPick,
 }: {
+  signals?: FixtureSignal[];
   alreadyLinked: string[];
   onPick: (sigId: string) => void;
 }) {
   const [q, setQ] = useState("");
 
-  const items = FIXTURE_SIGNALS.filter(
+  const items = signals.filter(
     (s) =>
       !alreadyLinked.includes(s.id) &&
       (!q || s.title.toLowerCase().includes(q.toLowerCase())),
@@ -1628,6 +1772,7 @@ export function SignalLinkPickerDialog({
           borderRadius: 8,
           marginTop: 4,
         }}
+        aria-label="signal list"
       >
         {items.map((s, i, arr) => (
           <button
