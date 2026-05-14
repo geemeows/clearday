@@ -119,7 +119,7 @@ describe("Settings hub layout", () => {
       name: /settings sections/i,
     });
     const active = within(nav).getByRole("link", { name: /notifications/i });
-    expect(active.className).toMatch(/font-medium/);
+    expect(active.className).toMatch(/font-semibold/);
   });
 });
 

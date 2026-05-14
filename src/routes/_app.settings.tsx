@@ -1,4 +1,5 @@
 import { createFileRoute, Link, Outlet } from "@tanstack/react-router";
+import { ArrowLeft } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SettingsPanel } from "#/components/SettingsPanel";
 import { Checkbox } from "#/components/ui/checkbox";
@@ -41,28 +42,30 @@ function SettingsLayout() {
     <section className="flex min-h-full">
       <aside
         aria-label="Settings"
-        className="w-[220px] shrink-0 border-border border-r bg-muted/30"
+        className="w-[220px] shrink-0 border-[var(--hairline-soft)] border-r bg-[var(--surface-soft)] px-3.5 py-6"
       >
-        <div className="px-4 pt-7 pb-4">
-          <p className="font-mono text-[10px] text-muted-foreground tracking-[0.12em] uppercase">
-            Settings
-          </p>
-          <h1 className="mt-1 font-semibold text-sidebar-foreground text-xl tracking-tight">
-            Workspace
-          </h1>
+        <Link
+          to="/today"
+          className="mb-3.5 inline-flex h-7 items-center gap-1.5 rounded-md px-1.5 text-[13px] text-[var(--body)] hover:bg-accent"
+        >
+          <ArrowLeft className="size-3.5" />
+          Back
+        </Link>
+        <div className="mb-3.5 px-2 font-semibold text-[var(--ink)] text-xl tracking-tight">
+          Settings
         </div>
         <nav
           aria-label="Settings sections"
-          className="flex flex-col gap-0.5 px-2"
+          className="flex flex-col gap-0.5"
         >
           {SETTINGS_TABS.map((tab) => (
             <Link
               key={tab.to}
               to={tab.to}
-              className="rounded-md px-3 py-2 text-sidebar-foreground/75 text-sm hover:bg-sidebar-accent hover:text-sidebar-foreground"
+              className="rounded-lg px-2.5 py-2 text-left font-medium text-[14px] text-[var(--body)] hover:bg-accent/50"
               activeProps={{
                 className:
-                  "bg-sidebar-accent font-medium text-sidebar-accent-foreground",
+                  "bg-[var(--surface-strong)] font-semibold text-[var(--ink)]",
               }}
             >
               {tab.label}
@@ -71,7 +74,7 @@ function SettingsLayout() {
         </nav>
       </aside>
       <div className="min-w-0 flex-1">
-        <div className="mx-auto max-w-[1100px] space-y-6 p-8">
+        <div className="mx-auto max-w-[1100px] space-y-6 px-10 py-8 pb-16">
           <Outlet />
         </div>
       </div>
