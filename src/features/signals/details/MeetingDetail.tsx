@@ -1,4 +1,5 @@
 // Meeting detail pane — shown when a cal signal is selected in Inbox.
+// Shows private notes, agenda, and attendees from the event payload.
 
 import { Button } from "#/components/ui/button";
 import { VideoIcon, CalendarIcon } from "lucide-react";
@@ -21,6 +22,8 @@ type Props = { signal: InboxSignal };
 
 export function MeetingDetail({ signal: s }: Props) {
   const timeLabel = s.age ? `Meeting · ${formatMeetingTime(s.age)}` : "Meeting";
+  const videoLink =
+    s.url && s.url.length > 0 ? s.url : null;
 
   return (
     <div style={{ padding: "28px 32px", overflowY: "auto", flex: 1 }}>
@@ -68,38 +71,130 @@ export function MeetingDetail({ signal: s }: Props) {
         </div>
       )}
 
-      {/* Agenda */}
-      {s.agenda && s.agenda.length > 0 && (
-        <div style={{ marginTop: 20, display: "flex", flexDirection: "column", gap: 6 }}>
+      {/* Private notes / description */}
+      {s.meetingNotes && (
+        <div style={{ marginTop: 16, marginBottom: 16 }}>
           <div
             style={{
               fontSize: 10,
               fontWeight: 700,
               letterSpacing: "0.08em",
               color: "var(--muted-foreground, var(--muted))",
-              marginBottom: 4,
+              marginBottom: 6,
+            }}
+          >
+            NOTES
+          </div>
+          <div
+            style={{
+              fontSize: 13,
+              lineHeight: 1.6,
+              color: "var(--body, var(--foreground))",
+              background: "var(--surface-soft)",
+              borderRadius: "var(--radius-md)",
+              padding: "10px 14px",
+              border: "1px solid var(--hairline-soft, var(--border))",
+              whiteSpace: "pre-wrap",
+            }}
+          >
+            {s.meetingNotes}
+          </div>
+        </div>
+      )}
+
+      {/* Agenda */}
+      {s.agenda && s.agenda.length > 0 && (
+        <div style={{ marginTop: 16, marginBottom: 16 }}>
+          <div
+            style={{
+              fontSize: 10,
+              fontWeight: 700,
+              letterSpacing: "0.08em",
+              color: "var(--muted-foreground, var(--muted))",
+              marginBottom: 6,
             }}
           >
             AGENDA
           </div>
-          {s.agenda.map((item, i) => (
-            <div
-              // biome-ignore lint/suspicious/noArrayIndexKey: static agenda items
-              key={i}
-              style={{
-                fontSize: 13.5,
-                color: "var(--body, var(--foreground))",
-              }}
-            >
-              · {item}
-            </div>
-          ))}
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            {s.agenda.map((item, i) => (
+              <div
+                // biome-ignore lint/suspicious/noArrayIndexKey: static agenda items
+                key={i}
+                style={{
+                  fontSize: 13.5,
+                  color: "var(--body, var(--foreground))",
+                }}
+              >
+                · {item}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Attendees */}
+      {s.meetingAttendees && s.meetingAttendees.length > 0 && (
+        <div style={{ marginTop: 16, marginBottom: 16 }}>
+          <div
+            style={{
+              fontSize: 10,
+              fontWeight: 700,
+              letterSpacing: "0.08em",
+              color: "var(--muted-foreground, var(--muted))",
+              marginBottom: 6,
+            }}
+          >
+            ATTENDEES
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            {s.meetingAttendees.map((a, i) => (
+              <div
+                // biome-ignore lint/suspicious/noArrayIndexKey: attendees list order is stable
+                key={i}
+                style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}
+              >
+                <span style={{ color: "var(--body, var(--foreground))" }}>
+                  {a.name ?? a.email ?? "Unknown"}
+                </span>
+                {a.organizer && (
+                  <span
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 600,
+                      padding: "1px 5px",
+                      borderRadius: 4,
+                      background: "var(--surface-strong)",
+                      color: "var(--muted-foreground, var(--muted))",
+                    }}
+                  >
+                    organizer
+                  </span>
+                )}
+                {a.response && a.response !== "accepted" && (
+                  <span
+                    style={{
+                      fontSize: 10,
+                      color: a.response === "declined" ? "var(--destructive, #ef4444)" : "var(--muted-foreground, var(--muted))",
+                    }}
+                  >
+                    {a.response}
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
       {/* Actions */}
       <div style={{ display: "flex", gap: 8, marginTop: 24 }}>
-        <Button variant="default" size="sm">
+        <Button
+          variant="default"
+          size="sm"
+          onClick={() => videoLink && window.open(videoLink, "_blank")}
+          disabled={!videoLink}
+        >
           <VideoIcon />
           Join meeting
         </Button>

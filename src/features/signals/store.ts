@@ -148,6 +148,42 @@ export async function dismissSignal(
   if (error) throw new Error(`signal dismiss failed: ${error.message}`);
 }
 
+export async function snoozeSignal(
+  client: SupabaseLike,
+  id: string,
+  snoozedUntil: string,
+): Promise<void> {
+  const { error } = await client
+    .from("signals")
+    .update({ snoozed_until: snoozedUntil, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) throw new Error(`signal snooze failed: ${error.message}`);
+}
+
+export async function tagSignal(
+  client: SupabaseLike,
+  id: string,
+  tags: string[],
+): Promise<void> {
+  const { error } = await client
+    .from("signals")
+    .update({ tags, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) throw new Error(`signal tag failed: ${error.message}`);
+}
+
+export async function setPrioritySignal(
+  client: SupabaseLike,
+  id: string,
+  priority: "low" | "high" | null,
+): Promise<void> {
+  const { error } = await client
+    .from("signals")
+    .update({ priority, updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) throw new Error(`signal priority failed: ${error.message}`);
+}
+
 /**
  * Flip `requires_action` to false on the matching Signal so the optimistic
  * "Replied" state in the inbox survives a reload. Used by the PR-review and

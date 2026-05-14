@@ -281,6 +281,10 @@ export default {
       return handleGetPrOverview(url, service);
     }
 
+    if (url.pathname === "/api/pr/comment" && request.method === "POST") {
+      return handlePostPrComment(request, service);
+    }
+
     if (
       url.pathname === "/api/projects/links/github/refresh" &&
       request.method === "POST"
@@ -1474,6 +1478,36 @@ async function handleGetPrOverview(
   const out = await PROVIDERS.github.capabilities.fetchPrOverview(
     { repo, number },
     { token, fetch: (i, init) => fetch(i, init) },
+  );
+  return json(out, out.ok ? 200 : 400);
+}
+
+async function handlePostPrComment(
+  request: Request,
+  service: SupabaseService,
+): Promise<Response> {
+  let body: { repo?: unknown; number?: unknown; body?: unknown };
+  try {
+    body = (await request.json()) as typeof body;
+  } catch {
+    return json({ ok: false, error: "invalid json" }, 400);
+  }
+  const repo = typeof body.repo === "string" ? body.repo : "";
+  const number = Number(body.number);
+  const commentBody = typeof body.body === "string" ? body.body : "";
+  if (!repo || !Number.isInteger(number) || number <= 0 || !commentBody) {
+    return json({ ok: false, error: "repo, number and body required", reason: "invalid_input" }, 400);
+  }
+  const { data, error } = await service
+    .from("provider_accounts")
+    .select("access_token")
+    .eq("provider", "github")
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  const token = (data as { access_token: string | null } | null)?.access_token ?? null;
+  const out = await PROVIDERS.github.capabilities.commentOnPr(
+    { repo, number, body: commentBody },
+    { token, fetch },
   );
   return json(out, out.ok ? 200 : 400);
 }

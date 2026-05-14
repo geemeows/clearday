@@ -21,6 +21,7 @@ import { Route as AppInboxRouteImport } from './routes/_app.inbox'
 import { Route as AppCareerRouteImport } from './routes/_app.career'
 import { Route as AppCalendarRouteImport } from './routes/_app.calendar'
 import { Route as AppAutomationsRouteImport } from './routes/_app.automations'
+import { Route as CareerShareTokenRouteImport } from './routes/career.share.$token'
 
 const OnboardingRoute = OnboardingRouteImport.update({
   id: '/onboarding',
@@ -81,6 +82,11 @@ const AppAutomationsRoute = AppAutomationsRouteImport.update({
   path: '/automations',
   getParentRoute: () => AppRoute,
 } as any)
+const CareerShareTokenRoute = CareerShareTokenRouteImport.update({
+  id: '/career/share/$token',
+  path: '/career/share/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -94,6 +100,7 @@ export interface FileRoutesByFullPath {
   '/settings': typeof AppSettingsRoute
   '/today': typeof AppTodayRoute
   '/auth/callback': typeof AuthCallbackRoute
+  '/career/share/$token': typeof CareerShareTokenRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -107,6 +114,7 @@ export interface FileRoutesByTo {
   '/settings': typeof AppSettingsRoute
   '/today': typeof AppTodayRoute
   '/auth/callback': typeof AuthCallbackRoute
+  '/career/share/$token': typeof CareerShareTokenRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -122,6 +130,7 @@ export interface FileRoutesById {
   '/_app/settings': typeof AppSettingsRoute
   '/_app/today': typeof AppTodayRoute
   '/auth/callback': typeof AuthCallbackRoute
+  '/career/share/$token': typeof CareerShareTokenRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -137,6 +146,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/today'
     | '/auth/callback'
+    | '/career/share/$token'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -150,6 +160,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/today'
     | '/auth/callback'
+    | '/career/share/$token'
   id:
     | '__root__'
     | '/'
@@ -164,6 +175,7 @@ export interface FileRouteTypes {
     | '/_app/settings'
     | '/_app/today'
     | '/auth/callback'
+    | '/career/share/$token'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -172,6 +184,7 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   OnboardingRoute: typeof OnboardingRoute
   AuthCallbackRoute: typeof AuthCallbackRoute
+  CareerShareTokenRoute: typeof CareerShareTokenRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -260,6 +273,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAutomationsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/career/share/$token': {
+      id: '/career/share/$token'
+      path: '/career/share/$token'
+      fullPath: '/career/share/$token'
+      preLoaderRoute: typeof CareerShareTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -291,6 +311,7 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   OnboardingRoute: OnboardingRoute,
   AuthCallbackRoute: AuthCallbackRoute,
+  CareerShareTokenRoute: CareerShareTokenRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

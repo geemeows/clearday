@@ -18,6 +18,11 @@ import {
   type SubmitPrReviewResult,
   submitPrReview,
 } from "#/features/integrations/providers/github/capabilities/submit-pr-review";
+import {
+  type CommentOnPrParams,
+  type CommentOnPrResult,
+  commentOnPr,
+} from "#/features/integrations/providers/github/capabilities/comment-on-pr";
 import { exchangeGithub } from "#/features/integrations/providers/github/oauth";
 import { pollGithubSignals } from "#/features/integrations/providers/github/poll";
 import { AUTHORIZE_PROVIDERS } from "#/shared/oauth/scopes";
@@ -35,9 +40,15 @@ export type GithubCapabilities = {
     params: FetchPrOverviewParams,
     deps: { fetch: typeof fetch; token: string | null },
   ) => Promise<FetchPrOverviewResult>;
+  commentOnPr: (
+    params: CommentOnPrParams,
+    deps: { fetch: typeof fetch; token: string | null },
+  ) => Promise<CommentOnPrResult>;
 };
 
 export type {
+  CommentOnPrParams,
+  CommentOnPrResult,
   FetchPrFilesParams,
   FetchPrFilesResult,
   FetchPrOverviewParams,
@@ -62,5 +73,6 @@ export const github: Provider<void, void, GithubCapabilities> = {
     submitPrReview: (params, deps) => submitPrReview(params, deps),
     fetchPrFiles: (params, deps) => fetchPrFiles(params, deps),
     fetchPrOverview: (params, deps) => fetchPrOverview(params, deps),
+    commentOnPr: (params, deps) => commentOnPr(params, deps),
   },
 };

@@ -29,9 +29,19 @@ export type InboxSignal = {
   severity?: "high" | "warn";
   badge?: "auto-rule";
   requires_action?: boolean;
+  url?: string | null;
   diff?: { add: number; del: number; files: number };
   thread?: Array<{ who: string; text: string; when: string }>;
   agenda?: string[];
+  /** Slack channel id — used by SlackDetail to post replies */
+  channel?: string | null;
+  /** Slack thread_ts — used by SlackDetail to post replies */
+  thread_ts?: string | null;
+  /** Signal id for backend tracking */
+  signalId?: string;
+  /** Calendar-meeting payload data */
+  meetingNotes?: string | null;
+  meetingAttendees?: Array<{ email: string | null; name: string | null; response: string | null; organizer: boolean }>;
 };
 
 export type InboxFilter = "all" | "prs" | "tickets" | "mentions" | "meetings";
@@ -298,7 +308,13 @@ function InboxList({
 
 // ── InboxDetail ───────────────────────────────────────────────────────────────
 
-function InboxDetail({ signal }: { signal: InboxSignal | undefined }) {
+function InboxDetail({
+  signal,
+  onDismiss,
+}: {
+  signal: InboxSignal | undefined;
+  onDismiss?: (id: string) => void;
+}) {
   if (!signal) {
     return (
       <div
@@ -315,10 +331,53 @@ function InboxDetail({ signal }: { signal: InboxSignal | undefined }) {
       </div>
     );
   }
-  if (signal.source === "git") return <PRDetail signal={signal} />;
-  if (signal.source === "slack") return <SlackDetail signal={signal} />;
-  if (signal.source === "cal") return <MeetingDetail signal={signal} />;
-  return <TaskDetail signal={signal} />;
+
+  const dismissBar = onDismiss && (
+    <div
+      style={{
+        display: "flex",
+        justifyContent: "flex-end",
+        padding: "6px 16px",
+        borderBottom: "1px solid var(--hairline-soft, var(--border))",
+        background: "var(--surface-soft)",
+        flexShrink: 0,
+      }}
+    >
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={() => onDismiss(signal.id)}
+        style={{ fontSize: 11 }}
+      >
+        Dismiss
+      </Button>
+    </div>
+  );
+
+  if (signal.source === "git") return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
+      {dismissBar}
+      <div style={{ flex: 1, overflow: "hidden" }}><PRDetail signal={signal} /></div>
+    </div>
+  );
+  if (signal.source === "slack") return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
+      {dismissBar}
+      <div style={{ flex: 1, overflow: "hidden" }}><SlackDetail signal={signal} /></div>
+    </div>
+  );
+  if (signal.source === "cal") return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
+      {dismissBar}
+      <div style={{ flex: 1, overflow: "hidden" }}><MeetingDetail signal={signal} /></div>
+    </div>
+  );
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
+      {dismissBar}
+      <div style={{ flex: 1, overflow: "hidden" }}><TaskDetail signal={signal} /></div>
+    </div>
+  );
 }
 
 // ── InboxView ─────────────────────────────────────────────────────────────────
@@ -326,15 +385,36 @@ function InboxDetail({ signal }: { signal: InboxSignal | undefined }) {
 type InboxViewProps = {
   signals: InboxSignal[];
   defaultSelectedId?: string;
+  onDismiss?: (id: string) => void;
 };
 
-export function InboxView({ signals, defaultSelectedId }: InboxViewProps) {
+export function InboxView({ signals, defaultSelectedId, onDismiss }: InboxViewProps) {
   const [filter, setFilter] = useState<InboxFilter>("all");
   const [selectedId, setSelectedId] = useState<string | null>(
     defaultSelectedId ?? signals[0]?.id ?? null,
   );
 
   const selected = signals.find((s) => s.id === selectedId);
+
+  if (signals.length === 0) {
+    return (
+      <div
+        style={{
+          flex: 1,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          flexDirection: "column",
+          gap: 12,
+          color: "var(--muted-foreground, var(--muted))",
+        }}
+      >
+        <div style={{ fontSize: 32 }}>📭</div>
+        <div style={{ fontSize: 15, fontWeight: 500 }}>Inbox is empty</div>
+        <div style={{ fontSize: 13 }}>No signals to review right now.</div>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -369,8 +449,104 @@ export function InboxView({ signals, defaultSelectedId }: InboxViewProps) {
           background: "var(--background)",
         }}
       >
-        <InboxDetail signal={selected} />
+        <InboxDetail signal={selected} onDismiss={onDismiss} />
       </div>
     </div>
   );
+}
+
+// ── StoredSignal → InboxSignal mapper ─────────────────────────────────────────
+
+import type { StoredSignal } from "#/shared/signal";
+
+const PROVIDER_TO_SOURCE: Record<string, string> = {
+  github: "git",
+  google: "cal",
+  slack: "slack",
+  linear: "task",
+  jira: "task",
+};
+
+const KIND_MAP: Record<string, string> = {
+  pr_review_requested: "pr-review",
+  pr_authored: "pr-review",
+  pr_assigned: "pr-review",
+  meeting: "meeting",
+  dm: "dm",
+  mention: "mention",
+  thread_reply: "thread",
+  ticket_assigned: "ticket-assigned",
+  ticket_in_progress: "ticket-assigned",
+  ticket_in_review: "ticket-assigned",
+  ticket_blocked: "ticket-assigned",
+};
+
+/**
+ * Convert a StoredSignal row (from Supabase) to the InboxSignal shape used
+ * by InboxView and the detail panes.
+ */
+export function storedSignalToInboxSignal(s: StoredSignal): InboxSignal {
+  const source = PROVIDER_TO_SOURCE[s.provider] ?? s.provider;
+  const kind = KIND_MAP[s.kind] ?? s.kind;
+
+  const p = s.payload as Record<string, unknown>;
+
+  // GitHub PR fields
+  const repo = typeof p.repo === "string" ? p.repo : undefined;
+  const num = typeof p.number === "number" ? `#${p.number}` : undefined;
+  const author = typeof p.author === "string" ? p.author : undefined;
+  const additions = typeof p.additions === "number" ? p.additions : undefined;
+  const deletions = typeof p.deletions === "number" ? p.deletions : undefined;
+  const changedFiles = typeof p.changed_files === "number" ? p.changed_files : undefined;
+  const diff =
+    additions !== undefined && deletions !== undefined && changedFiles !== undefined
+      ? { add: additions, del: deletions, files: changedFiles }
+      : undefined;
+
+  // Slack fields
+  const channel = typeof p.channel === "string" ? p.channel : null;
+  const threadTs = typeof p.thread_ts === "string" ? p.thread_ts : null;
+
+  // Google Calendar / meeting fields
+  const agenda = Array.isArray(p.agenda) ? (p.agenda as string[]) : undefined;
+  const description = typeof p.description === "string" ? p.description : null;
+  const rawAttendees = Array.isArray(p.attendees) ? p.attendees as Array<Record<string, unknown>> : [];
+  const meetingAttendees = rawAttendees.map((a) => ({
+    email: typeof a.email === "string" ? a.email : null,
+    name: typeof a.name === "string" ? a.name : null,
+    response: typeof a.response === "string" ? a.response : null,
+    organizer: a.organizer === true,
+  }));
+
+  // Sub-label: human-readable secondary line
+  let sub: string | undefined;
+  if (source === "slack") {
+    sub = s.title;
+  } else if (source === "cal" && meetingAttendees.length > 0) {
+    sub = `${meetingAttendees.length} attendee${meetingAttendees.length !== 1 ? "s" : ""}`;
+  } else if (source === "task") {
+    sub = s.title;
+  }
+
+  return {
+    id: s.id,
+    source,
+    kind,
+    title: s.title,
+    repo,
+    num,
+    author,
+    sub,
+    age: s.source_created_at ?? s.created_at,
+    unread: s.unread_count,
+    url: s.url ?? null,
+    requires_action: s.requires_action,
+    diff,
+    channel,
+    thread_ts: threadTs,
+    signalId: s.id,
+    agenda: agenda?.length ? agenda : undefined,
+    meetingNotes: description,
+    meetingAttendees: meetingAttendees.length > 0 ? meetingAttendees : undefined,
+  };
 }

@@ -1,10 +1,24 @@
 // Slack detail pane — shown when a slack signal is selected in Inbox.
+// Uses a tiptap rich-text composer for replies; serializes to Slack mrkdwn
+// before posting via /api/slack/reply.
 
 import { useState } from "react";
+import { useEditor, EditorContent } from "@tiptap/react";
+import StarterKit from "@tiptap/starter-kit";
+import Link from "@tiptap/extension-link";
+import Placeholder from "@tiptap/extension-placeholder";
 import { Button } from "#/components/ui/button";
-import { Textarea } from "#/components/ui/textarea";
-import { SparklesIcon, SendIcon } from "lucide-react";
+import {
+  SparklesIcon,
+  SendIcon,
+  BoldIcon,
+  ItalicIcon,
+  CodeIcon,
+  ListIcon,
+} from "lucide-react";
 import { SourceGlyph } from "#/features/signals/components/SourceGlyph";
+import { serializeToSlack, type TiptapDoc } from "#/features/signals/details/slack/serialize";
+import { apiFetch } from "#/lib/api-client";
 import type { InboxSignal } from "#/features/signals/components/InboxView";
 
 function relAgo(iso: string): string {
@@ -48,11 +62,102 @@ function ThreadAvatar({ name, size = 28 }: { name: string; size?: number }) {
   );
 }
 
+// ── Tiptap toolbar ────────────────────────────────────────────────────────────
+
+type EditorState = ReturnType<typeof useEditor>;
+
+function ToolbarButton({
+  active,
+  title,
+  onClick,
+  children,
+}: {
+  active?: boolean;
+  title: string;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      title={title}
+      onClick={onClick}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        width: 28,
+        height: 28,
+        borderRadius: 4,
+        border: "none",
+        background: active ? "var(--secondary)" : "transparent",
+        cursor: "pointer",
+        color: "var(--foreground)",
+        opacity: active ? 1 : 0.7,
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+function ComposerToolbar({ editor }: { editor: NonNullable<EditorState> }) {
+  return (
+    <div style={{ display: "flex", gap: 2, padding: "4px 6px", borderBottom: "1px solid var(--border)" }}>
+      <ToolbarButton
+        active={editor.isActive("bold")}
+        title="Bold"
+        onClick={() => editor.chain().focus().toggleBold().run()}
+      >
+        <BoldIcon style={{ width: 13, height: 13 }} />
+      </ToolbarButton>
+      <ToolbarButton
+        active={editor.isActive("italic")}
+        title="Italic"
+        onClick={() => editor.chain().focus().toggleItalic().run()}
+      >
+        <ItalicIcon style={{ width: 13, height: 13 }} />
+      </ToolbarButton>
+      <ToolbarButton
+        active={editor.isActive("code")}
+        title="Inline code"
+        onClick={() => editor.chain().focus().toggleCode().run()}
+      >
+        <CodeIcon style={{ width: 13, height: 13 }} />
+      </ToolbarButton>
+      <ToolbarButton
+        active={editor.isActive("bulletList")}
+        title="Bullet list"
+        onClick={() => editor.chain().focus().toggleBulletList().run()}
+      >
+        <ListIcon style={{ width: 13, height: 13 }} />
+      </ToolbarButton>
+    </div>
+  );
+}
+
+// ── SlackDetail ───────────────────────────────────────────────────────────────
+
 type Props = { signal: InboxSignal };
 
 export function SlackDetail({ signal: s }: Props) {
-  const [replyText, setReplyText] = useState("");
   const [sent, setSent] = useState(false);
+  const [sending, setSending] = useState(false);
+
+  const editor = useEditor({
+    extensions: [
+      StarterKit,
+      Link.configure({ openOnClick: false }),
+      Placeholder.configure({ placeholder: "Reply to thread…" }),
+    ],
+    editorProps: {
+      attributes: {
+        style: "outline: none; min-height: 70px; padding: 8px 10px; font-size: 13px; line-height: 1.55;",
+      },
+    },
+  });
+
+  const isEmpty = editor?.isEmpty ?? true;
 
   const heading =
     s.kind === "dm"
@@ -60,6 +165,32 @@ export function SlackDetail({ signal: s }: Props) {
       : s.kind === "mention"
         ? "Mention"
         : "Thread reply";
+
+  const handleSend = async () => {
+    if (!editor || isEmpty) return;
+    const doc = editor.getJSON() as TiptapDoc;
+    const text = serializeToSlack(doc);
+    if (!text.trim()) return;
+
+    setSending(true);
+    try {
+      await apiFetch("/api/slack/reply", {
+        method: "POST",
+        body: {
+          channel: s.channel ?? "",
+          text,
+          thread_ts: s.thread_ts ?? undefined,
+          signal_id: s.signalId ?? s.id,
+        },
+      });
+      setSent(true);
+      editor.commands.clearContent();
+    } catch {
+      // keep composer open on error; user can retry
+    } finally {
+      setSending(false);
+    }
+  };
 
   return (
     <div
@@ -142,9 +273,7 @@ export function SlackDetail({ signal: s }: Props) {
                       marginBottom: 4,
                     }}
                   >
-                    <span style={{ fontSize: 13, fontWeight: 600 }}>
-                      {t.who}
-                    </span>
+                    <span style={{ fontSize: 13, fontWeight: 600 }}>{t.who}</span>
                     <span
                       style={{
                         fontFamily: "var(--font-mono)",
@@ -155,13 +284,7 @@ export function SlackDetail({ signal: s }: Props) {
                       {relAgo(t.when)} ago
                     </span>
                   </div>
-                  <div
-                    style={{
-                      fontSize: 13,
-                      color: "var(--body, var(--foreground))",
-                      lineHeight: 1.55,
-                    }}
-                  >
+                  <div style={{ fontSize: 13, color: "var(--body, var(--foreground))", lineHeight: 1.55 }}>
                     {t.text}
                   </div>
                 </div>
@@ -170,7 +293,7 @@ export function SlackDetail({ signal: s }: Props) {
           </div>
         )}
 
-        {/* Quick reply composer */}
+        {/* Rich-text reply composer */}
         <div
           style={{
             fontSize: 10,
@@ -180,40 +303,35 @@ export function SlackDetail({ signal: s }: Props) {
             color: "var(--muted-foreground, var(--muted))",
           }}
         >
-          QUICK REPLY
+          REPLY
         </div>
         <div
           style={{
             background: "var(--surface-soft)",
             borderRadius: "var(--radius-md)",
-            padding: 8,
             border: "1px solid var(--hairline-soft, var(--border))",
+            overflow: "hidden",
           }}
         >
           {sent ? (
-            <div
-              style={{
-                padding: "12px 4px",
-                fontSize: 13,
-                color: "var(--good, #22c55e)",
-              }}
-            >
+            <div style={{ padding: "12px 14px", fontSize: 13, color: "var(--good, #22c55e)" }}>
               Reply sent.
             </div>
           ) : (
             <>
-              <Textarea
-                value={replyText}
-                onChange={(e) => setReplyText(e.target.value)}
-                placeholder="Reply to thread…"
-                style={{ minHeight: 70, border: "none", background: "transparent", resize: "none" }}
-              />
+              {editor && <ComposerToolbar editor={editor} />}
+              <div
+                style={{ cursor: "text" }}
+                onClick={() => editor?.commands.focus()}
+              >
+                <EditorContent editor={editor} />
+              </div>
               <div
                 style={{
                   display: "flex",
                   gap: 8,
-                  marginTop: 4,
-                  padding: "0 4px 4px",
+                  padding: "6px 8px",
+                  borderTop: "1px solid var(--hairline-soft, var(--border))",
                   alignItems: "center",
                 }}
               >
@@ -225,18 +343,18 @@ export function SlackDetail({ signal: s }: Props) {
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => setReplyText("")}
+                  onClick={() => editor?.commands.clearContent()}
                 >
                   Cancel
                 </Button>
                 <Button
                   variant="default"
                   size="sm"
-                  disabled={replyText.trim().length === 0}
-                  onClick={() => setSent(true)}
+                  disabled={isEmpty || sending}
+                  onClick={handleSend}
                 >
                   <SendIcon />
-                  Send
+                  {sending ? "Sending…" : "Send"}
                 </Button>
               </div>
             </>
