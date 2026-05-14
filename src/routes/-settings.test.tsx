@@ -1,4 +1,6 @@
 // Settings page — layout, per-tab smoke, and behavioral tests.
+// Updated for issue #194: Profile/Theme/Week-start/Career tabs removed;
+// Week-start lives under Google Calendar; Google Sheets moved to Integrations.
 
 import { render, screen, fireEvent } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
@@ -60,6 +62,7 @@ vi.mock("#/lib/api-client", () => ({
 // ── Component imports (after mocks) ───────────────────────────────────────────
 
 import { SettingsPage } from "#/features/settings/components/SettingsPage";
+import type { SettingsLoaderData } from "#/features/settings/components/SettingsPage";
 import {
   IntegrationsPanel,
   NotificationsPanel,
@@ -67,16 +70,73 @@ import {
   InboxRulesPanel,
   RuleBuilder,
   AIPanel,
-  ThemePanel,
   WeekStartPanel,
   DataPrivacyPanel,
-  CareerSheetsPanel,
 } from "#/features/settings/components/SettingsPage";
+import type { Account as StoreAccount } from "#/features/integrations/accounts/store";
+
+// ── Test fixtures ─────────────────────────────────────────────────────────────
+
+const FAKE_ACCOUNTS: StoreAccount[] = [
+  {
+    id: "acc-1",
+    provider: "github",
+    account_id: "gh-001",
+    handle: "erinkov",
+    display_name: "Erin Kovacs",
+    context: "Personal · 14 repos",
+    primary: true,
+    added_at: new Date(Date.now() - 60_000).toISOString(),
+  },
+  {
+    id: "acc-2",
+    provider: "slack",
+    account_id: "sl-001",
+    handle: "kovacs-team.slack.com",
+    display_name: "Kovacs Team",
+    context: "Engineering workspace",
+    primary: true,
+    added_at: new Date(Date.now() - 120_000).toISOString(),
+  },
+  {
+    id: "acc-3",
+    provider: "google",
+    account_id: "go-001",
+    handle: "erin@kovacs.dev",
+    display_name: null,
+    context: "Work calendar",
+    primary: true,
+    added_at: new Date(Date.now() - 180_000).toISOString(),
+  },
+];
+
+const FAKE_PREFERENCES: SettingsLoaderData["preferences"] = {
+  alert_channels: ["push", "slack"],
+  notification_matrix: {
+    "PR review": ["push", "slack", "desktop"],
+    "@mention": ["push", "slack", "desktop"],
+    "CI failure": ["push", "email", "desktop"],
+  },
+  quiet_hours_v2: {},
+  focus_block: {},
+  focus_defaults: {},
+  notification_threshold_min: 10,
+};
+
+const FAKE_RETENTION = { retention_days: 60 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function renderSettings() {
-  return render(<SettingsPage />);
+function renderSettings(overrides: Partial<SettingsLoaderData> = {}) {
+  return render(
+    <SettingsPage
+      accounts={FAKE_ACCOUNTS}
+      preferences={FAKE_PREFERENCES}
+      aiSettings={null}
+      retention={FAKE_RETENTION}
+      {...overrides}
+    />,
+  );
 }
 
 // ── SettingsPage layout tests ─────────────────────────────────────────────────
@@ -87,36 +147,33 @@ describe("SettingsPage", () => {
     expect(screen.getByText("Settings")).toBeTruthy();
   });
 
-  it("renders all 10 sidebar tabs", () => {
+  it("renders exactly 6 sidebar tabs", () => {
     renderSettings();
     const labels = [
-      "Profile",
       "Integrations",
       "Notifications",
       "Inbox rules",
       "AI provider",
       "Self-host",
-      "Theme",
-      "Week start",
       "Data & privacy",
-      "Career",
     ];
     for (const label of labels) {
       expect(screen.getByRole("button", { name: label })).toBeTruthy();
     }
   });
 
-  it("shows Profile panel content by default", () => {
+  it("does NOT render the removed Profile, Theme, Week start, or Career tabs", () => {
     renderSettings();
-    // ProfilePanel renders "Profile" heading; sidebar also has it — at least 2
-    expect(screen.getAllByText("Profile").length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByRole("button", { name: "Profile" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Theme" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Week start" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Career" })).toBeNull();
   });
 
-  it("navigates to Integrations tab on click", () => {
+  it("shows Integrations panel content by default", () => {
     renderSettings();
-    fireEvent.click(screen.getByRole("button", { name: "Integrations" }));
-    expect(screen.getByText("GitHub")).toBeTruthy();
-    expect(screen.getByText("Slack")).toBeTruthy();
+    // "Integrations" appears in both the nav and the panel heading
+    expect(screen.getAllByText("Integrations").length).toBeGreaterThanOrEqual(2);
   });
 
   it("navigates to Notifications tab on click", () => {
@@ -129,7 +186,6 @@ describe("SettingsPage", () => {
   it("navigates to Inbox rules tab on click", () => {
     renderSettings();
     fireEvent.click(screen.getByRole("button", { name: "Inbox rules" }));
-    // Both the nav button and h2 say "Inbox rules" — check count >= 2
     expect(screen.getAllByText("Inbox rules").length).toBeGreaterThanOrEqual(2);
     expect(screen.getByRole("button", { name: /new rule/i })).toBeTruthy();
   });
@@ -140,72 +196,64 @@ describe("SettingsPage", () => {
     expect(screen.getByText("Anthropic")).toBeTruthy();
   });
 
-  it("navigates to Theme tab on click", () => {
-    renderSettings();
-    fireEvent.click(screen.getByRole("button", { name: "Theme" }));
-    expect(screen.getByText("Color scheme")).toBeTruthy();
-  });
-
-  it("navigates to Week start tab on click", () => {
-    renderSettings();
-    fireEvent.click(screen.getByRole("button", { name: "Week start" }));
-    expect(screen.getByText("Week starts on")).toBeTruthy();
-  });
-
   it("navigates to Data & privacy tab on click", () => {
     renderSettings();
     fireEvent.click(screen.getByRole("button", { name: "Data & privacy" }));
     expect(screen.getByText("Export")).toBeTruthy();
   });
-
-  it("navigates to Career tab on click", () => {
-    renderSettings();
-    fireEvent.click(screen.getByRole("button", { name: "Career" }));
-    expect(screen.getByText("Google Sheets")).toBeTruthy();
-  });
 });
 
-// ── IntegrationsPanel ─────────────────────────────────────────────────────────
+// ── IntegrationsPanel — live accounts ─────────────────────────────────────────
 
-describe("IntegrationsPanel", () => {
-  it("renders all 4 providers", () => {
-    render(<IntegrationsPanel />);
-    expect(screen.getByText("GitHub")).toBeTruthy();
-    expect(screen.getByText("Slack")).toBeTruthy();
-    expect(screen.getByText("Google Calendar")).toBeTruthy();
-    expect(screen.getByText("Linear")).toBeTruthy();
-  });
-
-  it("shows Google Sheets re-auth banner", () => {
-    render(<IntegrationsPanel />);
-    expect(screen.getByText("Google Sheets — for Career sync")).toBeTruthy();
-    expect(screen.getByText("Re-auth needed")).toBeTruthy();
-  });
-
-  it("shows total accounts count", () => {
-    render(<IntegrationsPanel />);
-    expect(screen.getByText(/accounts across 4 providers/)).toBeTruthy();
-  });
-
-  it("renders connected account handles", () => {
-    render(<IntegrationsPanel />);
+describe("IntegrationsPanel — live data", () => {
+  it("renders connected accounts from storeAccounts prop", () => {
+    render(<IntegrationsPanel storeAccounts={FAKE_ACCOUNTS} />);
     expect(screen.getByText("erinkov")).toBeTruthy();
-    expect(screen.getByText("kovacs-acme")).toBeTruthy();
+    expect(screen.getByText("kovacs-team.slack.com")).toBeTruthy();
+    expect(screen.getByText("erin@kovacs.dev")).toBeTruthy();
   });
 
-  it("adds an account when Add account is clicked", () => {
-    render(<IntegrationsPanel />);
-    const addButtons = screen.getAllByRole("button", { name: /add account/i });
-    fireEvent.click(addButtons[0]!);
-    expect(screen.getByText("just connected")).toBeTruthy();
+  it("renders an empty state when no accounts are connected", () => {
+    render(<IntegrationsPanel storeAccounts={[]} />);
+    expect(screen.getByText(/No integrations connected yet/)).toBeTruthy();
   });
 
-  it("removes an account when Remove is clicked", () => {
-    render(<IntegrationsPanel />);
+  it("shows Google Sheets section (moved from Career tab)", () => {
+    render(<IntegrationsPanel storeAccounts={[]} />);
+    expect(screen.getByText("Google Sheets")).toBeTruthy();
+    expect(screen.getByText(/Career sync/)).toBeTruthy();
+  });
+
+  it("shows Google Sheets as connected when a google account exists", () => {
+    render(<IntegrationsPanel storeAccounts={FAKE_ACCOUNTS} />);
+    // Google account present → Sheets shown as connected
+    expect(screen.getByText("Google Sheets")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /disconnect/i })).toBeTruthy();
+  });
+
+  it("Week-start control appears under Google Calendar integration", () => {
+    render(<IntegrationsPanel storeAccounts={FAKE_ACCOUNTS} />);
+    expect(screen.getByText("Week starts on")).toBeTruthy();
+  });
+
+  it("shows the Remove button for connected accounts", () => {
+    render(<IntegrationsPanel storeAccounts={FAKE_ACCOUNTS} />);
+    const removeBtns = screen.getAllByRole("button", { name: /remove/i });
+    expect(removeBtns.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("removes an account optimistically when Remove is clicked", () => {
+    render(<IntegrationsPanel storeAccounts={FAKE_ACCOUNTS} />);
     expect(screen.getByText("erinkov")).toBeTruthy();
-    const removeButtons = screen.getAllByRole("button", { name: /remove/i });
-    fireEvent.click(removeButtons[0]!);
+    const removeBtns = screen.getAllByRole("button", { name: /remove/i });
+    fireEvent.click(removeBtns[0]!);
     expect(screen.queryByText("erinkov")).toBeNull();
+  });
+
+  it("shows Add account button for each provider", () => {
+    render(<IntegrationsPanel storeAccounts={[]} />);
+    const addBtns = screen.getAllByRole("button", { name: /add account/i });
+    expect(addBtns.length).toBeGreaterThanOrEqual(1);
   });
 });
 
@@ -218,6 +266,15 @@ describe("NotificationsPanel", () => {
     expect(screen.getByText("Slack self-DM")).toBeTruthy();
     expect(screen.getByText("Email digest")).toBeTruthy();
     expect(screen.getByText("Desktop banner")).toBeTruthy();
+  });
+
+  it("initializes channels from preferences prop", () => {
+    render(<NotificationsPanel initialPreferences={FAKE_PREFERENCES} />);
+    // push and slack are in alert_channels → their switches should be checked
+    const pushSwitch = screen.getByRole("switch", {
+      name: /toggle pwa web push/i,
+    });
+    expect(pushSwitch.getAttribute("data-checked")).toBe("");
   });
 
   it("renders notification matrix event kinds", () => {
@@ -238,7 +295,6 @@ describe("NotificationsPanel", () => {
     const prReviewPushBtn = screen.getByRole("button", {
       name: /toggle push for PR review/i,
     });
-    // Initially pressed=true
     expect(prReviewPushBtn.getAttribute("aria-pressed")).toBe("true");
     fireEvent.click(prReviewPushBtn);
     expect(prReviewPushBtn.getAttribute("aria-pressed")).toBe("false");
@@ -246,7 +302,6 @@ describe("NotificationsPanel", () => {
 
   it("toggles a channel switch on click", () => {
     render(<NotificationsPanel />);
-    // Email digest channel starts unchecked (email: false)
     const emailSwitch = screen.getByRole("switch", {
       name: /toggle email digest/i,
     });
@@ -284,7 +339,6 @@ describe("QuietHoursCard", () => {
 
   it("shows the week summary strip with 7 day labels", () => {
     render(<QuietHoursCard />);
-    // Strip always shows Mon–Sun
     expect(screen.getAllByText("Mon").length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText("Sun").length).toBeGreaterThanOrEqual(1);
   });
@@ -328,7 +382,6 @@ describe("InboxRulesPanel", () => {
     expect(screen.getByText("New rule")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /save rule/i }));
     expect(screen.queryByRole("button", { name: /save rule/i })).toBeNull();
-    // A new rule was added to the list (now 6)
     expect(screen.getByText(/of 6 active/)).toBeTruthy();
   });
 
@@ -343,7 +396,6 @@ describe("InboxRulesPanel", () => {
   it("toggles a rule on/off", () => {
     render(<InboxRulesPanel />);
     const switches = screen.getAllByRole("switch");
-    // First rule (dependabot) is on — data-checked present
     expect(switches[0]!.getAttribute("data-checked")).toBe("");
     fireEvent.click(switches[0]!);
     expect(switches[0]!.getAttribute("data-unchecked")).toBe("");
@@ -379,7 +431,7 @@ describe("RuleBuilder", () => {
     expect(onSave).toHaveBeenCalledWith(
       expect.objectContaining({
         when: expect.any(String),
-        then: expect.any(String),
+        do: expect.any(String),
       }),
     );
   });
@@ -389,7 +441,6 @@ describe("RuleBuilder", () => {
     const onCancel = vi.fn();
     render(<RuleBuilder onSave={onSave} onCancel={onCancel} />);
     fireEvent.click(screen.getByRole("button", { name: /add condition/i }));
-    // 2 conditions → 2 remove buttons
     const removeButtons = screen.getAllByRole("button", { name: "×" });
     expect(removeButtons.length).toBe(2);
   });
@@ -455,26 +506,7 @@ describe("AIPanel", () => {
   });
 });
 
-// ── ThemePanel ────────────────────────────────────────────────────────────────
-
-describe("ThemePanel", () => {
-  it("renders color scheme options", () => {
-    render(<ThemePanel />);
-    expect(screen.getByText("Color scheme")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Light" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Dark" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "System" })).toBeTruthy();
-  });
-
-  it("renders density options", () => {
-    render(<ThemePanel />);
-    expect(screen.getByText("Density")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Comfortable" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Compact" })).toBeTruthy();
-  });
-});
-
-// ── WeekStartPanel ────────────────────────────────────────────────────────────
+// ── WeekStartPanel (still exported, used standalone) ─────────────────────────
 
 describe("WeekStartPanel", () => {
   it("renders Sun/Mon/Sat options", () => {
@@ -493,6 +525,12 @@ describe("DataPrivacyPanel", () => {
     expect(screen.getByText("Export")).toBeTruthy();
     expect(screen.getByText("Retention")).toBeTruthy();
     expect(screen.getByRole("button", { name: /export my data/i })).toBeTruthy();
+  });
+
+  it("initializes retention from prop", () => {
+    render(<DataPrivacyPanel initialRetention={{ retention_days: 60 }} />);
+    const input = screen.getByRole("spinbutton") as HTMLInputElement;
+    expect(input.value).toBe("60");
   });
 
   it("renders danger zone", () => {
@@ -520,26 +558,5 @@ describe("DataPrivacyPanel", () => {
       name: /confirm purge/i,
     }) as HTMLButtonElement;
     expect(confirmBtn.disabled).toBe(false);
-  });
-});
-
-// ── CareerSheetsPanel ─────────────────────────────────────────────────────────
-
-describe("CareerSheetsPanel", () => {
-  it("renders the not-connected state", () => {
-    render(<CareerSheetsPanel />);
-    expect(screen.getByText("Not connected")).toBeTruthy();
-    expect(
-      screen.getByRole("button", { name: /authorize google sheets/i }),
-    ).toBeTruthy();
-  });
-
-  it("shows connected state after authorization", () => {
-    render(<CareerSheetsPanel />);
-    fireEvent.click(
-      screen.getByRole("button", { name: /authorize google sheets/i }),
-    );
-    expect(screen.getByText("Google Sheets connected")).toBeTruthy();
-    expect(screen.getByRole("button", { name: /disconnect/i })).toBeTruthy();
   });
 });

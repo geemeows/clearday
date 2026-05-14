@@ -1,6 +1,8 @@
-// SettingsPage — Redesign v5 / Settings (#184)
-// All tabs: Profile, Integrations, Notifications, Inbox rules, AI provider,
-// Self-host, Theme, Week start, Data & privacy, Career.
+// SettingsPage — Redesign v5 / Wire data — Settings (#194)
+// Tabs: Integrations, Notifications, Inbox rules, AI provider, Self-host,
+// Data & privacy. Profile, Theme, Week start, and Career tabs removed.
+// Week-start now lives under Google Calendar integration settings.
+// Google Sheets OAuth grant moved into Integrations panel.
 
 import { CheckIcon, PlusIcon, ShieldCheckIcon } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -12,7 +14,8 @@ import {
   PopoverTrigger,
 } from "#/components/ui/popover";
 import { Switch } from "#/components/ui/switch";
-import { ProfilePanel } from "#/features/settings/profile/components/ProfilePanel";
+import type { AiSettingsView } from "#/features/ai/api/settings";
+import type { Account as StoreAccount } from "#/features/integrations/accounts/store";
 import { SelfHostPanel } from "#/features/settings/self-host/components/SelfHostPanel";
 import {
   DEFAULT_THEME,
@@ -26,19 +29,31 @@ import { useWeekStart } from "#/features/settings/week-start/use-week-start";
 import { SourceGlyph } from "#/features/signals/components/SourceGlyph";
 import { apiFetch } from "#/lib/api-client";
 
+// ── Loader data type ──────────────────────────────────────────────────────────
+
+export type SettingsLoaderData = {
+  accounts: StoreAccount[];
+  preferences: {
+    alert_channels: string[];
+    notification_matrix: Record<string, string[]>;
+    quiet_hours_v2: Record<string, unknown>;
+    focus_block: Record<string, unknown>;
+    focus_defaults: Record<string, unknown>;
+    notification_threshold_min: number;
+  };
+  aiSettings: AiSettingsView | null;
+  retention: { retention_days: number };
+};
+
 // ── Tabs ─────────────────────────────────────────────────────────────────────
 
 const SETTINGS_TABS = [
-  { id: "profile", label: "Profile" },
   { id: "integrations", label: "Integrations" },
   { id: "notifications", label: "Notifications" },
   { id: "inbox-rules", label: "Inbox rules" },
   { id: "ai", label: "AI provider" },
   { id: "selfhost", label: "Self-host" },
-  { id: "theme", label: "Theme" },
-  { id: "week-start", label: "Week start" },
   { id: "data-privacy", label: "Data & privacy" },
-  { id: "career", label: "Career" },
 ] as const;
 
 type SettingsTab = (typeof SETTINGS_TABS)[number]["id"];
@@ -102,6 +117,84 @@ function SegmentedControl<T extends string>({
         </button>
       ))}
     </div>
+  );
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function storeProviderToSourceId(provider: string): string {
+  if (provider === "github") return "git";
+  if (provider === "google") return "cal";
+  if (provider === "linear") return "linear";
+  return provider;
+}
+
+function deriveInitials(acc: StoreAccount): string {
+  const name = acc.display_name ?? acc.handle ?? acc.account_id ?? acc.provider;
+  const words = name.split(/[\s\-_.@]/);
+  return words
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase() ?? "")
+    .join("")
+    .slice(0, 2) || acc.provider.slice(0, 2).toUpperCase();
+}
+
+function formatConnectedAt(isoDate: string): string {
+  const ms = Date.now() - new Date(isoDate).getTime();
+  const mins = Math.floor(ms / 60_000);
+  if (mins < 2) return "just connected";
+  if (mins < 60) return `connected ${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `connected ${hrs}h ago`;
+  return `connected ${Math.floor(hrs / 24)}d ago`;
+}
+
+function toDisplayAccount(acc: StoreAccount): Account {
+  return {
+    id: acc.id,
+    handle: acc.handle ?? acc.account_id ?? acc.provider,
+    initials: deriveInitials(acc),
+    context: acc.context ?? acc.provider,
+    status: "good" as const,
+    last: formatConnectedAt(acc.added_at),
+    primary: acc.primary,
+  };
+}
+
+// matrix: API format (Record<string, string[]>) ↔ UI format (Record<string, MatrixRow>)
+function matrixFromApi(
+  api: Record<string, string[]>,
+  defaults: Record<string, MatrixRow>,
+): Record<string, MatrixRow> {
+  const result: Record<string, MatrixRow> = { ...defaults };
+  const empty: MatrixRow = {
+    push: false,
+    slack: false,
+    email: false,
+    desktop: false,
+    sound: false,
+  };
+  for (const [k, channels] of Object.entries(api)) {
+    const row: MatrixRow = { ...empty };
+    for (const ch of channels) {
+      if (ch in empty) (row as Record<string, boolean>)[ch] = true;
+    }
+    result[k] = row;
+  }
+  return result;
+}
+
+function matrixToApi(
+  ui: Record<string, MatrixRow>,
+): Record<string, string[]> {
+  return Object.fromEntries(
+    Object.entries(ui).map(([k, v]) => [
+      k,
+      (Object.entries(v) as [MatrixKey, boolean][])
+        .filter(([, on]) => on)
+        .map(([ch]) => ch),
+    ]),
   );
 }
 
@@ -304,7 +397,7 @@ function CalendarWeekStartInline() {
 
 function ProviderExtras({ providerId }: { providerId: string }) {
   if (providerId === "slack") return <SlackChannelAllowlist />;
-  if (providerId === "cal") return <CalendarWeekStartInline />;
+  if (providerId === "google") return <CalendarWeekStartInline />;
   return null;
 }
 
@@ -327,12 +420,13 @@ function IntegrationCard({
   onRemoveAccount: (id: string) => void;
   onAddAccount: () => void;
 }) {
+  const sourceId = storeProviderToSourceId(provider.id);
   return (
     <div className="mb-3.5 overflow-hidden rounded-lg border border-[var(--hairline-soft)] bg-[var(--canvas)]">
       <div
         className={`grid grid-cols-[auto_1fr_auto] items-center gap-3.5 px-4 py-4 bg-[var(--surface-soft)]${accounts.length > 0 ? " border-b border-[var(--hairline-soft)]" : ""}`}
       >
-        <SourceGlyph source={provider.id} size={32} />
+        <SourceGlyph source={sourceId as Parameters<typeof SourceGlyph>[0]["source"]} size={32} />
         <div>
           <div className="flex items-center gap-2">
             <span className="font-semibold text-[15px]">{provider.name}</span>
@@ -383,7 +477,7 @@ function IntegrationCard({
 
 const INTEGRATIONS_PROVIDERS: Provider[] = [
   {
-    id: "git",
+    id: "github",
     name: "GitHub",
     desc: "PR reviews, CI status, comments. Polls each connected account separately.",
   },
@@ -393,113 +487,133 @@ const INTEGRATIONS_PROVIDERS: Provider[] = [
     desc: "DMs, @mentions, threads. Each workspace gets its own Events API subscription.",
   },
   {
-    id: "cal",
+    id: "google",
     name: "Google Calendar",
     desc: "Per-account: pick which calendars feed your inbox.",
   },
   {
-    id: "task",
+    id: "linear",
     name: "Linear",
     desc: "Assigned tickets, in-progress widget. Cron-polled per workspace.",
   },
+  {
+    id: "jira",
+    name: "Jira",
+    desc: "Assigned issues, comments, and sprint progress.",
+  },
 ];
 
-const INITIAL_ACCOUNTS: AccountsByProvider = {
-  git: [
-    {
-      id: "git-1",
-      handle: "erinkov",
-      initials: "EK",
-      context: "Personal · 14 repos · public + private",
-      scopes: "repo, read:user",
-      status: "good",
-      last: "polled 32s ago",
-      primary: true,
-    },
-    {
-      id: "git-2",
-      handle: "kovacs-acme",
-      initials: "AC",
-      context: "Acme org · 47 repos · SSO via Okta",
-      scopes: "repo, read:org",
-      status: "good",
-      last: "polled 1m ago",
-      primary: false,
-    },
-  ],
-  slack: [
-    {
-      id: "slack-1",
-      handle: "kovacs-team.slack.com",
-      initials: "KT",
-      context: "Engineering workspace · 23 channels",
-      scopes: "channels:history, chat:write",
-      status: "good",
-      last: "live · 2 events / min",
-      primary: true,
-    },
-  ],
-  cal: [
-    {
-      id: "cal-1",
-      handle: "erin@kovacs.dev",
-      initials: "EK",
-      context: "Work · primary + 2 shared calendars",
-      scopes: "calendar.events",
-      status: "good",
-      last: "polled 1m ago",
-      primary: true,
-    },
-  ],
-  task: [
-    {
-      id: "task-1",
-      handle: "Acme Inc",
-      initials: "AC",
-      context: "Linear workspace · 4 teams · 12 projects",
-      scopes: "read, write:comments",
-      status: "warn",
-      last: "rate-limited · retry 0:42",
-      primary: true,
-    },
-  ],
-};
+function GoogleSheetsSection({
+  hasGoogleAccount,
+}: {
+  hasGoogleAccount: boolean;
+}) {
+  const [sheetsConnected, setSheetsConnected] = useState(hasGoogleAccount);
 
-export function IntegrationsPanel() {
-  const [accounts, setAccounts] =
-    useState<AccountsByProvider>(INITIAL_ACCOUNTS);
+  const connect = async () => {
+    const res = (await apiFetch("/api/providers/google/connect-url")) as {
+      url: string;
+    };
+    if (res.url) window.location.href = res.url;
+  };
 
-  const removeAccount = (provId: string, accId: string) =>
-    setAccounts((s) => ({
+  return (
+    <div className="mb-3.5 overflow-hidden rounded-lg border border-[var(--hairline-soft)] bg-[var(--canvas)]">
+      <div className="grid grid-cols-[auto_1fr_auto] items-center gap-3.5 bg-[var(--surface-soft)] p-4">
+        <div className="inline-flex size-8 items-center justify-center rounded-lg bg-[var(--good-soft)]">
+          <span
+            className="inline-flex size-[20px] items-center justify-center rounded font-bold text-xs text-white"
+            style={{ background: "#0F9D58" }}
+          >
+            S
+          </span>
+        </div>
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-[15px]">Google Sheets</span>
+            <span className="font-mono text-[11px] text-[var(--muted-foreground)]">
+              for Career sync
+            </span>
+            {!sheetsConnected && (
+              <span className="rounded-full bg-[var(--warn-soft)] px-[7px] py-[1px] text-[10px] font-bold uppercase tracking-[0.4px] text-[var(--warn)]">
+                Not connected
+              </span>
+            )}
+          </div>
+          <div className="mt-0.5 text-xs text-[var(--muted-foreground)]">
+            Adds{" "}
+            <code className="font-mono text-[11px]">spreadsheets</code> +{" "}
+            <code className="font-mono text-[11px]">drive.file</code> scopes
+            to your Google connection. Per-file access only.
+          </div>
+        </div>
+        {sheetsConnected ? (
+          <div className="flex items-center gap-2">
+            <CheckIcon className="size-4 text-[var(--good)]" />
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setSheetsConnected(false)}
+            >
+              Disconnect
+            </Button>
+          </div>
+        ) : (
+          <Button type="button" variant="default" size="sm" onClick={connect}>
+            <ShieldCheckIcon className="size-3.5" />
+            Authorize Google Sheets
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function IntegrationsPanel({
+  storeAccounts = [],
+}: {
+  storeAccounts?: StoreAccount[];
+}) {
+  const groupedByProvider: AccountsByProvider = {};
+  for (const acc of storeAccounts) {
+    const display = toDisplayAccount(acc);
+    if (!groupedByProvider[acc.provider]) groupedByProvider[acc.provider] = [];
+    groupedByProvider[acc.provider]!.push(display);
+  }
+
+  const [accountsMap, setAccountsMap] =
+    useState<AccountsByProvider>(groupedByProvider);
+
+  const removeAccount = async (provId: string, accId: string) => {
+    setAccountsMap((s) => ({
       ...s,
       [provId]: (s[provId] ?? []).filter((a) => a.id !== accId),
     }));
+    try {
+      await apiFetch(`/api/accounts/${accId}`, { method: "DELETE" });
+    } catch {
+      // best-effort — account already removed from UI optimistically
+    }
+  };
 
-  const addAccount = (provId: string) =>
-    setAccounts((s) => {
-      const existing = s[provId] ?? [];
-      return {
-        ...s,
-        [provId]: [
-          ...existing,
-          {
-            id: `${provId}-${Date.now()}`,
-            handle: `account-${existing.length + 1}`,
-            initials: "??",
-            context: "Newly authorized account",
-            scopes: "default scopes",
-            status: "good" as const,
-            last: "just connected",
-            primary: existing.length === 0,
-          },
-        ],
-      };
-    });
+  const addAccount = async (provId: string) => {
+    try {
+      const res = (await apiFetch(
+        `/api/providers/${provId}/connect-url`,
+      )) as { url: string };
+      if (res.url) window.location.href = res.url;
+    } catch {
+      // ignore — user stays on page
+    }
+  };
 
-  const totalAccounts = Object.values(accounts).reduce(
+  const totalAccounts = Object.values(accountsMap).reduce(
     (a, b) => a + b.length,
     0,
   );
+
+  const hasGoogleAccount = (accountsMap.google ?? []).length > 0;
 
   return (
     <div>
@@ -508,47 +622,30 @@ export function IntegrationsPanel() {
         sub="Per-user backend — refresh tokens stored in your own Supabase, never on shared infrastructure. Connect multiple accounts per provider to merge work and personal contexts in one inbox."
       />
 
-      {/* Google Sheets re-consent banner */}
-      <div className="mb-3.5 grid grid-cols-[auto_1fr_auto] items-center gap-3.5 rounded-lg border border-[var(--hairline-soft)] bg-[var(--surface-card)] p-3.5">
-        <div className="inline-flex size-9 items-center justify-center rounded-lg bg-[var(--good-soft)]">
-          <span
-            className="inline-flex size-[22px] items-center justify-center rounded font-bold text-sm text-white"
-            style={{ background: "#0F9D58" }}
-          >
-            S
+      <GoogleSheetsSection hasGoogleAccount={hasGoogleAccount} />
+
+      {totalAccounts > 0 && (
+        <div className="mb-3.5 text-xs text-[var(--muted-foreground)]">
+          {totalAccounts} account{totalAccounts !== 1 ? "s" : ""} across{" "}
+          {Object.keys(accountsMap).length} provider
+          {Object.keys(accountsMap).length !== 1 ? "s" : ""}
+        </div>
+      )}
+
+      {totalAccounts === 0 && (
+        <div className="mb-3.5 rounded-lg border border-[var(--hairline-soft)] bg-[var(--canvas)] px-4 py-8 text-center text-[13px] text-[var(--muted-foreground)]">
+          No integrations connected yet.{" "}
+          <span className="text-[var(--ink)]">
+            Click Add account below to get started.
           </span>
         </div>
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold">
-              Google Sheets — for Career sync
-            </span>
-            <span className="rounded-full bg-[var(--warn-soft)] px-[7px] py-[1px] text-[10px] font-bold uppercase tracking-[0.4px] text-[var(--warn)]">
-              Re-auth needed
-            </span>
-          </div>
-          <div className="mt-0.5 text-xs text-[var(--muted-foreground)]">
-            Adds <code className="font-mono text-[11.5px]">spreadsheets</code> +{" "}
-            <code className="font-mono text-[11.5px]">drive.file</code> scopes
-            to your existing Google connection. Per-file access only.
-          </div>
-        </div>
-        <Button type="button" variant="default" size="sm">
-          <ShieldCheckIcon className="size-3.5" />
-          Re-authorize Google
-        </Button>
-      </div>
-
-      <div className="mb-3.5 text-xs text-[var(--muted-foreground)]">
-        {totalAccounts} accounts across {INTEGRATIONS_PROVIDERS.length}{" "}
-        providers
-      </div>
+      )}
 
       {INTEGRATIONS_PROVIDERS.map((p) => (
         <IntegrationCard
           key={p.id}
           provider={p}
-          accounts={accounts[p.id] ?? []}
+          accounts={accountsMap[p.id] ?? []}
           onRemoveAccount={(accId) => removeAccount(p.id, accId)}
           onAddAccount={() => addAccount(p.id)}
         />
@@ -1062,20 +1159,67 @@ export function QuietHoursCard() {
   );
 }
 
-export function NotificationsPanel() {
-  const [channels, setChannels] = useState<Record<ChannelKey, boolean>>({
-    push: true,
-    slack: true,
-    email: false,
-    desktop: true,
-  });
-  const [matrix, setMatrix] = useState(INITIAL_MATRIX);
+function channelsFromApi(alertChannels: string[]): Record<ChannelKey, boolean> {
+  return {
+    push: alertChannels.includes("push"),
+    slack: alertChannels.includes("slack"),
+    email: alertChannels.includes("email"),
+    desktop: alertChannels.includes("desktop"),
+  };
+}
 
-  const toggleMatrix = (kind: string, ch: MatrixKey) =>
-    setMatrix((m) => ({
-      ...m,
-      [kind]: { ...(m[kind] ?? {}), [ch]: !m[kind]?.[ch] },
-    }));
+export function NotificationsPanel({
+  initialPreferences,
+}: {
+  initialPreferences?: SettingsLoaderData["preferences"];
+}) {
+  const [channels, setChannels] = useState<Record<ChannelKey, boolean>>(() =>
+    initialPreferences
+      ? channelsFromApi(initialPreferences.alert_channels)
+      : { push: true, slack: true, email: false, desktop: true },
+  );
+  const [matrix, setMatrix] = useState<Record<string, MatrixRow>>(() =>
+    initialPreferences
+      ? matrixFromApi(initialPreferences.notification_matrix, INITIAL_MATRIX)
+      : INITIAL_MATRIX,
+  );
+
+  const saveChannels = async (next: Record<ChannelKey, boolean>) => {
+    setChannels(next);
+    const alert_channels = (
+      Object.entries(next) as [ChannelKey, boolean][]
+    )
+      .filter(([, on]) => on)
+      .map(([ch]) => ch);
+    try {
+      await apiFetch("/api/preferences", {
+        method: "PUT",
+        body: { alert_channels },
+      });
+    } catch {
+      // best-effort save
+    }
+  };
+
+  const saveMatrix = async (next: Record<string, MatrixRow>) => {
+    setMatrix(next);
+    try {
+      await apiFetch("/api/preferences", {
+        method: "PUT",
+        body: { notification_matrix: matrixToApi(next) },
+      });
+    } catch {
+      // best-effort save
+    }
+  };
+
+  const toggleMatrix = (kind: string, ch: MatrixKey) => {
+    const next = {
+      ...matrix,
+      [kind]: { ...(matrix[kind] ?? {}), [ch]: !matrix[kind]?.[ch] },
+    };
+    saveMatrix(next);
+  };
 
   return (
     <div>
@@ -1106,7 +1250,9 @@ export function NotificationsPanel() {
             </Button>
             <Switch
               checked={channels[c.id]}
-              onCheckedChange={(v) => setChannels((s) => ({ ...s, [c.id]: v }))}
+              onCheckedChange={(v) =>
+                saveChannels({ ...channels, [c.id]: v })
+              }
               aria-label={`Toggle ${c.name}`}
             />
           </SettingsRow>
@@ -1630,15 +1776,46 @@ const AI_PRIVACY_CONTROLS = [
   },
 ];
 
-export function AIPanel() {
-  const [provider, setProvider] = useState<AiProviderId>("anthropic");
-  const [primaryModel, setPrimaryModel] = useState("claude-sonnet-4-6");
-  const [fallbackModel, setFallbackModel] = useState("claude-haiku-4-5");
-  const [fallbackThreshold, setFallbackThreshold] = useState("80");
-  const [apiKeyVisible, setApiKeyVisible] = useState(false);
-  const [privacy, setPrivacy] = useState<Record<string, boolean>>(() =>
-    Object.fromEntries(AI_PRIVACY_CONTROLS.map((c) => [c.id, c.defaultOn])),
+export function AIPanel({
+  initialAiSettings,
+}: {
+  initialAiSettings?: AiSettingsView | null;
+}) {
+  const initProvider = (initialAiSettings?.provider as AiProviderId | null) ?? "anthropic";
+  const [provider, setProvider] = useState<AiProviderId>(
+    initProvider in AI_CATALOG ? initProvider : "anthropic",
   );
+  const [primaryModel, setPrimaryModel] = useState(
+    initialAiSettings?.default_model ?? "claude-sonnet-4-6",
+  );
+  const [fallbackModel, setFallbackModel] = useState(
+    initialAiSettings?.fallback_model ?? "claude-haiku-4-5",
+  );
+  const [fallbackThreshold, setFallbackThreshold] = useState(
+    initialAiSettings?.fallback_threshold_pct != null
+      ? String(initialAiSettings.fallback_threshold_pct)
+      : "80",
+  );
+  const [apiKeyVisible, setApiKeyVisible] = useState(false);
+  const [privacy, setPrivacy] = useState<Record<string, boolean>>(() => {
+    const base = Object.fromEntries(
+      AI_PRIVACY_CONTROLS.map((c) => [c.id, c.defaultOn]),
+    );
+    if (initialAiSettings) {
+      base.strip_code = initialAiSettings.privacy_mode;
+      base.strip_secrets = initialAiSettings.privacy_mode;
+      base.strip_paths = initialAiSettings.privacy_mode;
+    }
+    return base;
+  });
+
+  const saveAi = async (patch: Record<string, unknown>) => {
+    try {
+      await apiFetch("/api/ai/settings", { method: "PUT", body: patch });
+    } catch {
+      // best-effort save
+    }
+  };
 
   const cat = AI_CATALOG[provider];
   const providers = Object.entries(AI_CATALOG) as [
@@ -1675,7 +1852,10 @@ export function AIPanel() {
           <button
             key={id}
             type="button"
-            onClick={() => setProvider(id)}
+            onClick={() => {
+                setProvider(id);
+                saveAi({ provider: id });
+              }}
             className={`rounded-xl p-4 text-left transition-colors ${
               provider === id
                 ? "border-[1.5px] border-[var(--primary)] bg-[var(--primary-disabled)]"
@@ -1998,10 +2178,41 @@ export function WeekStartPanel() {
 
 // ── Data & privacy panel ──────────────────────────────────────────────────────
 
-export function DataPrivacyPanel() {
-  const [retention, setRetention] = useState(90);
+export function DataPrivacyPanel({
+  initialRetention,
+}: {
+  initialRetention?: { retention_days: number };
+}) {
+  const [retention, setRetention] = useState(
+    initialRetention?.retention_days ?? 90,
+  );
   const [purgeConfirm, setPurgeConfirm] = useState("");
   const [purgeOpen, setPurgeOpen] = useState(false);
+
+  const saveRetention = async (days: number) => {
+    setRetention(days);
+    try {
+      await apiFetch("/api/retention", {
+        method: "PUT",
+        body: { retention_days: days },
+      });
+    } catch {
+      // best-effort save
+    }
+  };
+
+  const executePurge = async () => {
+    setPurgeOpen(false);
+    setPurgeConfirm("");
+    try {
+      await apiFetch("/api/data/purge", {
+        method: "POST",
+        body: { confirmation: "DELETE" },
+      });
+    } catch {
+      // best-effort
+    }
+  };
 
   return (
     <div>
@@ -2039,7 +2250,7 @@ export function DataPrivacyPanel() {
                   value={retention}
                   min={7}
                   max={3650}
-                  onChange={(e) => setRetention(Number(e.target.value))}
+                  onChange={(e) => saveRetention(Number(e.target.value))}
                   className="h-8 w-28 rounded-md border border-[var(--input)] bg-[var(--background)] px-3 font-mono text-[13px] outline-none"
                 />
                 <span className="text-xs text-[var(--muted-foreground)]">
@@ -2075,10 +2286,7 @@ export function DataPrivacyPanel() {
                     size="sm"
                     className="border-[var(--danger)] text-[var(--danger)]"
                     disabled={purgeConfirm !== "DELETE"}
-                    onClick={() => {
-                      setPurgeOpen(false);
-                      setPurgeConfirm("");
-                    }}
+                    onClick={executePurge}
                   >
                     Confirm purge
                   </Button>
@@ -2191,8 +2399,13 @@ export function CareerSheetsPanel() {
 
 // ── SettingsPage ──────────────────────────────────────────────────────────────
 
-export function SettingsPage() {
-  const [activeTab, setActiveTab] = useState<SettingsTab>("profile");
+export function SettingsPage({
+  accounts = [],
+  preferences,
+  aiSettings,
+  retention,
+}: Partial<SettingsLoaderData> = {}) {
+  const [activeTab, setActiveTab] = useState<SettingsTab>("integrations");
 
   return (
     <div className="flex h-full overflow-hidden">
@@ -2222,16 +2435,18 @@ export function SettingsPage() {
 
       {/* Content */}
       <main className="flex-1 overflow-y-auto px-10 pb-16 pt-8">
-        {activeTab === "profile" && <ProfilePanel />}
-        {activeTab === "integrations" && <IntegrationsPanel />}
-        {activeTab === "notifications" && <NotificationsPanel />}
+        {activeTab === "integrations" && (
+          <IntegrationsPanel storeAccounts={accounts} />
+        )}
+        {activeTab === "notifications" && (
+          <NotificationsPanel initialPreferences={preferences} />
+        )}
         {activeTab === "inbox-rules" && <InboxRulesPanel />}
-        {activeTab === "ai" && <AIPanel />}
+        {activeTab === "ai" && <AIPanel initialAiSettings={aiSettings} />}
         {activeTab === "selfhost" && <SelfHostPanel />}
-        {activeTab === "theme" && <ThemePanel />}
-        {activeTab === "week-start" && <WeekStartPanel />}
-        {activeTab === "data-privacy" && <DataPrivacyPanel />}
-        {activeTab === "career" && <CareerSheetsPanel />}
+        {activeTab === "data-privacy" && (
+          <DataPrivacyPanel initialRetention={retention} />
+        )}
       </main>
     </div>
   );
