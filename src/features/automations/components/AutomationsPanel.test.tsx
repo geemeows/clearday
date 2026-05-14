@@ -834,3 +834,57 @@ describe("AutomationsPanel row chips", () => {
     expect(screen.getAllByLabelText("Last run fail").length).toBe(1);
   });
 });
+
+describe("AutomationsPanel detail mode (Slice 8.3)", () => {
+  it("clicking Open enters detail mode and renders the detail header + sentence summary", async () => {
+    renderPanel();
+    fireEvent.click(await screen.findByLabelText("Open Snooze deps"));
+    expect(
+      await screen.findByLabelText("Automation detail Snooze deps"),
+    ).toBeTruthy();
+    expect(
+      screen.getByLabelText("Snooze deps enabled (detail)"),
+    ).toBeTruthy();
+    // SentenceSummary pill rail uses the trigger / predicate / action labels
+    expect(screen.getByText("Signal ingested")).toBeTruthy();
+    expect(screen.getByText("kind is mention")).toBeTruthy();
+  });
+
+  it("breadcrumb root returns to list from detail", async () => {
+    renderPanel();
+    fireEvent.click(await screen.findByLabelText("Open Snooze deps"));
+    await screen.findByLabelText("Automation detail Snooze deps");
+    // Breadcrumb first crumb is a button labeled "Automations"; clicking
+    // returns to the list (which renders the search input again).
+    fireEvent.click(screen.getByRole("button", { name: "Automations" }));
+    await waitFor(() => {
+      expect(screen.getByLabelText("Search automations")).toBeTruthy();
+      expect(
+        screen.queryByLabelText("Automation detail Snooze deps"),
+      ).toBeNull();
+    });
+  });
+
+  it("dry-run footer toggle persists dry_run: true on the open automation", async () => {
+    const saver = vi.fn<(next: Automation[]) => Promise<{ ok: true }>>(
+      async () => ({ ok: true }),
+    );
+    renderPanel({ saver });
+    fireEvent.click(await screen.findByLabelText("Open Snooze deps"));
+    fireEvent.click(
+      await screen.findByLabelText("Switch Snooze deps to dry-run"),
+    );
+    await waitFor(() => {
+      expect(saver).toHaveBeenCalledTimes(1);
+    });
+    const persisted = saver.mock.calls[0]?.[0] ?? [];
+    expect(persisted.find((a) => a.id === "a-1")?.dry_run).toBe(true);
+  });
+
+  it("Edit from detail enters builder mode", async () => {
+    renderPanel();
+    fireEvent.click(await screen.findByLabelText("Open Snooze deps"));
+    fireEvent.click(await screen.findByLabelText("Edit Snooze deps (detail)"));
+    expect(await screen.findByText("Edit automation")).toBeTruthy();
+  });
+});

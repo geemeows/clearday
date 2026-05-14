@@ -241,6 +241,7 @@ export function AutomationsPanel({
     null,
   );
   const [editing, setEditing] = useState<Automation | null>(null);
+  const [detailId, setDetailId] = useState<string | null>(null);
   const [templatesOpen, setTemplatesOpen] = useState(false);
 
   const load = useMemo(
@@ -341,6 +342,14 @@ export function AutomationsPanel({
     setEditing({ ...a });
   }, []);
 
+  const openDetail = useCallback((a: Automation) => {
+    setDetailId(a.id);
+  }, []);
+
+  const closeDetail = useCallback(() => {
+    setDetailId(null);
+  }, []);
+
   const closeBuilder = useCallback(() => {
     setEditing(null);
   }, []);
@@ -362,6 +371,18 @@ export function AutomationsPanel({
     (id: string, enabled: boolean) => {
       if (!automations) return;
       persist(automations.map((a) => (a.id === id ? { ...a, enabled } : a)));
+    },
+    [automations, persist],
+  );
+
+  const onToggleDryRun = useCallback(
+    (id: string) => {
+      if (!automations) return;
+      persist(
+        automations.map((a) =>
+          a.id === id ? { ...a, dry_run: !a.dry_run } : a,
+        ),
+      );
     },
     [automations, persist],
   );
@@ -480,11 +501,18 @@ export function AutomationsPanel({
     [automations],
   );
 
-  const mode: "list" | "builder" | "runs" = editing
+  const detailAutomation = useMemo(
+    () => (detailId ? (automations?.find((a) => a.id === detailId) ?? null) : null),
+    [automations, detailId],
+  );
+
+  const mode: "list" | "builder" | "runs" | "detail" = editing
     ? "builder"
     : runsAutomation
       ? "runs"
-      : "list";
+      : detailAutomation
+        ? "detail"
+        : "list";
 
   const builderIsNew =
     editing !== null && !(automations ?? []).some((a) => a.id === editing.id);
@@ -512,7 +540,9 @@ export function AutomationsPanel({
                   ? closeBuilder
                   : mode === "runs"
                     ? closeRuns
-                    : undefined,
+                    : mode === "detail"
+                      ? closeDetail
+                      : undefined,
             },
             {
               label:
@@ -520,7 +550,9 @@ export function AutomationsPanel({
                   ? builderIsNew
                     ? "New"
                     : (editing?.name ?? "")
-                  : (runsAutomation?.name ?? ""),
+                  : mode === "detail"
+                    ? (detailAutomation?.name ?? "")
+                    : (runsAutomation?.name ?? ""),
               onClick:
                 mode === "runs"
                   ? () => {
@@ -631,6 +663,7 @@ export function AutomationsPanel({
                   onEdit={() => openEdit(a)}
                   onDelete={() => requestDelete(a.id)}
                   onViewRuns={() => openRuns(a)}
+                  onOpen={() => openDetail(a)}
                 />
               ))}
             </div>
@@ -754,6 +787,19 @@ export function AutomationsPanel({
         </div>
       )}
 
+      {mode === "detail" && detailAutomation && (
+        <AutomationDetail
+          automation={detailAutomation}
+          latestFailure={latestFailures.get(detailAutomation.id) ?? null}
+          busy={busy}
+          onToggleEnabled={(enabled) => onToggle(detailAutomation.id, enabled)}
+          onToggleDryRun={() => onToggleDryRun(detailAutomation.id)}
+          onEdit={() => openEdit(detailAutomation)}
+          onDelete={() => requestDelete(detailAutomation.id)}
+          onViewRuns={() => openRuns(detailAutomation)}
+        />
+      )}
+
       <Dialog open={templatesOpen} onOpenChange={setTemplatesOpen}>
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
@@ -873,6 +919,7 @@ function AutomationRow({
   onEdit,
   onDelete,
   onViewRuns,
+  onOpen,
 }: {
   automation: Automation;
   busy: boolean;
@@ -881,6 +928,7 @@ function AutomationRow({
   onEdit: () => void;
   onDelete: () => void;
   onViewRuns: () => void;
+  onOpen: () => void;
 }) {
   const failed = latestFailure !== null;
   const dryRun = automation.dry_run === true;
@@ -972,6 +1020,15 @@ function AutomationRow({
       <div className="mt-1 flex items-center gap-1.5 border-[var(--hairline-soft)] border-t pt-2">
         <button
           type="button"
+          aria-label={`Open ${automation.name}`}
+          onClick={onOpen}
+          disabled={busy}
+          className="rounded border border-border bg-background px-2 py-1 text-xs disabled:opacity-50"
+        >
+          Open
+        </button>
+        <button
+          type="button"
           aria-label={`View runs for ${automation.name}`}
           onClick={onViewRuns}
           disabled={busy}
@@ -999,6 +1056,219 @@ function AutomationRow({
         </button>
       </div>
     </div>
+  );
+}
+
+function describePredicate(p: AutomationPredicate): string {
+  switch (p.type) {
+    case "provider":
+      return `provider is ${p.provider}`;
+    case "kind":
+      return `kind is ${p.kind}`;
+    case "source_match":
+      return `${p.field} equals ${p.equals}`;
+    case "title_regex":
+      return `title matches /${p.pattern}/`;
+    case "state_from_to":
+      return `${p.field} ${p.from ?? "*"} → ${p.to ?? "*"}`;
+  }
+}
+
+function describeAction(a: AutomationAction): string {
+  const label = ACTIONS[a.type]?.label ?? a.type;
+  switch (a.type) {
+    case "tag":
+      return a.tag ? `${label} ${a.tag}` : label;
+    case "snooze":
+      return `${label.replace(" (minutes)", "")} ${a.minutes}m`;
+    case "set_priority":
+      return `${label} ${a.value}`;
+    case "set_channels":
+      return `${label} ${a.channels.join(", ")}`;
+    default:
+      return label;
+  }
+}
+
+function AutomationDetail({
+  automation,
+  latestFailure,
+  busy,
+  onToggleEnabled,
+  onToggleDryRun,
+  onEdit,
+  onDelete,
+  onViewRuns,
+}: {
+  automation: Automation;
+  latestFailure: AutomationRunRow | null;
+  busy: boolean;
+  onToggleEnabled: (enabled: boolean) => void;
+  onToggleDryRun: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+  onViewRuns: () => void;
+}) {
+  const dryRun = automation.dry_run === true;
+  const paused = !automation.enabled;
+  const failed = latestFailure !== null;
+  const dotClass = failed
+    ? "bg-[var(--danger)]"
+    : dryRun
+      ? "bg-[var(--warn)]"
+      : "bg-[var(--good)]";
+  const dotLabel = failed ? "fail" : dryRun ? "dry" : "ok";
+  const triggerLabel =
+    TRIGGERS[automation.trigger_kind]?.label ?? automation.trigger_kind;
+  return (
+    <div
+      aria-label={`Automation detail ${automation.name}`}
+      className="flex min-h-[600px] flex-col overflow-hidden rounded-xl border border-[var(--hairline-soft)] bg-[var(--surface-card)]"
+    >
+      <div className="flex items-center gap-3 border-[var(--hairline-soft)] border-b px-[22px] py-4">
+        <output
+          aria-label={`Last run ${dotLabel}`}
+          title={dotLabel}
+          className={`inline-block size-[7px] shrink-0 rounded-full ${dotClass}`}
+        />
+        <h3 className="m-0 font-semibold text-[18px] text-[var(--ink)]">
+          {automation.name}
+        </h3>
+        {paused && (
+          <span
+            aria-label={`${automation.name} paused`}
+            className="rounded bg-[var(--surface-strong)] px-[7px] py-px font-mono text-[9.5px] tracking-[0.04em] text-[var(--muted)] uppercase"
+          >
+            Paused
+          </span>
+        )}
+        {dryRun && (
+          <span
+            aria-label={`${automation.name} dry-run`}
+            className="rounded bg-[var(--warn-soft)] px-[7px] py-px font-mono text-[9.5px] tracking-[0.04em] text-[var(--warn)] uppercase"
+          >
+            Dry-run
+          </span>
+        )}
+        <span className="flex-1" />
+        <Switch
+          aria-label={`${automation.name} enabled (detail)`}
+          checked={automation.enabled}
+          onCheckedChange={onToggleEnabled}
+          disabled={busy}
+        />
+        <button
+          type="button"
+          aria-label={`Edit ${automation.name} (detail)`}
+          onClick={onEdit}
+          disabled={busy}
+          className="rounded border border-border bg-background px-3 py-1.5 text-sm disabled:opacity-50"
+        >
+          Edit
+        </button>
+        <button
+          type="button"
+          aria-label={`Delete ${automation.name} (detail)`}
+          onClick={onDelete}
+          disabled={busy}
+          className="rounded border border-destructive/40 bg-background px-3 py-1.5 text-destructive text-sm hover:bg-destructive/10 disabled:opacity-50"
+        >
+          Delete
+        </button>
+      </div>
+      <div className="flex flex-1 flex-col gap-[22px] overflow-y-auto p-[22px]">
+        <div className="rounded-[10px] bg-[var(--surface-soft)] px-4 py-3.5 text-[14px] leading-[1.6] text-[var(--body)]">
+          <span className="text-[var(--muted)]">WHEN</span>{" "}
+          <DetailPill>{triggerLabel}</DetailPill>
+          {automation.predicates.length > 0 && (
+            <>
+              {" "}
+              <span className="text-[var(--muted)]">IF</span>{" "}
+              {automation.predicates.map((p, i) => (
+                // biome-ignore lint/suspicious/noArrayIndexKey: predicate chain order is the natural key for this read-only display
+                <span key={i}>
+                  <DetailPill mono>{describePredicate(p)}</DetailPill>
+                  {i < automation.predicates.length - 1 && (
+                    <span className="text-[var(--muted)]"> AND </span>
+                  )}
+                </span>
+              ))}
+            </>
+          )}{" "}
+          <span className="text-[var(--muted)]">THEN</span>{" "}
+          {automation.actions.map((a, i) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: action chain order is the natural key for this read-only display
+            <span key={i}>
+              <DetailPill
+                accent={ACTIONS[a.type]?.kind !== "deferred"}
+                disabled={ACTIONS[a.type]?.kind === "deferred"}
+              >
+                {describeAction(a)}
+              </DetailPill>
+              {i < automation.actions.length - 1 && (
+                <span className="text-[var(--muted)]"> + </span>
+              )}
+            </span>
+          ))}
+        </div>
+      </div>
+      <div className="flex items-center gap-2 border-[var(--hairline-soft)] border-t px-[22px] py-3">
+        <p className="font-mono text-[11px] text-muted-foreground">
+          priority {automation.priority}
+        </p>
+        <span className="flex-1" />
+        <button
+          type="button"
+          aria-label={`View runs for ${automation.name} (detail)`}
+          onClick={onViewRuns}
+          disabled={busy}
+          className="rounded border border-border bg-background px-3 py-1.5 text-sm disabled:opacity-50"
+        >
+          View runs
+        </button>
+        <button
+          type="button"
+          aria-label={
+            dryRun ? `Exit dry-run for ${automation.name}` : `Switch ${automation.name} to dry-run`
+          }
+          onClick={onToggleDryRun}
+          disabled={busy}
+          className="rounded border border-border bg-background px-3 py-1.5 text-sm disabled:opacity-50"
+        >
+          {dryRun ? "Exit dry-run" : "Switch to dry-run"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function DetailPill({
+  children,
+  mono,
+  accent,
+  disabled,
+}: {
+  children: React.ReactNode;
+  mono?: boolean;
+  accent?: boolean;
+  disabled?: boolean;
+}) {
+  const bg = disabled
+    ? "bg-[var(--surface-strong)]"
+    : accent
+      ? "bg-[var(--primary-disabled)]"
+      : "bg-[var(--canvas)]";
+  const fg = disabled
+    ? "text-[var(--muted)]"
+    : accent
+      ? "text-[var(--primary-active)]"
+      : "text-[var(--ink)]";
+  return (
+    <span
+      className={`mx-px inline-flex items-center rounded-md border border-[var(--hairline-soft)] px-2 py-px font-semibold text-[12.5px] ${bg} ${fg} ${mono ? "font-mono text-[11.5px]" : ""} ${disabled ? "line-through" : ""}`}
+    >
+      {children}
+    </span>
   );
 }
 
