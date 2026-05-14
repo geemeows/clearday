@@ -1,6 +1,6 @@
 // Today page — smoke, variant, and behavioral tests.
 
-import { render, screen, fireEvent } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 // ── Mocks ────────────────────────────────────────────────────────────────────
@@ -48,14 +48,14 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
 
 // ── Component imports (after mocks) ─────────────────────────────────────────
 
-import { TodayPage } from "./\_app.today";
-import { PulseCard } from "#/features/today/components/PulseCard";
-import { NextUpHero } from "#/features/today/components/NextUpHero";
-import { BriefingCard } from "#/features/today/components/BriefingCard";
-import { InboxPreviewRow } from "#/features/signals/components/InboxPreviewRow";
 import { FocusModal } from "#/features/focus/components/FocusModal";
-import type { NowSignal } from "#/features/today/components/MeetingCountdownNow";
+import { InboxPreviewRow } from "#/features/signals/components/InboxPreviewRow";
 import type { BriefingData } from "#/features/today/components/BriefingCard";
+import { BriefingCard } from "#/features/today/components/BriefingCard";
+import type { NowSignal } from "#/features/today/components/MeetingCountdownNow";
+import { NextUpHero } from "#/features/today/components/NextUpHero";
+import { PulseCard } from "#/features/today/components/PulseCard";
+import { TodayPage } from "./\_app.today";
 
 // ── TodayPage smoke ──────────────────────────────────────────────────────────
 
@@ -158,7 +158,9 @@ describe("BriefingCard", () => {
       />,
     );
     expect(screen.getByText(/Morning rundown is off/i)).toBeTruthy();
-    expect(screen.getByRole("button", { name: /Connect provider/i })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: /Connect provider/i }),
+    ).toBeTruthy();
   });
 
   it("calls onConnect when the connect button is clicked", () => {
@@ -175,21 +177,31 @@ describe("BriefingCard", () => {
   });
 
   it("renders the headline when aiConnected=true", () => {
-    render(
-      <BriefingCard data={minimalBriefing} aiConnected={true} />,
-    );
+    render(<BriefingCard data={minimalBriefing} aiConnected={true} />);
     expect(screen.getByText("Three things stand out.")).toBeTruthy();
     expect(screen.getByText("Morning rundown")).toBeTruthy();
   });
 
-  it("renders nothing when suppressed=true", () => {
+  it("hides the card after every item is dismissed", () => {
+    const data: BriefingData = {
+      ...minimalBriefing,
+      items: [
+        {
+          id: "a",
+          priority: "high",
+          source: "github",
+          tag: "PR #421",
+          title: "Review me",
+          body: "Reviewer requested",
+          reason: "blocked",
+        },
+      ],
+    };
     const { container } = render(
-      <BriefingCard
-        data={minimalBriefing}
-        suppressed={true}
-        aiConnected={true}
-      />,
+      <BriefingCard data={data} aiConnected={true} />,
     );
+    expect(screen.getByText("Review me")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /Dismiss Review me/i }));
     expect(container.firstChild).toBeNull();
   });
 });
@@ -240,7 +252,9 @@ describe("FocusModal", () => {
     await screen.findByText(/Start a focus session/i);
     const events: Event[] = [];
     window.addEventListener("devy:focus-started", (e) => events.push(e));
-    fireEvent.click(screen.getByRole("button", { name: /Start 45-min focus/i }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /Start 45-min focus/i }),
+    );
     expect(events.length).toBe(1);
     const detail = (events[0] as CustomEvent).detail;
     expect(detail.durationSeconds).toBe(45 * 60);

@@ -27,13 +27,15 @@ export function InProgressCard({ tickets }: Props) {
           marginBottom: 12,
         }}
       >
-        <span
-          style={{ fontSize: 15, fontWeight: 600, color: "var(--ink)" }}
-        >
+        <span style={{ fontSize: 15, fontWeight: 600, color: "var(--ink)" }}>
           In progress
         </span>
         <span
-          style={{ marginLeft: 8, fontSize: 12, color: "var(--muted)" }}
+          style={{
+            marginLeft: 8,
+            fontSize: 12,
+            color: "var(--muted-foreground)",
+          }}
         >
           {tickets.length} tickets
         </span>
@@ -56,7 +58,7 @@ export function InProgressCard({ tickets }: Props) {
                 fontSize: 11,
                 fontWeight: 600,
                 background: "var(--surface-strong)",
-                color: "var(--body, var(--muted))",
+                color: "var(--body, var(--muted-foreground))",
                 padding: "3px 8px",
                 borderRadius: 6,
                 whiteSpace: "nowrap",
@@ -81,7 +83,7 @@ export function InProgressCard({ tickets }: Props) {
                 style={{
                   fontFamily: "var(--font-mono)",
                   fontSize: 11,
-                  color: "var(--muted)",
+                  color: "var(--muted-foreground)",
                   marginTop: 2,
                 }}
               >
@@ -90,6 +92,8 @@ export function InProgressCard({ tickets }: Props) {
             </div>
             {/* Status dot */}
             <div
+              role="img"
+              aria-label="In progress"
               style={{
                 width: 8,
                 height: 8,
@@ -97,7 +101,6 @@ export function InProgressCard({ tickets }: Props) {
                 background: "var(--good, #22c55e)",
                 flexShrink: 0,
               }}
-              aria-label="In progress"
             />
           </div>
         ))}

@@ -1,4 +1,4 @@
-import { VideoIcon, CalendarIcon } from "lucide-react";
+import { CalendarIcon, VideoIcon } from "lucide-react";
 import { Button } from "#/components/ui/button";
 import { SourceGlyph } from "#/features/signals/components/SourceGlyph";
 
@@ -36,7 +36,12 @@ type Props = {
 const URGENT_BG = "#1b1b1b";
 const URGENT_FG = "#ffffff";
 
-export function MeetingCountdownNow({ signal, cd, onJoin, onOpenAgenda }: Props) {
+export function MeetingCountdownNow({
+  signal,
+  cd,
+  onJoin,
+  onOpenAgenda,
+}: Props) {
   const urgent = cd.minutes <= 10;
   const startLabel = fmtClockTime(signal.when);
 
@@ -98,7 +103,7 @@ export function MeetingCountdownNow({ signal, cd, onJoin, onOpenAgenda }: Props)
             fontSize: 10,
             fontWeight: 700,
             letterSpacing: 0.6,
-            color: urgent ? "rgba(255,255,255,.55)" : "var(--muted)",
+            color: urgent ? "rgba(255,255,255,.55)" : "var(--muted-foreground)",
             textTransform: "uppercase",
           }}
         >
@@ -135,7 +140,9 @@ export function MeetingCountdownNow({ signal, cd, onJoin, onOpenAgenda }: Props)
           <span
             style={{
               fontSize: 12,
-              color: urgent ? "rgba(255,255,255,.6)" : "var(--muted)",
+              color: urgent
+                ? "rgba(255,255,255,.6)"
+                : "var(--muted-foreground)",
             }}
           >
             {fmtClockTime(signal.when)} · Google Meet · 9 attendees
@@ -151,24 +158,22 @@ export function MeetingCountdownNow({ signal, cd, onJoin, onOpenAgenda }: Props)
         >
           {signal.title}
         </div>
-        <div
-          style={{ display: "flex", flexDirection: "column", gap: 3 }}
-        >
-          {(signal.agenda ?? []).slice(0, 3).map((line, i) => (
+        <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+          {(signal.agenda ?? []).slice(0, 3).map((line) => (
             <div
-              key={i}
+              key={line}
               style={{
                 fontSize: 12,
-                color: urgent ? "rgba(255,255,255,.7)" : "var(--body, var(--muted))",
+                color: urgent
+                  ? "rgba(255,255,255,.7)"
+                  : "var(--body, var(--muted))",
                 display: "flex",
                 gap: 8,
               }}
             >
               <span
                 style={{
-                  color: urgent
-                    ? "rgba(255,255,255,.35)"
-                    : "var(--muted-soft)",
+                  color: urgent ? "rgba(255,255,255,.35)" : "var(--muted-soft)",
                 }}
               >
                 ·
@@ -201,7 +206,9 @@ export function MeetingCountdownNow({ signal, cd, onJoin, onOpenAgenda }: Props)
           variant="default"
           size="lg"
           onClick={onJoin}
-          style={urgent ? { background: "var(--primary)", color: "#fff" } : undefined}
+          style={
+            urgent ? { background: "var(--primary)", color: "#fff" } : undefined
+          }
         >
           <VideoIcon size={14} />
           Join meeting
@@ -210,9 +217,9 @@ export function MeetingCountdownNow({ signal, cd, onJoin, onOpenAgenda }: Props)
           variant={urgent ? "ghost" : "outline"}
           size="sm"
           onClick={onOpenAgenda}
-          style={
+          className={
             urgent
-              ? { color: URGENT_FG, borderColor: "rgba(255,255,255,.2)" }
+              ? "border-white/20 text-white hover:bg-white/10 hover:text-white data-pressed:bg-white/10"
               : undefined
           }
         >

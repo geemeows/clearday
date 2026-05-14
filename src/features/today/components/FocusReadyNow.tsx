@@ -1,4 +1,4 @@
-import { TargetIcon, ArrowRightIcon } from "lucide-react";
+import { ArrowRightIcon, TargetIcon } from "lucide-react";
 import { Button } from "#/components/ui/button";
 import { CountdownRing } from "./CountdownRing";
 import type { CountdownState, NowSignal } from "./MeetingCountdownNow";
@@ -10,7 +10,12 @@ type Props = {
   onOpenSignal?: () => void;
 };
 
-export function FocusReadyNow({ signal, cd, onStartFocus, onOpenSignal }: Props) {
+export function FocusReadyNow({
+  signal,
+  cd,
+  onStartFocus,
+  onOpenSignal,
+}: Props) {
   return (
     <div
       style={{
@@ -30,7 +35,7 @@ export function FocusReadyNow({ signal, cd, onStartFocus, onOpenSignal }: Props)
             fontSize: 10,
             fontWeight: 700,
             letterSpacing: 0.6,
-            color: "var(--muted)",
+            color: "var(--muted-foreground)",
             textTransform: "uppercase",
           }}
         >
@@ -52,7 +57,7 @@ export function FocusReadyNow({ signal, cd, onStartFocus, onOpenSignal }: Props)
           style={{
             fontSize: 14,
             lineHeight: 1.5,
-            color: "var(--muted)",
+            color: "var(--muted-foreground)",
             marginBottom: 14,
           }}
         >
@@ -86,7 +91,7 @@ export function FocusReadyNow({ signal, cd, onStartFocus, onOpenSignal }: Props)
             marginTop: 10,
             fontFamily: "var(--font-mono)",
             fontSize: 11,
-            color: "var(--muted)",
+            color: "var(--muted-foreground)",
           }}
         >
           {new Date(signal.when).toLocaleTimeString([], {

@@ -38,7 +38,7 @@
   --secondary: #f4f4f5;
   --secondary-foreground: #18181b;
   --muted: #f4f4f5;
-  --muted-foreground: #71717a;
+  --muted-foreground: #52525b;
   --accent: #f4f4f5;
   --accent-foreground: #18181b;
 
@@ -65,7 +65,7 @@
   /* ---------- Devy compatibility aliases (read by existing components) ----- */
   --ink: var(--foreground);
   --body: #3f3f46;
-  --muted-soft: #a1a1aa;
+  --muted-soft: #71717a;
 
   --canvas: var(--background);
   --surface-soft: #fafafa;
@@ -312,7 +312,7 @@ html[data-theme="dark"] {
   --secondary: #1c1c1f;
   --secondary-foreground: #fafafa;
   --muted: #1c1c1f;
-  --muted-foreground: #a1a1aa;
+  --muted-foreground: #b4b4bb;
   --accent: #1c1c1f;
   --accent-foreground: #fafafa;
 
@@ -325,7 +325,7 @@ html[data-theme="dark"] {
 
   --ink: var(--foreground);
   --body: #d4d4d8;
-  --muted-soft: #71717a;
+  --muted-soft: #8b8b94;
 
   --canvas: var(--background);
   --surface-soft: #131316;
@@ -379,6 +379,16 @@ html[data-theme="dark"] {
 [data-density="compact"] {
   --row-pad-y: 8px;
   --row-pad-x: 12px;
+}
+
+/* Tailwind v4 defaults bare `border` to currentColor (near-black). Restore the
+   v3 default so unqualified border utilities use the design-token hairline.
+   Placed outside @layer base so Tailwind's preflight in the same layer doesn't
+   shadow this rule. */
+*,
+::before,
+::after {
+  border-color: var(--border);
 }
 
 body {

@@ -83,7 +83,7 @@ export function SelfHostPanel({
         <h2 className="font-semibold text-xl tracking-[-0.2px] text-[var(--ink)]">
           Self-host
         </h2>
-        <p className="mt-1 text-sm text-[var(--muted)]">
+        <p className="mt-1 text-sm text-[var(--muted-foreground)]">
           Your deployment. All data and tokens live in your own Supabase +
           Cloudflare Worker.
         </p>
@@ -108,7 +108,7 @@ export function SelfHostPanel({
                     : ""
                 }`}
               >
-                <span className="w-40 shrink-0 text-[13px] text-[var(--muted)]">
+                <span className="w-40 shrink-0 text-[13px] text-[var(--muted-foreground)]">
                   {row.label}
                 </span>
                 <code className="flex-1 font-mono text-[12px] text-[var(--ink)]">
@@ -119,9 +119,7 @@ export function SelfHostPanel({
                   variant="ghost"
                   size="sm"
                   disabled={!row.value}
-                  onClick={() =>
-                    row.value && handleCopy(row.label, row.value)
-                  }
+                  onClick={() => row.value && handleCopy(row.label, row.value)}
                   aria-label={`Copy ${row.label}`}
                 >
                   {copied === row.label ? (
@@ -163,7 +161,7 @@ export function SelfHostPanel({
                 Run signal-rollup now
               </Button>
               <span className="flex-1" />
-              <span className="font-mono text-[11px] text-[var(--muted)]">
+              <span className="font-mono text-[11px] text-[var(--muted-foreground)]">
                 {`${info.signal_count.toLocaleString()} raw signals · ${info.rollup_count} rollups · ${info.retention_days}-day retention`}
               </span>
             </div>

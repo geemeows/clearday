@@ -21,17 +21,25 @@ export function ChartEmpty({
         borderRadius: 6,
         background:
           "repeating-linear-gradient(45deg, transparent 0 6px, var(--surface-soft) 6px 7px)",
-        color: "var(--muted)",
+        color: "var(--muted-foreground)",
         padding: "8px 12px",
         textAlign: "center",
         gap: 2,
       }}
     >
-      <span style={{ fontSize: 11.5, fontWeight: 500, color: "var(--muted)" }}>
+      <span
+        style={{
+          fontSize: 11.5,
+          fontWeight: 500,
+          color: "var(--muted-foreground)",
+        }}
+      >
         {label}
       </span>
       {sub && (
-        <span style={{ fontSize: 10.5, color: "var(--muted-soft)" }}>{sub}</span>
+        <span style={{ fontSize: 10.5, color: "var(--muted-soft)" }}>
+          {sub}
+        </span>
       )}
     </div>
   );

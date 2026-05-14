@@ -86,7 +86,7 @@ export function InboxPreviewRow({ signal: s, onOpen }: Props) {
         <div
           style={{
             fontSize: 12,
-            color: "var(--muted)",
+            color: "var(--muted-foreground)",
             overflow: "hidden",
             textOverflow: "ellipsis",
             whiteSpace: "nowrap",
@@ -99,7 +99,7 @@ export function InboxPreviewRow({ signal: s, onOpen }: Props) {
         style={{
           fontFamily: "var(--font-mono)",
           fontSize: 11,
-          color: "var(--muted)",
+          color: "var(--muted-foreground)",
           flexShrink: 0,
         }}
       >

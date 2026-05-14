@@ -46,7 +46,9 @@ export function PulseCard({
   shipByDay: shipByDayProp,
 }: Props) {
   const sourceMix = empty ? [] : (sourceMixProp ?? DEFAULT_SOURCE_MIX);
-  const reviewLatency = empty ? [] : (reviewLatencyProp ?? DEFAULT_REVIEW_LATENCY);
+  const reviewLatency = empty
+    ? []
+    : (reviewLatencyProp ?? DEFAULT_REVIEW_LATENCY);
   const shipByDay = empty
     ? DEFAULT_SHIP_BY_DAY.map((d) => ({ ...d, prs: 0, tickets: 0 }))
     : (shipByDayProp ?? DEFAULT_SHIP_BY_DAY);
@@ -67,16 +69,14 @@ export function PulseCard({
           marginBottom: 14,
         }}
       >
-        <span
-          style={{ fontSize: 15, fontWeight: 600, color: "var(--ink)" }}
-        >
+        <span style={{ fontSize: 15, fontWeight: 600, color: "var(--ink)" }}>
           Pulse
         </span>
         <span
           style={{
             marginLeft: 8,
             fontSize: 12,
-            color: "var(--muted)",
+            color: "var(--muted-foreground)",
           }}
         >
           last 7 days
@@ -86,7 +86,7 @@ export function PulseCard({
           style={{
             fontFamily: "var(--font-mono)",
             fontSize: 11,
-            color: "var(--muted)",
+            color: "var(--muted-foreground)",
           }}
         >
           updated {updatedAgo}
@@ -148,7 +148,7 @@ export function PulseCard({
                   <span
                     style={{
                       fontFamily: "var(--font-mono)",
-                      color: "var(--muted)",
+                      color: "var(--muted-foreground)",
                     }}
                   >
                     {s.v}
@@ -170,14 +170,20 @@ export function PulseCard({
             style={{
               fontFamily: "var(--font-mono)",
               fontSize: 10,
-              color: "var(--muted)",
+              color: "var(--muted-foreground)",
               textTransform: "uppercase",
               letterSpacing: 0.5,
             }}
           >
             Review latency
           </div>
-          <div style={{ marginTop: 6, fontSize: 12, color: "var(--muted)" }}>
+          <div
+            style={{
+              marginTop: 6,
+              fontSize: 12,
+              color: "var(--muted-foreground)",
+            }}
+          >
             median time-to-first-comment, lower is better
           </div>
           <div style={{ marginTop: 8 }}>
@@ -204,14 +210,20 @@ export function PulseCard({
             style={{
               fontFamily: "var(--font-mono)",
               fontSize: 10,
-              color: "var(--muted)",
+              color: "var(--muted-foreground)",
               textTransform: "uppercase",
               letterSpacing: 0.5,
             }}
           >
             Shipped this week
           </div>
-          <div style={{ marginTop: 6, fontSize: 12, color: "var(--muted)" }}>
+          <div
+            style={{
+              marginTop: 6,
+              fontSize: 12,
+              color: "var(--muted-foreground)",
+            }}
+          >
             PRs merged · Tickets closed
           </div>
           <div style={{ marginTop: 8 }}>
@@ -223,7 +235,7 @@ export function PulseCard({
               display: "flex",
               gap: 14,
               fontSize: 11,
-              color: "var(--muted)",
+              color: "var(--muted-foreground)",
             }}
           >
             <span>

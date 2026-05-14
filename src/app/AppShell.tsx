@@ -4,6 +4,7 @@
 import type { ReactNode } from "react";
 import { CommandPalette } from "#/app/CommandPalette";
 import { NavigationSidebar } from "#/app/NavigationSidebar";
+import { FocusModal } from "#/features/focus/components/FocusModal";
 
 export function AppShell({ children }: { children: ReactNode }) {
   return (
@@ -28,6 +29,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         {children}
       </div>
       <CommandPalette />
+      <FocusModal />
     </div>
   );
 }

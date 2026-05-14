@@ -58,29 +58,31 @@ export function TodaySchedule({
           marginBottom: 12,
         }}
       >
-        <span
-          style={{ fontSize: 15, fontWeight: 600, color: "var(--ink)" }}
-        >
+        <span style={{ fontSize: 15, fontWeight: 600, color: "var(--ink)" }}>
           Today
         </span>
         <span
-          style={{ marginLeft: 8, fontSize: 12, color: "var(--muted)" }}
+          style={{
+            marginLeft: 8,
+            fontSize: 12,
+            color: "var(--muted-foreground)",
+          }}
         >
           {dateLabel}
         </span>
         <span style={{ flex: 1 }} />
-        <span style={{ fontSize: 12, color: "var(--muted)" }}>
+        <span style={{ fontSize: 12, color: "var(--muted-foreground)" }}>
           {currentTimeLabel}
         </span>
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
-        {schedule.map((b, i) => {
+        {schedule.map((b) => {
           const isCurrent = nowCursor ? b.t === nowCursor : false;
           const isBreak = b.kind === "break";
           return (
             <div
-              key={i}
+              key={`${b.t}-${b.title}`}
               style={{
                 display: "grid",
                 gridTemplateColumns: "60px 6px 1fr auto",
@@ -93,7 +95,7 @@ export function TodaySchedule({
               <div
                 style={{
                   fontFamily: "var(--font-mono)",
-                  color: "var(--muted)",
+                  color: "var(--muted-foreground)",
                   fontSize: 11,
                   textAlign: "right",
                 }}
@@ -115,7 +117,7 @@ export function TodaySchedule({
                   style={{
                     fontSize: 14,
                     fontWeight: isCurrent ? 700 : 500,
-                    color: isBreak ? "var(--muted)" : "var(--ink)",
+                    color: isBreak ? "var(--muted-foreground)" : "var(--ink)",
                   }}
                 >
                   {b.title}
@@ -126,7 +128,8 @@ export function TodaySchedule({
                         fontSize: 10,
                         padding: "1px 8px",
                         borderRadius: 999,
-                        background: "var(--primary-disabled, color-mix(in oklab, var(--primary) 15%, transparent))",
+                        background:
+                          "var(--primary-disabled, color-mix(in oklab, var(--primary) 15%, transparent))",
                         color: "var(--primary-active, var(--primary))",
                         fontWeight: 600,
                         letterSpacing: 0.3,
@@ -140,7 +143,7 @@ export function TodaySchedule({
                   style={{
                     fontFamily: "var(--font-mono)",
                     fontSize: 11,
-                    color: "var(--muted)",
+                    color: "var(--muted-foreground)",
                     marginTop: 1,
                   }}
                 >

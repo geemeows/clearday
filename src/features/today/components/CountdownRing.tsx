@@ -71,7 +71,7 @@ export function CountdownRing({
             fontSize: 9,
             letterSpacing: 0.6,
             fontWeight: 600,
-            color: "var(--muted)",
+            color: "var(--muted-foreground)",
             textTransform: "uppercase",
           }}
         >

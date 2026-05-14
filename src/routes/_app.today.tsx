@@ -1,21 +1,20 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect } from "react";
-import { useAuth } from "#/features/auth/auth";
-import { FocusModal } from "#/features/focus/components/FocusModal";
-import { InboxPreviewRow } from "#/features/signals/components/InboxPreviewRow";
-import type { PreviewSignal } from "#/features/signals/components/InboxPreviewRow";
-import { BriefingCard } from "#/features/today/components/BriefingCard";
-import type { BriefingData } from "#/features/today/components/BriefingCard";
-import { InProgressCard } from "#/features/today/components/InProgressCard";
-import type { InProgressTicket } from "#/features/today/components/InProgressCard";
-import { NextUpHero } from "#/features/today/components/NextUpHero";
-import type { NowSignal } from "#/features/today/components/MeetingCountdownNow";
-import { PulseCard } from "#/features/today/components/PulseCard";
-import type { WeekStats } from "#/features/today/components/PulseCard";
-import { TodaySchedule } from "#/features/today/components/TodaySchedule";
-import type { ScheduleBlock } from "#/features/today/components/TodaySchedule";
-import { Button } from "#/components/ui/button";
 import { ArrowRightIcon } from "lucide-react";
+import { useEffect } from "react";
+import { Button } from "#/components/ui/button";
+import { useAuth } from "#/features/auth/auth";
+import type { PreviewSignal } from "#/features/signals/components/InboxPreviewRow";
+import { InboxPreviewRow } from "#/features/signals/components/InboxPreviewRow";
+import type { BriefingData } from "#/features/today/components/BriefingCard";
+import { BriefingCard } from "#/features/today/components/BriefingCard";
+import type { InProgressTicket } from "#/features/today/components/InProgressCard";
+import { InProgressCard } from "#/features/today/components/InProgressCard";
+import type { NowSignal } from "#/features/today/components/MeetingCountdownNow";
+import { NextUpHero } from "#/features/today/components/NextUpHero";
+import type { WeekStats } from "#/features/today/components/PulseCard";
+import { PulseCard } from "#/features/today/components/PulseCard";
+import type { ScheduleBlock } from "#/features/today/components/TodaySchedule";
+import { TodaySchedule } from "#/features/today/components/TodaySchedule";
 
 // ── Fixture data ─────────────────────────────────────────────────────────────
 // Real data wiring (signals store, briefing API, calendar events) is a
@@ -176,14 +175,47 @@ const WEEK_STATS: WeekStats = {
 };
 
 const TODAY_SCHEDULE: ScheduleBlock[] = [
-  { t: "09:00", end: "09:45", title: "Deep work — Slack adapter", kind: "focus" },
-  { t: "10:00", end: "10:15", title: "Standup — Platform team", kind: "meeting", join: true },
+  {
+    t: "09:00",
+    end: "09:45",
+    title: "Deep work — Slack adapter",
+    kind: "focus",
+  },
+  {
+    t: "10:00",
+    end: "10:15",
+    title: "Standup — Platform team",
+    kind: "meeting",
+    join: true,
+  },
   { t: "10:30", end: "10:45", title: "Slack thread cleanup", kind: "buffer" },
-  { t: "11:00", end: "11:30", title: "1:1 — Maria", kind: "meeting", join: true },
-  { t: "11:45", end: "13:00", title: "Deep work — DEV-441 replay rejection", kind: "focus" },
+  {
+    t: "11:00",
+    end: "11:30",
+    title: "1:1 — Maria",
+    kind: "meeting",
+    join: true,
+  },
+  {
+    t: "11:45",
+    end: "13:00",
+    title: "Deep work — DEV-441 replay rejection",
+    kind: "focus",
+  },
   { t: "13:00", end: "14:00", title: "Lunch", kind: "break" },
-  { t: "14:00", end: "14:45", title: "Design review — onboarding flow", kind: "meeting", join: true },
-  { t: "15:00", end: "16:30", title: "Deep work — briefing prompt review", kind: "focus" },
+  {
+    t: "14:00",
+    end: "14:45",
+    title: "Design review — onboarding flow",
+    kind: "meeting",
+    join: true,
+  },
+  {
+    t: "15:00",
+    end: "16:30",
+    title: "Deep work — briefing prompt review",
+    kind: "focus",
+  },
   { t: "16:30", end: "17:00", title: "Inbox + ship reviews", kind: "buffer" },
 ];
 
@@ -201,23 +233,15 @@ export function TodayPage() {
     }
   }, [loading, session, navigate]);
   const firstName =
-    ((session?.user?.user_metadata?.full_name as string | undefined) ?? "")
-      .split(" ")[0] || "there";
-
-  const minutesUntilNext = Math.max(
-    0,
-    Math.floor((new Date(NEXT_UP.when).getTime() - Date.now()) / 60_000),
-  );
-  const meetingImminent = minutesUntilNext <= 10;
+    (
+      (session?.user?.user_metadata?.full_name as string | undefined) ?? ""
+    ).split(" ")[0] || "there";
 
   const previewRows = PREVIEW_SIGNALS.slice(0, 6);
   const unreadCount = previewRows.filter((s) => s.unread > 0).length;
 
   return (
-    <main
-      className="flex-1 overflow-auto"
-      aria-label="Today"
-    >
+    <main className="flex-1 overflow-auto" aria-label="Today">
       <div
         style={{
           padding: "32px 40px 64px",
@@ -241,10 +265,14 @@ export function TodayPage() {
             Good morning, {firstName}.
           </div>
           <div
-            style={{ marginTop: 4, fontSize: 14, color: "var(--muted)" }}
+            style={{
+              marginTop: 4,
+              fontSize: 14,
+              color: "var(--muted-foreground)",
+            }}
           >
-            {unreadCount} things need you · 3 meetings today · quiet hours
-            end at 09:00
+            {unreadCount} things need you · 3 meetings today · quiet hours end
+            at 09:00
           </div>
         </header>
 
@@ -263,7 +291,6 @@ export function TodayPage() {
         {/* Morning briefing */}
         <BriefingCard
           data={BRIEFING}
-          suppressed={meetingImminent}
           aiConnected={true}
           onConnect={() => void navigate({ to: "/settings" })}
         />
@@ -299,7 +326,11 @@ export function TodayPage() {
                 Needs you
               </span>
               <span
-                style={{ marginLeft: 8, fontSize: 12, color: "var(--muted)" }}
+                style={{
+                  marginLeft: 8,
+                  fontSize: 12,
+                  color: "var(--muted-foreground)",
+                }}
               >
                 {unreadCount} unread
               </span>
@@ -330,9 +361,6 @@ export function TodayPage() {
         {/* Schedule */}
         <TodaySchedule schedule={TODAY_SCHEDULE} />
       </div>
-
-      {/* Focus modal — mounted here, opened via devy:open-focus-modal event */}
-      <FocusModal />
     </main>
   );
 }

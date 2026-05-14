@@ -1,22 +1,22 @@
 // ProjectsPage — Redesign v5 / Projects (#181)
 // Kanban board: board view, project switcher, card detail pane, signal linking.
 
-import { useMemo, useState } from "react";
 import { ChevronDownIcon, LinkIcon, PlusIcon, XIcon } from "lucide-react";
+import { useMemo, useState } from "react";
 import { Button } from "#/components/ui/button";
-import { Input } from "#/components/ui/input";
-import { Textarea } from "#/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "#/components/ui/dialog";
+import { Input } from "#/components/ui/input";
 import {
   Popover,
-  PopoverTrigger,
   PopoverContent,
+  PopoverTrigger,
 } from "#/components/ui/popover";
+import { Textarea } from "#/components/ui/textarea";
 import { SourceGlyph } from "#/features/signals/components/SourceGlyph";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -68,14 +68,52 @@ export type FixtureSignal = {
 // ── Fixture data ──────────────────────────────────────────────────────────────
 
 const FIXTURE_SIGNALS: FixtureSignal[] = [
-  { id: "s1", source: "git", title: "Add retry logic to Slack adapter", repo: "platform", num: "PR #214" },
-  { id: "s2", source: "git", title: "Fix auth-proxy token TTL edge case", repo: "platform", num: "PR #218" },
-  { id: "s3", source: "slack", title: "@here standup reminder", sub: "#eng-platform" },
-  { id: "s4", source: "slack", title: "Review cron idempotency PR", sub: "DM from Joon" },
+  {
+    id: "s1",
+    source: "git",
+    title: "Add retry logic to Slack adapter",
+    repo: "platform",
+    num: "PR #214",
+  },
+  {
+    id: "s2",
+    source: "git",
+    title: "Fix auth-proxy token TTL edge case",
+    repo: "platform",
+    num: "PR #218",
+  },
+  {
+    id: "s3",
+    source: "slack",
+    title: "@here standup reminder",
+    sub: "#eng-platform",
+  },
+  {
+    id: "s4",
+    source: "slack",
+    title: "Review cron idempotency PR",
+    sub: "DM from Joon",
+  },
   { id: "s5", source: "cal", title: "Sprint planning", sub: "Today 2:00 PM" },
-  { id: "s6", source: "git", title: "ci: bump actions/checkout to v4", repo: "platform", num: "PR #215" },
-  { id: "s7", source: "task", title: "DEV-441: Slack adapter retry budget", sub: "In review" },
-  { id: "s8", source: "task", title: "DEV-447: Cron idempotent retry tick", sub: "Review" },
+  {
+    id: "s6",
+    source: "git",
+    title: "ci: bump actions/checkout to v4",
+    repo: "platform",
+    num: "PR #215",
+  },
+  {
+    id: "s7",
+    source: "task",
+    title: "DEV-441: Slack adapter retry budget",
+    sub: "In review",
+  },
+  {
+    id: "s8",
+    source: "task",
+    title: "DEV-447: Cron idempotent retry tick",
+    sub: "Review",
+  },
 ];
 
 const INITIAL_PROJECTS: ProjectDef[] = [
@@ -91,12 +129,72 @@ const INITIAL_PROJECTS: ProjectDef[] = [
       { id: "shipped", name: "Shipped" },
     ],
     cards: [
-      { id: "c1", col: "doing", title: "Slack adapter retry budget", desc: "Cap retries at 3 with jitter; emit metric on bail.", priority: "P1", labels: ["infra"], due: "today", linked: { source: "task", id: "DEV-441", repo: "linear" }, linkedSignals: ["s2", "s6"] },
-      { id: "c2", col: "doing", title: "Auth-proxy state token TTL audit", desc: "", priority: "P1", labels: ["security"], due: "tomorrow", linked: null, linkedSignals: ["s7"] },
-      { id: "c3", col: "review", title: "Cron orchestrator: idempotent retry tick", desc: "PR up — awaiting CI.", priority: "P2", labels: ["infra"], due: null, linked: { source: "task", id: "DEV-447", repo: "linear" }, linkedSignals: [] },
-      { id: "c4", col: "backlog", title: "Signal-store upsert benchmarks", desc: "", priority: "P3", labels: ["perf"], due: null, linked: { source: "task", id: "DEV-401", repo: "linear" }, linkedSignals: [] },
-      { id: "c5", col: "backlog", title: "Web-push VAPID key rotation flow", desc: "Document rotation cadence.", priority: "P3", labels: ["alerts"], due: null, linked: null, linkedSignals: [] },
-      { id: "c6", col: "shipped", title: "Onboarding: Slack-channel allowlist step", desc: "", priority: "P2", labels: ["onboarding"], due: null, linked: { source: "task", id: "DEV-388", repo: "linear" }, linkedSignals: [] },
+      {
+        id: "c1",
+        col: "doing",
+        title: "Slack adapter retry budget",
+        desc: "Cap retries at 3 with jitter; emit metric on bail.",
+        priority: "P1",
+        labels: ["infra"],
+        due: "today",
+        linked: { source: "task", id: "DEV-441", repo: "linear" },
+        linkedSignals: ["s2", "s6"],
+      },
+      {
+        id: "c2",
+        col: "doing",
+        title: "Auth-proxy state token TTL audit",
+        desc: "",
+        priority: "P1",
+        labels: ["security"],
+        due: "tomorrow",
+        linked: null,
+        linkedSignals: ["s7"],
+      },
+      {
+        id: "c3",
+        col: "review",
+        title: "Cron orchestrator: idempotent retry tick",
+        desc: "PR up — awaiting CI.",
+        priority: "P2",
+        labels: ["infra"],
+        due: null,
+        linked: { source: "task", id: "DEV-447", repo: "linear" },
+        linkedSignals: [],
+      },
+      {
+        id: "c4",
+        col: "backlog",
+        title: "Signal-store upsert benchmarks",
+        desc: "",
+        priority: "P3",
+        labels: ["perf"],
+        due: null,
+        linked: { source: "task", id: "DEV-401", repo: "linear" },
+        linkedSignals: [],
+      },
+      {
+        id: "c5",
+        col: "backlog",
+        title: "Web-push VAPID key rotation flow",
+        desc: "Document rotation cadence.",
+        priority: "P3",
+        labels: ["alerts"],
+        due: null,
+        linked: null,
+        linkedSignals: [],
+      },
+      {
+        id: "c6",
+        col: "shipped",
+        title: "Onboarding: Slack-channel allowlist step",
+        desc: "",
+        priority: "P2",
+        labels: ["onboarding"],
+        due: null,
+        linked: { source: "task", id: "DEV-388", repo: "linear" },
+        linkedSignals: [],
+      },
     ],
   },
   {
@@ -110,8 +208,28 @@ const INITIAL_PROJECTS: ProjectDef[] = [
       { id: "done", name: "Done" },
     ],
     cards: [
-      { id: "c7", col: "doing", title: "Read 'A Philosophy of Software Design'", desc: "Ch 4–6 this week.", priority: "P3", labels: ["reading"], due: null, linked: null, linkedSignals: [] },
-      { id: "c8", col: "ideas", title: "Refactor home dotfiles", desc: "", priority: "P3", labels: [], due: null, linked: null, linkedSignals: [] },
+      {
+        id: "c7",
+        col: "doing",
+        title: "Read 'A Philosophy of Software Design'",
+        desc: "Ch 4–6 this week.",
+        priority: "P3",
+        labels: ["reading"],
+        due: null,
+        linked: null,
+        linkedSignals: [],
+      },
+      {
+        id: "c8",
+        col: "ideas",
+        title: "Refactor home dotfiles",
+        desc: "",
+        priority: "P3",
+        labels: [],
+        due: null,
+        linked: null,
+        linkedSignals: [],
+      },
     ],
   },
 ];
@@ -121,7 +239,7 @@ const INITIAL_PROJECTS: ProjectDef[] = [
 function priorityStyle(p: CardPriority): { bg: string; color: string } {
   if (p === "P1") return { bg: "var(--danger-soft)", color: "var(--danger)" };
   if (p === "P2") return { bg: "var(--warn-soft)", color: "var(--warn)" };
-  return { bg: "var(--surface-strong)", color: "var(--muted)" };
+  return { bg: "var(--surface-strong)", color: "var(--muted-foreground)" };
 }
 
 // ── ProjectsPage ──────────────────────────────────────────────────────────────
@@ -133,7 +251,7 @@ export function ProjectsPage() {
   const [creatingProject, setCreatingProject] = useState(false);
   const [linkPickerCardId, setLinkPickerCardId] = useState<string | null>(null);
 
-  const project = projects.find((p) => p.id === activeId)!;
+  const project = projects.find((p) => p.id === activeId) ?? projects[0];
 
   const updateProject = (id: string, fn: (p: ProjectDef) => ProjectDef) =>
     setProjects((ps) => ps.map((p) => (p.id === id ? fn(p) : p)));
@@ -205,10 +323,7 @@ export function ProjectsPage() {
           onNew={() => setCreatingProject(true)}
         />
         <span style={{ flex: 1 }} />
-        <span
-          style={{ fontSize: 12, color: "var(--muted-foreground)" }}
-          aria-label="project stats"
-        >
+        <span style={{ fontSize: 12, color: "var(--muted-foreground)" }}>
           {project.cards.length} cards · {project.columns.length} columns
         </span>
       </div>
@@ -221,7 +336,6 @@ export function ProjectsPage() {
           overflowY: "hidden",
           padding: "20px 20px 28px",
         }}
-        aria-label="kanban board"
       >
         <div
           style={{
@@ -260,7 +374,9 @@ export function ProjectsPage() {
       {/* Card detail dialog */}
       <Dialog
         open={openCardId !== null}
-        onOpenChange={(open) => { if (!open) setOpenCardId(null); }}
+        onOpenChange={(open) => {
+          if (!open) setOpenCardId(null);
+        }}
       >
         {openCard && (
           <CardDetailDialog
@@ -278,7 +394,9 @@ export function ProjectsPage() {
       {/* Signal link picker dialog */}
       <Dialog
         open={linkPickerCardId !== null}
-        onOpenChange={(open) => { if (!open) setLinkPickerCardId(null); }}
+        onOpenChange={(open) => {
+          if (!open) setLinkPickerCardId(null);
+        }}
       >
         {linkPickerCardId && (
           <SignalLinkPickerDialog
@@ -310,7 +428,7 @@ export function ProjectSwitcher({
   setActiveId: (id: string) => void;
   onNew: () => void;
 }) {
-  const active = projects.find((p) => p.id === activeId)!;
+  const active = projects.find((p) => p.id === activeId) ?? projects[0];
 
   return (
     <Popover>
@@ -340,7 +458,9 @@ export function ProjectSwitcher({
                 flexShrink: 0,
               }}
             />
-            <span style={{ fontSize: 17, fontWeight: 700, letterSpacing: -0.4 }}>
+            <span
+              style={{ fontSize: 17, fontWeight: 700, letterSpacing: -0.4 }}
+            >
               {active.name}
             </span>
             <span
@@ -384,10 +504,22 @@ export function ProjectSwitcher({
             }}
           >
             <span
-              style={{ width: 8, height: 8, borderRadius: 999, background: active.color, flexShrink: 0 }}
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: 999,
+                background: active.color,
+                flexShrink: 0,
+              }}
             />
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: "var(--foreground)" }}>
+              <div
+                style={{
+                  fontSize: 13,
+                  fontWeight: 600,
+                  color: "var(--foreground)",
+                }}
+              >
                 {active.name}
               </div>
               <div style={{ fontSize: 11.5, color: "var(--muted-foreground)" }}>
@@ -522,7 +654,7 @@ export function KanbanColumn({
   const isActive = col.id === project.activeCol;
 
   return (
-    <div
+    <section
       onDragOver={(e) => {
         e.preventDefault();
         setDragOver(true);
@@ -538,7 +670,9 @@ export function KanbanColumn({
         flexShrink: 0,
         display: "flex",
         flexDirection: "column",
-        background: dragOver ? "var(--primary-disabled, #e8f5ee)" : "var(--surface-soft)",
+        background: dragOver
+          ? "var(--primary-disabled, #e8f5ee)"
+          : "var(--surface-soft)",
         borderRadius: 12,
         padding: 10,
         border: dragOver
@@ -575,7 +709,11 @@ export function KanbanColumn({
           {col.name}
         </span>
         <span
-          style={{ fontSize: 11, color: "var(--muted-foreground)", fontVariantNumeric: "tabular-nums" }}
+          style={{
+            fontSize: 11,
+            color: "var(--muted-foreground)",
+            fontVariantNumeric: "tabular-nums",
+          }}
         >
           {cards.length}
         </span>
@@ -626,7 +764,7 @@ export function KanbanColumn({
           </div>
         )}
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -642,15 +780,18 @@ export function KanbanCard({
   const ps = priorityStyle(card.priority);
 
   return (
-    <div
+    <button
+      type="button"
       draggable
       onDragStart={(e) => e.dataTransfer.setData("text/card-id", card.id)}
       onClick={() => onOpen(card)}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") onOpen(card); }}
       aria-label={card.title}
       style={{
+        display: "block",
+        width: "100%",
+        textAlign: "left",
+        font: "inherit",
+        color: "inherit",
         padding: "10px 12px",
         borderRadius: 10,
         background: "var(--card)",
@@ -661,7 +802,12 @@ export function KanbanCard({
     >
       {/* chip row */}
       <div
-        style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+          marginBottom: 6,
+        }}
       >
         {card.linked && (
           <span
@@ -670,7 +816,11 @@ export function KanbanCard({
           >
             <SourceGlyph source={card.linked.source} size={12} />
             <span
-              style={{ fontSize: 10, fontWeight: 600, color: "var(--muted-foreground)" }}
+              style={{
+                fontSize: 10,
+                fontWeight: 600,
+                color: "var(--muted-foreground)",
+              }}
             >
               {card.linked.id}
             </span>
@@ -725,7 +875,8 @@ export function KanbanCard({
           fontWeight: 500,
           lineHeight: 1.35,
           color: "var(--foreground)",
-          marginBottom: card.labels.length > 0 || card.linkedSignals.length > 0 ? 8 : 0,
+          marginBottom:
+            card.labels.length > 0 || card.linkedSignals.length > 0 ? 8 : 0,
         }}
       >
         {card.title}
@@ -775,7 +926,7 @@ export function KanbanCard({
           )}
         </div>
       )}
-    </div>
+    </button>
   );
 }
 
@@ -797,7 +948,9 @@ export function NewProjectDialog({
   const [activeCol, setActiveCol] = useState("doing");
 
   const updateCol = (i: number, val: string) =>
-    setColumns((cs) => cs.map((c, idx) => (idx === i ? { ...c, name: val } : c)));
+    setColumns((cs) =>
+      cs.map((c, idx) => (idx === i ? { ...c, name: val } : c)),
+    );
 
   const removeCol = (i: number) =>
     setColumns((cs) => (cs.length > 1 ? cs.filter((_, idx) => idx !== i) : cs));
@@ -830,7 +983,13 @@ export function NewProjectDialog({
     <DialogContent className="sm:max-w-lg" showCloseButton={false}>
       <DialogHeader>
         <DialogTitle>New project</DialogTitle>
-        <p style={{ fontSize: 13, color: "var(--muted-foreground)", marginTop: 2 }}>
+        <p
+          style={{
+            fontSize: 13,
+            color: "var(--muted-foreground)",
+            marginTop: 2,
+          }}
+        >
           Define your columns now — they're hard to reorganize later.
         </p>
       </DialogHeader>
@@ -1008,12 +1167,20 @@ export function NewProjectDialog({
               marginTop: 6,
             }}
           >
-            Active column = the one that surfaces on the Today page's "In progress" widget.
+            Active column = the one that surfaces on the Today page's "In
+            progress" widget.
           </p>
         </div>
       </div>
 
-      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 4 }}>
+      <div
+        style={{
+          display: "flex",
+          gap: 8,
+          justifyContent: "flex-end",
+          marginTop: 4,
+        }}
+      >
         <Button variant="ghost" onClick={onClose} type="button">
           Cancel
         </Button>
@@ -1053,7 +1220,14 @@ export function CardDetailDialog({
   return (
     <DialogContent className="sm:max-w-[640px]" showCloseButton>
       {/* header chips */}
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          marginBottom: 12,
+        }}
+      >
         {card.linked && (
           <span
             style={{
@@ -1066,10 +1240,18 @@ export function CardDetailDialog({
             }}
           >
             <SourceGlyph source={card.linked.source} size={14} />
-            <span style={{ fontSize: 11, fontWeight: 600, color: "var(--foreground)" }}>
+            <span
+              style={{
+                fontSize: 11,
+                fontWeight: 600,
+                color: "var(--foreground)",
+              }}
+            >
               {card.linked.id}
             </span>
-            <span style={{ fontSize: 10, color: "var(--muted-foreground)" }}>linked</span>
+            <span style={{ fontSize: 10, color: "var(--muted-foreground)" }}>
+              linked
+            </span>
           </span>
         )}
         <span
@@ -1118,10 +1300,14 @@ export function CardDetailDialog({
           fontSize: 13,
         }}
       >
-        <span style={{ color: "var(--muted-foreground)", alignSelf: "center" }}>Priority</span>
+        <span style={{ color: "var(--muted-foreground)", alignSelf: "center" }}>
+          Priority
+        </span>
         <select
           value={card.priority}
-          onChange={(e) => onUpdate({ priority: e.target.value as CardPriority })}
+          onChange={(e) =>
+            onUpdate({ priority: e.target.value as CardPriority })
+          }
           aria-label="Priority"
           style={{
             border: "1px solid var(--border)",
@@ -1138,7 +1324,9 @@ export function CardDetailDialog({
           <option>P3</option>
         </select>
 
-        <span style={{ color: "var(--muted-foreground)", alignSelf: "center" }}>Due</span>
+        <span style={{ color: "var(--muted-foreground)", alignSelf: "center" }}>
+          Due
+        </span>
         <select
           value={card.due ?? ""}
           onChange={(e) =>
@@ -1161,7 +1349,15 @@ export function CardDetailDialog({
           <option value="this-week">This week</option>
         </select>
 
-        <span style={{ color: "var(--muted-foreground)", alignSelf: "start", paddingTop: 4 }}>Labels</span>
+        <span
+          style={{
+            color: "var(--muted-foreground)",
+            alignSelf: "start",
+            paddingTop: 4,
+          }}
+        >
+          Labels
+        </span>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
           {card.labels.map((l) => (
             <span
@@ -1238,7 +1434,11 @@ export function CardDetailDialog({
           LINKED SIGNALS
         </span>
         <span
-          style={{ fontSize: 11, color: "var(--muted-foreground)", marginLeft: 6 }}
+          style={{
+            fontSize: 11,
+            color: "var(--muted-foreground)",
+            marginLeft: 6,
+          }}
         >
           {card.linkedSignals.length}
         </span>
@@ -1300,14 +1500,16 @@ export function CardDetailDialog({
                       whiteSpace: "nowrap",
                     }}
                   >
-                    {s.repo ? `${s.repo} ${s.num}` : s.sub ?? ""}
+                    {s.repo ? `${s.repo} ${s.num}` : (s.sub ?? "")}
                   </div>
                 </div>
                 <button
                   type="button"
                   onClick={() =>
                     onUpdate({
-                      linkedSignals: card.linkedSignals.filter((x) => x !== sid),
+                      linkedSignals: card.linkedSignals.filter(
+                        (x) => x !== sid,
+                      ),
                     })
                   }
                   aria-label={`Unlink ${s.title}`}
@@ -1374,9 +1576,8 @@ export function CardDetailDialog({
           >
             <SourceGlyph source={card.linked.source} size={16} />
             <span style={{ flex: 1 }}>
-              This card mirrors{" "}
-              <strong>{card.linked.id}</strong> in {card.linked.repo}. Edits
-              sync back via API.
+              This card mirrors <strong>{card.linked.id}</strong> in{" "}
+              {card.linked.repo}. Edits sync back via API.
             </span>
             <Button variant="outline" size="sm" type="button">
               Open in {card.linked.repo}
@@ -1427,7 +1628,6 @@ export function SignalLinkPickerDialog({
           borderRadius: 8,
           marginTop: 4,
         }}
-        aria-label="signal list"
       >
         {items.map((s, i, arr) => (
           <button

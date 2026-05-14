@@ -1,18 +1,33 @@
 // CareerPage — main orchestrator for the Career feature.
 // Local state only (no Supabase wiring) for the redesign pass.
 
-import { useMemo, useState } from "react";
 import { EyeIcon, PlusIcon } from "lucide-react";
+import { useMemo, useState } from "react";
 import { Button } from "#/components/ui/button";
 import { Input } from "#/components/ui/input";
 import { Tabs, TabsList, TabsTab } from "#/components/ui/tabs";
+import { ArchiveDetailView, ArchiveGrid } from "./ArchiveView";
 import {
-  ACTIVE_LEVEL,
-  ARCHIVED_LEVELS,
-  CAREER_LEGEND,
-  CAREER_LEGEND_DESC,
-  computeSatisfaction,
-} from "./career-data";
+  CommentsDialog,
+  CompetencyAddDialog,
+  CriterionAddDialog,
+  DevPlanAddDialog,
+  EvidenceAddDialog,
+  EvidenceListDialog,
+  HeaderFieldDialog,
+  IndicatorAddDialog,
+  LegendEditDialog,
+  ShareDialog,
+  SyncDialog,
+} from "./CareerDialogs";
+import { CareerEmpty } from "./CareerEmpty";
+import {
+  ActionsMenu,
+  HeaderKVs,
+  LevelSwitcher,
+  SyncPill,
+} from "./CareerHeader";
+import { CompetencyBlock } from "./CompetencyBlock";
 import type {
   ArchivedLevel,
   CareerLevel,
@@ -23,27 +38,17 @@ import type {
   ScoreLegend,
   WheelDataPoint,
 } from "./career-data";
-import { CareerEmpty } from "./CareerEmpty";
-import { ArchiveGrid, ArchiveDetailView } from "./ArchiveView";
-import { PublicShareView } from "./PublicShareView";
-import { CompetencyBlock } from "./CompetencyBlock";
-import { WheelPanel } from "./WheelPanel";
-import { HeaderKVs, LevelSwitcher, SyncPill, ActionsMenu } from "./CareerHeader";
-import { ScoreLegendStrip } from "./ScoreLegendStrip";
-import { DevPlanSection } from "./DevPlanSection";
 import {
-  SyncDialog,
-  ShareDialog,
-  EvidenceAddDialog,
-  EvidenceListDialog,
-  HeaderFieldDialog,
-  CompetencyAddDialog,
-  CriterionAddDialog,
-  IndicatorAddDialog,
-  CommentsDialog,
-  DevPlanAddDialog,
-  LegendEditDialog,
-} from "./CareerDialogs";
+  ACTIVE_LEVEL,
+  ARCHIVED_LEVELS,
+  CAREER_LEGEND,
+  CAREER_LEGEND_DESC,
+  computeSatisfaction,
+} from "./career-data";
+import { DevPlanSection } from "./DevPlanSection";
+import { PublicShareView } from "./PublicShareView";
+import { ScoreLegendStrip } from "./ScoreLegendStrip";
+import { WheelPanel } from "./WheelPanel";
 
 type View = "active" | "archive" | "archive-detail" | "empty" | "public";
 
@@ -61,7 +66,8 @@ export function CareerPage() {
     JSON.parse(JSON.stringify(ACTIVE_LEVEL)),
   );
   const [view, setView] = useState<View>("active");
-  const [archivedSelected, setArchivedSelected] = useState<ArchivedLevel | null>(null);
+  const [archivedSelected, setArchivedSelected] =
+    useState<ArchivedLevel | null>(null);
   const [careerTab, setCareerTab] = useState<string>("model");
   const [legend, setLegend] = useState<ScoreLegend>(buildInitialLegend);
 
@@ -69,7 +75,9 @@ export function CareerPage() {
   const [syncOpen, setSyncOpen] = useState(false);
   const [syncMode, setSyncMode] = useState<"first" | "resync">("resync");
   const [shareOpen, setShareOpen] = useState(false);
-  const [shareToken, setShareToken] = useState<string | null>(ACTIVE_LEVEL.share_token);
+  const [shareToken, setShareToken] = useState<string | null>(
+    ACTIVE_LEVEL.share_token,
+  );
   const [evidenceFor, setEvidenceFor] = useState<Indicator | null>(null);
   const [allEvidenceFor, setAllEvidenceFor] = useState<Indicator | null>(null);
   const [commentsFor, setCommentsFor] = useState<Indicator | null>(null);
@@ -87,8 +95,18 @@ export function CareerPage() {
     () =>
       level.competencies.flatMap((c) =>
         c.criteria.map((cr) => {
-          const s = sat.perCriterion[cr.id] ?? { avg: 0, target: cr.target, gap: cr.target };
-          return { id: cr.id, name: cr.name, current: s.avg, target: s.target, gap: s.gap };
+          const s = sat.perCriterion[cr.id] ?? {
+            avg: 0,
+            target: cr.target,
+            gap: cr.target,
+          };
+          return {
+            id: cr.id,
+            name: cr.name,
+            current: s.avg,
+            target: s.target,
+            gap: s.gap,
+          };
         }),
       ),
     [level, sat],
@@ -96,8 +114,12 @@ export function CareerPage() {
 
   const overall = useMemo(() => {
     const all = criteriaData;
-    const avg = all.length ? all.reduce((s, p) => s + p.current, 0) / all.length : 0;
-    const tar = all.length ? all.reduce((s, p) => s + p.target, 0) / all.length : 0;
+    const avg = all.length
+      ? all.reduce((s, p) => s + p.current, 0) / all.length
+      : 0;
+    const tar = all.length
+      ? all.reduce((s, p) => s + p.target, 0) / all.length
+      : 0;
     const atTarget = all.filter((c) => c.current >= c.target).length;
     return { avg, target: tar, atTarget, total: all.length };
   }, [criteriaData]);
@@ -123,8 +145,7 @@ export function CareerPage() {
     if (!id) return null;
     for (const c of level.competencies)
       for (const cr of c.criteria)
-        for (const i of cr.indicators)
-          if (i.id === id) return i;
+        for (const i of cr.indicators) if (i.id === id) return i;
     return null;
   }, [level, allEvidenceFor, commentsFor]);
 
@@ -139,7 +160,10 @@ export function CareerPage() {
           ...cr,
           indicators: cr.indicators.map((i) =>
             i.id === indId
-              ? { ...i, evidence: [...i.evidence, { id: `e_${Date.now()}`, ...ev }] }
+              ? {
+                  ...i,
+                  evidence: [...i.evidence, { id: `e_${Date.now()}`, ...ev }],
+                }
               : i,
           ),
         })),
@@ -154,7 +178,9 @@ export function CareerPage() {
         criteria: c.criteria.map((cr) => ({
           ...cr,
           indicators: cr.indicators.map((i) =>
-            i.id === indId ? { ...i, evidence: i.evidence.filter((e) => e.id !== evId) } : i,
+            i.id === indId
+              ? { ...i, evidence: i.evidence.filter((e) => e.id !== evId) }
+              : i,
           ),
         })),
       })),
@@ -167,7 +193,9 @@ export function CareerPage() {
         ...c,
         criteria: c.criteria.map((cr) => ({
           ...cr,
-          indicators: cr.indicators.map((i) => (i.id === indId ? { ...i, score } : i)),
+          indicators: cr.indicators.map((i) =>
+            i.id === indId ? { ...i, score } : i,
+          ),
         })),
       })),
     }));
@@ -178,7 +206,10 @@ export function CareerPage() {
   const addCompetency = (name: string) =>
     setLevel((L) => ({
       ...L,
-      competencies: [...L.competencies, { id: `c_${Date.now()}`, name, criteria: [] }],
+      competencies: [
+        ...L.competencies,
+        { id: `c_${Date.now()}`, name, criteria: [] },
+      ],
     }));
 
   const addCriterion = (compId: string, { name }: { name: string }) =>
@@ -186,7 +217,13 @@ export function CareerPage() {
       ...L,
       competencies: L.competencies.map((c) =>
         c.id === compId
-          ? { ...c, criteria: [...c.criteria, { id: `cr_${Date.now()}`, name, target: 3, indicators: [] }] }
+          ? {
+              ...c,
+              criteria: [
+                ...c.criteria,
+                { id: `cr_${Date.now()}`, name, target: 3, indicators: [] },
+              ],
+            }
           : c,
       ),
     }));
@@ -199,7 +236,13 @@ export function CareerPage() {
       notes,
       score,
       target,
-    }: { code: string; description: string; notes?: string; score?: number; target?: number },
+    }: {
+      code: string;
+      description: string;
+      notes?: string;
+      score?: number;
+      target?: number;
+    },
   ) =>
     setLevel((L) => ({
       ...L,
@@ -256,7 +299,8 @@ export function CareerPage() {
       })),
     }));
 
-  const devPlan: NonNullable<CareerLevel["development_plan"]> = level.development_plan ?? [];
+  const devPlan: NonNullable<CareerLevel["development_plan"]> =
+    level.development_plan ?? [];
 
   const addDevItem = (item: {
     title: string;
@@ -432,14 +476,14 @@ export function CareerPage() {
                 {overall.atTarget} of {overall.total} criteria at target
               </div>
             </div>
-            <HeaderKVs kvs={level.header} onAddField={() => setHeaderOpen(true)} />
+            <HeaderKVs
+              kvs={level.header}
+              onAddField={() => setHeaderOpen(true)}
+            />
           </div>
 
           {/* Career sub-tabs */}
-          <div
-            className="flex items-center gap-2 mt-3.5"
-            style={{ borderBottom: "1px solid var(--hairline)" }}
-          >
+          <div className="flex items-center gap-2 mt-3.5">
             <Tabs value={careerTab} onValueChange={setCareerTab}>
               <TabsList>
                 <TabsTab value="model">Career model</TabsTab>
@@ -456,7 +500,11 @@ export function CareerPage() {
                   className="w-[280px]"
                   aria-label="Filter indicators"
                 />
-                <Button variant="outline" size="sm" onClick={() => setView("public")}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setView("public")}
+                >
                   <EyeIcon /> Preview public view
                 </Button>
               </>
@@ -470,7 +518,10 @@ export function CareerPage() {
 
           {careerTab === "model" && (
             <>
-              <ScoreLegendStrip legend={legend} onEdit={() => setLegendOpen(true)} />
+              <ScoreLegendStrip
+                legend={legend}
+                onEdit={() => setLegendOpen(true)}
+              />
               <div
                 className="mt-3.5 grid gap-4.5 items-start"
                 style={{ gridTemplateColumns: "1.6fr 1fr" }}
@@ -505,7 +556,8 @@ export function CareerPage() {
                       e.currentTarget.style.color = "var(--primary)";
                     }}
                     onMouseLeave={(e) => {
-                      e.currentTarget.style.borderColor = "var(--border-strong)";
+                      e.currentTarget.style.borderColor =
+                        "var(--border-strong)";
                       e.currentTarget.style.color = "var(--muted-foreground)";
                     }}
                   >
@@ -534,19 +586,28 @@ export function CareerPage() {
       )}
 
       {/* Dialogs */}
-      <SyncDialog open={syncOpen} onOpenChange={setSyncOpen} level={level} mode={syncMode} />
+      <SyncDialog
+        open={syncOpen}
+        onOpenChange={setSyncOpen}
+        level={level}
+        mode={syncMode}
+      />
 
       <ShareDialog
         open={shareOpen}
         onOpenChange={setShareOpen}
         level={{ ...level, share_token: shareToken }}
-        onGenerate={() => setShareToken(ACTIVE_LEVEL.share_token ?? "kxq2-8m9p-r4v0")}
+        onGenerate={() =>
+          setShareToken(ACTIVE_LEVEL.share_token ?? "kxq2-8m9p-r4v0")
+        }
         onRevoke={() => setShareToken(null)}
       />
 
       <EvidenceAddDialog
         open={!!evidenceFor}
-        onOpenChange={(v) => { if (!v) setEvidenceFor(null); }}
+        onOpenChange={(v) => {
+          if (!v) setEvidenceFor(null);
+        }}
         indicator={evidenceFor}
         onSave={(ev) => {
           if (evidenceFor) addEvidence(evidenceFor.id, ev);
@@ -555,7 +616,9 @@ export function CareerPage() {
 
       <EvidenceListDialog
         open={!!allEvidenceFor}
-        onOpenChange={(v) => { if (!v) setAllEvidenceFor(null); }}
+        onOpenChange={(v) => {
+          if (!v) setAllEvidenceFor(null);
+        }}
         indicator={liveIndicator ?? allEvidenceFor}
         onRemove={(evId) => {
           const ind = liveIndicator ?? allEvidenceFor;
@@ -569,7 +632,9 @@ export function CareerPage() {
 
       <CommentsDialog
         open={!!commentsFor}
-        onOpenChange={(v) => { if (!v) setCommentsFor(null); }}
+        onOpenChange={(v) => {
+          if (!v) setCommentsFor(null);
+        }}
         indicator={liveIndicator ?? commentsFor}
         onAddComment={addComment}
       />
@@ -588,14 +653,18 @@ export function CareerPage() {
 
       <CriterionAddDialog
         open={!!critFor}
-        onOpenChange={(v) => { if (!v) setCritFor(null); }}
+        onOpenChange={(v) => {
+          if (!v) setCritFor(null);
+        }}
         parentComp={critFor}
         onSave={addCriterion}
       />
 
       <IndicatorAddDialog
         open={!!indFor}
-        onOpenChange={(v) => { if (!v) setIndFor(null); }}
+        onOpenChange={(v) => {
+          if (!v) setIndFor(null);
+        }}
         parentCrit={indFor}
         suggestCode={suggestIndicatorCode}
         onSave={addIndicator}

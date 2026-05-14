@@ -2,28 +2,28 @@
 // All tabs: Profile, Integrations, Notifications, Inbox rules, AI provider,
 // Self-host, Theme, Week start, Data & privacy, Career.
 
-import { useEffect, useState } from "react";
 import { CheckIcon, PlusIcon, ShieldCheckIcon } from "lucide-react";
+import { useEffect, useState } from "react";
 import { Button } from "#/components/ui/button";
 import { Input } from "#/components/ui/input";
-import { Switch } from "#/components/ui/switch";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "#/components/ui/popover";
-import { SourceGlyph } from "#/features/signals/components/SourceGlyph";
+import { Switch } from "#/components/ui/switch";
 import { ProfilePanel } from "#/features/settings/profile/components/ProfilePanel";
 import { SelfHostPanel } from "#/features/settings/self-host/components/SelfHostPanel";
-import { useWeekStart } from "#/features/settings/week-start/use-week-start";
-import { WEEK_STARTS } from "#/features/settings/week-start/api";
 import {
-  THEME_UPDATED_EVENT,
   DEFAULT_THEME,
-  type ThemeView,
-  type Theme,
   type Density,
+  THEME_UPDATED_EVENT,
+  type Theme,
+  type ThemeView,
 } from "#/features/settings/theme/api";
+import { WEEK_STARTS } from "#/features/settings/week-start/api";
+import { useWeekStart } from "#/features/settings/week-start/use-week-start";
+import { SourceGlyph } from "#/features/signals/components/SourceGlyph";
 import { apiFetch } from "#/lib/api-client";
 
 // ── Tabs ─────────────────────────────────────────────────────────────────────
@@ -52,7 +52,9 @@ function SectionHead({ title, sub }: { title: string; sub?: string }) {
         {title}
       </h2>
       {sub && (
-        <p className="mt-1 text-muted-foreground text-sm leading-[1.5]">{sub}</p>
+        <p className="mt-1 text-muted-foreground text-sm leading-[1.5]">
+          {sub}
+        </p>
       )}
     </div>
   );
@@ -84,16 +86,16 @@ function SegmentedControl<T extends string>({
   onChange: (v: T) => void;
 }) {
   return (
-    <div className="inline-flex rounded-lg bg-[var(--surface-soft)] p-[3px]">
+    <div className="inline-flex rounded-lg bg-muted p-0.5">
       {options.map((o) => (
         <button
           key={o.id}
           type="button"
           onClick={() => onChange(o.id)}
-          className={`rounded-md px-3.5 py-1.5 text-xs font-semibold transition-colors ${
+          className={`rounded-md px-3.5 py-1.5 text-xs font-semibold outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring ${
             value === o.id
-              ? "bg-[var(--canvas)] text-[var(--ink)] shadow-[0_1px_2px_rgba(0,0,0,.05)]"
-              : "text-[var(--muted)]"
+              ? "bg-background text-foreground shadow-sm/5 dark:bg-input"
+              : "text-muted-foreground/72 hover:text-muted-foreground"
           }`}
         >
           {o.label}
@@ -171,18 +173,18 @@ function AccountRow({
             {acc.handle}
           </span>
           {acc.primary && (
-            <span className="rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.4px] bg-[var(--surface-strong)] text-[var(--muted)]">
+            <span className="rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.4px] bg-[var(--surface-strong)] text-[var(--muted-foreground)]">
               PRIMARY
             </span>
           )}
           <span
             className={`size-[7px] rounded-full ${acc.status === "good" ? "bg-[var(--good)]" : acc.status === "warn" ? "bg-[var(--warn)]" : "bg-[var(--danger)]"}`}
           />
-          <span className="font-mono text-[11px] text-[var(--muted)]">
+          <span className="font-mono text-[11px] text-[var(--muted-foreground)]">
             {acc.last}
           </span>
         </div>
-        <div className="mt-0.5 overflow-hidden text-ellipsis whitespace-nowrap text-xs text-[var(--muted)]">
+        <div className="mt-0.5 overflow-hidden text-ellipsis whitespace-nowrap text-xs text-[var(--muted-foreground)]">
           {acc.context}
           {acc.scopes && (
             <span className="ml-2 font-mono text-[10px] text-[var(--muted-soft)]">
@@ -221,10 +223,10 @@ function SlackChannelAllowlist() {
   return (
     <div className="border-t border-[var(--hairline-soft)] bg-[var(--canvas)] px-4 py-3.5">
       <div className="mb-2 flex items-baseline gap-2">
-        <span className="text-[10px] font-semibold uppercase tracking-[0.5px] text-[var(--muted)]">
+        <span className="text-[10px] font-semibold uppercase tracking-[0.5px] text-[var(--muted-foreground)]">
           Channel allowlist
         </span>
-        <span className="text-xs text-[var(--muted)]">
+        <span className="text-xs text-[var(--muted-foreground)]">
           Capture{" "}
           <code className="rounded bg-[var(--surface-soft)] px-[5px] py-[1px] font-mono text-[11px]">
             @here
@@ -246,7 +248,7 @@ function SlackChannelAllowlist() {
             <button
               type="button"
               onClick={() => setChannels((cs) => cs.filter((x) => x !== c))}
-              className="ml-1 text-[var(--muted)] hover:text-[var(--ink)]"
+              className="ml-1 text-[var(--muted-foreground)] hover:text-[var(--ink)]"
             >
               ×
             </button>
@@ -264,7 +266,7 @@ function SlackChannelAllowlist() {
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             placeholder="+ Add channel"
-            className="rounded-full border border-dashed border-[var(--hairline)] bg-transparent px-2.5 py-1 text-xs text-[var(--muted)] outline-none placeholder:text-[var(--muted)] focus:border-[var(--primary)]"
+            className="rounded-full border border-dashed border-[var(--hairline)] bg-transparent px-2.5 py-1 text-xs text-[var(--muted-foreground)] outline-none placeholder:text-[var(--muted-foreground)] focus:border-[var(--primary)]"
           />
         </form>
       </div>
@@ -282,10 +284,10 @@ function CalendarWeekStartInline() {
     <div className="border-t border-[var(--hairline-soft)] bg-[var(--canvas)] px-4 py-3.5">
       <div className="flex items-center gap-3.5">
         <div>
-          <div className="text-[10px] font-semibold uppercase tracking-[0.5px] text-[var(--muted)]">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.5px] text-[var(--muted-foreground)]">
             Week starts on
           </div>
-          <div className="mt-1 text-xs text-[var(--muted)]">
+          <div className="mt-1 text-xs text-[var(--muted-foreground)]">
             Affects the week view on the Calendar page and weekly stats.
           </div>
         </div>
@@ -334,12 +336,12 @@ function IntegrationCard({
         <div>
           <div className="flex items-center gap-2">
             <span className="font-semibold text-[15px]">{provider.name}</span>
-            <span className="font-mono text-[11px] text-[var(--muted)]">
-              {accounts.length}{" "}
-              {accounts.length === 1 ? "account" : "accounts"} connected
+            <span className="font-mono text-[11px] text-[var(--muted-foreground)]">
+              {accounts.length} {accounts.length === 1 ? "account" : "accounts"}{" "}
+              connected
             </span>
           </div>
-          <div className="mt-0.5 text-xs text-[var(--muted)]">
+          <div className="mt-0.5 text-xs text-[var(--muted-foreground)]">
             {provider.desc}
           </div>
         </div>
@@ -363,7 +365,7 @@ function IntegrationCard({
         />
       ))}
       {accounts.length === 0 && (
-        <div className="px-4 py-5 text-center text-[13px] text-[var(--muted)]">
+        <div className="px-4 py-5 text-center text-[13px] text-[var(--muted-foreground)]">
           No accounts connected.{" "}
           <button
             type="button"
@@ -464,7 +466,8 @@ const INITIAL_ACCOUNTS: AccountsByProvider = {
 };
 
 export function IntegrationsPanel() {
-  const [accounts, setAccounts] = useState<AccountsByProvider>(INITIAL_ACCOUNTS);
+  const [accounts, setAccounts] =
+    useState<AccountsByProvider>(INITIAL_ACCOUNTS);
 
   const removeAccount = (provId: string, accId: string) =>
     setAccounts((s) => ({
@@ -508,7 +511,10 @@ export function IntegrationsPanel() {
       {/* Google Sheets re-consent banner */}
       <div className="mb-3.5 grid grid-cols-[auto_1fr_auto] items-center gap-3.5 rounded-lg border border-[var(--hairline-soft)] bg-[var(--surface-card)] p-3.5">
         <div className="inline-flex size-9 items-center justify-center rounded-lg bg-[var(--good-soft)]">
-          <span className="inline-flex size-[22px] items-center justify-center rounded font-bold text-sm text-white" style={{ background: "#0F9D58" }}>
+          <span
+            className="inline-flex size-[22px] items-center justify-center rounded font-bold text-sm text-white"
+            style={{ background: "#0F9D58" }}
+          >
             S
           </span>
         </div>
@@ -521,9 +527,8 @@ export function IntegrationsPanel() {
               Re-auth needed
             </span>
           </div>
-          <div className="mt-0.5 text-xs text-[var(--muted)]">
-            Adds{" "}
-            <code className="font-mono text-[11.5px]">spreadsheets</code> +{" "}
+          <div className="mt-0.5 text-xs text-[var(--muted-foreground)]">
+            Adds <code className="font-mono text-[11.5px]">spreadsheets</code> +{" "}
             <code className="font-mono text-[11.5px]">drive.file</code> scopes
             to your existing Google connection. Per-file access only.
           </div>
@@ -534,7 +539,7 @@ export function IntegrationsPanel() {
         </Button>
       </div>
 
-      <div className="mb-3.5 text-xs text-[var(--muted)]">
+      <div className="mb-3.5 text-xs text-[var(--muted-foreground)]">
         {totalAccounts} accounts across {INTEGRATIONS_PROVIDERS.length}{" "}
         providers
       </div>
@@ -648,13 +653,13 @@ function NotificationMatrix({
       <table className="w-full border-collapse text-[13px]">
         <thead>
           <tr className="bg-[var(--surface-soft)]">
-            <th className="px-3.5 py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.4px] text-[var(--muted)]">
+            <th className="px-3.5 py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.4px] text-[var(--muted-foreground)]">
               Event kind
             </th>
             {["Push", "Slack", "Email", "Desktop", "Sound"].map((c) => (
               <th
                 key={c}
-                className="px-3.5 py-2.5 text-[11px] font-semibold uppercase tracking-[0.4px] text-[var(--muted)]"
+                className="px-3.5 py-2.5 text-[11px] font-semibold uppercase tracking-[0.4px] text-[var(--muted-foreground)]"
               >
                 {c}
               </th>
@@ -724,7 +729,11 @@ const BYPASS_PRESETS = [
 ];
 
 function BypassRulesEditor() {
-  const [rules, setRules] = useState(["@mentions", "CI red on prod", "On-call pages"]);
+  const [rules, setRules] = useState([
+    "@mentions",
+    "CI red on prod",
+    "On-call pages",
+  ]);
   const [draft, setDraft] = useState("");
   const [open, setOpen] = useState(false);
 
@@ -736,10 +745,10 @@ function BypassRulesEditor() {
 
   return (
     <div>
-      <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.5px] text-[var(--muted)]">
+      <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.5px] text-[var(--muted-foreground)]">
         Allow through
       </div>
-      <p className="mb-2 text-xs leading-[1.5] text-[var(--muted)]">
+      <p className="mb-2 text-xs leading-[1.5] text-[var(--muted-foreground)]">
         Signals matching any of these{" "}
         <b className="text-[var(--ink)]">bypass rules</b> override quiet hours
         and ring through.
@@ -761,14 +770,11 @@ function BypassRulesEditor() {
           </span>
         ))}
         <Popover open={open} onOpenChange={setOpen}>
-          <PopoverTrigger
-            className="rounded-full border border-dashed border-[var(--hairline)] px-2.5 py-1 text-xs text-[var(--muted)] hover:border-[var(--primary)]"
-          >
+          <PopoverTrigger className="rounded-full border border-dashed border-[var(--hairline)] px-2.5 py-1 text-xs text-[var(--muted-foreground)] hover:border-[var(--primary)]">
             + Add rule
           </PopoverTrigger>
           <PopoverContent className="w-[340px] p-2" align="start">
             <input
-              autoFocus
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               placeholder="Type a rule, or pick one below…"
@@ -781,7 +787,7 @@ function BypassRulesEditor() {
               }}
               className="mb-2 w-full rounded-md border border-[var(--input)] bg-[var(--background)] px-2.5 py-1.5 text-sm outline-none"
             />
-            <div className="mb-1 px-1 text-[9.5px] font-semibold uppercase tracking-[0.4px] text-[var(--muted)]">
+            <div className="mb-1 px-1 text-[9.5px] font-semibold uppercase tracking-[0.4px] text-[var(--muted-foreground)]">
               Common picks
             </div>
             <div className="flex max-h-[200px] flex-col gap-0.5 overflow-y-auto">
@@ -840,7 +846,11 @@ export function QuietHoursCard() {
     if (mode === "uniform") return `${uniform.from}–${uniform.to}`;
     if (mode === "weekday-weekend") {
       if (i < 5) return `${weekday.from}–${weekday.to}`;
-      return weekend.on ? (weekend.allDay ? "all day" : `${weekend.from}–${weekend.to}`) : "off";
+      return weekend.on
+        ? weekend.allDay
+          ? "all day"
+          : `${weekend.from}–${weekend.to}`
+        : "off";
     }
     const p = perDay[d];
     return p?.on ? `${p.from}–${p.to}` : "off";
@@ -864,30 +874,42 @@ export function QuietHoursCard() {
         <span className="text-sm font-medium">
           Suppress alerts during quiet hours
         </span>
-        <span className="ml-auto font-mono text-[11px] text-[var(--muted)]">
+        <span className="ml-auto font-mono text-[11px] text-[var(--muted-foreground)]">
           queued and delivered at end
         </span>
       </div>
 
       <div
         className="mb-3.5 transition-opacity"
-        style={{ opacity: enabled ? 1 : 0.5, pointerEvents: enabled ? "auto" : "none" }}
+        style={{
+          opacity: enabled ? 1 : 0.5,
+          pointerEvents: enabled ? "auto" : "none",
+        }}
       >
         <SegmentedControl options={modeTabs} value={mode} onChange={setMode} />
       </div>
 
       <div
         className="transition-opacity"
-        style={{ opacity: enabled ? 1 : 0.5, pointerEvents: enabled ? "auto" : "none" }}
+        style={{
+          opacity: enabled ? 1 : 0.5,
+          pointerEvents: enabled ? "auto" : "none",
+        }}
       >
         {/* Mode editors */}
         {mode === "uniform" && (
           <div className="mb-3.5 flex items-center gap-2.5 rounded-lg bg-[var(--surface-soft)] px-3 py-2.5">
             <span className="text-[13px]">Every day from</span>
-            <TimeField value={uniform.from} onChange={(v) => setUniform((s) => ({ ...s, from: v }))} />
+            <TimeField
+              value={uniform.from}
+              onChange={(v) => setUniform((s) => ({ ...s, from: v }))}
+            />
             <span className="text-[13px]">to</span>
-            <TimeField value={uniform.to} onChange={(v) => setUniform((s) => ({ ...s, to: v }))} />
-            <span className="ml-auto font-mono text-[11px] text-[var(--muted)]">
+            <TimeField
+              value={uniform.to}
+              onChange={(v) => setUniform((s) => ({ ...s, to: v }))}
+            />
+            <span className="ml-auto font-mono text-[11px] text-[var(--muted-foreground)]">
               {uniform.from > uniform.to ? "overnight" : "same day"}
             </span>
           </div>
@@ -896,24 +918,36 @@ export function QuietHoursCard() {
         {mode === "weekday-weekend" && (
           <div className="mb-3.5 flex flex-col gap-2">
             <div className="flex items-center gap-2.5 rounded-lg bg-[var(--surface-soft)] px-3 py-2.5">
-              <span className="w-24 text-[13px] font-semibold text-[var(--ink)]">Mon–Fri</span>
+              <span className="w-24 text-[13px] font-semibold text-[var(--ink)]">
+                Mon–Fri
+              </span>
               <span className="text-[13px]">from</span>
-              <TimeField value={weekday.from} onChange={(v) => setWeekday((s) => ({ ...s, from: v }))} />
+              <TimeField
+                value={weekday.from}
+                onChange={(v) => setWeekday((s) => ({ ...s, from: v }))}
+              />
               <span className="text-[13px]">to</span>
-              <TimeField value={weekday.to} onChange={(v) => setWeekday((s) => ({ ...s, to: v }))} />
+              <TimeField
+                value={weekday.to}
+                onChange={(v) => setWeekday((s) => ({ ...s, to: v }))}
+              />
             </div>
             <div className="flex items-center gap-2.5 rounded-lg bg-[var(--surface-soft)] px-3 py-2.5">
-              <span className="w-24 text-[13px] font-semibold text-[var(--ink)]">Sat–Sun</span>
+              <span className="w-24 text-[13px] font-semibold text-[var(--ink)]">
+                Sat–Sun
+              </span>
               <Switch
                 checked={weekend.on}
                 onCheckedChange={(v) => setWeekend((s) => ({ ...s, on: v }))}
                 aria-label="Enable weekend quiet hours"
               />
-              <label className="flex cursor-pointer items-center gap-1.5 text-xs text-[var(--muted)]">
+              <label className="flex cursor-pointer items-center gap-1.5 text-xs text-[var(--muted-foreground)]">
                 <input
                   type="checkbox"
                   checked={weekend.allDay}
-                  onChange={(e) => setWeekend((s) => ({ ...s, allDay: e.target.checked }))}
+                  onChange={(e) =>
+                    setWeekend((s) => ({ ...s, allDay: e.target.checked }))
+                  }
                   className="accent-[var(--primary)]"
                 />
                 All day
@@ -921,9 +955,15 @@ export function QuietHoursCard() {
               {!weekend.allDay && (
                 <>
                   <span className="text-[13px]">from</span>
-                  <TimeField value={weekend.from} onChange={(v) => setWeekend((s) => ({ ...s, from: v }))} />
+                  <TimeField
+                    value={weekend.from}
+                    onChange={(v) => setWeekend((s) => ({ ...s, from: v }))}
+                  />
                   <span className="text-[13px]">to</span>
-                  <TimeField value={weekend.to} onChange={(v) => setWeekend((s) => ({ ...s, to: v }))} />
+                  <TimeField
+                    value={weekend.to}
+                    onChange={(v) => setWeekend((s) => ({ ...s, to: v }))}
+                  />
                 </>
               )}
             </div>
@@ -935,21 +975,57 @@ export function QuietHoursCard() {
             {DAY_NAMES.map((d) => {
               const p = perDay[d] ?? { on: true, from: "22:00", to: "08:00" };
               return (
-                <div key={d} className="flex items-center gap-2.5 rounded-lg bg-[var(--surface-soft)] px-3 py-2">
+                <div
+                  key={d}
+                  className="flex items-center gap-2.5 rounded-lg bg-[var(--surface-soft)] px-3 py-2"
+                >
                   <span className="w-14 text-[13px] font-semibold text-[var(--ink)]">
                     {d}
                   </span>
                   <Switch
                     checked={p.on}
-                    onCheckedChange={(v) => setPerDay((s) => ({ ...s, [d]: { ...s[d]!, on: v } }))}
+                    onCheckedChange={(v) =>
+                      setPerDay((s) => ({
+                        ...s,
+                        [d]: { ...(s[d] ?? p), on: v },
+                      }))
+                    }
                     aria-label={`Enable quiet hours for ${d}`}
                   />
-                  <span className={`text-[13px] ${p.on ? "text-[var(--body)]" : "text-[var(--muted-soft)]"}`}>from</span>
-                  <TimeField value={p.from} disabled={!p.on} onChange={(v) => setPerDay((s) => ({ ...s, [d]: { ...s[d]!, from: v } }))} />
-                  <span className={`text-[13px] ${p.on ? "text-[var(--body)]" : "text-[var(--muted-soft)]"}`}>to</span>
-                  <TimeField value={p.to} disabled={!p.on} onChange={(v) => setPerDay((s) => ({ ...s, [d]: { ...s[d]!, to: v } }))} />
+                  <span
+                    className={`text-[13px] ${p.on ? "text-[var(--body)]" : "text-[var(--muted-soft)]"}`}
+                  >
+                    from
+                  </span>
+                  <TimeField
+                    value={p.from}
+                    disabled={!p.on}
+                    onChange={(v) =>
+                      setPerDay((s) => ({
+                        ...s,
+                        [d]: { ...(s[d] ?? p), from: v },
+                      }))
+                    }
+                  />
+                  <span
+                    className={`text-[13px] ${p.on ? "text-[var(--body)]" : "text-[var(--muted-soft)]"}`}
+                  >
+                    to
+                  </span>
+                  <TimeField
+                    value={p.to}
+                    disabled={!p.on}
+                    onChange={(v) =>
+                      setPerDay((s) => ({
+                        ...s,
+                        [d]: { ...(s[d] ?? p), to: v },
+                      }))
+                    }
+                  />
                   {p.on && p.from > p.to && (
-                    <span className="ml-auto font-mono text-[10px] text-[var(--muted)]">overnight</span>
+                    <span className="ml-auto font-mono text-[10px] text-[var(--muted-foreground)]">
+                      overnight
+                    </span>
                   )}
                 </div>
               );
@@ -968,7 +1044,7 @@ export function QuietHoursCard() {
                 className="rounded-lg py-2 text-center text-[11px] font-semibold"
                 style={{
                   background: off ? "var(--surface-strong)" : "var(--ink)",
-                  color: off ? "var(--muted)" : "white",
+                  color: off ? "var(--muted-foreground)" : "white",
                 }}
               >
                 <div>{d}</div>
@@ -998,7 +1074,7 @@ export function NotificationsPanel() {
   const toggleMatrix = (kind: string, ch: MatrixKey) =>
     setMatrix((m) => ({
       ...m,
-      [kind]: { ...m[kind]!, [ch]: !m[kind]![ch] },
+      [kind]: { ...(m[kind] ?? {}), [ch]: !m[kind]?.[ch] },
     }));
 
   return (
@@ -1021,16 +1097,16 @@ export function NotificationsPanel() {
             </span>
             <div>
               <div className="text-sm font-semibold">{c.name}</div>
-              <div className="mt-0.5 text-xs text-[var(--muted)]">{c.desc}</div>
+              <div className="mt-0.5 text-xs text-[var(--muted-foreground)]">
+                {c.desc}
+              </div>
             </div>
             <Button type="button" variant="ghost" size="sm">
               Test
             </Button>
             <Switch
               checked={channels[c.id]}
-              onCheckedChange={(v) =>
-                setChannels((s) => ({ ...s, [c.id]: v }))
-              }
+              onCheckedChange={(v) => setChannels((s) => ({ ...s, [c.id]: v }))}
               aria-label={`Toggle ${c.name}`}
             />
           </SettingsRow>
@@ -1084,17 +1160,29 @@ const VALUES_BY_FIELD: Record<string, string[]> = {
 };
 
 const RULE_ACTIONS = [
-  { id: "snooze", label: "Snooze", params: ["1 hour", "4 hours", "1 day", "until tomorrow", "until Monday"] },
+  {
+    id: "snooze",
+    label: "Snooze",
+    params: ["1 hour", "4 hours", "1 day", "until tomorrow", "until Monday"],
+  },
   { id: "low", label: "Mark as low-prio", params: null },
   { id: "dismiss", label: "Auto-dismiss", params: null },
   { id: "bypass", label: "Bypass quiet hours", params: null },
   { id: "weekly", label: "Add to weekly review", params: null },
-  { id: "tag", label: "Add tag", params: ["follow-up", "review", "later", "incident"] },
-  { id: "route", label: "Route to", params: ["push", "Slack DM", "email", "desktop"] },
+  {
+    id: "tag",
+    label: "Add tag",
+    params: ["follow-up", "review", "later", "incident"],
+  },
+  {
+    id: "route",
+    label: "Route to",
+    params: ["push", "Slack DM", "email", "desktop"],
+  },
 ] as const;
 
 type RuleCond = { field: string; op: string; value: string };
-type SavedRule = { when: string; then: string; on: boolean; hits: number };
+type SavedRule = { when: string; do: string; on: boolean; hits: number };
 
 function RuleCondChip({
   label,
@@ -1113,7 +1201,7 @@ function RuleCondChip({
     kind === "field"
       ? "bg-[var(--surface-strong)] text-[var(--ink)] font-semibold"
       : kind === "op"
-        ? "bg-transparent text-[var(--muted)]"
+        ? "bg-transparent text-[var(--muted-foreground)]"
         : "bg-[var(--primary-disabled)] text-[var(--primary-active)] font-mono";
 
   return (
@@ -1138,7 +1226,7 @@ export function RuleBuilder({
   onSave,
   onCancel,
 }: {
-  onSave: (rule: { when: string; then: string }) => void;
+  onSave: (rule: { when: string; do: string }) => void;
   onCancel: () => void;
 }) {
   const [matchAll, setMatchAll] = useState(true);
@@ -1182,7 +1270,7 @@ export function RuleBuilder({
     const condStr = conds
       .map((c) => `${c.field} ${c.op} ${c.value}`)
       .join(matchAll ? " AND " : " OR ");
-    onSave({ when: condStr, then: currentAction?.label ?? action });
+    onSave({ when: condStr, do: currentAction?.label ?? action });
   };
 
   return (
@@ -1192,14 +1280,15 @@ export function RuleBuilder({
           New rule
         </span>
         <span className="flex-1" />
-        <span className="font-mono text-[11px] text-[var(--muted)]">
-          preview matches <b className="text-[var(--ink)]">3 signals</b> from last 7d
+        <span className="font-mono text-[11px] text-[var(--muted-foreground)]">
+          preview matches <b className="text-[var(--ink)]">3 signals</b> from
+          last 7d
         </span>
       </div>
 
       {/* WHEN */}
       <div className="mb-3.5 flex items-start gap-3.5">
-        <span className="w-[50px] pt-2 font-mono text-[11px] font-bold text-[var(--muted)]">
+        <span className="w-[50px] pt-2 font-mono text-[11px] font-bold text-[var(--muted-foreground)]">
           WHEN
         </span>
         <div className="flex-1">
@@ -1217,7 +1306,7 @@ export function RuleBuilder({
           </div>
           {conds.map((c, i) => (
             <div
-              key={i}
+              key={`${c.field}-${c.op}-${c.value}`}
               className="mb-2 flex items-center gap-1.5 rounded-lg bg-[var(--surface-soft)] px-2 py-1.5"
             >
               <RuleCondChip
@@ -1246,7 +1335,7 @@ export function RuleBuilder({
                 <button
                   type="button"
                   onClick={() => removeCond(i)}
-                  className="px-1 text-base text-[var(--muted)] hover:text-[var(--ink)]"
+                  className="px-1 text-base text-[var(--muted-foreground)] hover:text-[var(--ink)]"
                 >
                   ×
                 </button>
@@ -1256,7 +1345,7 @@ export function RuleBuilder({
           <button
             type="button"
             onClick={addCond}
-            className="rounded-md border border-dashed border-[var(--hairline)] bg-transparent px-3 py-1.5 text-xs font-medium text-[var(--muted)] hover:border-[var(--primary)]"
+            className="rounded-md border border-dashed border-[var(--hairline)] bg-transparent px-3 py-1.5 text-xs font-medium text-[var(--muted-foreground)] hover:border-[var(--primary)]"
           >
             + Add condition
           </button>
@@ -1296,7 +1385,7 @@ export function RuleBuilder({
 
       {/* NAME */}
       <div className="mb-[18px] flex items-center gap-3.5 border-t border-[var(--hairline-soft)] pt-3.5">
-        <span className="w-[50px] font-mono text-[11px] font-bold text-[var(--muted)]">
+        <span className="w-[50px] font-mono text-[11px] font-bold text-[var(--muted-foreground)]">
           NAME
         </span>
         <Input
@@ -1323,11 +1412,31 @@ export function RuleBuilder({
 }
 
 const INITIAL_RULES: SavedRule[] = [
-  { when: "PR author is dependabot", then: "Snooze 1 day", on: true, hits: 47 },
-  { when: "Slack channel is #eng-announce", then: "Mark as low-priority", on: true, hits: 12 },
-  { when: "PR has only lockfile changes", then: "Auto-dismiss", on: false, hits: 31 },
-  { when: 'Mention contains "prod" or "incident"', then: "Bypass quiet hours", on: true, hits: 4 },
-  { when: "Meeting has no agenda", then: "Add to weekly review", on: false, hits: 8 },
+  { when: "PR author is dependabot", do: "Snooze 1 day", on: true, hits: 47 },
+  {
+    when: "Slack channel is #eng-announce",
+    do: "Mark as low-priority",
+    on: true,
+    hits: 12,
+  },
+  {
+    when: "PR has only lockfile changes",
+    do: "Auto-dismiss",
+    on: false,
+    hits: 31,
+  },
+  {
+    when: 'Mention contains "prod" or "incident"',
+    do: "Bypass quiet hours",
+    on: true,
+    hits: 4,
+  },
+  {
+    when: "Meeting has no agenda",
+    do: "Add to weekly review",
+    on: false,
+    hits: 8,
+  },
 ];
 
 export function InboxRulesPanel() {
@@ -1337,7 +1446,7 @@ export function InboxRulesPanel() {
   const toggle = (i: number) =>
     setRules((rs) => rs.map((r, idx) => (idx === i ? { ...r, on: !r.on } : r)));
 
-  const handleSave = (rule: { when: string; then: string }) => {
+  const handleSave = (rule: { when: string; do: string }) => {
     setRules((rs) => [...rs, { ...rule, on: true, hits: 0 }]);
     setEditing(false);
   };
@@ -1349,7 +1458,7 @@ export function InboxRulesPanel() {
         sub="Pure rule evaluator over Signals — runs after upsert, before alert dispatch."
       />
       <div className="mb-3 flex items-center">
-        <span className="text-xs text-[var(--muted)]">
+        <span className="text-xs text-[var(--muted-foreground)]">
           {rules.filter((r) => r.on).length} of {rules.length} active ·
           evaluated in order, top-down
         </span>
@@ -1373,18 +1482,22 @@ export function InboxRulesPanel() {
 
       <div className="overflow-hidden rounded-lg border border-[var(--hairline-soft)]">
         {rules.map((r, i) => (
-          <SettingsRow key={i} last={i === rules.length - 1}>
-            <span className="w-6 text-right font-mono text-[11px] font-bold text-[var(--muted)]">
+          <SettingsRow key={`${r.when}-${r.do}`} last={i === rules.length - 1}>
+            <span className="w-6 text-right font-mono text-[11px] font-bold text-[var(--muted-foreground)]">
               {i + 1}
             </span>
             <div className="flex flex-wrap items-center gap-3 text-[13px]">
-              <span className="font-mono text-[11px] text-[var(--muted)]">WHEN</span>
+              <span className="font-mono text-[11px] text-[var(--muted-foreground)]">
+                WHEN
+              </span>
               <code className="rounded bg-[var(--surface-soft)] px-2 py-[3px] font-mono text-xs">
                 {r.when}
               </code>
-              <span className="font-mono text-[11px] text-[var(--muted)]">THEN</span>
-              <span className="font-medium">{r.then}</span>
-              <span className="ml-auto pl-3 font-mono text-[10px] text-[var(--muted)]">
+              <span className="font-mono text-[11px] text-[var(--muted-foreground)]">
+                THEN
+              </span>
+              <span className="font-medium">{r.do}</span>
+              <span className="ml-auto pl-3 font-mono text-[10px] text-[var(--muted-foreground)]">
                 {r.hits} hits / 30d
               </span>
             </div>
@@ -1409,30 +1522,75 @@ const AI_CATALOG = {
   anthropic: {
     name: "Anthropic",
     models: [
-      { id: "claude-sonnet-4-6", label: "Claude Sonnet 4.6", tier: "smartest", cost: "$3 / $15 per Mtok" },
-      { id: "claude-opus-4-5", label: "Claude Opus 4.5", tier: "best for hard reasoning", cost: "$15 / $75 per Mtok" },
-      { id: "claude-haiku-4-5", label: "Claude Haiku 4.5", tier: "fast & cheap", cost: "$1 / $5 per Mtok" },
+      {
+        id: "claude-sonnet-4-6",
+        label: "Claude Sonnet 4.6",
+        tier: "smartest",
+        cost: "$3 / $15 per Mtok",
+      },
+      {
+        id: "claude-opus-4-5",
+        label: "Claude Opus 4.5",
+        tier: "best for hard reasoning",
+        cost: "$15 / $75 per Mtok",
+      },
+      {
+        id: "claude-haiku-4-5",
+        label: "Claude Haiku 4.5",
+        tier: "fast & cheap",
+        cost: "$1 / $5 per Mtok",
+      },
     ],
   },
   openai: {
     name: "OpenAI",
     models: [
-      { id: "gpt-4o", label: "GPT-4o", tier: "balanced", cost: "$2.50 / $10 per Mtok" },
-      { id: "gpt-4o-mini", label: "GPT-4o mini", tier: "fast & cheap", cost: "$0.15 / $0.60 per Mtok" },
+      {
+        id: "gpt-4o",
+        label: "GPT-4o",
+        tier: "balanced",
+        cost: "$2.50 / $10 per Mtok",
+      },
+      {
+        id: "gpt-4o-mini",
+        label: "GPT-4o mini",
+        tier: "fast & cheap",
+        cost: "$0.15 / $0.60 per Mtok",
+      },
     ],
   },
   google: {
     name: "Google",
     models: [
-      { id: "gemini-2.5-pro", label: "Gemini 2.5 Pro", tier: "smartest", cost: "$1.25 / $10 per Mtok" },
-      { id: "gemini-2.5-flash", label: "Gemini 2.5 Flash", tier: "fast & cheap", cost: "$0.30 / $2.50 per Mtok" },
+      {
+        id: "gemini-2.5-pro",
+        label: "Gemini 2.5 Pro",
+        tier: "smartest",
+        cost: "$1.25 / $10 per Mtok",
+      },
+      {
+        id: "gemini-2.5-flash",
+        label: "Gemini 2.5 Flash",
+        tier: "fast & cheap",
+        cost: "$0.30 / $2.50 per Mtok",
+      },
     ],
   },
   groq: {
     name: "Groq",
     models: [
-      { id: "llama-3.3-70b", label: "Llama 3.3 70B", tier: "fast inference", cost: "$0.59 / $0.79 per Mtok" },
-      { id: "llama-3.1-8b", label: "Llama 3.1 8B", tier: "fastest", cost: "$0.05 / $0.08 per Mtok" },
+      {
+        id: "llama-3.3-70b",
+        label: "Llama 3.3 70B",
+        tier: "fast inference",
+        cost: "$0.59 / $0.79 per Mtok",
+      },
+      {
+        id: "llama-3.1-8b",
+        label: "Llama 3.1 8B",
+        tier: "fastest",
+        cost: "$0.05 / $0.08 per Mtok",
+      },
     ],
   },
 } as const;
@@ -1440,11 +1598,36 @@ const AI_CATALOG = {
 type AiProviderId = keyof typeof AI_CATALOG;
 
 const AI_PRIVACY_CONTROLS = [
-  { id: "strip_code", name: "Strip code blocks", desc: "Removes ``` fenced blocks before sending.", defaultOn: true },
-  { id: "strip_paths", name: "Strip file paths", desc: "Replaces /src/foo/bar.ts with [path].", defaultOn: true },
-  { id: "strip_secrets", name: "Strip secrets", desc: "Pattern match: API keys, JWTs, env vars.", defaultOn: true },
-  { id: "strip_diffs", name: "Strip PR diffs", desc: "Drops + / − lines entirely.", defaultOn: false },
-  { id: "ai_disabled_personal", name: "Disable AI on personal account", desc: "No outbound LLM calls when this profile is active.", defaultOn: false },
+  {
+    id: "strip_code",
+    name: "Strip code blocks",
+    desc: "Removes ``` fenced blocks before sending.",
+    defaultOn: true,
+  },
+  {
+    id: "strip_paths",
+    name: "Strip file paths",
+    desc: "Replaces /src/foo/bar.ts with [path].",
+    defaultOn: true,
+  },
+  {
+    id: "strip_secrets",
+    name: "Strip secrets",
+    desc: "Pattern match: API keys, JWTs, env vars.",
+    defaultOn: true,
+  },
+  {
+    id: "strip_diffs",
+    name: "Strip PR diffs",
+    desc: "Drops + / − lines entirely.",
+    defaultOn: false,
+  },
+  {
+    id: "ai_disabled_personal",
+    name: "Disable AI on personal account",
+    desc: "No outbound LLM calls when this profile is active.",
+    defaultOn: false,
+  },
 ];
 
 export function AIPanel() {
@@ -1458,16 +1641,22 @@ export function AIPanel() {
   );
 
   const cat = AI_CATALOG[provider];
-  const providers = Object.entries(AI_CATALOG) as [AiProviderId, (typeof AI_CATALOG)[AiProviderId]][];
+  const providers = Object.entries(AI_CATALOG) as [
+    AiProviderId,
+    (typeof AI_CATALOG)[AiProviderId],
+  ][];
 
-  const primaryMeta = cat.models.find((m) => m.id === primaryModel) ?? cat.models[0]!;
-  const fallbackMeta = cat.models.find((m) => m.id === fallbackModel) ?? cat.models[cat.models.length - 1]!;
+  type ModelMeta = (typeof cat.models)[number];
+  const primaryMeta = (cat.models.find((m) => m.id === primaryModel) ??
+    cat.models[0]) as ModelMeta;
+  const fallbackMeta = (cat.models.find((m) => m.id === fallbackModel) ??
+    cat.models[cat.models.length - 1]) as ModelMeta;
 
   // Reset models when provider changes
   useEffect(() => {
-    setPrimaryModel(cat.models[0]!.id);
-    setFallbackModel(cat.models[cat.models.length - 1]!.id);
-  }, [provider, cat.models]);
+    setPrimaryModel(cat.models[0]?.id);
+    setFallbackModel(cat.models[cat.models.length - 1]?.id);
+  }, [cat.models]);
 
   const budgetCap = 25;
   const budgetSpent = 8.41;
@@ -1494,7 +1683,7 @@ export function AIPanel() {
             }`}
           >
             <div className="mb-1 text-sm font-semibold">{p.name}</div>
-            <div className="font-mono text-[10px] text-[var(--muted)]">
+            <div className="font-mono text-[10px] text-[var(--muted-foreground)]">
               {p.models.length} models
             </div>
           </button>
@@ -1505,7 +1694,7 @@ export function AIPanel() {
       <div className="mb-6 rounded-lg border border-[var(--hairline-soft)] bg-[var(--canvas)] p-[18px]">
         <div className="grid grid-cols-2 gap-4">
           <label className="flex flex-col gap-1.5">
-            <span className="text-[10px] font-semibold uppercase tracking-[0.4px] text-[var(--muted)]">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.4px] text-[var(--muted-foreground)]">
               Primary model
             </span>
             <select
@@ -1519,13 +1708,13 @@ export function AIPanel() {
                 </option>
               ))}
             </select>
-            <span className="text-[11px] text-[var(--muted)]">
+            <span className="text-[11px] text-[var(--muted-foreground)]">
               Used for daily briefing, smart routing, and inbox triage.{" "}
               <span className="font-mono">{primaryMeta.cost}</span>
             </span>
           </label>
           <label className="flex flex-col gap-1.5">
-            <span className="text-[10px] font-semibold uppercase tracking-[0.4px] text-[var(--muted)]">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.4px] text-[var(--muted-foreground)]">
               Fallback model
             </span>
             <select
@@ -1539,7 +1728,7 @@ export function AIPanel() {
                 </option>
               ))}
             </select>
-            <span className="text-[11px] text-[var(--muted)]">
+            <span className="text-[11px] text-[var(--muted-foreground)]">
               Used after the budget threshold below.{" "}
               <span className="font-mono">{fallbackMeta.cost}</span>
             </span>
@@ -1548,7 +1737,7 @@ export function AIPanel() {
       </div>
 
       <div className="mb-6 rounded-lg border border-[var(--hairline-soft)] bg-[var(--canvas)] p-[18px]">
-        <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.4px] text-[var(--muted)]">
+        <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.4px] text-[var(--muted-foreground)]">
           API key
         </div>
         <div className="mb-1.5 flex gap-2.5">
@@ -1581,8 +1770,10 @@ export function AIPanel() {
           <span className="text-[32px] font-bold tracking-[-1px]">
             ${budgetSpent.toFixed(2)}
           </span>
-          <span className="ml-1.5 text-[var(--muted)]">of ${budgetCap}.00 cap</span>
-          <span className="ml-auto font-mono text-[11px] text-[var(--muted)]">
+          <span className="ml-1.5 text-[var(--muted-foreground)]">
+            of ${budgetCap}.00 cap
+          </span>
+          <span className="ml-auto font-mono text-[11px] text-[var(--muted-foreground)]">
             {budgetPct}% used · resets May 31
           </span>
         </div>
@@ -1592,21 +1783,23 @@ export function AIPanel() {
             style={{ width: `${budgetPct}%` }}
           />
         </div>
-        <div className="mb-4 flex gap-3 text-xs text-[var(--muted)]">
+        <div className="mb-4 flex gap-3 text-xs text-[var(--muted-foreground)]">
           <span>
             ↓{" "}
-            <b className="text-[var(--ink)]">Fallback at {fallbackThreshold}%</b>{" "}
+            <b className="text-[var(--ink)]">
+              Fallback at {fallbackThreshold}%
+            </b>{" "}
             → <span className="font-mono">{fallbackMeta.label}</span>
           </span>
           <span>
-            ·{" "}
-            <b className="text-[var(--ink)]">Hard stop at 100%</b> (${budgetCap})
+            · <b className="text-[var(--ink)]">Hard stop at 100%</b> ($
+            {budgetCap})
           </span>
         </div>
 
         <div className="grid grid-cols-2 gap-4 border-t border-[var(--hairline-soft)] pt-4">
           <label className="flex flex-col gap-1.5">
-            <span className="text-[10px] font-semibold uppercase tracking-[0.4px] text-[var(--muted)]">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.4px] text-[var(--muted-foreground)]">
               Monthly cap
             </span>
             <div className="relative">
@@ -1621,12 +1814,12 @@ export function AIPanel() {
                 className="h-8 w-full rounded-md border border-[var(--input)] bg-[var(--background)] pl-6 pr-3 font-mono text-[13px] outline-none"
               />
             </div>
-            <span className="text-[11px] text-[var(--muted)]">
+            <span className="text-[11px] text-[var(--muted-foreground)]">
               Hard stop when reached. Resets on the 1st of each month.
             </span>
           </label>
           <label className="flex flex-col gap-1.5">
-            <span className="text-[10px] font-semibold uppercase tracking-[0.4px] text-[var(--muted)]">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.4px] text-[var(--muted-foreground)]">
               Fallback threshold
             </span>
             <select
@@ -1641,9 +1834,8 @@ export function AIPanel() {
               <option value="90">90%</option>
               <option value="off">Never (always primary)</option>
             </select>
-            <span className="text-[11px] text-[var(--muted)]">
-              Switches{" "}
-              <span className="font-mono">{primaryMeta.label}</span> →{" "}
+            <span className="text-[11px] text-[var(--muted-foreground)]">
+              Switches <span className="font-mono">{primaryMeta.label}</span> →{" "}
               <span className="font-mono">{fallbackMeta.label}</span> at this
               percentage.
             </span>
@@ -1658,14 +1850,14 @@ export function AIPanel() {
             <span className="w-5" />
             <div>
               <div className="text-sm font-semibold">{c.name}</div>
-              <div className="mt-0.5 text-xs text-[var(--muted)]">{c.desc}</div>
+              <div className="mt-0.5 text-xs text-[var(--muted-foreground)]">
+                {c.desc}
+              </div>
             </div>
             <span />
             <Switch
               checked={privacy[c.id] ?? false}
-              onCheckedChange={(v) =>
-                setPrivacy((s) => ({ ...s, [c.id]: v }))
-              }
+              onCheckedChange={(v) => setPrivacy((s) => ({ ...s, [c.id]: v }))}
               aria-label={c.name}
             />
           </SettingsRow>
@@ -1687,7 +1879,9 @@ export function ThemePanel() {
   useEffect(() => {
     let cancelled = false;
     (apiFetch("/api/theme") as Promise<ThemeView>)
-      .then((t) => { if (!cancelled) setView(t); })
+      .then((t) => {
+        if (!cancelled) setView(t);
+      })
       .catch(() => {});
     const onUpdate = (e: Event) => {
       const detail = (e as CustomEvent<ThemeView>).detail;
@@ -1703,7 +1897,9 @@ export function ThemePanel() {
   const save = async (patch: Partial<ThemeView>) => {
     const next = { ...view, ...patch };
     setView(next);
-    window.dispatchEvent(new CustomEvent(THEME_UPDATED_EVENT, { detail: next }));
+    window.dispatchEvent(
+      new CustomEvent(THEME_UPDATED_EVENT, { detail: next }),
+    );
     try {
       const out = (await apiFetch("/api/theme", {
         method: "PUT",
@@ -1711,11 +1907,15 @@ export function ThemePanel() {
       })) as ThemeSaveResult;
       if (out.ok) {
         setView(out.theme);
-        window.dispatchEvent(new CustomEvent(THEME_UPDATED_EVENT, { detail: out.theme }));
+        window.dispatchEvent(
+          new CustomEvent(THEME_UPDATED_EVENT, { detail: out.theme }),
+        );
       }
     } catch {
       setView(view);
-      window.dispatchEvent(new CustomEvent(THEME_UPDATED_EVENT, { detail: view }));
+      window.dispatchEvent(
+        new CustomEvent(THEME_UPDATED_EVENT, { detail: view }),
+      );
     }
   };
 
@@ -1739,7 +1939,7 @@ export function ThemePanel() {
 
       <div className="space-y-4">
         <div className="rounded-lg border border-[var(--hairline-soft)] bg-[var(--canvas)] p-[18px]">
-          <div className="mb-3 text-[10px] font-semibold uppercase tracking-[0.4px] text-[var(--muted)]">
+          <div className="mb-3 text-[10px] font-semibold uppercase tracking-[0.4px] text-[var(--muted-foreground)]">
             Color scheme
           </div>
           <SegmentedControl
@@ -1750,7 +1950,7 @@ export function ThemePanel() {
         </div>
 
         <div className="rounded-lg border border-[var(--hairline-soft)] bg-[var(--canvas)] p-[18px]">
-          <div className="mb-3 text-[10px] font-semibold uppercase tracking-[0.4px] text-[var(--muted)]">
+          <div className="mb-3 text-[10px] font-semibold uppercase tracking-[0.4px] text-[var(--muted-foreground)]">
             Density
           </div>
           <SegmentedControl
@@ -1758,7 +1958,7 @@ export function ThemePanel() {
             value={view.density}
             onChange={(v) => save({ density: v })}
           />
-          <p className="mt-2 text-xs text-[var(--muted)]">
+          <p className="mt-2 text-xs text-[var(--muted-foreground)]">
             Compact reduces row heights and padding across the whole app.
           </p>
         </div>
@@ -1783,10 +1983,14 @@ export function WeekStartPanel() {
         sub="Affects the week view on the Calendar page and weekly stats."
       />
       <div className="rounded-lg border border-[var(--hairline-soft)] bg-[var(--canvas)] p-[18px]">
-        <div className="mb-3 text-[10px] font-semibold uppercase tracking-[0.4px] text-[var(--muted)]">
+        <div className="mb-3 text-[10px] font-semibold uppercase tracking-[0.4px] text-[var(--muted-foreground)]">
           Week starts on
         </div>
-        <SegmentedControl options={options} value={weekStart} onChange={setWeekStart} />
+        <SegmentedControl
+          options={options}
+          value={weekStart}
+          onChange={setWeekStart}
+        />
       </div>
     </div>
   );
@@ -1815,7 +2019,7 @@ export function DataPrivacyPanel() {
               Export my data (JSON)
             </Button>
             <span className="flex-1" />
-            <span className="font-mono text-[11px] text-[var(--muted)]">
+            <span className="font-mono text-[11px] text-[var(--muted-foreground)]">
               1,847 signals · 12 rollups · includes preferences
             </span>
           </div>
@@ -1826,7 +2030,7 @@ export function DataPrivacyPanel() {
           <h3 className="mb-2.5 font-semibold text-base">Retention</h3>
           <div className="rounded-lg border border-[var(--hairline-soft)] bg-[var(--canvas)] p-[18px]">
             <label className="flex flex-col gap-1.5">
-              <span className="text-[10px] font-semibold uppercase tracking-[0.4px] text-[var(--muted)]">
+              <span className="text-[10px] font-semibold uppercase tracking-[0.4px] text-[var(--muted-foreground)]">
                 Signal retention (days)
               </span>
               <div className="flex items-center gap-3">
@@ -1838,7 +2042,7 @@ export function DataPrivacyPanel() {
                   onChange={(e) => setRetention(Number(e.target.value))}
                   className="h-8 w-28 rounded-md border border-[var(--input)] bg-[var(--background)] px-3 font-mono text-[13px] outline-none"
                 />
-                <span className="text-xs text-[var(--muted)]">
+                <span className="text-xs text-[var(--muted-foreground)]">
                   Signals older than {retention} days are purged nightly.
                 </span>
               </div>
@@ -1854,7 +2058,7 @@ export function DataPrivacyPanel() {
           <div className="rounded-lg border border-[var(--danger-soft)] bg-[var(--canvas)] p-[18px]">
             {purgeOpen ? (
               <div className="flex flex-col gap-3">
-                <p className="text-sm text-[var(--muted)]">
+                <p className="text-sm text-[var(--muted-foreground)]">
                   Type <b className="text-[var(--ink)]">DELETE</b> to confirm
                   purging all signals and rollups.
                 </p>
@@ -1928,8 +2132,10 @@ export function CareerSheetsPanel() {
               <CheckIcon className="size-5 text-[var(--good)]" />
             </div>
             <div>
-              <div className="text-sm font-semibold">Google Sheets connected</div>
-              <div className="text-xs text-[var(--muted)]">
+              <div className="text-sm font-semibold">
+                Google Sheets connected
+              </div>
+              <div className="text-xs text-[var(--muted-foreground)]">
                 Devy can read and write sheets it created. Sync runs nightly.
               </div>
             </div>
@@ -1946,7 +2152,10 @@ export function CareerSheetsPanel() {
         ) : (
           <div className="grid grid-cols-[auto_1fr_auto] items-center gap-3.5">
             <div className="inline-flex size-9 items-center justify-center rounded-lg bg-[var(--warn-soft)]">
-              <span className="inline-flex size-[22px] items-center justify-center rounded font-bold text-sm text-white" style={{ background: "#0F9D58" }}>
+              <span
+                className="inline-flex size-[22px] items-center justify-center rounded font-bold text-sm text-white"
+                style={{ background: "#0F9D58" }}
+              >
                 S
               </span>
             </div>
@@ -1957,11 +2166,11 @@ export function CareerSheetsPanel() {
                   Not connected
                 </span>
               </div>
-              <div className="mt-0.5 text-xs text-[var(--muted)]">
+              <div className="mt-0.5 text-xs text-[var(--muted-foreground)]">
                 Adds{" "}
                 <code className="font-mono text-[11.5px]">spreadsheets</code> +{" "}
-                <code className="font-mono text-[11.5px]">drive.file</code> scopes
-                to your Google connection.
+                <code className="font-mono text-[11.5px]">drive.file</code>{" "}
+                scopes to your Google connection.
               </div>
             </div>
             <Button

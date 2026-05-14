@@ -1,7 +1,17 @@
-import { SparklesIcon, RefreshCwIcon, PlugIcon, ExternalLinkIcon, RefreshCwOffIcon, CalendarIcon, SettingsIcon } from "lucide-react";
+import {
+  CalendarIcon,
+  ExternalLinkIcon,
+  PlugIcon,
+  RefreshCwIcon,
+  RefreshCwOffIcon,
+  SettingsIcon,
+  SparklesIcon,
+  XIcon,
+} from "lucide-react";
+import { useState } from "react";
 import { Button } from "#/components/ui/button";
-import { SourceGlyph } from "#/features/signals/components/SourceGlyph";
 import type { SourceId } from "#/features/signals/components/SourceGlyph";
+import { SourceGlyph } from "#/features/signals/components/SourceGlyph";
 
 export type BriefingItemPriority = "high" | "watch" | "plan" | "skip";
 
@@ -71,7 +81,13 @@ function ctaIcon(name: string) {
   }
 }
 
-function BriefingItem({ item }: { item: BriefingItemData }) {
+function BriefingItem({
+  item,
+  onDismiss,
+}: {
+  item: BriefingItemData;
+  onDismiss: () => void;
+}) {
   const p = PRIORITY_STYLES[item.priority] ?? PRIORITY_STYLES.plan;
   return (
     <div
@@ -136,11 +152,14 @@ function BriefingItem({ item }: { item: BriefingItemData }) {
       </div>
       {/* Title + body */}
       <div
-        style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 1 }}
+        style={{
+          minWidth: 0,
+          display: "flex",
+          flexDirection: "column",
+          gap: 1,
+        }}
       >
-        <div
-          style={{ display: "flex", alignItems: "center", gap: 6 }}
-        >
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <SourceGlyph source={normalizeSource(item.source)} size={12} />
           <span
             style={{
@@ -178,13 +197,23 @@ function BriefingItem({ item }: { item: BriefingItemData }) {
           {item.body}
         </div>
       </div>
-      {/* CTA */}
-      {item.cta && (
-        <Button variant="ghost" size="sm">
-          {ctaIcon(item.cta.icon)}
-          {item.cta.label}
+      {/* CTA + dismiss */}
+      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+        {item.cta && (
+          <Button variant="ghost" size="sm">
+            {ctaIcon(item.cta.icon)}
+            {item.cta.label}
+          </Button>
+        )}
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          onClick={onDismiss}
+          aria-label={`Dismiss ${item.title}`}
+        >
+          <XIcon />
         </Button>
-      )}
+      </div>
     </div>
   );
 }
@@ -220,7 +249,12 @@ function BriefingEmpty({ onConnect }: { onConnect?: () => void }) {
         <SparklesIcon size={16} />
       </div>
       <div
-        style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: 2,
+          minWidth: 0,
+        }}
       >
         <span
           style={{ fontSize: 14, fontWeight: 600, color: "var(--foreground)" }}
@@ -249,15 +283,15 @@ function BriefingEmpty({ onConnect }: { onConnect?: () => void }) {
 
 type Props = {
   data: BriefingData;
-  /** Suppress the card entirely (e.g., meeting is imminent). */
-  suppressed?: boolean;
   aiConnected: boolean;
   onConnect?: () => void;
 };
 
-export function BriefingCard({ data, suppressed, aiConnected, onConnect }: Props) {
-  if (suppressed) return null;
+export function BriefingCard({ data, aiConnected, onConnect }: Props) {
+  const [dismissed, setDismissed] = useState<Set<string>>(new Set());
   if (!aiConnected) return <BriefingEmpty onConnect={onConnect} />;
+  const visibleItems = data.items.filter((i) => !dismissed.has(i.id));
+  if (data.items.length > 0 && visibleItems.length === 0) return null;
   return (
     <div
       style={{
@@ -289,7 +323,11 @@ export function BriefingCard({ data, suppressed, aiConnected, onConnect }: Props
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
           <span
-            style={{ fontSize: 14, fontWeight: 600, color: "var(--foreground)" }}
+            style={{
+              fontSize: 14,
+              fontWeight: 600,
+              color: "var(--foreground)",
+            }}
           >
             Morning rundown
           </span>
@@ -334,8 +372,18 @@ export function BriefingCard({ data, suppressed, aiConnected, onConnect }: Props
         </button>
       </header>
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-        {data.items.map((item) => (
-          <BriefingItem key={item.id} item={item} />
+        {visibleItems.map((item) => (
+          <BriefingItem
+            key={item.id}
+            item={item}
+            onDismiss={() =>
+              setDismissed((prev) => {
+                const next = new Set(prev);
+                next.add(item.id);
+                return next;
+              })
+            }
+          />
         ))}
       </div>
     </div>
