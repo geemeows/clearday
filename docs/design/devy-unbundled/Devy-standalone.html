@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Devy — Developer Command Center</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<meta name="ext-resource-dependency" content="devy-logo.png" data-resource-id="devyLogo" />
+<template id="__bundler_thumbnail" data-bg-color="#fafafa">
+  <svg viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg">
+    <rect x="320" y="200" width="560" height="400" rx="56" fill="#2c6cf8"/>
+    <text x="600" y="500" text-anchor="middle" font-family="Inter, system-ui, sans-serif" font-weight="700" font-size="240" fill="#ffffff" letter-spacing="-10">D</text>
+  </svg>
+</template>
+<style id="tw-shim">
+  .w-full{width:100%}
+  .flex{display:flex}
+  .items-center{align-items:center}
+  .items-start{align-items:flex-start}
+  .items-baseline{align-items:baseline}
+  .justify-end{justify-content:flex-end}
+  .gap-1{gap:.25rem}.gap-2{gap:.5rem}.gap-2\.5{gap:.625rem}.gap-3{gap:.75rem}
+  .text-left{text-align:left}
+  .transition-colors{transition:color .15s,background-color .15s,border-color .15s}
+  .relative{position:relative}.absolute{position:absolute}
+  .flex-1{flex:1 1 0%}.min-w-0{min-width:0}
+  .ml-1{margin-left:.25rem}.ml-1\.5{margin-left:.375rem}.mt-1{margin-top:.25rem}
+  .px-4{padding-left:1rem;padding-right:1rem}.pt-4{padding-top:1rem}.pb-2{padding-bottom:.5rem}.pb-4{padding-bottom:1rem}
+  .px-5{padding-left:1.25rem;padding-right:1.25rem}.pt-5{padding-top:1.25rem}
+  .py-3{padding-top:.75rem;padding-bottom:.75rem}.pt-3{padding-top:.75rem}.pb-5{padding-bottom:1.25rem}
+  .text-\[11px\]{font-size:11px}.text-muted-foreground{color:var(--muted-foreground)}
+  @keyframes __spin{to{transform:rotate(360deg)}}.animate-spin{animation:__spin 1s linear infinite}
+</style>
+<script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+<link rel="stylesheet" href="tokens.css" />
+<script>
+  // standalone — Tailwind shim is static CSS above
+</script>
+<style>
+  html, body, #root { height: 100%; }
+  #root { display: flex; flex-direction: column; }
+
+  /* Browser chrome wrapper */
+  .browser-frame {
+    flex: 1; display: flex; flex-direction: column;
+    background: var(--surface-strong);
+    overflow: hidden;
+  }
+  .browser-tabs {
+    display: flex; align-items: center; gap: 0;
+    padding: 8px 14px 0;
+    background: var(--surface-strong);
+    border-bottom: 1px solid var(--hairline-soft);
+    flex-shrink: 0;
+  }
+  .traffic-lights { display: flex; gap: 6px; padding: 0 14px 0 4px; }
+  .traffic-lights span { width: 11px; height: 11px; border-radius: 50%; }
+  .browser-tab {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 14px;
+    background: var(--canvas);
+    border-radius: 8px 8px 0 0;
+    font-size: 12px; color: var(--ink);
+    max-width: 240px;
+    border-top: 1px solid var(--hairline-soft);
+    border-left: 1px solid var(--hairline-soft);
+    border-right: 1px solid var(--hairline-soft);
+    margin-bottom: -1px;
+  }
+  .browser-tab .fav {
+    width: 14px; height: 14px; border-radius: 4px;
+    background: var(--accent); color: white;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 9px; font-weight: 800;
+  }
+  .browser-bar {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 14px; background: var(--canvas);
+    border-bottom: 1px solid var(--hairline-soft);
+    flex-shrink: 0;
+  }
+  .browser-bar .url {
+    flex: 1; padding: 6px 14px; border-radius: 999px;
+    background: var(--surface-soft); border: 1px solid var(--hairline-soft);
+    font-family: var(--font-mono); font-size: 12px; color: var(--muted);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .browser-bar .url .lock { color: var(--good); }
+
+  /* App body */
+  .app-body {
+    flex: 1; display: flex; min-height: 0;
+    background: var(--canvas);
+  }
+  .app-main {
+    flex: 1; min-width: 0; overflow: auto;
+    background: var(--canvas);
+  }
+
+  /* In-focus dim overlay */
+  .focus-dim::before {
+    content: ""; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.55); z-index: 50;
+    pointer-events: none;
+    transition: opacity .3s;
+  }
+  [data-theme="dark"] .focus-dim::before {
+    background: rgba(0,0,0,0.7);
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<!-- TipTap (rich text editor) — loaded as ESM, exposed on window.TipTap -->
+<script type="module">
+  import { Editor } from "https://esm.sh/@tiptap/core@2.10.3";
+  import StarterKit from "https://esm.sh/@tiptap/starter-kit@2.10.3";
+  import Placeholder from "https://esm.sh/@tiptap/extension-placeholder@2.10.3";
+  import Link from "https://esm.sh/@tiptap/extension-link@2.10.3";
+  window.TipTap = { Editor, StarterKit, Placeholder, Link };
+  window.dispatchEvent(new Event("tiptap-loaded"));
+</script>
+
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel" src="rich-editor.jsx"></script>
+<script type="text/babel" src="coss-primitives.jsx"></script>
+<script type="text/babel" src="source-glyph.jsx"></script>
+<script type="text/babel" src="data.jsx"></script>
+<script type="text/babel" src="shell.jsx"></script>
+<script type="text/babel" src="today.jsx"></script>
+<script type="text/babel" src="inbox.jsx"></script>
+<script type="text/babel" src="calendar.jsx"></script>
+<script type="text/babel" src="tasks.jsx"></script>
+<script type="text/babel" src="projects.jsx"></script>
+<script type="text/babel" src="overlays.jsx"></script>
+<script type="text/babel" src="automations.jsx"></script>
+<script type="text/babel" src="settings.jsx"></script>
+<script type="text/babel" src="career-data.jsx"></script>
+<script type="text/babel" src="career-wheel.jsx"></script>
+<script type="text/babel" src="career.jsx"></script>
+
+<script type="text/babel" data-presets="env,react">
+const { useState, useEffect } = React;
+
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "theme": "light",
+  "density": "comfortable",
+  "showBrowserChrome": false,
+  "focusActive": false,
+  "manyProjects": false,
+  "aiConnected": true,
+  "emptyCharts": false,
+  "careerView": "active"
+}/*EDITMODE-END*/;
+
+const App = () => {
+  const [tweaks, setTweak] = window.useTweaks(TWEAK_DEFAULTS);
+  // expose for Career page in-canvas tweak buttons
+  window.__careerSetTweak = (patch) => Object.entries(patch).forEach(([k,v]) => setTweak(k, v));
+  const [page, setPage] = useState("today");
+  const [cmdkOpen, setCmdkOpen] = useState(false);
+  const [focusModalOpen, setFocusModalOpen] = useState(false);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = tweaks.theme === "dark" ? "dark" : "light";
+    document.documentElement.dataset.density = tweaks.density;
+  }, [tweaks.theme, tweaks.density]);
+
+  // Swap project fixture when "many projects" is on
+  useEffect(() => {
+    if (!window.__originalProjects) window.__originalProjects = window.ProjectsData;
+    if (tweaks.manyProjects) {
+      const extras = [
+        { id: "p-mobile",   name: "Mobile app v2", color: "#2563eb" },
+        { id: "p-billing",  name: "Billing migration", color: "#0a8754" },
+        { id: "p-onb",      name: "Onboarding redesign", color: "#b76c00" },
+        { id: "p-infra",    name: "Infra hardening Q3", color: "#9333ea" },
+        { id: "p-research", name: "User research — Acme", color: "#0d9488" },
+        { id: "p-bugs",     name: "Bug bash — June", color: "#dc2626" },
+        { id: "p-docs",     name: "Public docs site", color: "#64748b" },
+      ].map(p => ({ ...p, activeCol: "doing", columns: [{id:"todo",name:"To do"},{id:"doing",name:"Doing"},{id:"done",name:"Done"}], cards: [] }));
+      window.ProjectsData = [...window.__originalProjects, ...extras];
+    } else {
+      window.ProjectsData = window.__originalProjects;
+    }
+  }, [tweaks.manyProjects]);
+
+  // ⌘K
+  useEffect(() => {
+    const onKey = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") { e.preventDefault(); setCmdkOpen(o => !o); }
+      if (e.key === "Escape") { setCmdkOpen(false); setFocusModalOpen(false); }
+    };
+    window.addEventListener("keydown", onKey);
+    const onOpen = () => setCmdkOpen(true);
+    window.addEventListener("devy:open-cmdk", onOpen);
+    const onNav = (e) => {
+      const t = e.detail && e.detail.tab;
+      if (t) setPage(t);
+    };
+    window.addEventListener("devy:nav", onNav);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("devy:open-cmdk", onOpen);
+      window.removeEventListener("devy:nav", onNav);
+    };
+  }, []);
+
+  const renderPage = () => {
+    if (page === "today")    return <window.TodayPage onOpenInbox={() => setPage("inbox")} aiConnected={tweaks.aiConnected} emptyCharts={tweaks.emptyCharts} />;
+    if (page === "inbox")    return <window.InboxPage />;
+    if (page === "calendar") return <window.CalendarPage />;
+    if (page === "tasks")    return <window.ProjectsPage />;
+    if (page === "projects") return <window.ProjectsPage />;
+    if (page === "automations") return <div style={{ padding: "32px 40px 64px", overflowY: "auto", height: "100%" }}><window.AutomationsPanel /></div>;
+    if (page === "career")  return <window.CareerPage tweaks={tweaks} />;
+    if (page === "settings") return <window.SettingsPage onBack={() => setPage("today")} />;
+    return <window.TodayPage onOpenInbox={() => setPage("inbox")} />;
+  };
+
+  const shell = (
+    <div className={`app-body ${tweaks.focusActive ? "focus-dim" : ""}`}>
+      <window.Sidebar
+        page={page} setPage={setPage}
+        focusActive={tweaks.focusActive}
+        onStartFocus={() => setFocusModalOpen(true)}
+        sources={window.DevyData.SOURCES}
+        openSettings={() => setPage("settings")}
+      />
+      <main className="app-main" data-screen-label={`Devy · ${page}`}>
+        {renderPage()}
+      </main>
+    </div>
+  );
+
+  return (
+    <>
+      {tweaks.showBrowserChrome ? (
+        <div className="browser-frame">
+          <div className="browser-tabs">
+            <div className="traffic-lights">
+              <span style={{ background: "#ff5f57" }} />
+              <span style={{ background: "#febc2e" }} />
+              <span style={{ background: "#28c840" }} />
+            </div>
+            <div className="browser-tab">
+              <span className="fav" style={{ background: "var(--primary)", color: "var(--primary-foreground)" }}>D</span>
+              <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>Devy · {page === "today" ? "Today" : page === "inbox" ? "Inbox" : page === "automations" ? "Automations" : page === "calendar" ? "Calendar" : "Tasks"}</span>
+              <span style={{ color: "var(--muted-soft)", cursor: "pointer" }}>×</span>
+            </div>
+            <div style={{ padding: "0 8px", color: "var(--muted)", fontSize: 14 }}>+</div>
+          </div>
+          <div className="browser-bar">
+            <span style={{ display: "flex", gap: 6, color: "var(--muted)" }}>
+              <span>‹</span><span>›</span><span>↻</span>
+            </span>
+            <div className="url"><span className="lock">⌐</span>devy.kovacs.dev/{page}</div>
+          </div>
+          {shell}
+        </div>
+      ) : shell}
+
+      <window.CmdK open={cmdkOpen} onClose={() => setCmdkOpen(false)} />
+      <window.FocusModal open={focusModalOpen} onClose={() => setFocusModalOpen(false)} onStart={() => setTweak("focusActive", true)} />
+
+      <window.TweaksPanel title="Tweaks">
+        <window.TweakSection title="Appearance">
+          <window.TweakRadio label="Theme" value={tweaks.theme} options={[{value:"light",label:"Light"},{value:"dark",label:"Dark"}]} onChange={v => setTweak("theme", v)} />
+          <window.TweakRadio label="Density" value={tweaks.density} options={[{value:"comfortable",label:"Comfortable"},{value:"compact",label:"Compact"}]} onChange={v => setTweak("density", v)} />
+        </window.TweakSection>
+        <window.TweakSection title="Frame">
+          <window.TweakToggle label="Browser chrome" value={tweaks.showBrowserChrome} onChange={v => setTweak("showBrowserChrome", v)} />
+        </window.TweakSection>
+        <window.TweakSection title="Career">
+          <window.TweakButton label="Go to Career page" onClick={() => setPage("career")} />
+        </window.TweakSection>
+        <window.TweakSection title="State">
+          <window.TweakToggle label="Focus session active" value={tweaks.focusActive} onChange={v => setTweak("focusActive", v)} />
+          <window.TweakToggle label="Many projects (demo)" value={tweaks.manyProjects} onChange={v => setTweak("manyProjects", v)} />
+          <window.TweakToggle label="AI provider connected" value={tweaks.aiConnected} onChange={v => setTweak("aiConnected", v)} />
+          <window.TweakToggle label="Empty / insufficient chart data" value={tweaks.emptyCharts} onChange={v => setTweak("emptyCharts", v)} />
+          <window.TweakButton label="Open ⌘K palette" onClick={() => setCmdkOpen(true)} />
+          <window.TweakButton label="Open Focus modal" onClick={() => setFocusModalOpen(true)} />
+        </window.TweakSection>
+      </window.TweaksPanel>
+    </>
+  );
+};
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
