@@ -1,8 +1,19 @@
 // CareerPage — main orchestrator for the Career feature.
-// Local state only (no Supabase wiring) for the redesign pass.
+// Accepts loader data (initialLevel, archivedLevels, initialShares, initialLegend)
+// from the route; all fixture data has been removed.
 
 import { EyeIcon, PlusIcon } from "lucide-react";
 import { useMemo, useState } from "react";
+import { supabase } from "#/lib/supabase";
+import type { SupabaseLike } from "#/shared/db";
+import {
+  createShareLink,
+  revokeShareLink,
+  setIndicatorScore,
+  setLevelHeader,
+  type StoredShare,
+} from "#/features/career/store";
+import { filterCareerLevel, type CareerFilterParams } from "#/features/career/filter";
 import { Button } from "#/components/ui/button";
 import { Input } from "#/components/ui/input";
 import { Tabs, TabsList, TabsTab } from "#/components/ui/tabs";
@@ -39,8 +50,6 @@ import type {
   WheelDataPoint,
 } from "./career-data";
 import {
-  ACTIVE_LEVEL,
-  ARCHIVED_LEVELS,
   CAREER_LEGEND,
   CAREER_LEGEND_DESC,
   computeSatisfaction,
@@ -52,7 +61,7 @@ import { WheelPanel } from "./WheelPanel";
 
 type View = "active" | "archive" | "archive-detail" | "empty" | "public";
 
-function buildInitialLegend(): ScoreLegend {
+function buildDefaultLegend(): ScoreLegend {
   return Object.fromEntries(
     [1, 2, 3, 4].map((n) => [
       n,
@@ -61,23 +70,38 @@ function buildInitialLegend(): ScoreLegend {
   );
 }
 
-export function CareerPage() {
-  const [level, setLevel] = useState<CareerLevel>(() =>
-    JSON.parse(JSON.stringify(ACTIVE_LEVEL)),
+const db = supabase as unknown as SupabaseLike;
+
+export type CareerPageProps = {
+  initialLevel: CareerLevel | null;
+  archivedLevels: ArchivedLevel[];
+  initialShares: StoredShare[];
+  initialLegend: ScoreLegend;
+};
+
+export function CareerPage({
+  initialLevel,
+  archivedLevels,
+  initialShares,
+  initialLegend,
+}: CareerPageProps) {
+  const [level, setLevel] = useState<CareerLevel | null>(() =>
+    initialLevel ? JSON.parse(JSON.stringify(initialLevel)) : null,
   );
-  const [view, setView] = useState<View>("active");
+  const [view, setView] = useState<View>(initialLevel ? "active" : "empty");
   const [archivedSelected, setArchivedSelected] =
     useState<ArchivedLevel | null>(null);
   const [careerTab, setCareerTab] = useState<string>("model");
-  const [legend, setLegend] = useState<ScoreLegend>(buildInitialLegend);
+  const [legend, setLegend] = useState<ScoreLegend>(
+    () => initialLegend ?? buildDefaultLegend(),
+  );
+  const [shares, setShares] = useState<StoredShare[]>(initialShares);
+  const [filterQuery, setFilterQuery] = useState("");
 
   // dialog open states
   const [syncOpen, setSyncOpen] = useState(false);
   const [syncMode, setSyncMode] = useState<"first" | "resync">("resync");
   const [shareOpen, setShareOpen] = useState(false);
-  const [shareToken, setShareToken] = useState<string | null>(
-    ACTIVE_LEVEL.share_token,
-  );
   const [evidenceFor, setEvidenceFor] = useState<Indicator | null>(null);
   const [allEvidenceFor, setAllEvidenceFor] = useState<Indicator | null>(null);
   const [commentsFor, setCommentsFor] = useState<Indicator | null>(null);
@@ -88,12 +112,27 @@ export function CareerPage() {
   const [devOpen, setDevOpen] = useState(false);
   const [legendOpen, setLegendOpen] = useState(false);
 
+  const activeShare = useMemo(
+    () => shares.find((s) => !s.revoked_at) ?? null,
+    [shares],
+  );
+  const shareToken = activeShare?.token ?? null;
+
   // derived
-  const sat = useMemo(() => computeSatisfaction(level), [level]);
+  const sat = useMemo(
+    () => (level ? computeSatisfaction(level) : { perCompetency: [], perCriterion: {} }),
+    [level],
+  );
+
+  const visibleLevel = useMemo<CareerLevel | null>(() => {
+    if (!level) return null;
+    const params: CareerFilterParams = { query: filterQuery };
+    return filterCareerLevel(level, params);
+  }, [level, filterQuery]);
 
   const criteriaData = useMemo<WheelDataPoint[]>(
     () =>
-      level.competencies.flatMap((c) =>
+      (visibleLevel ?? level)?.competencies.flatMap((c) =>
         c.criteria.map((cr) => {
           const s = sat.perCriterion[cr.id] ?? {
             avg: 0,
@@ -108,8 +147,8 @@ export function CareerPage() {
             gap: s.gap,
           };
         }),
-      ),
-    [level, sat],
+      ) ?? [],
+    [visibleLevel, level, sat],
   );
 
   const overall = useMemo(() => {
@@ -125,7 +164,7 @@ export function CareerPage() {
   }, [criteriaData]);
 
   const allCriteria = useMemo<Criterion[]>(
-    () => level.competencies.flatMap((c) => c.criteria),
+    () => level?.competencies.flatMap((c) => c.criteria) ?? [],
     [level],
   );
 
@@ -142,7 +181,7 @@ export function CareerPage() {
 
   const liveIndicator = useMemo(() => {
     const id = allEvidenceFor?.id ?? commentsFor?.id;
-    if (!id) return null;
+    if (!id || !level) return null;
     for (const c of level.competencies)
       for (const cr of c.criteria)
         for (const i of cr.indicators) if (i.id === id) return i;
@@ -152,81 +191,109 @@ export function CareerPage() {
   // ── mutators ────────────────────────────────────────────────────────────────
 
   const addEvidence = (indId: string, ev: Omit<Evidence, "id">) =>
-    setLevel((L) => ({
-      ...L,
-      competencies: L.competencies.map((c) => ({
-        ...c,
-        criteria: c.criteria.map((cr) => ({
-          ...cr,
-          indicators: cr.indicators.map((i) =>
-            i.id === indId
-              ? {
-                  ...i,
-                  evidence: [...i.evidence, { id: `e_${Date.now()}`, ...ev }],
-                }
-              : i,
-          ),
+    setLevel((L) => {
+      if (!L) return L;
+      return {
+        ...L,
+        competencies: L.competencies.map((c) => ({
+          ...c,
+          criteria: c.criteria.map((cr) => ({
+            ...cr,
+            indicators: cr.indicators.map((i) =>
+              i.id === indId
+                ? {
+                    ...i,
+                    evidence: [...i.evidence, { id: `e_${Date.now()}`, ...ev }],
+                  }
+                : i,
+            ),
+          })),
         })),
-      })),
-    }));
+      };
+    });
 
   const removeEvidence = (indId: string, evId: string) =>
-    setLevel((L) => ({
-      ...L,
-      competencies: L.competencies.map((c) => ({
-        ...c,
-        criteria: c.criteria.map((cr) => ({
-          ...cr,
-          indicators: cr.indicators.map((i) =>
-            i.id === indId
-              ? { ...i, evidence: i.evidence.filter((e) => e.id !== evId) }
-              : i,
-          ),
+    setLevel((L) => {
+      if (!L) return L;
+      return {
+        ...L,
+        competencies: L.competencies.map((c) => ({
+          ...c,
+          criteria: c.criteria.map((cr) => ({
+            ...cr,
+            indicators: cr.indicators.map((i) =>
+              i.id === indId
+                ? { ...i, evidence: i.evidence.filter((e) => e.id !== evId) }
+                : i,
+            ),
+          })),
         })),
-      })),
-    }));
+      };
+    });
 
-  const setScore = (indId: string, score: number) =>
-    setLevel((L) => ({
-      ...L,
-      competencies: L.competencies.map((c) => ({
-        ...c,
-        criteria: c.criteria.map((cr) => ({
-          ...cr,
-          indicators: cr.indicators.map((i) =>
-            i.id === indId ? { ...i, score } : i,
-          ),
+  const setScore = (indId: string, score: number) => {
+    setLevel((L) => {
+      if (!L) return L;
+      return {
+        ...L,
+        competencies: L.competencies.map((c) => ({
+          ...c,
+          criteria: c.criteria.map((cr) => ({
+            ...cr,
+            indicators: cr.indicators.map((i) =>
+              i.id === indId ? { ...i, score } : i,
+            ),
+          })),
         })),
-      })),
-    }));
+      };
+    });
+    // Persist to Supabase (fire-and-forget)
+    setIndicatorScore(db, indId, score).catch((err) =>
+      console.error("score update failed:", err),
+    );
+  };
 
-  const addHeaderFields = (rows: Array<{ key: string; value: string }>) =>
-    setLevel((L) => ({ ...L, header: [...L.header, ...rows] }));
+  const addHeaderFields = (rows: Array<{ key: string; value: string }>) => {
+    setLevel((L) => {
+      if (!L) return L;
+      const updated = { ...L, header: [...L.header, ...rows] };
+      setLevelHeader(db, L.id, updated.header).catch((err) =>
+        console.error("header update failed:", err),
+      );
+      return updated;
+    });
+  };
 
   const addCompetency = (name: string) =>
-    setLevel((L) => ({
-      ...L,
-      competencies: [
-        ...L.competencies,
-        { id: `c_${Date.now()}`, name, criteria: [] },
-      ],
-    }));
+    setLevel((L) => {
+      if (!L) return L;
+      return {
+        ...L,
+        competencies: [
+          ...L.competencies,
+          { id: `c_${Date.now()}`, name, criteria: [] },
+        ],
+      };
+    });
 
   const addCriterion = (compId: string, { name }: { name: string }) =>
-    setLevel((L) => ({
-      ...L,
-      competencies: L.competencies.map((c) =>
-        c.id === compId
-          ? {
-              ...c,
-              criteria: [
-                ...c.criteria,
-                { id: `cr_${Date.now()}`, name, target: 3, indicators: [] },
-              ],
-            }
-          : c,
-      ),
-    }));
+    setLevel((L) => {
+      if (!L) return L;
+      return {
+        ...L,
+        competencies: L.competencies.map((c) =>
+          c.id === compId
+            ? {
+                ...c,
+                criteria: [
+                  ...c.criteria,
+                  { id: `cr_${Date.now()}`, name, target: 3, indicators: [] },
+                ],
+              }
+            : c,
+        ),
+      };
+    });
 
   const addIndicator = (
     crId: string,
@@ -244,63 +311,68 @@ export function CareerPage() {
       target?: number;
     },
   ) =>
-    setLevel((L) => ({
-      ...L,
-      competencies: L.competencies.map((c) => ({
-        ...c,
-        criteria: c.criteria.map((cr) =>
-          cr.id === crId
-            ? {
-                ...cr,
-                indicators: [
-                  ...cr.indicators,
-                  {
-                    id: `i_${Date.now()}`,
-                    code,
-                    description,
-                    notes: notes ?? "",
-                    score: Math.max(1, score ?? 1),
-                    target: target ?? 3,
-                    evidence: [],
-                    comments: [],
-                  },
-                ],
-              }
-            : cr,
-        ),
-      })),
-    }));
-
-  const addComment = (indId: string, body: string) =>
-    setLevel((L) => ({
-      ...L,
-      competencies: L.competencies.map((c) => ({
-        ...c,
-        criteria: c.criteria.map((cr) => ({
-          ...cr,
-          indicators: cr.indicators.map((i) =>
-            i.id === indId
+    setLevel((L) => {
+      if (!L) return L;
+      return {
+        ...L,
+        competencies: L.competencies.map((c) => ({
+          ...c,
+          criteria: c.criteria.map((cr) =>
+            cr.id === crId
               ? {
-                  ...i,
-                  comments: [
-                    ...(i.comments ?? []),
+                  ...cr,
+                  indicators: [
+                    ...cr.indicators,
                     {
-                      id: `cm_${Date.now()}`,
-                      author: "You",
-                      author_initials: "YO",
-                      when: "just now",
-                      body,
+                      id: `i_${Date.now()}`,
+                      code,
+                      description,
+                      notes: notes ?? "",
+                      score: Math.max(1, score ?? 1),
+                      target: target ?? 3,
+                      evidence: [],
+                      comments: [],
                     },
                   ],
                 }
-              : i,
+              : cr,
           ),
         })),
-      })),
-    }));
+      };
+    });
 
-  const devPlan: NonNullable<CareerLevel["development_plan"]> =
-    level.development_plan ?? [];
+  const addComment = (indId: string, body: string) =>
+    setLevel((L) => {
+      if (!L) return L;
+      return {
+        ...L,
+        competencies: L.competencies.map((c) => ({
+          ...c,
+          criteria: c.criteria.map((cr) => ({
+            ...cr,
+            indicators: cr.indicators.map((i) =>
+              i.id === indId
+                ? {
+                    ...i,
+                    comments: [
+                      ...(i.comments ?? []),
+                      {
+                        id: `cm_${Date.now()}`,
+                        author: "You",
+                        author_initials: "YO",
+                        when: "just now",
+                        body,
+                      },
+                    ],
+                  }
+                : i,
+            ),
+          })),
+        })),
+      };
+    });
+
+  const devPlan = level?.development_plan ?? [];
 
   const addDevItem = (item: {
     title: string;
@@ -309,30 +381,60 @@ export function CareerPage() {
     status: string;
     criterion_id: string | null;
   }) =>
-    setLevel((L) => ({
-      ...L,
-      development_plan: [
-        ...(L.development_plan ?? []),
-        {
-          id: `dp_${Date.now()}`,
-          title: item.title,
-          start: item.start,
-          due: item.due,
-          status: item.status as import("./career-data").DevPlanStatus,
-          criterion_id: item.criterion_id,
-        },
-      ],
-    }));
+    setLevel((L) => {
+      if (!L) return L;
+      return {
+        ...L,
+        development_plan: [
+          ...(L.development_plan ?? []),
+          {
+            id: `dp_${Date.now()}`,
+            title: item.title,
+            start: item.start,
+            due: item.due,
+            status: item.status as import("./career-data").DevPlanStatus,
+            criterion_id: item.criterion_id,
+          },
+        ],
+      };
+    });
 
   const removeDevItem = (id: string) =>
-    setLevel((L) => ({
-      ...L,
-      development_plan: (L.development_plan ?? []).filter((it) => it.id !== id),
-    }));
+    setLevel((L) => {
+      if (!L) return L;
+      return {
+        ...L,
+        development_plan: (L.development_plan ?? []).filter(
+          (it) => it.id !== id,
+        ),
+      };
+    });
+
+  // ── share handlers ────────────────────────────────────────────────────────────
+
+  const handleGenerate = async () => {
+    if (!level) return;
+    const share = await createShareLink(db, level.id);
+    setShares((s) => [share, ...s]);
+    setLevel((L) => (L ? { ...L, share_token: share.token } : L));
+  };
+
+  const handleRevoke = async () => {
+    if (!activeShare) return;
+    await revokeShareLink(db, activeShare.id);
+    setShares((s) =>
+      s.map((sh) =>
+        sh.id === activeShare.id
+          ? { ...sh, revoked_at: new Date().toISOString() }
+          : sh,
+      ),
+    );
+    setLevel((L) => (L ? { ...L, share_token: null } : L));
+  };
 
   // ── views ────────────────────────────────────────────────────────────────────
 
-  if (view === "empty") {
+  if (view === "empty" || !level) {
     return (
       <CareerEmpty
         onSeed={() => setView("active")}
@@ -373,7 +475,7 @@ export function CareerPage() {
       <div className="flex items-center gap-2 flex-wrap">
         <LevelSwitcher
           active={level}
-          archived={ARCHIVED_LEVELS}
+          archived={archivedLevels}
           onPickArchived={(a) => {
             setArchivedSelected(a);
             setView("archive-detail");
@@ -413,10 +515,10 @@ export function CareerPage() {
             className="text-[9.5px] uppercase tracking-wider font-semibold mb-2.5"
             style={{ color: "var(--muted-foreground)" }}
           >
-            Archive · {ARCHIVED_LEVELS.length} levels
+            Archive · {archivedLevels.length} levels
           </div>
           <ArchiveGrid
-            levels={ARCHIVED_LEVELS}
+            levels={archivedLevels}
             onOpen={(l) => {
               setArchivedSelected(l);
               setView("archive-detail");
@@ -499,6 +601,8 @@ export function CareerPage() {
                   placeholder="Filter indicators…"
                   className="w-[280px]"
                   aria-label="Filter indicators"
+                  value={filterQuery}
+                  onChange={(e) => setFilterQuery(e.target.value)}
                 />
                 <Button
                   variant="outline"
@@ -527,7 +631,7 @@ export function CareerPage() {
                 style={{ gridTemplateColumns: "1.6fr 1fr" }}
               >
                 <div>
-                  {level.competencies.map((c) => (
+                  {(visibleLevel ?? level).competencies.map((c) => (
                     <CompetencyBlock
                       key={c.id}
                       comp={c}
@@ -566,7 +670,7 @@ export function CareerPage() {
                 </div>
                 <WheelPanel
                   criteria={criteriaData}
-                  competencies={level.competencies}
+                  competencies={(visibleLevel ?? level).competencies}
                 />
               </div>
             </>
@@ -597,10 +701,8 @@ export function CareerPage() {
         open={shareOpen}
         onOpenChange={setShareOpen}
         level={{ ...level, share_token: shareToken }}
-        onGenerate={() =>
-          setShareToken(ACTIVE_LEVEL.share_token ?? "kxq2-8m9p-r4v0")
-        }
-        onRevoke={() => setShareToken(null)}
+        onGenerate={handleGenerate}
+        onRevoke={handleRevoke}
       />
 
       <EvidenceAddDialog
