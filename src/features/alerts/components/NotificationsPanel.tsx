@@ -179,30 +179,36 @@ export function NotificationsPanel() {
   return (
     <section className="space-y-8">
       <header>
-        <h2 className="font-semibold text-2xl tracking-tight">Notifications</h2>
-        <p className="mt-1 font-mono text-[11px] text-muted-foreground">
+        <h2 className="font-semibold text-[var(--ink)] text-xl tracking-tight">
+          Notifications
+        </h2>
+        <p className="mt-2 max-w-2xl text-[var(--body)] text-sm">
           Choose channels, route per event kind, and define quiet hours.
         </p>
       </header>
 
       <section>
-        <h3 className="font-semibold text-base tracking-tight">Channels</h3>
+        <h3 className="font-semibold text-[15px] text-[var(--ink)] tracking-tight">
+          Channels
+        </h3>
         <ul
           aria-label="Notification channels"
-          className="mt-3 divide-y divide-border overflow-hidden rounded-lg border border-border bg-card"
+          className="mt-3 divide-y divide-[var(--hairline-soft)] overflow-hidden rounded-lg border border-[var(--hairline-soft)] bg-[var(--surface-card)]"
         >
           {CHANNELS.map((c) => (
-            <li key={c.id} className="flex items-center gap-4 px-4 py-3">
+            <li key={c.id} className="flex items-center gap-3.5 px-4 py-3.5">
               <ChannelIcon kind={c.icon} />
               <div className="min-w-0 flex-1">
-                <div className="font-medium text-sm">{c.label}</div>
-                <p className="mt-0.5 text-muted-foreground text-xs">
+                <div className="font-semibold text-[14px] text-[var(--ink)]">
+                  {c.label}
+                </div>
+                <p className="mt-0.5 text-[13px] text-[var(--body)]">
                   {c.description}
                 </p>
               </div>
               <Button
                 type="button"
-                variant="outline"
+                variant="ghost"
                 size="sm"
                 aria-label={`Test ${c.label}`}
               >
@@ -221,13 +227,13 @@ export function NotificationsPanel() {
       </section>
 
       <section>
-        <h3 className="font-semibold text-base tracking-tight">
+        <h3 className="font-semibold text-[15px] text-[var(--ink)] tracking-tight">
           Per-event routing
         </h3>
-        <p className="mt-1 text-muted-foreground text-sm">
+        <p className="mt-1 text-[var(--body)] text-sm">
           Pick which channels fire for each kind of signal.
         </p>
-        <div className="mt-3 rounded-lg border border-border bg-card p-4">
+        <div className="mt-3 rounded-lg border border-[var(--hairline-soft)] bg-[var(--surface-card)] p-4">
           <NotificationMatrix
             kinds={MATRIX_KINDS}
             channels={MATRIX_CHANNELS}
@@ -239,7 +245,7 @@ export function NotificationsPanel() {
 
       <section>
         <div className="flex items-center justify-between">
-          <h3 className="font-semibold text-base tracking-tight">
+          <h3 className="font-semibold text-[15px] text-[var(--ink)] tracking-tight">
             Quiet hours
           </h3>
           <Switch
@@ -248,28 +254,26 @@ export function NotificationsPanel() {
             onCheckedChange={setQuietHoursOn}
           />
         </div>
-        <p className="mt-1 text-muted-foreground text-sm">
+        <p className="mt-1 text-[var(--body)] text-sm">
           Hold non-urgent pings during these windows. Items still land in your
           Inbox.
         </p>
         <ul
           aria-label="Quiet hours week strip"
-          className="mt-3 grid grid-cols-7 gap-2"
+          className="mt-3 grid grid-cols-7 gap-1.5"
         >
           {DAYS.map((d) => (
             <li
               key={d.id}
               className={cn(
-                "rounded-md border border-border p-3 text-center",
+                "rounded-lg p-2 text-center",
                 d.weekend
-                  ? "bg-muted text-muted-foreground"
-                  : "bg-foreground text-background",
+                  ? "bg-[var(--surface-strong)] text-[var(--muted)]"
+                  : "bg-[var(--ink)] text-white",
               )}
             >
-              <div className="font-medium text-xs uppercase tracking-wider">
-                {d.label}
-              </div>
-              <div className="mt-1 font-mono text-[11px]">
+              <div className="font-semibold text-[11px]">{d.label}</div>
+              <div className="mt-0.5 font-mono text-[10px] opacity-80">
                 {d.weekend ? "all day" : "22:00–08:00"}
               </div>
             </li>
@@ -277,20 +281,22 @@ export function NotificationsPanel() {
         </ul>
 
         <div className="mt-4">
-          <h4 className="font-medium text-sm">Allow through</h4>
+          <div className="font-mono text-[10px] text-[var(--muted)] uppercase tracking-[0.04em]">
+            Allow through
+          </div>
           <ul
             aria-label="Allow through pills"
-            className="mt-2 flex flex-wrap gap-2"
+            className="mt-1.5 flex flex-wrap gap-1.5"
           >
             {allowThrough.map((name) => (
               <li key={name}>
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-2.5 py-1 text-xs">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--primary-disabled)] px-2.5 py-1 text-[12px] text-[var(--primary-active)]">
                   {name}
                   <button
                     type="button"
                     onClick={() => onRemoveAllow(name)}
                     aria-label={`Remove ${name}`}
-                    className="text-muted-foreground hover:text-foreground"
+                    className="text-[var(--primary-active)]/70 hover:text-[var(--primary-active)]"
                   >
                     <X className="size-3" />
                   </button>
