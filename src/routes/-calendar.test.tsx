@@ -1,4 +1,5 @@
-// Calendar page — smoke, view-switch, event-kind, NOW cursor, and conflict tests.
+// Calendar page — smoke, view-switch, event-kind, account-color, NOW cursor,
+// conflict, Today→Day toggle, and multi-account rendering tests.
 
 import { render, screen, fireEvent } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
@@ -52,6 +53,7 @@ import { CalendarPage } from "#/features/calendar/components/CalendarPage";
 import { EventBlock } from "#/features/calendar/components/EventBlock";
 import { NowCursor } from "#/features/calendar/components/AgendaGrid";
 import type { CalEvent } from "#/features/calendar/components/cal-event";
+import type { StoredSignal } from "#/shared/signal";
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -62,7 +64,7 @@ const focusEvent: CalEvent = {
   end: 10.0,
   title: "Deep work block",
   kind: "focus",
-  account: "cal-work",
+  account: "acct-uuid-001",
 };
 
 const meetingEvent: CalEvent = {
@@ -72,7 +74,7 @@ const meetingEvent: CalEvent = {
   end: 10.5,
   title: "Standup Meeting",
   kind: "meeting",
-  account: "cal-work",
+  account: "acct-uuid-002",
   attendees: ["Alice", "Bob"],
 };
 
@@ -83,66 +85,137 @@ const breakEvent: CalEvent = {
   end: 14.0,
   title: "Lunch break",
   kind: "break",
-  account: "cal-personal",
+  account: "acct-uuid-003",
 };
+
+// Build a StoredSignal for a meeting event.
+function makeSignal(
+  id: string,
+  title: string,
+  accountId: string,
+  startsAt: Date,
+  durationMin = 60,
+): StoredSignal {
+  const endsAt = new Date(startsAt.getTime() + durationMin * 60000);
+  return {
+    id,
+    provider: "google",
+    kind: "meeting",
+    source_id: id,
+    title,
+    url: null,
+    payload: {
+      starts_at: startsAt.toISOString(),
+      ends_at: endsAt.toISOString(),
+    },
+    requires_action: false,
+    source_created_at: startsAt.toISOString(),
+    unread_count: 0,
+    created_at: startsAt.toISOString(),
+    updated_at: startsAt.toISOString(),
+    dismissed_at: null,
+    priority: null,
+    snoozed_until: null,
+    alert_channels_override: null,
+    tags: null,
+    account_id: accountId,
+  };
+}
 
 // ── CalendarPage smoke ────────────────────────────────────────────────────────
 
 describe("CalendarPage", () => {
-  it("renders the Calendar heading", () => {
-    render(<CalendarPage />);
+  it("renders the Calendar heading with empty signals", () => {
+    render(<CalendarPage signals={[]} />);
     expect(screen.getByRole("heading", { name: /calendar/i })).toBeTruthy();
   });
 
-  it("renders the account legend", () => {
-    render(<CalendarPage />);
-    expect(screen.getByText("Work")).toBeTruthy();
-    expect(screen.getByText("Personal")).toBeTruthy();
-    expect(screen.getByText("Team")).toBeTruthy();
-  });
-
   it("renders the view switcher buttons", () => {
-    render(<CalendarPage />);
+    render(<CalendarPage signals={[]} />);
     expect(screen.getByText("Week")).toBeTruthy();
     expect(screen.getByText("Day")).toBeTruthy();
     expect(screen.getByText("Month")).toBeTruthy();
     expect(screen.getByText("Agenda")).toBeTruthy();
   });
 
-  it("defaults to week view and shows event titles", () => {
-    render(<CalendarPage />);
-    const standups = screen.getAllByText(/standup/i);
-    expect(standups.length).toBeGreaterThan(0);
+  it("shows empty state when no signals", () => {
+    render(<CalendarPage signals={[]} />);
+    expect(screen.getByText(/no calendar events yet/i)).toBeTruthy();
   });
 
-  it("switches to agenda view and lists all days", () => {
-    render(<CalendarPage />);
-    fireEvent.click(screen.getByText("Agenda"));
-    expect(screen.getByText("Mon 4")).toBeTruthy();
-    expect(screen.getByText("Fri 8")).toBeTruthy();
+  it("shows 'No calendar accounts connected' in legend when signals is empty", () => {
+    render(<CalendarPage signals={[]} />);
+    expect(
+      screen.getByText(/no calendar accounts connected/i),
+    ).toBeTruthy();
   });
 
-  it("switches to month view and shows the month label", () => {
-    render(<CalendarPage />);
-    fireEvent.click(screen.getByText("Month"));
-    expect(screen.getByText("May 2026")).toBeTruthy();
+  it("renders events from signals in week view", () => {
+    const now = new Date();
+    const signal = makeSignal("s1", "Team Standup", "acct-work", now);
+    render(<CalendarPage signals={[signal]} />);
+    // Event block should be visible in default week view
+    expect(screen.getAllByTestId("event-block").length).toBeGreaterThan(0);
   });
 
-  it("switches to day view and shows the day label", () => {
-    render(<CalendarPage />);
-    fireEvent.click(screen.getByText("Day"));
-    expect(screen.getByText("Mon, May 4 2026")).toBeTruthy();
-  });
-
-  it("shows the meta strip with focus hours", () => {
-    render(<CalendarPage />);
+  it("shows meta strip with focus and conflict info", () => {
+    render(<CalendarPage signals={[]} />);
     expect(screen.getByText(/focus scheduled/i)).toBeTruthy();
   });
+});
 
-  it("shows conflict count in the meta strip", () => {
-    render(<CalendarPage />);
-    // getByText with substring = true to find the meta span that contains "conflict"
-    expect(screen.getAllByText(/conflict/i).length).toBeGreaterThan(0);
+// ── Today button → Day view ───────────────────────────────────────────────────
+
+describe("CalendarPage — Today→Day toggle", () => {
+  it("clicking Today switches the view to Day", () => {
+    render(<CalendarPage signals={[]} />);
+    // Default is week view; meta strip should say "Week" range
+    const todayBtn = screen.getByRole("button", { name: /today/i });
+    fireEvent.click(todayBtn);
+    // Day button should now be pressed
+    const dayBtn = screen.getByRole("button", { name: "Day" });
+    expect(dayBtn.getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("Day button aria-pressed is false in default week view", () => {
+    render(<CalendarPage signals={[]} />);
+    const dayBtn = screen.getByRole("button", { name: "Day" });
+    expect(dayBtn.getAttribute("aria-pressed")).toBe("false");
+  });
+});
+
+// ── Multi-account rendering ───────────────────────────────────────────────────
+
+describe("CalendarPage — multi-account", () => {
+  it("renders events from two different account_ids", () => {
+    const now = new Date();
+    const t1 = new Date(now);
+    t1.setHours(9, 0, 0, 0);
+    const t2 = new Date(now);
+    t2.setHours(11, 0, 0, 0);
+    const signals: StoredSignal[] = [
+      makeSignal("e-work", "Work Standup", "acct-work-uuid", t1),
+      makeSignal("e-personal", "Personal Appt", "acct-personal-uuid", t2),
+    ];
+    render(<CalendarPage signals={signals} />);
+    const blocks = screen.getAllByTestId("event-block");
+    expect(blocks.length).toBe(2);
+  });
+
+  it("shows account legend entries for each unique account_id", () => {
+    const now = new Date();
+    const t1 = new Date(now);
+    t1.setHours(9, 0, 0, 0);
+    const t2 = new Date(now);
+    t2.setHours(11, 0, 0, 0);
+    const signals: StoredSignal[] = [
+      makeSignal("e-work", "Work Standup", "account-aaa", t1),
+      makeSignal("e-personal", "Personal Appt", "account-bbb", t2),
+    ];
+    render(<CalendarPage signals={signals} />);
+    // Legend should show truncated ids (last 8 chars)
+    expect(screen.getByText("ount-aaa")).toBeTruthy();
+    expect(screen.getByText("ount-bbb")).toBeTruthy();
   });
 });
 
@@ -256,12 +329,18 @@ describe("EventDialog", () => {
   });
 });
 
-// ── Conflict rendering in CalendarPage ───────────────────────────────────────
+// ── Conflict rendering ────────────────────────────────────────────────────────
 
-describe("CalendarPage — conflict rendering", () => {
-  it("renders conflict pills on conflicting Tuesday events", () => {
-    render(<CalendarPage />);
-    // Fixture has Sprint planning + 1:1 Joon both conflict=true on day 1.
+describe("EventBlock — conflict rendering", () => {
+  it("renders conflict pills when multiple events overlap on same day", () => {
+    const now = new Date();
+    const t = new Date(now);
+    t.setHours(10, 0, 0, 0);
+    const signals: StoredSignal[] = [
+      makeSignal("c1", "Sprint planning", "acct-work", t, 60),
+      makeSignal("c2", "1:1 Joon", "acct-work", t, 30),
+    ];
+    render(<CalendarPage signals={signals} />);
     const pills = screen.getAllByTestId("conflict-pill");
     expect(pills.length).toBe(2);
   });

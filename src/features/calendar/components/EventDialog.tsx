@@ -17,10 +17,19 @@ import {
   DialogContent,
   DialogTitle,
 } from "#/components/ui/dialog";
+import { accountColor } from "#/features/calendar/account-color";
 import type { CalEvent } from "./cal-event";
-import { accountFor, fmtCalHour } from "./cal-event";
+import { fmtCalHour } from "./cal-event";
 
-const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri"];
+const DAY_LABELS = [
+  "Mon",
+  "Tue",
+  "Wed",
+  "Thu",
+  "Fri",
+  "Sat",
+  "Sun",
+];
 
 type Props = {
   event: CalEvent | null;
@@ -38,7 +47,7 @@ export function EventDialog({ event, onOpenChange }: Props) {
     }
   }, [event]);
 
-  const acc = event ? accountFor(event.account) : accountFor("cal-work");
+  const { background: accentColor } = accountColor(event?.account ?? "");
   const isFocus = event?.kind === "focus";
   const dayLabel = event ? (DAY_LABELS[event.day] ?? "") : "";
   const isVideoLink = Boolean(event?.location?.startsWith("http"));
@@ -67,7 +76,7 @@ export function EventDialog({ event, onOpenChange }: Props) {
                   width: 12,
                   height: 36,
                   borderRadius: 3,
-                  background: acc.color,
+                  background: accentColor,
                   marginTop: 3,
                   flexShrink: 0,
                 }}
@@ -92,19 +101,7 @@ export function EventDialog({ event, onOpenChange }: Props) {
                   }}
                 >
                   {dayLabel} · {fmtCalHour(event.start)} –{" "}
-                  {fmtCalHour(event.end)} ·{" "}
-                  <span style={{ color: "var(--foreground)" }}>
-                    {acc.short}
-                  </span>{" "}
-                  <span
-                    style={{
-                      fontFamily: "var(--font-mono)",
-                      fontSize: 11,
-                      color: "var(--muted-foreground)",
-                    }}
-                  >
-                    ({acc.label})
-                  </span>
+                  {fmtCalHour(event.end)}
                 </div>
               </div>
               <Button

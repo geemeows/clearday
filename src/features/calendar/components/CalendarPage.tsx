@@ -1,266 +1,137 @@
 // Calendar page — week / day / month / agenda views.
-// Fixture data is inline; real data wiring (calendar signals API) is a follow-up.
+// Events come from the route loader via StoredSignal[]; all fixture data removed.
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
 import { Button } from "#/components/ui/button";
-import type { CalEvent } from "./cal-event";
-import { CAL_ACCOUNTS } from "./cal-event";
+import { accountColor } from "#/features/calendar/account-color";
+import {
+  eventsByMonthGrid,
+  eventsForDay,
+  localDayStart,
+  toMeetingEvents,
+} from "#/features/calendar/events";
+import type { StoredSignal } from "#/shared/signal";
 import { AgendaGrid, DayTimeline } from "./AgendaGrid";
 import { AgendaView } from "./AgendaView";
 import { EventDialog } from "./EventDialog";
 import { MonthView } from "./MonthView";
+import type { CalEvent, CalEventKind } from "./cal-event";
+import { buildConflictLayout } from "./cal-event";
 
-// ── Fixture events ────────────────────────────────────────────────────────────
-// day: 0=Mon, 1=Tue, 2=Wed, 3=Thu, 4=Fri (Mon-start week, May 4–8 2026)
-// start/end: decimal hours (9.75 = 09:45)
-
-const EVENTS: CalEvent[] = [
-  // Monday (today)
-  {
-    id: "e1",
-    day: 0,
-    start: 9.0,
-    end: 9.75,
-    title: "Deep work — Slack adapter",
-    kind: "focus",
-    account: "cal-work",
-  },
-  {
-    id: "e2",
-    day: 0,
-    start: 10.0,
-    end: 10.25,
-    title: "Standup",
-    kind: "meeting",
-    account: "cal-work",
-    attendees: ["Priya M.", "Joon K.", "Sam R.", "+ 3"],
-    location: "https://meet.google.com/abc-defg-hij",
-    agenda: "Round-robin: yesterday / today / blockers.",
-  },
-  {
-    id: "e3",
-    day: 0,
-    start: 11.0,
-    end: 11.5,
-    title: "1:1 — Maria",
-    kind: "meeting",
-    account: "cal-work",
-    attendees: ["Maria L."],
-    location: "https://meet.google.com/xyz-vwxy-zab",
-    notes: "Career conversation continues — share L5 wheel snapshot.",
-  },
-  {
-    id: "e4",
-    day: 0,
-    start: 11.75,
-    end: 13.0,
-    title: "Deep work — DEV-441",
-    kind: "focus",
-    account: "cal-work",
-  },
-  {
-    id: "e5",
-    day: 0,
-    start: 13.0,
-    end: 14.0,
-    title: "Lunch w/ Alex",
-    kind: "personal",
-    account: "cal-personal",
-    location: "Roma Caffè",
-  },
-  {
-    id: "e6",
-    day: 0,
-    start: 14.0,
-    end: 14.75,
-    title: "Design review — onboarding",
-    kind: "meeting",
-    account: "cal-team",
-    attendees: ["Priya M.", "Joon K.", "Design team"],
-    location: "https://meet.google.com/def-ghij-klm",
-    agenda: "Walk through onboarding v3 hi-fi flow.",
-  },
-  {
-    id: "e7",
-    day: 0,
-    start: 15.0,
-    end: 16.5,
-    title: "Deep work — briefing prompt",
-    kind: "focus",
-    account: "cal-work",
-  },
-  {
-    id: "e8",
-    day: 0,
-    start: 18.0,
-    end: 19.0,
-    title: "Gym",
-    kind: "personal",
-    account: "cal-personal",
-  },
-  // Tuesday — Sprint planning + 1:1 conflict
-  {
-    id: "e9",
-    day: 1,
-    start: 10.0,
-    end: 11.0,
-    title: "Sprint planning",
-    kind: "meeting",
-    account: "cal-work",
-    conflict: true,
-  },
-  {
-    id: "e10",
-    day: 1,
-    start: 10.0,
-    end: 10.5,
-    title: "1:1 — Joon",
-    kind: "meeting",
-    account: "cal-work",
-    conflict: true,
-    notes: "Re-schedule — conflicts with sprint planning.",
-  },
-  {
-    id: "e11",
-    day: 1,
-    start: 13.0,
-    end: 14.5,
-    title: "Deep work — review queue",
-    kind: "focus",
-    account: "cal-work",
-  },
-  {
-    id: "e12",
-    day: 1,
-    start: 15.0,
-    end: 15.5,
-    title: "Office hours",
-    kind: "meeting",
-    account: "cal-team",
-  },
-  // Wednesday
-  {
-    id: "e13",
-    day: 2,
-    start: 9.0,
-    end: 11.0,
-    title: "Deep work — quiet hours arc",
-    kind: "focus",
-    account: "cal-work",
-  },
-  {
-    id: "e14",
-    day: 2,
-    start: 11.0,
-    end: 11.5,
-    title: "Architecture sync",
-    kind: "meeting",
-    account: "cal-team",
-  },
-  {
-    id: "e15",
-    day: 2,
-    start: 14.0,
-    end: 15.0,
-    title: "Eng all-hands",
-    kind: "meeting",
-    account: "cal-team",
-  },
-  {
-    id: "e16",
-    day: 2,
-    start: 19.0,
-    end: 20.0,
-    title: "Dinner",
-    kind: "personal",
-    account: "cal-personal",
-  },
-  // Thursday
-  {
-    id: "e17",
-    day: 3,
-    start: 9.0,
-    end: 9.25,
-    title: "Standup",
-    kind: "meeting",
-    account: "cal-work",
-  },
-  {
-    id: "e18",
-    day: 3,
-    start: 10.0,
-    end: 12.0,
-    title: "Deep work",
-    kind: "focus",
-    account: "cal-work",
-  },
-  {
-    id: "e19",
-    day: 3,
-    start: 14.0,
-    end: 15.0,
-    title: "PR review window",
-    kind: "focus",
-    account: "cal-work",
-  },
-  // Friday
-  {
-    id: "e20",
-    day: 4,
-    start: 9.0,
-    end: 9.25,
-    title: "Standup",
-    kind: "meeting",
-    account: "cal-work",
-  },
-  {
-    id: "e21",
-    day: 4,
-    start: 11.0,
-    end: 11.5,
-    title: "Demo",
-    kind: "meeting",
-    account: "cal-team",
-  },
-  {
-    id: "e22",
-    day: 4,
-    start: 14.0,
-    end: 16.0,
-    title: "Deep work — ship",
-    kind: "focus",
-    account: "cal-work",
-  },
-];
-
-// ── Day-set configs ───────────────────────────────────────────────────────────
-
-type DayCfg = {
-  labels: string[];
-  todayIndex: number;
-  eventDayOffset: number;
-};
-
-const DAY_SETS: Record<string, DayCfg> = {
-  sun: {
-    labels: ["Sun 3", "Mon 4", "Tue 5", "Wed 6", "Thu 7", "Fri 8", "Sat 9"],
-    todayIndex: 1,
-    eventDayOffset: 1,
-  },
-  mon: {
-    labels: ["Mon 4", "Tue 5", "Wed 6", "Thu 7", "Fri 8"],
-    todayIndex: 0,
-    eventDayOffset: 0,
-  },
-  sat: {
-    labels: ["Sat 2", "Sun 3", "Mon 4", "Tue 5", "Wed 6", "Thu 7", "Fri 8"],
-    todayIndex: 2,
-    eventDayOffset: 2,
-  },
-};
+// ── Types ─────────────────────────────────────────────────────────────────────
 
 type CalView = "week" | "day" | "month" | "agenda";
+
+// ── Date helpers ──────────────────────────────────────────────────────────────
+
+function getMondayOf(d: Date): Date {
+  const date = new Date(d);
+  date.setHours(0, 0, 0, 0);
+  // JS: 0=Sun, 1=Mon … 6=Sat → offset to Monday
+  const day = date.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  date.setDate(date.getDate() + diff);
+  return date;
+}
+
+function fmt(d: Date, opts: Intl.DateTimeFormatOptions): string {
+  return d.toLocaleDateString("en-US", opts);
+}
+
+function headerLabel(view: CalView, anchor: Date, weekMonday: Date): string {
+  if (view === "day") {
+    return fmt(anchor, {
+      weekday: "short",
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+    });
+  }
+  if (view === "month") {
+    return fmt(anchor, { month: "long", year: "numeric" });
+  }
+  // week / agenda: Mon–Sun range
+  const weekSun = new Date(weekMonday);
+  weekSun.setDate(weekMonday.getDate() + 6);
+  return `${fmt(weekMonday, { month: "short", day: "numeric" })} – ${fmt(weekSun, { month: "short", day: "numeric", year: "numeric" })}`;
+}
+
+// ── Converter: MeetingEvent → CalEvent ────────────────────────────────────────
+
+function toCalEvents(
+  meetingEvents: ReturnType<typeof toMeetingEvents>,
+  weekMonday: Date,
+): CalEvent[] {
+  const monStart = localDayStart(weekMonday).getTime();
+  const result: CalEvent[] = [];
+  for (const ev of meetingEvents) {
+    const evDay = localDayStart(ev.startsAt).getTime();
+    const day = Math.round((evDay - monStart) / 86400000);
+    if (day < 0 || day > 6) continue;
+    const kind: CalEventKind = ev.isFocus ? "focus" : "meeting";
+    result.push({
+      id: ev.signal.id,
+      day,
+      start: ev.startsAt.getHours() + ev.startsAt.getMinutes() / 60,
+      end: ev.endsAt.getHours() + ev.endsAt.getMinutes() / 60,
+      title: ev.signal.title,
+      kind,
+      account: ev.signal.account_id ?? "__unknown__",
+      location:
+        typeof ev.signal.payload?.location === "string"
+          ? (ev.signal.payload.location as string)
+          : ev.videoLink ?? undefined,
+      attendees: Array.isArray(ev.signal.payload?.attendees)
+        ? (ev.signal.payload.attendees as string[])
+        : undefined,
+      notes:
+        typeof ev.signal.payload?.notes === "string"
+          ? (ev.signal.payload.notes as string)
+          : undefined,
+      agenda:
+        typeof ev.signal.payload?.agenda === "string"
+          ? (ev.signal.payload.agenda as string)
+          : undefined,
+    });
+  }
+  return result;
+}
+
+// Single-day CalEvents with day=0 (for DayTimeline single-column layout).
+function toDayCalEvents(
+  meetingEvents: ReturnType<typeof toMeetingEvents>,
+  anchorDay: Date,
+): CalEvent[] {
+  const dayEvents = eventsForDay(meetingEvents, anchorDay);
+  return dayEvents.map((ev) => {
+    const kind: CalEventKind = ev.isFocus ? "focus" : "meeting";
+    return {
+      id: ev.signal.id,
+      day: 0,
+      start: ev.startsAt.getHours() + ev.startsAt.getMinutes() / 60,
+      end: ev.endsAt.getHours() + ev.endsAt.getMinutes() / 60,
+      title: ev.signal.title,
+      kind,
+      account: ev.signal.account_id ?? "__unknown__",
+      location:
+        typeof ev.signal.payload?.location === "string"
+          ? (ev.signal.payload.location as string)
+          : ev.videoLink ?? undefined,
+      attendees: Array.isArray(ev.signal.payload?.attendees)
+        ? (ev.signal.payload.attendees as string[])
+        : undefined,
+      notes:
+        typeof ev.signal.payload?.notes === "string"
+          ? (ev.signal.payload.notes as string)
+          : undefined,
+      agenda:
+        typeof ev.signal.payload?.agenda === "string"
+          ? (ev.signal.payload.agenda as string)
+          : undefined,
+    };
+  });
+}
 
 // ── Derived stats ─────────────────────────────────────────────────────────────
 
@@ -271,10 +142,12 @@ function focusHours(events: CalEvent[]): number {
 }
 
 function conflictCount(events: CalEvent[]): number {
-  const ids = new Set(events.filter((e) => e.conflict).map((e) => e.id));
-  // Pairs: each conflict event participates in at least one conflict pair.
-  // For simplicity, count unique conflicting events / 2.
-  return Math.floor(ids.size / 2);
+  const layout = buildConflictLayout(events);
+  const conflicting = new Set<string>();
+  for (const [id, slot] of layout) {
+    if (slot.of > 1) conflicting.add(id);
+  }
+  return Math.floor(conflicting.size / 2);
 }
 
 // ── KindLegend ────────────────────────────────────────────────────────────────
@@ -284,20 +157,15 @@ function KindLegend({
   pattern,
 }: {
   label: string;
-  pattern: "solid" | "outline" | "stripes";
+  pattern: "solid" | "stripes";
 }) {
   const bgStyle =
-    pattern === "outline"
+    pattern === "stripes"
       ? {
-          background: "transparent",
-          border: "1.5px solid var(--border-strong, var(--border))",
+          backgroundImage:
+            "repeating-linear-gradient(45deg, rgba(220,38,38,0.18) 0 6px, transparent 6px 10px)",
         }
-      : pattern === "stripes"
-        ? {
-            backgroundImage:
-              "repeating-linear-gradient(45deg, rgba(220,38,38,0.18) 0 6px, transparent 6px 10px)",
-          }
-        : { background: "var(--foreground)" };
+      : { background: "var(--foreground)" };
 
   return (
     <span
@@ -320,21 +188,95 @@ function KindLegend({
 
 // ── CalendarPage ──────────────────────────────────────────────────────────────
 
-export function CalendarPage() {
+type Props = { signals: StoredSignal[] };
+
+export function CalendarPage({ signals }: Props) {
   const [view, setView] = useState<CalView>("week");
+  const [anchor, setAnchor] = useState<Date>(() => new Date());
   const [selectedEvent, setSelectedEvent] = useState<CalEvent | null>(null);
 
-  // Fixed to Mon-start week for the fixture.
-  const cfg: DayCfg = DAY_SETS.mon;
-  const focusH = focusHours(EVENTS);
-  const conflicts = conflictCount(EVENTS);
+  const meetingEvents = useMemo(() => toMeetingEvents(signals), [signals]);
 
-  const headerLabel =
-    view === "day"
-      ? "Mon, May 4 2026"
-      : view === "month"
-        ? "May 2026"
-        : "May 4 – 8, 2026";
+  const weekMonday = useMemo(() => getMondayOf(anchor), [anchor]);
+
+  const weekCalEvents = useMemo(
+    () => toCalEvents(meetingEvents, weekMonday),
+    [meetingEvents, weekMonday],
+  );
+
+  const dayCalEvents = useMemo(
+    () => toDayCalEvents(meetingEvents, anchor),
+    [meetingEvents, anchor],
+  );
+
+  const monthCells = useMemo(
+    () => eventsByMonthGrid(meetingEvents, anchor),
+    [meetingEvents, anchor],
+  );
+
+  // Day labels for AgendaGrid / AgendaView: 7 days Mon–Sun
+  const dayLabels = useMemo(() => {
+    const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(weekMonday);
+      d.setDate(weekMonday.getDate() + i);
+      return `${DAYS[d.getDay()]} ${d.getDate()}`;
+    });
+  }, [weekMonday]);
+
+  // Index of today in the current week (0=Mon … 6=Sun), or -1 if not this week.
+  const todayIndex = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const diff = Math.round(
+      (today.getTime() - weekMonday.getTime()) / 86400000,
+    );
+    return diff >= 0 && diff <= 6 ? diff : -1;
+  }, [weekMonday]);
+
+  const hLabel = headerLabel(view, anchor, weekMonday);
+  const focusH = focusHours(weekCalEvents);
+  const conflicts = conflictCount(weekCalEvents);
+
+  // Unique account ids in the current dataset (for the legend)
+  const accountIds = useMemo(() => {
+    const seen = new Map<string, number>();
+    for (const ev of meetingEvents) {
+      const id = ev.signal.account_id ?? "__unknown__";
+      if (!seen.has(id)) seen.set(id, seen.size);
+    }
+    return [...seen.entries()];
+  }, [meetingEvents]);
+
+  // Navigation
+  const goToday = () => {
+    setAnchor(new Date());
+    setView("day");
+  };
+
+  const goPrev = () => {
+    setAnchor((prev) => {
+      const d = new Date(prev);
+      if (view === "month") {
+        d.setMonth(d.getMonth() - 1);
+      } else {
+        d.setDate(d.getDate() - 7);
+      }
+      return d;
+    });
+  };
+
+  const goNext = () => {
+    setAnchor((prev) => {
+      const d = new Date(prev);
+      if (view === "month") {
+        d.setMonth(d.getMonth() + 1);
+      } else {
+        d.setDate(d.getDate() + 7);
+      }
+      return d;
+    });
+  };
 
   return (
     <main className="flex-1 overflow-auto" aria-label="Calendar">
@@ -368,13 +310,23 @@ export function CalendarPage() {
           <span style={{ flex: 1 }} />
 
           {/* Today + navigation */}
-          <Button variant="outline" size="sm">
+          <Button variant="outline" size="sm" onClick={goToday}>
             Today
           </Button>
-          <Button variant="ghost" size="icon-sm" aria-label="Previous">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Previous"
+            onClick={goPrev}
+          >
             <ChevronLeftIcon />
           </Button>
-          <Button variant="ghost" size="icon-sm" aria-label="Next">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Next"
+            onClick={goNext}
+          >
             <ChevronRightIcon />
           </Button>
 
@@ -454,11 +406,9 @@ export function CalendarPage() {
               color: "var(--foreground)",
             }}
           >
-            {headerLabel}
+            {hLabel}
           </span>
-          <span
-            style={{ fontSize: 12, color: "var(--muted-foreground)" }}
-          >
+          <span style={{ fontSize: 12, color: "var(--muted-foreground)" }}>
             {conflicts} conflict{conflicts !== 1 ? "s" : ""} ·{" "}
             {focusH.toFixed(1)}h focus scheduled
           </span>
@@ -490,41 +440,45 @@ export function CalendarPage() {
           >
             Accounts
           </span>
-          {CAL_ACCOUNTS.map((a) => (
-            <span
-              key={a.id}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 6,
-                fontSize: 12,
-              }}
-            >
-              <span
-                aria-hidden
-                style={{
-                  width: 10,
-                  height: 10,
-                  borderRadius: 3,
-                  background: a.color,
-                }}
-              />
-              <span
-                style={{ color: "var(--foreground)", fontWeight: 500 }}
-              >
-                {a.short}
-              </span>
-              <span
-                style={{
-                  fontFamily: "var(--font-mono)",
-                  fontSize: 10.5,
-                  color: "var(--muted-foreground)",
-                }}
-              >
-                {a.label}
-              </span>
+          {accountIds.length === 0 ? (
+            <span style={{ fontSize: 12, color: "var(--muted-foreground)" }}>
+              No calendar accounts connected
             </span>
-          ))}
+          ) : (
+            accountIds.map(([id, ordinal]) => {
+              const { background } = accountColor(id, ordinal);
+              return (
+                <span
+                  key={id}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    fontSize: 12,
+                  }}
+                >
+                  <span
+                    aria-hidden
+                    style={{
+                      width: 10,
+                      height: 10,
+                      borderRadius: 3,
+                      background,
+                    }}
+                  />
+                  <span
+                    style={{
+                      fontFamily: "var(--font-mono)",
+                      fontSize: 10.5,
+                      color: "var(--muted-foreground)",
+                    }}
+                  >
+                    {id === "__unknown__" ? "Unknown" : id.slice(-8)}
+                  </span>
+                </span>
+              );
+            })
+          )}
           <span style={{ flex: 1 }} />
           <span
             style={{
@@ -538,32 +492,51 @@ export function CalendarPage() {
             Kind
           </span>
           <KindLegend label="Focus" pattern="solid" />
-          <KindLegend label="Meeting" pattern="outline" />
           <KindLegend label="Conflict" pattern="stripes" />
         </div>
 
+        {/* Empty state */}
+        {meetingEvents.length === 0 && (
+          <div
+            style={{
+              padding: "48px 32px",
+              textAlign: "center",
+              color: "var(--muted-foreground)",
+              fontSize: 14,
+              background: "var(--surface-card)",
+              border: "1px solid var(--border)",
+              borderRadius: "var(--radius-lg)",
+            }}
+          >
+            No calendar events yet. Connect a Google Calendar account in
+            Settings → Integrations.
+          </div>
+        )}
+
         {/* Active view */}
-        {view === "week" && (
+        {meetingEvents.length > 0 && view === "week" && (
           <AgendaGrid
-            days={cfg.labels}
-            todayIndex={cfg.todayIndex}
-            eventDayOffset={cfg.eventDayOffset}
-            events={EVENTS}
+            days={dayLabels}
+            todayIndex={todayIndex}
+            eventDayOffset={0}
+            events={weekCalEvents}
             onEventClick={setSelectedEvent}
           />
         )}
-        {view === "day" && (
+        {meetingEvents.length > 0 && view === "day" && (
           <DayTimeline
-            events={EVENTS}
+            events={dayCalEvents}
             onEventClick={setSelectedEvent}
           />
         )}
-        {view === "month" && <MonthView events={EVENTS} />}
-        {view === "agenda" && (
+        {meetingEvents.length > 0 && view === "month" && (
+          <MonthView cells={monthCells} />
+        )}
+        {meetingEvents.length > 0 && view === "agenda" && (
           <AgendaView
-            days={cfg.labels}
-            eventDayOffset={cfg.eventDayOffset}
-            events={EVENTS}
+            days={dayLabels}
+            eventDayOffset={0}
+            events={weekCalEvents}
             onEventClick={setSelectedEvent}
           />
         )}

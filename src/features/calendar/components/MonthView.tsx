@@ -1,27 +1,16 @@
 // Month view — 7-column grid with day numbers and event chips.
-// Fixed to the May 2026 fixture layout (May 1 = Thursday, col offset 3).
+// Accepts MonthCell[] from eventsByMonthGrid (events.ts) so the grid
+// layout is correct for any month in any year, not just May 2026.
 
-import type { CalEvent } from "./cal-event";
+import type { MonthCell } from "#/features/calendar/events";
 
 const WEEK_HEADERS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
-type Props = { events: CalEvent[] };
+type Props = { cells: MonthCell[] };
 
-export function MonthView({ events }: Props) {
-  // May 2026: 31 days, starts Thursday (Mon-start grid → col index 3).
-  // 5 rows × 7 cols = 35 cells; pad 3 cells at start for Mon/Tue/Wed before May 1.
-  const cells = Array.from({ length: 35 });
-
-  // Map "day number in May" → event titles for quick lookup.
-  // The fixture uses 0-indexed Monday week; May 4 = Monday → dayNum 4.
-  const eventsByDay = new Map<number, string[]>();
-  for (const e of events) {
-    // e.day=0 → Mon May 4, so dayNum = e.day + 4
-    const dayNum = e.day + 4;
-    const bucket = eventsByDay.get(dayNum) ?? [];
-    bucket.push(e.title);
-    eventsByDay.set(dayNum, bucket);
-  }
+export function MonthView({ cells }: Props) {
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${today.getMonth()}-${today.getDate()}`;
 
   return (
     <div
@@ -72,16 +61,15 @@ export function MonthView({ events }: Props) {
           gridAutoRows: 96,
         }}
       >
-        {cells.map((_, i) => {
-          // i=0..2 → before May 1 (padding cells); i=3 → May 1 (Thu)
-          const dayNum = i - 2; // i=3 → dayNum=1
-          const inMonth = dayNum >= 1 && dayNum <= 31;
-          const isToday = dayNum === 4; // May 4 = Monday fixture "today"
-          const evts = inMonth ? (eventsByDay.get(dayNum) ?? []) : [];
+        {cells.map((cell) => {
+          const d = cell.day;
+          const cellStr = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+          const isToday = cellStr === todayStr;
+          const titles = cell.events.map((e) => e.signal.title);
 
           return (
             <div
-              key={i}
+              key={cellStr}
               style={{
                 padding: "6px 8px",
                 borderTop: "1px solid var(--hairline-soft)",
@@ -89,7 +77,7 @@ export function MonthView({ events }: Props) {
                 background: isToday
                   ? "color-mix(in oklab, var(--primary) 8%, var(--surface-card))"
                   : "var(--surface-card)",
-                opacity: inMonth ? 1 : 0.35,
+                opacity: cell.inMonth ? 1 : 0.35,
               }}
             >
               <div
@@ -99,7 +87,7 @@ export function MonthView({ events }: Props) {
                   color: isToday ? "var(--primary)" : "var(--foreground)",
                 }}
               >
-                {inMonth ? dayNum : ""}
+                {d.getDate()}
               </div>
 
               <div
@@ -110,8 +98,9 @@ export function MonthView({ events }: Props) {
                   marginTop: 3,
                 }}
               >
-                {evts.slice(0, 3).map((title, k) => (
+                {titles.slice(0, 3).map((title, k) => (
                   <span
+                    // biome-ignore lint/suspicious/noArrayIndexKey: stable, positional list
                     key={k}
                     style={{
                       fontSize: 10,

@@ -1,7 +1,8 @@
 // Agenda view — flat list of events grouped by day.
 
+import { accountColor } from "#/features/calendar/account-color";
 import type { CalEvent } from "./cal-event";
-import { accountFor, fmtCalHour } from "./cal-event";
+import { fmtCalHour } from "./cal-event";
 
 type Props = {
   days: string[];
@@ -66,7 +67,7 @@ export function AgendaView({
 
           {/* Event rows */}
           {g.events.map((e) => {
-            const acc = accountFor(e.account);
+            const { background } = accountColor(e.account);
             return (
               <button
                 key={e.id}
@@ -75,7 +76,7 @@ export function AgendaView({
                 aria-label={e.title}
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "120px auto 1fr auto",
+                  gridTemplateColumns: "120px auto 1fr",
                   gap: 12,
                   alignItems: "center",
                   width: "100%",
@@ -102,7 +103,7 @@ export function AgendaView({
                     width: 4,
                     height: 22,
                     borderRadius: 2,
-                    background: acc.color,
+                    background,
                   }}
                 />
                 <span
@@ -113,11 +114,6 @@ export function AgendaView({
                   }}
                 >
                   {e.title}
-                </span>
-                <span
-                  style={{ fontSize: 11, color: "var(--muted-foreground)" }}
-                >
-                  {acc.short}
                 </span>
               </button>
             );
