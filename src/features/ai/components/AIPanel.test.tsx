@@ -3,15 +3,9 @@ import { describe, expect, it, vi } from "vitest";
 import { AIPanel } from "#/features/ai/components/AIPanel";
 
 describe("AIPanel", () => {
-  it("renders the five provider tiles with model names in mono", () => {
+  it("renders four provider tiles", () => {
     render(<AIPanel />);
-    for (const name of [
-      "Anthropic",
-      "OpenAI",
-      "Google",
-      "Groq",
-      "Local Ollama",
-    ]) {
+    for (const name of ["Anthropic", "OpenAI", "Google", "Groq"]) {
       expect(
         screen.getByRole("button", { name: new RegExp(name, "i") }),
       ).toBeTruthy();
@@ -30,6 +24,21 @@ describe("AIPanel", () => {
     expect(anthropic.getAttribute("aria-pressed")).toBe("false");
   });
 
+  it("renders PRIMARY MODEL and FALLBACK MODEL selects", () => {
+    render(<AIPanel />);
+    expect(screen.getByRole("combobox", { name: /primary model/i })).toBeTruthy();
+    expect(screen.getByRole("combobox", { name: /fallback model/i })).toBeTruthy();
+  });
+
+  it("switching provider resets primary to first model of that provider", () => {
+    render(<AIPanel />);
+    fireEvent.click(screen.getByRole("button", { name: /openai/i }));
+    const primary = screen.getByRole("combobox", {
+      name: /primary model/i,
+    }) as unknown as HTMLSelectElement;
+    expect(primary.value).toBe("gpt-4o");
+  });
+
   it("renders the API key input as type=password", () => {
     render(<AIPanel />);
     const input = screen.getByLabelText("API key") as HTMLInputElement;
@@ -44,6 +53,22 @@ describe("AIPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: /validate/i }));
     await waitFor(() => expect(validator).toHaveBeenCalledWith("sk-test-123"));
     expect(await screen.findByText(/last validated/i)).toBeTruthy();
+  });
+
+  it("renders the monthly budget section with spend and cap", () => {
+    render(<AIPanel />);
+    const section = screen.getByRole("region", { name: /monthly budget/i });
+    expect(section).toBeTruthy();
+    expect(section.textContent).toContain("$8.41");
+    expect(section.textContent).toContain("of $25.00 cap");
+  });
+
+  it("renders the monthly cap input and fallback threshold select", () => {
+    render(<AIPanel />);
+    const capInput = screen.getByLabelText(/monthly cap/i) as HTMLInputElement;
+    expect(capInput.type).toBe("number");
+    expect(capInput.value).toBe("25");
+    expect(screen.getByRole("combobox", { name: /fallback threshold/i })).toBeTruthy();
   });
 
   it("renders five privacy toggles and toggling one updates its checked state", () => {
@@ -61,10 +86,5 @@ describe("AIPanel", () => {
     expect(toggle.getAttribute("aria-checked")).toBe("false");
     fireEvent.click(toggle);
     expect(toggle.getAttribute("aria-checked")).toBe("true");
-  });
-
-  it("renders the monthly budget card", () => {
-    render(<AIPanel />);
-    expect(screen.getByLabelText("Monthly budget")).toBeTruthy();
   });
 });
