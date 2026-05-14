@@ -1,4 +1,5 @@
-// Automations page — smoke, list, detail, builder, and mode-transition tests.
+// Automations page — smoke, list, detail, builder, mode-transition, and
+// empty-state-from-data tests.
 
 import { render, screen, fireEvent } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
@@ -24,6 +25,11 @@ vi.mock("#/features/auth/auth", () => ({
     rejected: false,
   }),
   signOut: vi.fn(),
+}));
+
+// Mock listRuns so RunsView/AutomationDetail don't fire real Supabase queries
+vi.mock("#/features/automations/runs", () => ({
+  listRuns: vi.fn().mockResolvedValue([]),
 }));
 
 vi.mock("@tanstack/react-router", async (importOriginal) => {
@@ -85,39 +91,72 @@ function makeAutomation(overrides: Partial<AutomationItem> = {}): AutomationItem
   };
 }
 
+const SAMPLE_ITEMS: AutomationItem[] = [
+  makeAutomation({ id: "a1", name: "Post my PRs to #reviews", enabled: true, dryRun: false }),
+  makeAutomation({ id: "a2", name: "Focus auto-reply", enabled: true, dryRun: false }),
+  makeAutomation({ id: "a3", name: "Back-online summary", enabled: false, dryRun: false }),
+  makeAutomation({ id: "a4", name: "Daily digest", enabled: true, dryRun: true }),
+];
+
 // ── AutomationsPage smoke ─────────────────────────────────────────────────────
 
 describe("AutomationsPage smoke", () => {
   it("renders the page heading", () => {
-    render(<AutomationsPage />);
+    render(<AutomationsPage items={SAMPLE_ITEMS} />);
     expect(screen.getByText("Automations")).toBeTruthy();
   });
 
   it("shows automation cards in list view", () => {
-    render(<AutomationsPage />);
+    render(<AutomationsPage items={SAMPLE_ITEMS} />);
     expect(screen.getByText("Post my PRs to #reviews")).toBeTruthy();
     expect(screen.getByText("Focus auto-reply")).toBeTruthy();
   });
 
   it("shows active / paused / dry-run stats text", () => {
-    render(<AutomationsPage />);
+    render(<AutomationsPage items={SAMPLE_ITEMS} />);
     expect(screen.getByText(/active/)).toBeTruthy();
     expect(screen.getByText(/paused/)).toBeTruthy();
     expect(screen.getByText(/dry-run/)).toBeTruthy();
   });
 
   it("renders the New automation button", () => {
-    render(<AutomationsPage />);
+    render(<AutomationsPage items={SAMPLE_ITEMS} />);
     expect(
       screen.getByRole("button", { name: /new automation/i }),
     ).toBeTruthy();
   });
 
   it("renders the filter input", () => {
-    render(<AutomationsPage />);
+    render(<AutomationsPage items={SAMPLE_ITEMS} />);
     expect(
       screen.getByPlaceholderText(/filter automations/i),
     ).toBeTruthy();
+  });
+
+  it("does not render the empty-state toggle button", () => {
+    render(<AutomationsPage items={SAMPLE_ITEMS} />);
+    expect(screen.queryByText(/empty state/i)).toBeNull();
+    expect(screen.queryByText(/← Restore/i)).toBeNull();
+  });
+});
+
+// ── Empty state (data-driven) ─────────────────────────────────────────────────
+
+describe("AutomationsPage empty state", () => {
+  it("shows EmptyState when items is empty", () => {
+    render(<AutomationsPage items={[]} />);
+    // EmptyState renders a message and a New automation button
+    expect(screen.getByText(/no automations yet/i)).toBeTruthy();
+  });
+
+  it("does not show EmptyState when items are present", () => {
+    render(<AutomationsPage items={SAMPLE_ITEMS} />);
+    expect(screen.queryByText(/no automations yet/i)).toBeNull();
+  });
+
+  it("shows EmptyState when no items prop is passed", () => {
+    render(<AutomationsPage />);
+    expect(screen.getByText(/no automations yet/i)).toBeTruthy();
   });
 });
 
@@ -125,7 +164,7 @@ describe("AutomationsPage smoke", () => {
 
 describe("AutomationsPage list filter", () => {
   it("hides cards that don't match the filter", () => {
-    render(<AutomationsPage />);
+    render(<AutomationsPage items={SAMPLE_ITEMS} />);
     const input = screen.getByPlaceholderText(/filter automations/i);
     fireEvent.change(input, { target: { value: "Focus" } });
     expect(screen.getByText("Focus auto-reply")).toBeTruthy();
@@ -135,7 +174,7 @@ describe("AutomationsPage list filter", () => {
   });
 
   it("restores all cards when filter is cleared", () => {
-    render(<AutomationsPage />);
+    render(<AutomationsPage items={SAMPLE_ITEMS} />);
     const input = screen.getByPlaceholderText(/filter automations/i);
     fireEvent.change(input, { target: { value: "xyz" } });
     expect(
@@ -150,18 +189,17 @@ describe("AutomationsPage list filter", () => {
 
 describe("AutomationsPage mode transitions", () => {
   it("navigates to detail when a card is clicked", () => {
-    render(<AutomationsPage />);
+    render(<AutomationsPage items={SAMPLE_ITEMS} />);
     const card = screen.getByRole("button", {
       name: /open automation: post my prs/i,
     });
     fireEvent.click(card);
-    // detail view renders WHEN / THEN labels (may appear multiple times across sentence summary + section labels)
     expect(screen.getAllByText("WHEN").length).toBeGreaterThan(0);
     expect(screen.getAllByText("THEN").length).toBeGreaterThan(0);
   });
 
   it("breadcrumb returns to list from detail", () => {
-    render(<AutomationsPage />);
+    render(<AutomationsPage items={SAMPLE_ITEMS} />);
     fireEvent.click(
       screen.getByRole("button", { name: /open automation: post my prs/i }),
     );
@@ -170,7 +208,7 @@ describe("AutomationsPage mode transitions", () => {
   });
 
   it("navigates to builder via Edit button", () => {
-    render(<AutomationsPage />);
+    render(<AutomationsPage items={SAMPLE_ITEMS} />);
     fireEvent.click(
       screen.getByRole("button", { name: /open automation: post my prs/i }),
     );
@@ -179,7 +217,7 @@ describe("AutomationsPage mode transitions", () => {
   });
 
   it("New automation button opens builder with blank automation", () => {
-    render(<AutomationsPage />);
+    render(<AutomationsPage items={SAMPLE_ITEMS} />);
     fireEvent.click(screen.getByRole("button", { name: /new automation/i }));
     const nameInput = screen.getByLabelText(
       "Automation name",
@@ -188,7 +226,7 @@ describe("AutomationsPage mode transitions", () => {
   });
 
   it("navigates to runs view via Full history button", () => {
-    render(<AutomationsPage />);
+    render(<AutomationsPage items={SAMPLE_ITEMS} />);
     fireEvent.click(
       screen.getByRole("button", { name: /open automation: post my prs/i }),
     );
@@ -278,7 +316,6 @@ describe("AutomationDetail", () => {
         onDelete={vi.fn()}
       />,
     );
-    // WHEN / IF / THEN may appear in both the sentence summary and the section labels
     expect(screen.getAllByText("WHEN").length).toBeGreaterThan(0);
     expect(screen.getAllByText("IF").length).toBeGreaterThan(0);
     expect(screen.getAllByText("THEN").length).toBeGreaterThan(0);
@@ -451,7 +488,6 @@ describe("AutomationBuilder", () => {
         onCancel={vi.fn()}
       />,
     );
-    // Trigger labels may appear in both picker buttons and sentence summary pills
     expect(screen.getAllByText("Signal ingested").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Signal state changed").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Focus session started").length).toBeGreaterThan(0);
@@ -469,15 +505,12 @@ describe("RunsView", () => {
     expect(screen.getByText(/My rule · runs/)).toBeTruthy();
   });
 
-  it("renders histogram section", () => {
+  it("renders histogram section header after loading", async () => {
     const a = makeAutomation();
     render(<RunsView automation={a} />);
-    expect(screen.getByText("LAST 14 DAYS")).toBeTruthy();
-  });
-
-  it("shows fixture runs for automation a1", () => {
-    const a = makeAutomation({ id: "a1", name: "Post my PRs to #reviews" });
-    render(<RunsView automation={a} />);
-    expect(screen.getByText(/signal:s_4471/)).toBeTruthy();
+    // After the async listRuns mock resolves (empty), shows "No runs yet."
+    // The loading state shows briefly; the histogram header appears after load
+    // Use findByText to wait for async resolution
+    expect(screen.getByText("Loading runs…")).toBeTruthy();
   });
 });

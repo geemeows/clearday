@@ -1,7 +1,7 @@
 // AutomationsPage — Redesign v5 / Automations (#183)
 // List → Detail → Builder → Runs single-pane navigation.
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIcon,
   AlertTriangleIcon,
@@ -15,6 +15,9 @@ import { Button } from "#/components/ui/button";
 import { Input } from "#/components/ui/input";
 import { Switch } from "#/components/ui/switch";
 import { SourceGlyph } from "#/features/signals/components/SourceGlyph";
+import { listRuns } from "#/features/automations/runs";
+import type { AutomationRunRow } from "#/features/automations/runs";
+import { supabase } from "#/lib/supabase";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -103,7 +106,7 @@ export type AutomationItem = {
 
 type AutomationMode = "list" | "detail" | "builder" | "runs";
 
-// ── Fixture data ──────────────────────────────────────────────────────────────
+// ── Constants ─────────────────────────────────────────────────────────────────
 
 const TRIGGER_KINDS: Array<{ id: TriggerKind; label: string; desc: string }> =
   [
@@ -208,267 +211,6 @@ const ACTION_KINDS: ActionMeta[] = [
   },
 ];
 
-const FIXTURE_AUTOMATIONS: AutomationItem[] = [
-  {
-    id: "a1",
-    name: "Post my PRs to #reviews",
-    enabled: true,
-    dryRun: false,
-    priority: 10,
-    trigger: { kind: "signal_ingested" },
-    predicates: [
-      { field: "signal.source", op: "equals", value: "github" },
-      { field: "signal.kind", op: "equals", value: "pr_review_requested" },
-      { field: "signal.payload.author", op: "equals", value: "erinkov" },
-    ],
-    actions: [
-      {
-        kind: "slack_post_message",
-        config: {
-          target: "channel",
-          channel: "#reviews",
-          body: "📋 New PR up for review\n*{{signal.title}}*\n{{signal.url}}\nLinked ticket: {{signal.payload.ticket}}",
-        },
-      },
-    ],
-    stats: {
-      lastRunAt: "2026-05-07T09:42:00Z",
-      lastStatus: "succeeded",
-      totalRuns: 47,
-      fail7d: 0,
-    },
-  },
-  {
-    id: "a2",
-    name: "Re-ping reviewers on PR updates",
-    enabled: true,
-    dryRun: false,
-    priority: 20,
-    trigger: {
-      kind: "signal_state_change",
-      watchFields: ["payload.commits_after_review"],
-    },
-    predicates: [
-      { field: "signal.kind", op: "equals", value: "pr_opened" },
-      { field: "signal.author_is_me", op: "is_true", value: true },
-      {
-        field: "transition.field",
-        op: "equals",
-        value: "payload.commits_after_review",
-      },
-    ],
-    actions: [
-      {
-        kind: "slack_post_message",
-        config: {
-          target: "thread_reply",
-          body: "Pushed a new commit addressing review feedback. {{signal.payload.reviewers_at}} mind taking another pass? 🙏",
-        },
-      },
-    ],
-    stats: {
-      lastRunAt: "2026-05-07T08:14:00Z",
-      lastStatus: "succeeded",
-      totalRuns: 18,
-      fail7d: 0,
-    },
-  },
-  {
-    id: "a3",
-    name: "Focus auto-reply",
-    enabled: true,
-    dryRun: false,
-    priority: 5,
-    trigger: { kind: "signal_ingested" },
-    predicates: [
-      { field: "signal.source", op: "equals", value: "slack" },
-      { field: "signal.is_focus_match", op: "is_true", value: true },
-      { field: "context.focus.active", op: "equals", value: "true" },
-    ],
-    actions: [
-      {
-        kind: "slack_post_message",
-        config: {
-          target: "thread_reply",
-          body: "Hey — I'm in a Focus block until {{context.focus.ends_at}} ⏳\n\nReact with 🚨 if this is genuinely urgent and I'll be paged immediately. Otherwise I'll reply when I'm out.",
-          softIdempotencyKey: "focus_session_id:slack_thread_ts",
-        },
-      },
-    ],
-    stats: {
-      lastRunAt: "2026-05-07T07:55:00Z",
-      lastStatus: "succeeded",
-      totalRuns: 32,
-      fail7d: 1,
-    },
-  },
-  {
-    id: "a4",
-    name: "Back-online summary",
-    enabled: true,
-    dryRun: false,
-    priority: 15,
-    trigger: { kind: "focus_ended" },
-    predicates: [],
-    actions: [
-      {
-        kind: "slack_post_message",
-        config: {
-          target: "self_dm",
-          body: "👋 Back online — Focus block was {{focus.duration_min}}m. Threads I auto-replied to:\n{{focus.replied_threads}}",
-        },
-      },
-    ],
-    stats: {
-      lastRunAt: "2026-05-06T17:30:00Z",
-      lastStatus: "succeeded",
-      totalRuns: 12,
-      fail7d: 0,
-    },
-  },
-  {
-    id: "a5",
-    name: "Mark merged: tag + dismiss",
-    enabled: true,
-    dryRun: false,
-    priority: 30,
-    trigger: {
-      kind: "signal_state_change",
-      watchFields: ["payload.merged"],
-    },
-    predicates: [
-      { field: "signal.author_is_me", op: "is_true", value: true },
-      { field: "transition.to", op: "equals", value: "merged" },
-    ],
-    actions: [
-      { kind: "tag", config: { tags: ["shipped"] } },
-      { kind: "dismiss", config: {} },
-      { kind: "transition_ticket", config: { to: "Done" } },
-    ],
-    stats: {
-      lastRunAt: "2026-05-06T16:11:00Z",
-      lastStatus: "partial",
-      totalRuns: 9,
-      fail7d: 0,
-      deferred: 1,
-    },
-  },
-  {
-    id: "a6",
-    name: "Daily 9am — yesterday's merged PRs",
-    enabled: false,
-    dryRun: true,
-    priority: 50,
-    trigger: {
-      kind: "schedule",
-      cron: "0 9 * * 1-5",
-      cronLabel: "Weekdays · 9:00",
-    },
-    predicates: [],
-    actions: [
-      {
-        kind: "slack_post_message",
-        config: {
-          target: "self_dm",
-          body: "Yesterday's merged PRs:\n{{schedule.merged_prs_summary}}",
-        },
-      },
-    ],
-    stats: {
-      lastRunAt: "2026-05-07T09:00:00Z",
-      lastStatus: "skipped_dry_run",
-      totalRuns: 4,
-      fail7d: 0,
-    },
-  },
-];
-
-const FIXTURE_RUNS: Record<string, AutomationRun[]> = {
-  a1: [
-    {
-      ts: "2026-05-07T09:42:00Z",
-      status: "succeeded",
-      trigger: "signal:s_4471",
-      actions: [
-        {
-          kind: "slack_post_message",
-          ref: "channel #reviews · ts 1715071320",
-        },
-      ],
-    },
-    {
-      ts: "2026-05-07T08:11:00Z",
-      status: "succeeded",
-      trigger: "signal:s_4467",
-      actions: [
-        {
-          kind: "slack_post_message",
-          ref: "channel #reviews · ts 1715065860",
-        },
-      ],
-    },
-    {
-      ts: "2026-05-06T19:01:00Z",
-      status: "skipped_idempotent",
-      trigger: "signal:s_4467",
-      actions: [],
-    },
-    {
-      ts: "2026-05-06T16:24:00Z",
-      status: "succeeded",
-      trigger: "signal:s_4459",
-      actions: [
-        {
-          kind: "slack_post_message",
-          ref: "channel #reviews · ts 1714999440",
-        },
-      ],
-    },
-    {
-      ts: "2026-05-06T11:09:00Z",
-      status: "succeeded",
-      trigger: "signal:s_4452",
-      actions: [
-        {
-          kind: "slack_post_message",
-          ref: "channel #reviews · ts 1714980540",
-        },
-      ],
-    },
-  ],
-  a3: [
-    {
-      ts: "2026-05-07T07:55:00Z",
-      status: "succeeded",
-      trigger: "signal:s_4470",
-      actions: [
-        { kind: "slack_post_message", ref: "thread D03KQ.1715062500" },
-      ],
-    },
-    {
-      ts: "2026-05-07T07:48:00Z",
-      status: "skipped_idempotent",
-      trigger: "signal:s_4469",
-      actions: [],
-    },
-    {
-      ts: "2026-05-07T07:42:00Z",
-      status: "succeeded",
-      trigger: "signal:s_4468",
-      actions: [
-        { kind: "slack_post_message", ref: "thread D03KQ.1715061720" },
-      ],
-    },
-    {
-      ts: "2026-05-07T07:38:00Z",
-      status: "failed",
-      trigger: "signal:s_4466",
-      actions: [],
-      error: "Slack API: channel_not_found (rotated channel id)",
-    },
-  ],
-};
-
 type PreviewSignal = {
   id: string;
   source: string;
@@ -536,6 +278,26 @@ const PREVIEW_SIGNALS: PreviewSignal[] = [
     payload: {},
   },
 ];
+
+// ── DB → UI conversion ────────────────────────────────────────────────────────
+
+function runRowToUiRun(r: AutomationRunRow): AutomationRun {
+  return {
+    ts: r.started_at,
+    status: r.status as RunStatus,
+    trigger: r.signal_id ? `signal:${r.signal_id}` : r.trigger_event_id,
+    actions: (r.actions_executed ?? []).map((e) => ({
+      kind: e.type,
+      ref:
+        e.ref !== undefined && e.ref !== null
+          ? typeof e.ref === "string"
+            ? e.ref
+            : JSON.stringify(e.ref)
+          : "",
+    })),
+    ...(r.error ? { error: r.error } : {}),
+  };
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -1568,7 +1330,16 @@ export function AutomationDetail({
   onUpdate: (patch: Partial<AutomationItem>) => void;
   onDelete: () => void;
 }) {
-  const recent = (FIXTURE_RUNS[a.id] ?? []).slice(0, 5);
+  const [recentRuns, setRecentRuns] = useState<AutomationRun[]>([]);
+  useEffect(() => {
+    if (!a.id || a.id === "__new__") return;
+    // Cast needed: PostgrestFilterBuilder is awaitable but not strict Promise<T>
+    // biome-ignore lint/suspicious/noExplicitAny: Supabase client vs SupabaseLike compat cast
+    listRuns(supabase as any, a.id, { limit: 5 })
+      .then((rows) => setRecentRuns(rows.map(runRowToUiRun)))
+      .catch(() => {});
+  }, [a.id]);
+
   const deferred = a.actions.some((act) => !actionMeta(act.kind)?.cap);
 
   return (
@@ -1720,7 +1491,7 @@ export function AutomationDetail({
               Full history →
             </Button>
           </div>
-          {recent.length > 0 ? (
+          {recentRuns.length > 0 ? (
             <div
               style={{
                 border: "1px solid var(--hairline-soft)",
@@ -1728,8 +1499,8 @@ export function AutomationDetail({
                 overflow: "hidden",
               }}
             >
-              {recent.map((r, i) => (
-                <RunRow key={i} r={r} last={i === recent.length - 1} />
+              {recentRuns.map((r, i) => (
+                <RunRow key={i} r={r} last={i === recentRuns.length - 1} />
               ))}
             </div>
           ) : (
@@ -1890,21 +1661,20 @@ export function RunsView({
 }: {
   automation: AutomationItem;
 }) {
-  const base = FIXTURE_RUNS[a.id] ?? [];
-  const padded =
-    base.length > 0
-      ? base
-      : Array.from({ length: 5 }, (_, i) => ({
-          ts: new Date(Date.now() - i * 7 * 3600 * 1000).toISOString(),
-          status: "succeeded" as RunStatus,
-          trigger: `signal:s_${4400 + i}`,
-          actions: [
-            {
-              kind: "slack_post_message",
-              ref: `channel #reviews · ts ${1715000000 + i * 1000}`,
-            },
-          ],
-        }));
+  const [runs, setRuns] = useState<AutomationRun[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!a.id || a.id === "__new__") {
+      setLoading(false);
+      return;
+    }
+    // biome-ignore lint/suspicious/noExplicitAny: Supabase client vs SupabaseLike compat cast
+    listRuns(supabase as any, a.id, { limit: 50 })
+      .then((rows) => setRuns(rows.map(runRowToUiRun)))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [a.id]);
 
   return (
     <div
@@ -1943,19 +1713,33 @@ export function RunsView({
       <div
         style={{ overflowY: "auto", padding: "16px 22px", flex: 1 }}
       >
-        <RunsHistogram runs={padded} />
-        <div
-          style={{
-            marginTop: 18,
-            border: "1px solid var(--hairline-soft)",
-            borderRadius: 8,
-            overflow: "hidden",
-          }}
-        >
-          {padded.map((r, i) => (
-            <RunRow key={i} r={r} last={i === padded.length - 1} />
-          ))}
-        </div>
+        {loading ? (
+          <div style={{ padding: "24px", textAlign: "center", fontSize: 13, color: "var(--muted-foreground)" }}>
+            Loading runs…
+          </div>
+        ) : (
+          <>
+            <RunsHistogram runs={runs} />
+            <div
+              style={{
+                marginTop: 18,
+                border: "1px solid var(--hairline-soft)",
+                borderRadius: 8,
+                overflow: "hidden",
+              }}
+            >
+              {runs.length === 0 ? (
+                <div style={{ padding: "24px", textAlign: "center", fontSize: 13, color: "var(--muted-foreground)" }}>
+                  No runs yet.
+                </div>
+              ) : (
+                runs.map((r, i) => (
+                  <RunRow key={i} r={r} last={i === runs.length - 1} />
+                ))
+              )}
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
@@ -3345,12 +3129,17 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
 
 // ── AutomationsPage ───────────────────────────────────────────────────────────
 
-export function AutomationsPage() {
-  const [items, setItems] = useState<AutomationItem[]>(FIXTURE_AUTOMATIONS);
-  const [selectedId, setSelectedId] = useState<string>("a1");
+export function AutomationsPage({
+  items: initialItems = [],
+  onSave,
+}: {
+  items?: AutomationItem[];
+  onSave?: (items: AutomationItem[]) => Promise<void>;
+}) {
+  const [items, setItems] = useState<AutomationItem[]>(initialItems);
+  const [selectedId, setSelectedId] = useState<string>(initialItems[0]?.id ?? "");
   const [mode, setMode] = useState<AutomationMode>("list");
   const [filter, setFilter] = useState("");
-  const [showEmpty, setShowEmpty] = useState(false);
 
   const visible = items.filter(
     (a) =>
@@ -3359,11 +3148,12 @@ export function AutomationsPage() {
   const selected = items.find((a) => a.id === selectedId) ?? items[0];
 
   const updateSelected = (patch: Partial<AutomationItem>) => {
-    setItems((prev) =>
-      prev.map((a) => (a.id === selectedId ? { ...a, ...patch } : a)),
-    );
+    setItems((prev) => {
+      const next = prev.map((a) => (a.id === selectedId ? { ...a, ...patch } : a));
+      onSave?.(next).catch(() => {});
+      return next;
+    });
   };
-
 
   const goToBuilder = (id: string) => {
     setSelectedId(id);
@@ -3421,13 +3211,6 @@ export function AutomationsPage() {
             </span>
             <span style={{ flex: 1 }} />
             <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setShowEmpty((e) => !e)}
-            >
-              {showEmpty ? "← Restore" : "Empty state"}
-            </Button>
-            <Button
               size="sm"
               onClick={() => goToBuilder("__new__")}
             >
@@ -3457,13 +3240,8 @@ export function AutomationsPage() {
       )}
 
       {/* Main content pane */}
-      {showEmpty && mode === "list" ? (
-        <EmptyState
-          onCreate={() => {
-            setShowEmpty(false);
-            goToBuilder("__new__");
-          }}
-        />
+      {mode === "list" && items.length === 0 && !filter ? (
+        <EmptyState onCreate={() => goToBuilder("__new__")} />
       ) : mode === "list" ? (
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           <Input
@@ -3500,11 +3278,13 @@ export function AutomationsPage() {
                     setMode("detail");
                   }}
                   onToggle={(v) =>
-                    setItems((prev) =>
-                      prev.map((x) =>
+                    setItems((prev) => {
+                      const updated = prev.map((x) =>
                         x.id === a.id ? { ...x, enabled: v } : x,
-                      ),
-                    )
+                      );
+                      onSave?.(updated).catch(() => {});
+                      return updated;
+                    })
                   }
                 />
               ))}
@@ -3533,26 +3313,25 @@ export function AutomationsPage() {
               onSave={(next) => {
                 if (selectedId === "__new__") {
                   const id = `a${Date.now()}`;
-                  setItems((prev) => [
-                    ...prev,
-                    {
-                      ...next,
-                      id,
-                      stats: {
-                        lastRunAt: null,
-                        lastStatus: null,
-                        totalRuns: 0,
-                        fail7d: 0,
-                      },
-                    },
-                  ]);
+                  const newItem: AutomationItem = {
+                    ...next,
+                    id,
+                    stats: { lastRunAt: null, lastStatus: null, totalRuns: 0, fail7d: 0 },
+                  };
+                  setItems((prev) => {
+                    const updated = [...prev, newItem];
+                    onSave?.(updated).catch(() => {});
+                    return updated;
+                  });
                   setSelectedId(id);
                 } else {
-                  setItems((prev) =>
-                    prev.map((x) =>
+                  setItems((prev) => {
+                    const updated = prev.map((x) =>
                       x.id === selectedId ? { ...x, ...next } : x,
-                    ),
-                  );
+                    );
+                    onSave?.(updated).catch(() => {});
+                    return updated;
+                  });
                 }
                 setMode("detail");
               }}
@@ -3575,6 +3354,7 @@ export function AutomationsPage() {
                 setItems(next);
                 setSelectedId(next[0]?.id ?? "");
                 setMode("list");
+                onSave?.(next).catch(() => {});
               }}
             />
           ) : null}
