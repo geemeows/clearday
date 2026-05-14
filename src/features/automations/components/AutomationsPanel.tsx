@@ -350,14 +350,6 @@ export function AutomationsPanel({
     setEditing({ ...a });
   }, []);
 
-  const openDetail = useCallback((a: Automation) => {
-    setDetailId(a.id);
-  }, []);
-
-  const closeDetail = useCallback(() => {
-    setDetailId(null);
-  }, []);
-
   const closeBuilder = useCallback(() => {
     setEditing(null);
   }, []);
@@ -451,6 +443,22 @@ export function AutomationsPanel({
     setRuns(null);
     setRunsError(null);
     setDryRunMessage(null);
+  }, []);
+
+  const openDetail = useCallback(
+    (a: Automation) => {
+      setDetailId(a.id);
+      setRuns(null);
+      setRunsError(null);
+      loadRuns(a.id);
+    },
+    [loadRuns],
+  );
+
+  const closeDetail = useCallback(() => {
+    setDetailId(null);
+    setRuns(null);
+    setRunsError(null);
   }, []);
 
   const triggerDryRun = useCallback(async () => {
@@ -800,6 +808,8 @@ export function AutomationsPanel({
           automation={detailAutomation}
           latestFailure={latestFailures.get(detailAutomation.id) ?? null}
           busy={busy}
+          recentRuns={runs}
+          runsError={runsError}
           onToggleEnabled={(enabled) => onToggle(detailAutomation.id, enabled)}
           onToggleDryRun={() => onToggleDryRun(detailAutomation.id)}
           onEdit={() => openEdit(detailAutomation)}
@@ -1102,6 +1112,8 @@ function AutomationDetail({
   automation,
   latestFailure,
   busy,
+  recentRuns,
+  runsError,
   onToggleEnabled,
   onToggleDryRun,
   onEdit,
@@ -1111,6 +1123,8 @@ function AutomationDetail({
   automation: Automation;
   latestFailure: AutomationRunRow | null;
   busy: boolean;
+  recentRuns: AutomationRunRow[] | null;
+  runsError: string | null;
   onToggleEnabled: (enabled: boolean) => void;
   onToggleDryRun: () => void;
   onEdit: () => void;
@@ -1249,6 +1263,23 @@ function AutomationDetail({
             ))}
           </div>
         </div>
+
+        <div aria-label={`Recent runs for ${automation.name}`}>
+          <div className="mb-2 flex items-baseline">
+            <DetailLabel inline>RECENT RUNS</DetailLabel>
+            <span className="flex-1" />
+            <button
+              type="button"
+              aria-label={`Full run history for ${automation.name}`}
+              onClick={onViewRuns}
+              disabled={busy}
+              className="rounded px-2 py-1 text-[12px] text-[var(--primary)] hover:bg-[var(--surface-soft)] disabled:opacity-50"
+            >
+              Full history →
+            </button>
+          </div>
+          <RecentRunsStrip runs={recentRuns} error={runsError} />
+        </div>
       </div>
       <div className="flex items-center gap-2 border-[var(--hairline-soft)] border-t px-[22px] py-3">
         <p className="font-mono text-[11px] text-muted-foreground">
@@ -1278,6 +1309,107 @@ function AutomationDetail({
       </div>
     </div>
   );
+}
+
+function RecentRunsStrip({
+  runs,
+  error,
+}: {
+  runs: AutomationRunRow[] | null;
+  error: string | null;
+}) {
+  if (error) {
+    return (
+      <p
+        role="alert"
+        className="rounded border border-destructive/30 bg-destructive/10 px-3 py-2 text-destructive text-xs"
+      >
+        {error}
+      </p>
+    );
+  }
+  if (runs === null) {
+    return (
+      <p className="font-mono text-[11px] text-[var(--muted-soft)]">
+        Loading runs…
+      </p>
+    );
+  }
+  if (runs.length === 0) {
+    return (
+      <div className="rounded-lg border border-[var(--hairline)] border-dashed px-3 py-4 text-center text-[12px] text-[var(--muted-soft)]">
+        Hasn't fired yet. Live preview below shows what would match.
+      </div>
+    );
+  }
+  const recent = runs.slice(0, 5);
+  return (
+    <div className="overflow-hidden rounded-lg border border-[var(--hairline-soft)]">
+      {recent.map((r, i) => (
+        <RecentRunRow key={r.id} run={r} last={i === recent.length - 1} />
+      ))}
+    </div>
+  );
+}
+
+function RecentRunRow({
+  run,
+  last,
+}: {
+  run: AutomationRunRow;
+  last: boolean;
+}) {
+  const failed = run.status === "failed";
+  const dotClass = failed
+    ? "bg-[var(--danger)]"
+    : run.status === "succeeded"
+      ? "bg-[var(--good)]"
+      : "bg-[var(--muted-soft)]";
+  const ref = run.actions_executed[0];
+  const refLabel = ref ? ` → ${ref.type}` : "";
+  return (
+    <div
+      className={`grid grid-cols-[auto_100px_1fr_auto] items-center gap-3 px-3 py-2 ${
+        last ? "" : "border-[var(--hairline-soft)] border-b"
+      } ${failed ? "bg-[var(--danger-soft)]" : ""}`}
+    >
+      <output
+        aria-label={`Run status ${run.status.replace(/_/g, " ")}`}
+        className={`inline-block size-[7px] shrink-0 rounded-full ${dotClass}`}
+      />
+      <span className="font-mono text-[10.5px] text-[var(--muted)]">
+        {relRunTime(run.started_at)}
+      </span>
+      <div className="min-w-0">
+        <div className="overflow-hidden text-ellipsis whitespace-nowrap font-mono text-[10.5px] text-[var(--ink)]">
+          {run.trigger_event_id}
+          {refLabel}
+        </div>
+        {run.error && (
+          <div className="mt-px text-[10.5px] text-[var(--danger)]">
+            {run.error}
+          </div>
+        )}
+      </div>
+      <span className="font-mono text-[9.5px] text-muted-foreground">
+        {run.status.replace(/_/g, " ")}
+      </span>
+    </div>
+  );
+}
+
+function relRunTime(iso: string, now: number = Date.now()): string {
+  const t = new Date(iso).getTime();
+  if (!Number.isFinite(t)) return iso;
+  const diffMs = now - t;
+  const abs = Math.abs(diffMs);
+  const minute = 60_000;
+  const hour = 60 * minute;
+  const day = 24 * hour;
+  if (abs < minute) return "now";
+  if (abs < hour) return `${Math.round(abs / minute)}m ago`;
+  if (abs < day) return `${Math.round(abs / hour)}h ago`;
+  return `${Math.round(abs / day)}d ago`;
 }
 
 function DetailPill({

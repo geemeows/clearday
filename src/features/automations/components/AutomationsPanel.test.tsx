@@ -906,4 +906,54 @@ describe("AutomationsPanel detail mode (Slice 8.3)", () => {
     fireEvent.click(await screen.findByLabelText("Edit Snooze deps (detail)"));
     expect(await screen.findByText("Edit automation")).toBeTruthy();
   });
+
+  it("renders the RECENT RUNS strip with up to five run rows + Full history link", async () => {
+    const runs: AutomationRunRow[] = Array.from({ length: 7 }, (_, i) => ({
+      id: `r-${i}`,
+      automation_id: "a-1",
+      trigger_event_id: `evt-${i}`,
+      signal_id: `sig-${i}`,
+      status: i === 0 ? "failed" : "succeeded",
+      actions_planned: [{ type: "tag", tag: "x" }],
+      actions_executed: [{ type: "tag", ok: i !== 0 }],
+      error: i === 0 ? "boom" : null,
+      started_at: new Date(Date.now() - i * 60_000).toISOString(),
+      finished_at: new Date(Date.now() - i * 60_000 + 500).toISOString(),
+    }));
+    const runsLoader = vi.fn(async () => ({ runs }));
+    renderPanel({ runsLoader });
+    fireEvent.click(await screen.findByLabelText("Open Snooze deps"));
+    await screen.findByLabelText("Automation detail Snooze deps");
+    const recent = await screen.findByLabelText("Recent runs for Snooze deps");
+    const rows = recent.querySelectorAll(
+      "[aria-label^='Run status']",
+    );
+    expect(rows.length).toBe(5);
+    expect(recent.textContent).toMatch(/boom/);
+    expect(
+      screen.getByLabelText("Full run history for Snooze deps"),
+    ).toBeTruthy();
+  });
+
+  it("renders the dashed empty-state for an automation that hasn't fired yet", async () => {
+    const runsLoader = vi.fn(async () => ({ runs: [] }));
+    renderPanel({ runsLoader });
+    fireEvent.click(await screen.findByLabelText("Open Snooze deps"));
+    await screen.findByLabelText("Automation detail Snooze deps");
+    const recent = await screen.findByLabelText("Recent runs for Snooze deps");
+    expect(recent.textContent).toMatch(/Hasn't fired yet/);
+  });
+
+  it("Full history link enters runs mode from detail", async () => {
+    const runsLoader = vi.fn(async () => ({ runs: [] }));
+    renderPanel({ runsLoader });
+    fireEvent.click(await screen.findByLabelText("Open Snooze deps"));
+    await screen.findByLabelText("Automation detail Snooze deps");
+    fireEvent.click(
+      await screen.findByLabelText("Full run history for Snooze deps"),
+    );
+    await waitFor(() => {
+      expect(screen.getByText(/Runs · Snooze deps/)).toBeTruthy();
+    });
+  });
 });
