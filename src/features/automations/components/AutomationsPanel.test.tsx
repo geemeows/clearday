@@ -845,9 +845,28 @@ describe("AutomationsPanel detail mode (Slice 8.3)", () => {
     expect(
       screen.getByLabelText("Snooze deps enabled (detail)"),
     ).toBeTruthy();
-    // SentenceSummary pill rail uses the trigger / predicate / action labels
-    expect(screen.getByText("Signal ingested")).toBeTruthy();
+    // SentenceSummary pill rail + WHEN block both surface the trigger label
+    expect(screen.getAllByText("Signal ingested").length).toBeGreaterThan(0);
     expect(screen.getByText("kind is mention")).toBeTruthy();
+  });
+
+  it("renders WHEN / IF / THEN detail blocks below the sentence summary", async () => {
+    renderPanel();
+    fireEvent.click(await screen.findByLabelText("Open Snooze deps"));
+    await screen.findByLabelText("Automation detail Snooze deps");
+    // WHEN block — TriggerSummary card (label + meta text)
+    const whenBlock = screen.getByLabelText("When Snooze deps");
+    expect(whenBlock.textContent).toMatch(/Signal ingested/);
+    expect(whenBlock.textContent).toMatch(/new signal is ingested/);
+    // IF block — PredicateLine: "kind" `is` `mention`
+    const ifBlock = screen.getByLabelText("If Snooze deps");
+    expect(ifBlock.textContent).toMatch(/^IF/);
+    expect(ifBlock.textContent).toMatch(/kind/);
+    expect(ifBlock.textContent).toMatch(/mention/);
+    // THEN block — ActionPreviewCard with action label + kind tag
+    const thenBlock = screen.getByLabelText("Then Snooze deps");
+    expect(thenBlock.textContent).toMatch(/Tag/);
+    expect(thenBlock.textContent).toMatch(/internal/);
   });
 
   it("breadcrumb root returns to list from detail", async () => {

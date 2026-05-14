@@ -1,4 +1,11 @@
-import { Search } from "lucide-react";
+import {
+  Activity,
+  CheckCircle2,
+  Clock,
+  Inbox,
+  Search,
+  Target,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Dialog,
@@ -15,6 +22,7 @@ import {
   type Automation,
   type AutomationAction,
   type AutomationPredicate,
+  type AutomationTriggerKind,
   bucketAutomations,
   bucketRunsByDay,
   cronExpressionValid,
@@ -1211,6 +1219,36 @@ function AutomationDetail({
             </span>
           ))}
         </div>
+
+        <div aria-label={`When ${automation.name}`}>
+          <DetailLabel>WHEN</DetailLabel>
+          <TriggerSummary
+            kind={automation.trigger_kind}
+            cron={automation.trigger_config?.cron}
+          />
+        </div>
+
+        {automation.predicates.length > 0 && (
+          <div aria-label={`If ${automation.name}`}>
+            <DetailLabel>IF</DetailLabel>
+            <div className="flex flex-col gap-1 font-mono text-[11.5px] text-[var(--body)]">
+              {automation.predicates.map((p, i) => (
+                // biome-ignore lint/suspicious/noArrayIndexKey: predicate chain order is the natural key for this read-only display
+                <PredicateLine key={i} predicate={p} index={i} />
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div aria-label={`Then ${automation.name}`}>
+          <DetailLabel>THEN</DetailLabel>
+          <div className="flex flex-col gap-2">
+            {automation.actions.map((a, i) => (
+              // biome-ignore lint/suspicious/noArrayIndexKey: action chain order is the natural key for this read-only display
+              <ActionPreviewCard key={i} action={a} index={i} />
+            ))}
+          </div>
+        </div>
       </div>
       <div className="flex items-center gap-2 border-[var(--hairline-soft)] border-t px-[22px] py-3">
         <p className="font-mono text-[11px] text-muted-foreground">
@@ -1269,6 +1307,234 @@ function DetailPill({
     >
       {children}
     </span>
+  );
+}
+
+function DetailLabel({
+  children,
+  inline,
+}: {
+  children: React.ReactNode;
+  inline?: boolean;
+}) {
+  return (
+    <div
+      className={`font-mono text-[10px] text-[var(--muted)] uppercase tracking-[0.06em] ${inline ? "" : "mb-2"}`}
+    >
+      {children}
+    </div>
+  );
+}
+
+const TRIGGER_ICONS: Record<
+  AutomationTriggerKind,
+  React.ComponentType<{ size?: number; className?: string }>
+> = {
+  signal_ingested: Inbox,
+  signal_state_change: Activity,
+  focus_started: Target,
+  focus_ended: CheckCircle2,
+  schedule: Clock,
+};
+
+const TRIGGER_DESCS: Record<AutomationTriggerKind, string> = {
+  signal_ingested: "Fires when a new signal is ingested",
+  signal_state_change: "Fires when an existing signal's payload changes",
+  focus_started: "Fires when a Focus session starts",
+  focus_ended: "Fires when a Focus session ends",
+  schedule: "Fires on a cron schedule",
+};
+
+function TriggerSummary({
+  kind,
+  cron,
+}: {
+  kind: AutomationTriggerKind;
+  cron?: string;
+}) {
+  const Icon = TRIGGER_ICONS[kind];
+  const label = TRIGGERS[kind]?.label ?? kind;
+  const meta =
+    kind === "schedule" && cron
+      ? `${humanizeCron(cron)} · ${cron}`
+      : TRIGGER_DESCS[kind];
+  return (
+    <div className="flex items-center gap-2.5 rounded-lg border border-[var(--hairline-soft)] bg-[var(--canvas)] px-3 py-2.5">
+      <Icon
+        size={14}
+        className="shrink-0 text-[var(--foreground)]"
+        aria-hidden="true"
+      />
+      <div className="min-w-0 flex-1">
+        <div className="font-semibold text-[13px] text-[var(--ink)]">
+          {label}
+        </div>
+        <div className="mt-0.5 font-mono text-[11px] text-[var(--muted)]">
+          {meta}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const PREDICATE_FIELDS: Record<AutomationPredicate["type"], string> = {
+  provider: "provider",
+  kind: "kind",
+  source_match: "payload",
+  title_regex: "title",
+  state_from_to: "state",
+};
+
+function predicateOpLabel(p: AutomationPredicate): string {
+  switch (p.type) {
+    case "provider":
+    case "kind":
+      return "is";
+    case "source_match":
+      return "equals";
+    case "title_regex":
+      return "matches";
+    case "state_from_to":
+      return "transitions";
+  }
+}
+
+function predicateValueText(p: AutomationPredicate): string {
+  switch (p.type) {
+    case "provider":
+      return p.provider;
+    case "kind":
+      return p.kind;
+    case "source_match":
+      return `${p.field}: ${p.equals}`;
+    case "title_regex":
+      return `/${p.pattern}/`;
+    case "state_from_to":
+      return `${p.field} ${p.from ?? "*"} → ${p.to ?? "*"}`;
+  }
+}
+
+function PredicateLine({
+  predicate,
+  index,
+}: {
+  predicate: AutomationPredicate;
+  index: number;
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="w-[22px] shrink-0 font-mono text-[10px] text-[var(--muted-soft)] uppercase">
+        {index === 0 ? "IF" : "AND"}
+      </span>
+      <code className="rounded bg-[var(--surface-soft)] px-2 py-0.5 text-[var(--ink)]">
+        {PREDICATE_FIELDS[predicate.type]}
+      </code>
+      <span className="text-[var(--muted)]">{predicateOpLabel(predicate)}</span>
+      <code className="rounded bg-[var(--primary-disabled)] px-2 py-0.5 text-[var(--primary-active)]">
+        {predicateValueText(predicate)}
+      </code>
+    </div>
+  );
+}
+
+function actionDetailText(a: AutomationAction): string | null {
+  switch (a.type) {
+    case "snooze":
+      return `${a.minutes}m`;
+    case "tag":
+      return a.tag;
+    case "set_priority":
+      return String(a.value);
+    case "set_channels":
+      return a.channels.join(", ");
+    case "transition_ticket":
+      return `→ ${a.to_status}`;
+    case "set_focus":
+      return `${a.duration_minutes}m`;
+    case "post_message":
+      return a.target === "channel" && a.channel ? `#${a.channel}` : a.target;
+    case "comment_on_pr":
+      return a.repo && a.number ? `${a.repo}#${a.number}` : null;
+    case "request_reviewers":
+      return [...a.reviewers, ...(a.team_reviewers ?? [])].join(", ");
+    default:
+      return null;
+  }
+}
+
+function actionBody(a: AutomationAction): string | null {
+  if (a.type === "post_message" || a.type === "comment_on_pr") return a.body;
+  return null;
+}
+
+function renderTemplateBody(text: string): React.ReactNode[] {
+  return text.split(/(\{\{[^}]+\}\})/g).map((part, i) =>
+    part.startsWith("{{") ? (
+      // biome-ignore lint/suspicious/noArrayIndexKey: split-by-pattern preserves a stable order — index is the natural key
+      <span
+        key={i}
+        className="rounded-sm bg-[var(--primary-disabled)] px-1 font-semibold text-[var(--primary-active)]"
+      >
+        {part}
+      </span>
+    ) : (
+      // biome-ignore lint/suspicious/noArrayIndexKey: same as above — split order is stable
+      <span key={i}>{part}</span>
+    ),
+  );
+}
+
+function ActionPreviewCard({
+  action,
+  index,
+}: {
+  action: AutomationAction;
+  index: number;
+}) {
+  const meta = ACTIONS[action.type];
+  const deferred = meta?.kind === "deferred";
+  const label = meta?.label ?? action.type;
+  const detail = actionDetailText(action);
+  const body = actionBody(action);
+  const wrapClass = deferred
+    ? "border-[var(--warn-soft)] bg-[var(--warn-soft)] opacity-90"
+    : "border-[var(--hairline-soft)] bg-[var(--canvas)]";
+  const dotClass = deferred ? "bg-[var(--warn)]" : "bg-[var(--primary)]";
+  return (
+    <div className={`rounded-lg border px-3.5 py-3 ${wrapClass}`}>
+      <div className={`flex items-center gap-2 ${body ? "mb-1.5" : ""}`}>
+        <span
+          aria-hidden="true"
+          className={`inline-flex size-[18px] shrink-0 items-center justify-center rounded-full font-bold text-[10px] text-white ${dotClass}`}
+        >
+          {index + 1}
+        </span>
+        <span className="font-semibold text-[13px] text-[var(--ink)]">
+          {label}
+        </span>
+        <span className="font-mono text-[10px] text-[var(--muted)] uppercase">
+          {meta?.kind ?? ""}
+        </span>
+        {detail && (
+          <span className="ml-auto font-mono text-[10.5px] text-[var(--muted)]">
+            {detail}
+          </span>
+        )}
+        {deferred && (
+          <span
+            aria-label="not wired"
+            className="ml-auto rounded bg-[var(--warn)] px-1.5 py-px font-mono text-[9px] text-white tracking-[0.04em] uppercase"
+          >
+            Not wired
+          </span>
+        )}
+      </div>
+      {body && (
+        <div className="whitespace-pre-wrap rounded-md bg-[var(--surface-soft)] px-2.5 py-2 font-mono text-[11px] text-[var(--body)] leading-[1.5]">
+          {renderTemplateBody(body)}
+        </div>
+      )}
+    </div>
   );
 }
 
