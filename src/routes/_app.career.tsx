@@ -1026,7 +1026,7 @@ function CompetencyRow({
           type="button"
           aria-label={`Add criterion to ${competency.name}`}
           onClick={() => setShowAddForm(true)}
-          className="inline-flex items-center gap-1.5 rounded-sm border border-border bg-background px-2.5 py-1 text-[12px] text-foreground hover:bg-muted"
+          className="inline-flex items-center gap-[5px] rounded-sm border border-border bg-background px-2.5 py-[5px] text-[12px] text-foreground hover:bg-muted"
         >
           <Plus aria-hidden="true" className="h-3 w-3" /> Criterion
         </button>
@@ -1210,7 +1210,7 @@ export function CriteriaList({
   const addFormVisible = showAddForm ?? true;
 
   return (
-    <div className="mt-2 ml-4 space-y-2 border-border border-l pl-4">
+    <div>
       {error && (
         <p
           role="alert"
@@ -1221,11 +1221,11 @@ export function CriteriaList({
       )}
       {addFormVisible && <AddCriterionForm onAdd={handleAdd} />}
       {criteria === null ? (
-        <p className="text-muted-foreground text-xs">Loading…</p>
+        <p className="px-2 py-1.5 text-muted-foreground text-xs">Loading…</p>
       ) : criteria.length === 0 ? null : (
         <ul
           aria-label="Criteria"
-          className="space-y-1.5"
+          className=""
           onDragOver={(e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -1436,16 +1436,16 @@ function CriterionRow({
       draggable
       onDragStart={onDragStart}
       onDragEnter={onDragEnter}
-      className="cursor-grab rounded-md border border-border bg-card px-2.5 py-1.5 active:cursor-grabbing"
+      className="mt-3.5 cursor-grab active:cursor-grabbing first:mt-0"
     >
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2.5 border-b border-[var(--hairline-soft)] px-2 py-1.5">
         <GripVertical
           aria-hidden="true"
-          className="h-3 w-3 shrink-0 text-muted-foreground/60"
+          className="h-3 w-3 shrink-0 text-[var(--muted-soft)] opacity-70"
         />
         <span
           aria-hidden="true"
-          className="inline-flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-xs bg-[var(--surface-strong)] font-bold text-[11px] text-muted-foreground"
+          className="inline-flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-[4px] bg-[var(--surface-strong)] font-bold text-[11px] text-muted-foreground"
         >
           {letter}
         </span>
@@ -1462,7 +1462,7 @@ function CriterionRow({
               setDraft(criterion.name);
             }
           }}
-          className="min-w-0 flex-1 rounded border border-transparent bg-transparent px-1.5 py-0.5 text-foreground text-sm outline-none focus:border-border focus:bg-muted"
+          className="min-w-0 flex-1 rounded border border-transparent bg-transparent px-1.5 py-0.5 text-[13.5px] font-semibold text-foreground outline-none focus:border-border focus:bg-muted"
         />
         {avg !== null && (
           <span
@@ -1635,7 +1635,7 @@ export function IndicatorList({
   };
 
   return (
-    <div className="mt-2 ml-4 space-y-1.5 border-border border-l pl-3">
+    <div>
       {error && (
         <p
           role="alert"
@@ -1645,7 +1645,7 @@ export function IndicatorList({
         </p>
       )}
       {indicators === null ? (
-        <p className="text-muted-foreground text-xs">Loading…</p>
+        <p className="px-3.5 py-2 text-muted-foreground text-xs">Loading…</p>
       ) : indicators.length === 0 ? null : (
         <ul
           aria-label="Indicators"
