@@ -1,9 +1,9 @@
 // Settings → Notifications panel (per PRD #29 mockup #2 / issue #41).
 //
-// Three sub-sections: channels list (Test + Switch per row), per-event
-// routing matrix, and a Quiet hours card with mode tabs + schedule editors
-// + day strip + allow-through pills. Backend dispatch is out of scope —
-// toggles update local state only.
+// Four sub-sections: channels list (Test + Switch per row), per-event
+// routing matrix, a Quiet hours card with mode tabs + schedule editors
+// + day strip + allow-through pills, and an Inbox rules section
+// (RulesPanel + RuleBuilder — fixture-backed; see needs-triage backend issue).
 
 import { Bell, Mail, Monitor, Plus, X } from "lucide-react";
 import { useState } from "react";
@@ -188,6 +188,406 @@ function TimeField({
           : "bg-[var(--canvas)] text-[var(--ink)]",
       )}
     />
+  );
+}
+
+// ── Inbox rules (fixture-backed per v4 fixture rule; backend follow-up needed) ─
+
+type Condition = { field: string; op: string; value: string };
+type RuleAction = { id: string; label: string; params: string[] | null };
+
+const FIELDS = [
+  "source",
+  "author",
+  "channel",
+  "repo",
+  "title contains",
+  "labels include",
+  "diff size",
+  "is draft",
+] as const;
+
+const OPS_BY_FIELD: Record<string, string[]> = {
+  source: ["is", "is not"],
+  author: ["is", "is not", "matches"],
+  channel: ["is", "is not", "in"],
+  repo: ["is", "is not", "matches"],
+  "title contains": ["matches", "doesn't match"],
+  "labels include": ["any of", "all of", "none of"],
+  "diff size": [">", "<", "="],
+  "is draft": ["is true", "is false"],
+};
+
+const VALUES_BY_FIELD: Record<string, string[]> = {
+  source: ["github", "slack", "calendar", "linear"],
+  author: ["dependabot", "renovate-bot", "@me", "team:platform"],
+  channel: ["#eng-announce", "#incidents", "#deploys", "#random"],
+  repo: ["acme/web", "acme/api", "acme/infra", "acme/*"],
+  "title contains": ["prod", "incident", "[WIP]", "lockfile only"],
+  "labels include": ["urgent", "blocked", "good-first-issue"],
+  "diff size": ["10 lines", "100 lines", "500 lines"],
+  "is draft": ["—"],
+};
+
+const RULE_ACTIONS: RuleAction[] = [
+  { id: "snooze", label: "Snooze", params: ["1 hour", "4 hours", "1 day", "until tomorrow", "until Monday"] },
+  { id: "low", label: "Mark as low-prio", params: null },
+  { id: "dismiss", label: "Auto-dismiss", params: null },
+  { id: "bypass", label: "Bypass quiet hours", params: null },
+  { id: "weekly", label: "Add to weekly review", params: null },
+  { id: "tag", label: "Add tag", params: ["follow-up", "review", "later", "incident"] },
+  { id: "route", label: "Route to", params: ["push", "Slack DM", "email", "desktop"] },
+];
+
+type FixtureRule = {
+  when: string;
+  then: string;
+  on: boolean;
+  hits: number;
+};
+
+// Fixture — UI ships here; wire backend when ready (needs-triage issue filed).
+const FIXTURE_RULES: FixtureRule[] = [
+  { when: "PR author is dependabot", then: "Snooze 1 day", on: true, hits: 47 },
+  { when: "Slack channel is #eng-announce", then: "Mark as low-priority", on: true, hits: 12 },
+  { when: "PR has only lockfile changes", then: "Auto-dismiss", on: false, hits: 31 },
+  { when: "Mention contains \"prod\" or \"incident\"", then: "Bypass quiet hours", on: true, hits: 4 },
+  { when: "Meeting has no agenda", then: "Add to weekly review", on: false, hits: 8 },
+];
+
+function RuleChip({
+  value,
+  options,
+  onChange,
+  kind,
+  "aria-label": ariaLabel,
+}: {
+  value: string;
+  options: readonly string[];
+  onChange: (v: string) => void;
+  kind: "field" | "op" | "value";
+  "aria-label"?: string;
+}) {
+  const base =
+    "rounded-md border-none outline-none cursor-pointer text-[13px] appearance-none";
+  const kindCls =
+    kind === "field"
+      ? "bg-[var(--surface-strong)] text-[var(--ink)] font-semibold px-2.5 py-[5px] pr-6"
+      : kind === "op"
+        ? "bg-transparent text-[var(--muted)] font-medium px-1 py-[4px]"
+        : "bg-[var(--primary-disabled)] text-[var(--primary-active)] font-mono font-medium px-2.5 py-[5px] pr-6";
+
+  return (
+    <span className="relative inline-block">
+      <select
+        aria-label={ariaLabel}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className={`${base} ${kindCls}`}
+      >
+        {options.map((o) => (
+          <option key={o} value={o}>
+            {o}
+          </option>
+        ))}
+      </select>
+      {kind !== "op" && (
+        <span
+          aria-hidden
+          className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-[9px] text-[var(--muted)]"
+        >
+          ▾
+        </span>
+      )}
+    </span>
+  );
+}
+
+function RuleBuilder({
+  onSave,
+  onCancel,
+}: {
+  onSave: () => void;
+  onCancel: () => void;
+}) {
+  const [matchAll, setMatchAll] = useState(true);
+  const [conds, setConds] = useState<Condition[]>([
+    { field: "source", op: "is", value: "github" },
+  ]);
+  const [action, setAction] = useState("snooze");
+  const [actionParam, setActionParam] = useState<string | null>("1 day");
+  const [ruleName, setRuleName] = useState("Auto-snooze dependabot");
+
+  const updateCond = (i: number, patch: Partial<Condition>) =>
+    setConds((cs) => cs.map((c, idx) => (idx === i ? { ...c, ...patch } : c)));
+  const addCond = () =>
+    setConds((cs) => [
+      ...cs,
+      { field: "author", op: "is", value: "dependabot" },
+    ]);
+  const removeCond = (i: number) =>
+    setConds((cs) => (cs.length > 1 ? cs.filter((_, idx) => idx !== i) : cs));
+
+  const currentAction = RULE_ACTIONS.find((a) => a.id === action);
+
+  return (
+    <div
+      aria-label="New rule builder"
+      className="mb-3.5 rounded-xl border-[1.5px] border-[var(--primary)] bg-[var(--canvas)] p-[18px]"
+    >
+      <div className="mb-3.5 flex items-center">
+        <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.6px] text-[var(--primary-active)]">
+          NEW RULE
+        </span>
+        <span className="flex-1" />
+        <span className="font-mono text-[11px] text-[var(--muted)]">
+          preview matches{" "}
+          <b className="text-[var(--ink)]">3 signals</b> from last 7d
+        </span>
+      </div>
+
+      {/* WHEN */}
+      <div className="mb-3.5 flex items-start gap-3.5">
+        <span className="w-[50px] pt-2 font-mono text-[11px] font-bold text-[var(--muted)]">
+          WHEN
+        </span>
+        <div className="flex-1">
+          <div className="mb-2.5 flex items-center gap-2">
+            <span className="text-[13px] text-[var(--body)]">
+              signal matches
+            </span>
+            <div className="inline-flex rounded-md bg-[var(--surface-soft)] p-0.5">
+              {(
+                [
+                  ["all", true],
+                  ["any", false],
+                ] as const
+              ).map(([l, v]) => (
+                <button
+                  key={l}
+                  type="button"
+                  onClick={() => setMatchAll(v)}
+                  className={cn(
+                    "rounded px-3 py-1 text-[12px] font-semibold transition-colors",
+                    matchAll === v
+                      ? "bg-[var(--canvas)] text-[var(--ink)] shadow-sm"
+                      : "bg-transparent text-[var(--muted)]",
+                  )}
+                >
+                  {l}
+                </button>
+              ))}
+            </div>
+            <span className="text-[13px] text-[var(--body)]">
+              of these conditions:
+            </span>
+          </div>
+          {conds.map((c, i) => (
+            <div
+              // biome-ignore lint/suspicious/noArrayIndexKey: condition order is stable within the builder
+              key={i}
+              className="mb-2 flex items-center gap-1.5 rounded-lg bg-[var(--surface-soft)] px-2 py-1.5"
+            >
+              <RuleChip
+                aria-label={`Condition ${i + 1} field`}
+                kind="field"
+                value={c.field}
+                options={FIELDS}
+                onChange={(v) =>
+                  updateCond(i, {
+                    field: v,
+                    op: OPS_BY_FIELD[v]?.[0] ?? "is",
+                    value: VALUES_BY_FIELD[v]?.[0] ?? "",
+                  })
+                }
+              />
+              <RuleChip
+                aria-label={`Condition ${i + 1} op`}
+                kind="op"
+                value={c.op}
+                options={OPS_BY_FIELD[c.field] ?? ["is"]}
+                onChange={(v) => updateCond(i, { op: v })}
+              />
+              <RuleChip
+                aria-label={`Condition ${i + 1} value`}
+                kind="value"
+                value={c.value}
+                options={VALUES_BY_FIELD[c.field] ?? [c.value]}
+                onChange={(v) => updateCond(i, { value: v })}
+              />
+              <span className="flex-1" />
+              {conds.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => removeCond(i)}
+                  aria-label={`Remove condition ${i + 1}`}
+                  className="cursor-pointer border-none bg-transparent px-1 text-[16px] leading-none text-[var(--muted)]"
+                >
+                  ×
+                </button>
+              )}
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={addCond}
+            aria-label="Add condition"
+            className="cursor-pointer rounded-md border border-dashed border-[var(--hairline)] bg-transparent px-3 py-1.5 text-[12px] font-medium text-[var(--muted)]"
+          >
+            + Add condition
+          </button>
+        </div>
+      </div>
+
+      {/* THEN */}
+      <div className="mb-3.5 flex items-start gap-3.5 border-t border-[var(--hairline-soft)] pt-3.5">
+        <span className="w-[50px] pt-2 font-mono text-[11px] font-bold text-[var(--primary)]">
+          THEN
+        </span>
+        <div className="flex flex-1 items-center gap-2 rounded-lg bg-[var(--surface-soft)] px-2 py-1.5">
+          <RuleChip
+            aria-label="Rule action"
+            kind="field"
+            value={currentAction?.label ?? RULE_ACTIONS[0].label}
+            options={RULE_ACTIONS.map((a) => a.label)}
+            onChange={(v) => {
+              const a = RULE_ACTIONS.find((x) => x.label === v);
+              if (!a) return;
+              setAction(a.id);
+              setActionParam(a.params?.[0] ?? null);
+            }}
+          />
+          {currentAction?.params && actionParam !== null && (
+            <RuleChip
+              aria-label="Rule action parameter"
+              kind="value"
+              value={actionParam}
+              options={currentAction.params}
+              onChange={setActionParam}
+            />
+          )}
+        </div>
+      </div>
+
+      {/* NAME */}
+      <div className="mb-[18px] flex items-center gap-3.5 border-t border-[var(--hairline-soft)] pt-3.5">
+        <span className="w-[50px] font-mono text-[11px] font-bold text-[var(--muted)]">
+          NAME
+        </span>
+        <input
+          aria-label="Rule name"
+          value={ruleName}
+          onChange={(e) => setRuleName(e.target.value)}
+          className="flex-1 rounded-lg border border-[var(--hairline)] bg-[var(--canvas)] px-3 py-2 text-[14px] text-[var(--ink)] outline-none focus:ring-1 focus:ring-[var(--ring)]"
+        />
+      </div>
+
+      <div className="flex justify-end gap-2">
+        <Button type="button" variant="ghost" onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button type="button" variant="outline" onClick={onSave}>
+          Test on history
+        </Button>
+        <Button type="button" variant="default" onClick={onSave}>
+          Save rule
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function InboxRulesPanel() {
+  const [rules, setRules] = useState<FixtureRule[]>(FIXTURE_RULES);
+  const [editing, setEditing] = useState(false);
+
+  const toggleRule = (i: number) =>
+    setRules((rs) => rs.map((r, idx) => (idx === i ? { ...r, on: !r.on } : r)));
+
+  const activeCount = rules.filter((r) => r.on).length;
+
+  return (
+    <section>
+      <h3 className="font-semibold text-[15px] text-[var(--ink)] tracking-tight">
+        Inbox rules
+      </h3>
+      <p className="mt-1 text-[var(--body)] text-sm">
+        Pure rule evaluator over Signals — runs after upsert, before alert
+        dispatch.
+      </p>
+
+      <div className="mt-3 flex items-center">
+        <span className="text-[13px] text-[var(--body)]">
+          {activeCount} of {rules.length} active · evaluated in order, top-down
+        </span>
+        <span className="flex-1" />
+        {!editing && (
+          <Button
+            type="button"
+            variant="default"
+            size="sm"
+            onClick={() => setEditing(true)}
+          >
+            <Plus className="size-3.5" />
+            New rule
+          </Button>
+        )}
+      </div>
+
+      {editing && (
+        <div className="mt-3">
+          <RuleBuilder
+            onSave={() => setEditing(false)}
+            onCancel={() => setEditing(false)}
+          />
+        </div>
+      )}
+
+      <ul
+        aria-label="Inbox rules list"
+        className="mt-3 overflow-hidden rounded-lg border border-[var(--hairline-soft)]"
+      >
+        {rules.map((r, i) => (
+          <li
+            // biome-ignore lint/suspicious/noArrayIndexKey: rule order is stable fixture data
+            key={i}
+            className="grid grid-cols-[auto_1fr_auto_auto] items-center gap-3.5 border-b border-[var(--hairline-soft)] px-3.5 py-3 last:border-b-0"
+          >
+            <span className="w-6 text-right font-mono text-[11px] font-bold text-[var(--muted)]">
+              {i + 1}
+            </span>
+            <div className="flex flex-wrap items-center gap-3 text-[13px]">
+              <span className="font-mono text-[11px] text-[var(--muted)]">
+                WHEN
+              </span>
+              <code className="rounded bg-[var(--surface-soft)] px-2 py-[3px] font-mono text-[12px]">
+                {r.when}
+              </code>
+              <span className="font-mono text-[11px] text-[var(--muted)]">
+                THEN
+              </span>
+              <span className="font-medium">{r.then}</span>
+              <span className="ml-auto pl-3 font-mono text-[10px] text-[var(--muted)]">
+                {r.hits} hits / 30d
+              </span>
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              aria-label={`Edit rule ${i + 1}`}
+            >
+              Edit
+            </Button>
+            <Switch
+              aria-label={`Rule ${i + 1} enabled`}
+              checked={r.on}
+              onCheckedChange={() => toggleRule(i)}
+            />
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 
@@ -605,6 +1005,8 @@ export function NotificationsPanel() {
           </ul>
         </div>
       </section>
+
+      <InboxRulesPanel />
     </section>
   );
 }

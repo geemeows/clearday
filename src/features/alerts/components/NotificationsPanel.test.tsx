@@ -66,6 +66,52 @@ describe("NotificationsPanel", () => {
     expect(within(pills).getByText("Pager escalations")).toBeTruthy();
   });
 
+  describe("InboxRulesPanel (Slice 9.3c)", () => {
+    it("renders fixture rules with WHEN / THEN labels and hit counts", () => {
+      render(<NotificationsPanel />);
+      const list = screen.getByLabelText("Inbox rules list");
+      expect(within(list).getByText("PR author is dependabot")).toBeTruthy();
+      expect(within(list).getByText("Snooze 1 day")).toBeTruthy();
+      expect(within(list).getByText("47 hits / 30d")).toBeTruthy();
+    });
+
+    it("renders active count summary", () => {
+      render(<NotificationsPanel />);
+      // 3 of 5 rules are on by default
+      expect(screen.getByText("3 of 5 active · evaluated in order, top-down")).toBeTruthy();
+    });
+
+    it("toggling a rule switch flips its enabled state and updates the count", () => {
+      render(<NotificationsPanel />);
+      // rule 1 is on; turn it off → count becomes 2 of 5
+      const toggle = screen.getByLabelText("Rule 1 enabled");
+      expect(toggle.getAttribute("aria-checked")).toBe("true");
+      fireEvent.click(toggle);
+      expect(toggle.getAttribute("aria-checked")).toBe("false");
+      expect(screen.getByText("2 of 5 active · evaluated in order, top-down")).toBeTruthy();
+    });
+
+    it("clicking New rule shows the RuleBuilder and Cancel hides it", () => {
+      render(<NotificationsPanel />);
+      expect(screen.queryByLabelText("New rule builder")).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: /new rule/i }));
+      expect(screen.getByLabelText("New rule builder")).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: /cancel/i }));
+      expect(screen.queryByLabelText("New rule builder")).toBeNull();
+    });
+
+    it("RuleBuilder: Add condition adds a row; Remove condition removes it", () => {
+      render(<NotificationsPanel />);
+      fireEvent.click(screen.getByRole("button", { name: /new rule/i }));
+      // starts with 1 condition (condition 1 field)
+      expect(screen.getByLabelText("Condition 1 field")).toBeTruthy();
+      fireEvent.click(screen.getByLabelText("Add condition"));
+      expect(screen.getByLabelText("Condition 2 field")).toBeTruthy();
+      fireEvent.click(screen.getByLabelText("Remove condition 2"));
+      expect(screen.queryByLabelText("Condition 2 field")).toBeNull();
+    });
+  });
+
   describe("schedule mode tabs (Slice 9.3b)", () => {
     it("renders the three mode tab buttons", () => {
       render(<NotificationsPanel />);
