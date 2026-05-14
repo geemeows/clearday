@@ -555,7 +555,10 @@ export function AutomationsPanel({
                 mode === "builder"
                   ? closeBuilder
                   : mode === "runs"
-                    ? closeRuns
+                    ? () => {
+                        closeRuns();
+                        closeDetail();
+                      }
                     : mode === "detail"
                       ? closeDetail
                       : undefined,
@@ -569,13 +572,7 @@ export function AutomationsPanel({
                   : mode === "detail"
                     ? (detailAutomation?.name ?? "")
                     : (runsAutomation?.name ?? ""),
-              onClick:
-                mode === "runs"
-                  ? () => {
-                      // Runs has no detail view yet (Slice 8.3); back to list.
-                      closeRuns();
-                    }
-                  : undefined,
+              onClick: mode === "runs" ? closeRuns : undefined,
             },
             ...(mode === "runs" ? [{ label: "Runs" }] : []),
           ]}
@@ -774,14 +771,17 @@ export function AutomationsPanel({
 
       {mode === "runs" && runsAutomation && (
         <div className="flex min-h-[600px] flex-col overflow-hidden rounded-xl border border-[var(--hairline-soft)] bg-[var(--surface-card)]">
-          <div className="flex items-center gap-3 border-[var(--hairline-soft)] border-b px-5 py-3.5">
+          <div className="flex items-center gap-3 border-[var(--hairline-soft)] border-b px-[22px] py-4">
             <h3 className="m-0 font-semibold text-[var(--ink)] text-base">
-              Runs · {runsAutomation.name}
+              {runsAutomation.name} · runs
             </h3>
+            <span className="flex-1" />
+            <span className="font-mono text-[11px] text-[var(--muted)]">
+              {summarizeRunsStats(runs)}
+            </span>
           </div>
-          <div className="flex flex-1 flex-col gap-4 overflow-y-auto p-5">
-            {runs && runs.length > 0 && <RunsHistogram runs={runs} />}
-            <RunsList runs={runs} error={runsError} />
+          <div className="flex flex-1 flex-col gap-[18px] overflow-y-auto px-[22px] py-4">
+            <RunsView runs={runs} error={runsError} />
             {dryRunMessage && (
               <p
                 aria-label="Dry-run result"
@@ -792,7 +792,7 @@ export function AutomationsPanel({
               </p>
             )}
           </div>
-          <div className="flex justify-end gap-2 border-[var(--hairline-soft)] border-t px-5 py-3">
+          <div className="flex justify-end gap-2 border-[var(--hairline-soft)] border-t px-[22px] py-3">
             <button
               type="button"
               aria-label="Test automation in dry-run mode"
@@ -1833,7 +1833,20 @@ function RunsHistogram({ runs }: { runs: AutomationRunRow[] }) {
   );
 }
 
-function RunsList({
+function summarizeRunsStats(runs: AutomationRunRow[] | null): string {
+  if (runs === null) return "loading…";
+  const total = runs.length;
+  const now = Date.now();
+  const weekMs = 7 * 24 * 60 * 60 * 1000;
+  const fail7d = runs.filter((r) => {
+    if (r.status !== "failed") return false;
+    const t = new Date(r.started_at).getTime();
+    return Number.isFinite(t) && now - t <= weekMs;
+  }).length;
+  return `${total} runs · ${fail7d} failed (7d)`;
+}
+
+function RunsView({
   runs,
   error,
 }: {
@@ -1851,7 +1864,11 @@ function RunsList({
     );
   }
   if (runs === null) {
-    return <p className="text-muted-foreground text-sm">Loading runs…</p>;
+    return (
+      <p className="font-mono text-[11px] text-[var(--muted-soft)]">
+        Loading runs…
+      </p>
+    );
   }
   if (runs.length === 0) {
     return (
@@ -1861,32 +1878,27 @@ function RunsList({
     );
   }
   return (
-    <ul aria-label="Automation runs" className="space-y-2">
-      {runs.map((r) => (
-        <li
-          key={r.id}
-          className="rounded border border-border bg-muted/40 p-2 text-xs"
-        >
-          <div className="flex items-baseline justify-between gap-2">
-            <span className="font-mono text-[10px] text-muted-foreground">
-              {r.started_at}
-            </span>
-            <span
-              aria-label="Run status"
-              role="note"
-              className="rounded-sm border border-border bg-background px-1.5 py-0.5 font-mono text-[10px]"
-            >
+    <>
+      <div>
+        <div className="mb-2 font-mono text-[10px] tracking-[0.06em] text-[var(--muted)] uppercase">
+          Last 14 days
+        </div>
+        <RunsHistogram runs={runs} />
+      </div>
+      <ul
+        aria-label="Automation runs"
+        className="overflow-hidden rounded-lg border border-[var(--hairline-soft)] p-0"
+      >
+        {runs.map((r, i) => (
+          <li key={r.id}>
+            <RecentRunRow run={r} last={i === runs.length - 1} />
+            <span aria-label="Run status" className="sr-only">
               {r.status}
             </span>
-          </div>
-          <div className="mt-1 text-muted-foreground">
-            Signal: {r.signal_id ?? "—"} · planned {r.actions_planned.length} ·
-            executed {r.actions_executed.length}
-          </div>
-          {r.error && <p className="mt-1 text-destructive">{r.error}</p>}
-        </li>
-      ))}
-    </ul>
+          </li>
+        ))}
+      </ul>
+    </>
   );
 }
 

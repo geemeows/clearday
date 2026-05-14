@@ -442,7 +442,7 @@ describe("AutomationsPanel runs view", () => {
     await waitFor(() => {
       expect(screen.getByLabelText("Automation runs")).toBeTruthy();
     });
-    expect(screen.getByText(/Runs · Snooze deps/)).toBeTruthy();
+    expect(screen.getByText(/Snooze deps · runs/)).toBeTruthy();
     const statusChips = screen.getAllByLabelText("Run status");
     expect(statusChips.map((el) => el.textContent)).toEqual([
       "succeeded",
@@ -1107,7 +1107,56 @@ describe("AutomationsPanel detail mode (Slice 8.3)", () => {
       await screen.findByLabelText("Full run history for Snooze deps"),
     );
     await waitFor(() => {
-      expect(screen.getByText(/Runs · Snooze deps/)).toBeTruthy();
+      expect(screen.getByText(/Snooze deps · runs/)).toBeTruthy();
     });
+  });
+
+  it("runs view renders stats header + LAST 14 DAYS histogram label + full bordered list (Slice 8.5)", async () => {
+    const now = Date.now();
+    const day = 24 * 60 * 60 * 1000;
+    const runs: AutomationRunRow[] = [
+      // 6 runs: 4 within 7d (2 failed, 2 succeeded), 2 older (1 failed)
+      ...Array.from({ length: 4 }, (_, i) => ({
+        id: `r-recent-${i}`,
+        automation_id: "a-1",
+        trigger_event_id: `evt-${i}`,
+        signal_id: `sig-${i}`,
+        status: (i < 2 ? "failed" : "succeeded") as AutomationRunRow["status"],
+        actions_planned: [{ type: "tag" as const, tag: "x" }],
+        actions_executed: [{ type: "tag" as const, ok: i >= 2 }],
+        error: i < 2 ? "boom" : null,
+        started_at: new Date(now - i * 60_000).toISOString(),
+        finished_at: new Date(now - i * 60_000 + 500).toISOString(),
+      })),
+      ...Array.from({ length: 2 }, (_, i) => ({
+        id: `r-old-${i}`,
+        automation_id: "a-1",
+        trigger_event_id: `evt-old-${i}`,
+        signal_id: `sig-old-${i}`,
+        status: (i === 0 ? "failed" : "succeeded") as AutomationRunRow["status"],
+        actions_planned: [{ type: "tag" as const, tag: "x" }],
+        actions_executed: [{ type: "tag" as const, ok: i !== 0 }],
+        error: i === 0 ? "old-boom" : null,
+        started_at: new Date(now - (10 + i) * day).toISOString(),
+        finished_at: new Date(now - (10 + i) * day + 500).toISOString(),
+      })),
+    ];
+    const runsLoader = vi.fn(async () => ({ runs }));
+    renderPanel({ runsLoader });
+    fireEvent.click(await screen.findByLabelText("Open Snooze deps"));
+    await screen.findByLabelText("Automation detail Snooze deps");
+    fireEvent.click(
+      await screen.findByLabelText("Full run history for Snooze deps"),
+    );
+    await waitFor(() => {
+      expect(screen.getByText(/Snooze deps · runs/)).toBeTruthy();
+    });
+    // Stats header: total = 6, fail7d = 2 (the 4-recent batch has 2 failed within 7d)
+    expect(screen.getByText("6 runs · 2 failed (7d)")).toBeTruthy();
+    // Histogram label
+    expect(screen.getByText(/Last 14 days/i)).toBeTruthy();
+    // Full bordered list: all 6 rows (not capped at 5 like RECENT RUNS strip)
+    const list = screen.getByLabelText("Automation runs");
+    expect(list.querySelectorAll("li").length).toBe(6);
   });
 });
