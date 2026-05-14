@@ -15,11 +15,17 @@ Tracer bullets comes from the Pragmatic Programmer. When building systems, you w
 
 TL;DR - build a tiny, end-to-end slice of the feature first, then expand it out.
 
-**Exception — redesign work.** If the selected issue has the `redesign` label, or its title starts with `Redesign v`, tracer bullets do **not** apply. Visual ports are wholesale by nature — splitting a page into one-badge-per-commit shipments produces a polish trail, not a redesign.
+**Exception — redesign work (Redesign v5 rules).** If the selected issue has the `redesign` label, or its title starts with `Redesign v`, tracer bullets do **not** apply. The canonical design source is `docs/design/devy-standalone.html` — open it to read the page and its variant toggles before writing code.
 
-Prefer one commit per redesign issue: complete the full scope in one pass and ship it as a single commit. The "one logical change per commit" rule in the COMMIT section is overridden — one commit per issue, however large the diff.
+**Hard rule: one commit per redesign issue. No sub-slices.** Complete the full scope of the page in one pass and ship it as a single commit. The "one logical change per commit" rule in the COMMIT section is overridden — one commit per issue, however large the diff.
 
-If the scope genuinely exceeds one loop, split along **structural boundaries** (e.g. shell → list → detail → builder; or per-tab for tabbed surfaces) and commit each sub-slice with a `RALPH: Slice N.M —` prefix. Pick the largest coherent sub-slice you can finish *and verify clean* (typecheck + tests + biome) this loop, commit it, then leave a progress comment listing the remaining sub-slices. **Never leave a loop with zero commits if a coherent sub-slice is shippable** — a scope-audit comment without a commit is only acceptable when no sub-slice can be landed cleanly (e.g. the shell itself is entangled with the detail pane). State that reason explicitly in the comment when it applies.
+`RALPH: Slice N.M —` sub-slice commits are **forbidden**. The structural-boundary split escape hatch is **removed**. If the page cannot be finished and verified clean (typecheck + tests + biome on touched files) in one loop, commit **nothing**. Instead, leave a structured comment on the issue containing:
+
+- What you attempted (sections / components you got working).
+- What blocked completion (specific file, missing primitive, ambiguous mockup region, etc.).
+- A recommendation (split the issue into N smaller page issues, request a scope reduction, ask for a missing primitive, etc.).
+
+A "polish trail" of micro-commits is the failure mode this rule exists to prevent. Plan the whole page before you start. If you can't plan it, leave the comment and stop — do not partially land it.
 
 3. Polish and quick wins
 4. Refactors

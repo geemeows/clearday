@@ -2,8 +2,16 @@
 // per-provider icon/label dispatch and the signal-kind → human label table
 // so routes don't each repeat the same switch statements.
 
-import type { SourceKind } from "#/features/signals/components/SourceGlyph";
 import type { SignalProvider } from "#/shared/signal";
+
+export type SourceKind =
+  | "git"
+  | "slack"
+  | "cal"
+  | "task"
+  | "linear"
+  | "jira"
+  | "ai";
 
 export function providerSourceKind(provider: SignalProvider): SourceKind {
   if (provider === "github") return "git";
