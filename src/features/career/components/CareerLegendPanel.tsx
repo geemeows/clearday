@@ -55,34 +55,40 @@ export function CareerLegendPanel({
   };
 
   return (
-    <section className="space-y-6">
-      <header>
-        <h2 className="font-semibold text-2xl tracking-tight">Career</h2>
-        <p className="mt-1 font-mono text-[11px] text-muted-foreground">
-          Labels for the 1–4 score scale used by the wheel and exported sheets.
-        </p>
-      </header>
+    <section aria-label="Career settings">
+      <h2 className="font-semibold text-xl tracking-[-0.2px] text-[var(--ink)]">
+        Career settings
+      </h2>
+      <p className="mt-1 text-[var(--muted)] text-sm">
+        Labels for the 1–4 score scale used by the career wheel and exported
+        sheets.
+      </p>
 
       {error && (
         <p
           role="alert"
-          className="rounded-sm border border-destructive/30 bg-destructive/10 p-3 text-destructive text-sm"
+          className="mt-4 rounded-md border border-[var(--danger-soft)] bg-[var(--danger-soft)] px-3 py-2 text-[var(--danger)] text-sm"
         >
           {error}
         </p>
       )}
 
       {legend === null ? (
-        <p className="text-muted-foreground text-sm">Loading…</p>
+        <p className="mt-6 text-[var(--muted)] text-sm">Loading…</p>
       ) : (
-        <div className="max-w-xl space-y-3 rounded-lg border border-border bg-card p-5">
-          <h3 className="font-medium text-foreground text-sm">
-            Scale legend (1–4)
-          </h3>
-          <ul className="space-y-2">
-            {FIELDS.map(({ key, score }) => (
-              <li key={key} className="flex items-center gap-3">
-                <span className="w-6 font-mono text-muted-foreground text-xs">
+        <div className="mt-6 rounded-lg border border-[var(--hairline-soft)] bg-[var(--canvas)]">
+          <div className="border-[var(--hairline-soft)] border-b px-4 py-3">
+            <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.4px] text-[var(--muted)]">
+              SCALE LEGEND (1–4)
+            </div>
+          </div>
+          <ul>
+            {FIELDS.map(({ key, score }, i) => (
+              <li
+                key={key}
+                className={`flex items-center gap-3 px-4 py-2.5 ${i > 0 ? "border-[var(--hairline-soft)] border-t" : ""}`}
+              >
+                <span className="w-5 font-mono text-[12px] text-[var(--muted)]">
                   {score}
                 </span>
                 <LegendInput
@@ -117,7 +123,7 @@ function LegendInput({
       onChange={(e) => setDraft(e.target.value)}
       onBlur={() => onCommit(draft)}
       placeholder="e.g. Beginner"
-      className="min-w-0 flex-1 rounded-md border border-border bg-background px-3 py-1.5 text-foreground text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+      className="min-w-0 flex-1 rounded-md border border-[var(--hairline)] bg-[var(--canvas)] px-3 py-1.5 text-[13px] text-[var(--ink)] placeholder:text-[var(--muted-soft)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
     />
   );
 }

@@ -25,6 +25,11 @@ import {
   type ThemeView,
 } from "#/features/settings/theme/api";
 import {
+  WEEK_START_UPDATED_EVENT,
+  type WeekStart,
+  type WeekStartView,
+} from "#/features/settings/week-start/api";
+import {
   AiProviderPanel,
   AiSafeguardsPanel,
   DataPrivacyPanel,
@@ -41,6 +46,7 @@ import {
   Route as SettingsLayoutRoute,
   ThemePanel,
   WebPushDevicesPanel,
+  WeekStartPanel,
 } from "#/routes/_app.settings";
 
 async function renderSettings(initial = "/settings") {
@@ -1126,10 +1132,8 @@ describe("ThemePanel", () => {
         }) as ThemeView,
     );
     render(<ThemePanel loader={loader} />);
-    const darkRadio = (await screen.findByRole("radio", {
-      name: /dark/i,
-    })) as HTMLInputElement;
-    expect(darkRadio.checked).toBe(true);
+    const darkRadio = await screen.findByRole("radio", { name: /dark/i });
+    expect(darkRadio.getAttribute("aria-checked")).toBe("true");
     expect(loader).toHaveBeenCalledTimes(1);
   });
 
@@ -1143,9 +1147,7 @@ describe("ThemePanel", () => {
     window.addEventListener(THEME_UPDATED_EVENT, onUpdate);
     try {
       render(<ThemePanel loader={loader} saver={saver} />);
-      const darkRadio = (await screen.findByRole("radio", {
-        name: /dark/i,
-      })) as HTMLInputElement;
+      const darkRadio = await screen.findByRole("radio", { name: /dark/i });
       fireEvent.click(darkRadio);
       await waitFor(() => expect(saver).toHaveBeenCalled());
       expect(saver).toHaveBeenCalledWith({
@@ -1165,9 +1167,7 @@ describe("ThemePanel", () => {
       theme: patch,
     }));
     render(<ThemePanel loader={loader} saver={saver} />);
-    const compactRadio = (await screen.findByRole("radio", {
-      name: /compact/i,
-    })) as HTMLInputElement;
+    const compactRadio = await screen.findByRole("radio", { name: /compact/i });
     fireEvent.click(compactRadio);
     await waitFor(() =>
       expect(saver).toHaveBeenLastCalledWith(
@@ -1183,9 +1183,7 @@ describe("ThemePanel", () => {
       error: "theme must be one of light, dark, system",
     }));
     render(<ThemePanel loader={loader} saver={saver} />);
-    const lightRadio = (await screen.findByRole("radio", {
-      name: /light/i,
-    })) as HTMLInputElement;
+    const lightRadio = await screen.findByRole("radio", { name: /light/i });
     fireEvent.click(lightRadio);
     await waitFor(() =>
       expect(screen.getByText(/theme must be one of/i)).toBeTruthy(),
@@ -1200,7 +1198,7 @@ describe("DataPrivacyPanel", () => {
     const retentionLoader = vi.fn(async () => ({ retention_days: 30 }));
     render(<DataPrivacyPanel retentionLoader={retentionLoader} />);
     const input = (await screen.findByLabelText(
-      /retention \(days\)/i,
+      /retention days/i,
     )) as HTMLInputElement;
     expect(input.value).toBe("30");
     expect(retentionLoader).toHaveBeenCalledTimes(1);
@@ -1219,10 +1217,10 @@ describe("DataPrivacyPanel", () => {
       />,
     );
     const input = (await screen.findByLabelText(
-      /retention \(days\)/i,
+      /retention days/i,
     )) as HTMLInputElement;
     fireEvent.change(input, { target: { value: "45" } });
-    fireEvent.click(screen.getByRole("button", { name: /save retention/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
     await waitFor(() =>
       expect(retentionSaver).toHaveBeenCalledWith({ retention_days: 45 }),
     );
@@ -1256,7 +1254,7 @@ describe("DataPrivacyPanel", () => {
       />,
     );
     fireEvent.click(
-      await screen.findByRole("button", { name: /export all data/i }),
+      await screen.findByRole("button", { name: /export my data/i }),
     );
     await waitFor(() => expect(exporter).toHaveBeenCalledTimes(1));
     expect(createObjectURL).toHaveBeenCalled();
@@ -1327,6 +1325,35 @@ describe("DataPrivacyPanel", () => {
     await waitFor(() =>
       expect(screen.getByRole("alert").textContent).toMatch(/confirmation/i),
     );
+  });
+});
+
+describe("WeekStartPanel (Slice 9.6)", () => {
+  it("loads the saved week-start and reflects it in the radiogroup", async () => {
+    const loader = vi.fn(async (): Promise<WeekStartView> => ({ weekStart: "sat" as WeekStart }));
+    render(<WeekStartPanel loader={loader} />);
+    const satRadio = await screen.findByRole("radio", { name: /saturday/i });
+    expect(satRadio.getAttribute("aria-checked")).toBe("true");
+    expect(loader).toHaveBeenCalledTimes(1);
+  });
+
+  it("saves and dispatches WEEK_START_UPDATED_EVENT on pick", async () => {
+    const loader = vi.fn(async (): Promise<WeekStartView> => ({ weekStart: "mon" as WeekStart }));
+    const saver = vi.fn(async (patch: WeekStartView) => ({
+      ok: true as const,
+      weekStart: patch,
+    }));
+    const onUpdate = vi.fn();
+    window.addEventListener(WEEK_START_UPDATED_EVENT, onUpdate);
+    try {
+      render(<WeekStartPanel loader={loader} saver={saver} />);
+      await screen.findByRole("radio", { name: /monday/i });
+      fireEvent.click(screen.getByRole("radio", { name: /sunday/i }));
+      await waitFor(() => expect(saver).toHaveBeenCalledWith({ weekStart: "sun" }));
+      await waitFor(() => expect(onUpdate).toHaveBeenCalled());
+    } finally {
+      window.removeEventListener(WEEK_START_UPDATED_EVENT, onUpdate);
+    }
   });
 });
 

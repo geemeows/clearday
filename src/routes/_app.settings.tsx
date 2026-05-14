@@ -26,6 +26,13 @@ import {
   type Theme,
   type ThemeView,
 } from "#/features/settings/theme/api";
+import {
+  DEFAULT_WEEK_START,
+  WEEK_STARTS,
+  WEEK_START_UPDATED_EVENT,
+  type WeekStart,
+  type WeekStartView,
+} from "#/features/settings/week-start/api";
 import { useAsyncPanel } from "#/hooks/useAsyncPanel";
 import { apiFetch } from "#/lib/api-client";
 
@@ -40,6 +47,9 @@ export const SETTINGS_TABS: ReadonlyArray<{ to: string; label: string }> = [
   { to: "/settings/selfhost", label: "Self-host" },
   { to: "/settings/profile", label: "Profile" },
   { to: "/settings/career", label: "Career" },
+  { to: "/settings/theme", label: "Theme" },
+  { to: "/settings/data-privacy", label: "Data & privacy" },
+  { to: "/settings/week-start", label: "Week-start" },
 ];
 
 function SettingsLayout() {
@@ -2847,70 +2857,100 @@ export function ThemePanel({
   const current = data ?? DEFAULT_THEME;
 
   return (
-    <SettingsPanel
-      title="Theme & layout"
-      desc="Light / dark / system and density. Changes apply immediately without a reload."
-      error={error}
-      busy={busy && !data}
-    >
-      {data && (
-        <div className="mt-3 grid gap-4">
-          <fieldset>
-            <legend className="font-medium text-foreground text-sm">
-              Theme
-            </legend>
-            <div className="mt-2 flex gap-2">
-              {THEMES.map((t: Theme) => (
-                <label
-                  key={t}
-                  className={`cursor-pointer rounded-md border px-3 py-1.5 text-sm capitalize ${
-                    current.theme === t
-                      ? "border-primary bg-primary text-primary-foreground"
-                      : "border-border hover:bg-muted/50"
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="theme"
-                    className="sr-only"
-                    checked={current.theme === t}
-                    onChange={() => persist({ theme: t })}
-                  />
-                  {t}
-                </label>
-              ))}
-            </div>
-          </fieldset>
+    <section aria-label="Theme">
+      <h2 className="font-semibold text-xl tracking-[-0.2px] text-[var(--ink)]">
+        Theme &amp; layout
+      </h2>
+      <p className="mt-1 text-[var(--muted)] text-sm">
+        Light / dark / system and density. Changes apply immediately without a
+        reload.
+      </p>
 
-          <fieldset>
-            <legend className="font-medium text-foreground text-sm">
-              Density
-            </legend>
-            <div className="mt-2 flex gap-2">
-              {DENSITIES.map((d: Density) => (
-                <label
-                  key={d}
-                  className={`cursor-pointer rounded-md border px-3 py-1.5 text-sm capitalize ${
-                    current.density === d
-                      ? "border-primary bg-primary text-primary-foreground"
-                      : "border-border hover:bg-muted/50"
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="density"
-                    className="sr-only"
-                    checked={current.density === d}
-                    onChange={() => persist({ density: d })}
-                  />
-                  {d}
-                </label>
-              ))}
+      {error && (
+        <p
+          role="alert"
+          className="mt-4 rounded-md border border-[var(--danger-soft)] bg-[var(--danger-soft)] px-3 py-2 text-[var(--danger)] text-sm"
+        >
+          {typeof error === "string" ? error : (error as Error).message}
+        </p>
+      )}
+
+      {data && (
+        <div className="mt-6 space-y-4">
+          <div className="rounded-lg border border-[var(--hairline-soft)] bg-[var(--canvas)]">
+            <div className="flex items-center justify-between px-4 py-3.5">
+              <div>
+                <div className="font-medium text-[13px] text-[var(--ink)]">
+                  Theme
+                </div>
+                <div className="mt-0.5 text-[12px] text-[var(--muted)]">
+                  Overrides the system preference when set to Light or Dark.
+                </div>
+              </div>
+              <div
+                className="inline-flex rounded-lg bg-[var(--surface-soft)] p-0.75"
+                role="radiogroup"
+                aria-label="Theme"
+              >
+                {THEMES.map((t: Theme) => (
+                  <button
+                    key={t}
+                    type="button"
+                    role="radio"
+                    aria-checked={current.theme === t}
+                    onClick={() => persist({ theme: t })}
+                    className={`rounded-[6px] px-3.5 py-1.5 capitalize text-[12px] font-semibold transition-colors ${
+                      current.theme === t
+                        ? "bg-[var(--canvas)] text-[var(--ink)] shadow-sm"
+                        : "bg-transparent text-[var(--muted)]"
+                    }`}
+                  >
+                    {t}
+                  </button>
+                ))}
+              </div>
             </div>
-          </fieldset>
+
+            <div className="flex items-center justify-between border-[var(--hairline-soft)] border-t px-4 py-3.5">
+              <div>
+                <div className="font-medium text-[13px] text-[var(--ink)]">
+                  Density
+                </div>
+                <div className="mt-0.5 text-[12px] text-[var(--muted)]">
+                  Comfortable fits more breathing room; compact fits more rows.
+                </div>
+              </div>
+              <div
+                className="inline-flex rounded-lg bg-[var(--surface-soft)] p-0.75"
+                role="radiogroup"
+                aria-label="Density"
+              >
+                {DENSITIES.map((d: Density) => (
+                  <button
+                    key={d}
+                    type="button"
+                    role="radio"
+                    aria-checked={current.density === d}
+                    onClick={() => persist({ density: d })}
+                    className={`rounded-[6px] px-3.5 py-1.5 capitalize text-[12px] font-semibold transition-colors ${
+                      current.density === d
+                        ? "bg-[var(--canvas)] text-[var(--ink)] shadow-sm"
+                        : "bg-transparent text-[var(--muted)]"
+                    }`}
+                  >
+                    {d}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
       )}
-    </SettingsPanel>
+
+      {busy && !data && (
+        <p className="mt-6 text-[var(--muted)] text-sm">Loading…</p>
+      )}
+    </section>
   );
 }
 
@@ -3053,145 +3093,291 @@ export function DataPrivacyPanel({
   };
 
   return (
-    <SettingsPanel
-      title="Data & privacy"
-      desc="Export or purge your Signals and rollups, and override how long raw Signals are retained before rollup."
-      error={retentionError}
-      busy={retentionBusy && !retention}
-    >
-      <div className="mt-4 grid gap-4">
-        <div>
-          <h3 className="font-medium text-foreground text-sm">
-            Export all data
-          </h3>
-          <p className="mt-1 text-muted-foreground text-xs">
-            Downloads a JSON file with all your Signals, rollups, settings, and
-            inbox rules. Excludes encrypted secrets.
-          </p>
-          <div className="mt-2 flex items-center gap-3">
-            <button
-              type="button"
-              onClick={onExport}
-              disabled={exportBusy}
-              className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted/50 disabled:opacity-50"
-            >
-              {exportBusy ? "Exporting…" : "Export all data"}
-            </button>
-            {exportError && (
-              <p role="alert" className="text-destructive text-sm">
-                {exportError}
-              </p>
-            )}
-          </div>
-        </div>
+    <section aria-label="Data & privacy">
+      <h2 className="font-semibold text-xl tracking-[-0.2px] text-[var(--ink)]">
+        Data &amp; privacy
+      </h2>
+      <p className="mt-1 text-[var(--muted)] text-sm">
+        Export or purge your Signals and rollups, and override how long raw
+        Signals are retained before rollup.
+      </p>
 
-        {retention && (
-          <div>
-            <label className="block text-sm">
-              <span className="text-foreground">Retention (days)</span>
-              <input
-                type="number"
-                min={MIN_RETENTION_DAYS}
-                max={MAX_RETENTION_DAYS}
-                className="mt-1 block w-32 rounded-md border border-input bg-background px-2 py-1.5 text-sm"
-                value={draftDays}
-                onChange={(e) => {
-                  const n = Number.parseInt(e.target.value, 10);
-                  if (Number.isFinite(n)) setDraftDays(n);
-                }}
-                disabled={retentionBusy}
-              />
-            </label>
-            <p className="mt-1 text-muted-foreground text-xs">
-              Raw Signals older than this are rolled up into period aggregates
-              and removed from the hot table. Default: {DEFAULT_RETENTION_DAYS}.
-            </p>
-            <div className="mt-2 flex items-center gap-3">
-              <button
-                type="button"
-                onClick={onSaveRetention}
-                className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted/50 disabled:opacity-50"
-              >
-                Save retention
-              </button>
+      {retentionError && (
+        <p
+          role="alert"
+          className="mt-4 rounded-md border border-[var(--danger-soft)] bg-[var(--danger-soft)] px-3 py-2 text-[var(--danger)] text-sm"
+        >
+          {typeof retentionError === "string"
+            ? retentionError
+            : (retentionError as Error).message}
+        </p>
+      )}
+
+      <div className="mt-6 space-y-2">
+        {/* Export row */}
+        <div className="rounded-lg border border-[var(--hairline-soft)] bg-[var(--canvas)]">
+          <div className="flex items-center justify-between px-4 py-3.5">
+            <div>
+              <div className="font-medium text-[13px] text-[var(--ink)]">
+                Export all data
+              </div>
+              <div className="mt-0.5 text-[12px] text-[var(--muted)]">
+                Downloads a JSON file with all your Signals, rollups, settings,
+                and inbox rules. Excludes encrypted secrets.
+              </div>
             </div>
-          </div>
-        )}
-
-        <div>
-          <h3 className="font-medium text-destructive text-sm">
-            Purge all data
-          </h3>
-          <p className="mt-1 text-muted-foreground text-xs">
-            Permanently deletes every Signal and rollup. This cannot be undone.
-          </p>
-          {!purgeOpen ? (
-            <div className="mt-2 flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => {
-                  setPurgeOpen(true);
-                  setPurgeStatus(null);
-                  setPurgeError(null);
-                }}
-                className="rounded-md border border-destructive/40 px-3 py-1.5 text-destructive text-sm hover:bg-destructive/5"
-              >
-                Purge all data…
-              </button>
-              {purgeStatus && (
-                <output className="text-muted-foreground text-sm">
-                  {purgeStatus}
-                </output>
+            <div className="flex items-center gap-3">
+              {exportError && (
+                <p role="alert" className="text-[var(--danger)] text-[12px]">
+                  {exportError}
+                </p>
               )}
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={onExport}
+                disabled={exportBusy}
+              >
+                {exportBusy ? "Exporting…" : "Export my data (JSON)"}
+              </Button>
             </div>
-          ) : (
-            <div
-              role="dialog"
-              aria-label="Confirm purge"
-              className="mt-2 rounded-md border border-destructive/40 bg-destructive/5 p-3"
-            >
-              <p className="text-destructive text-sm">
-                Type <code className="font-mono">{PURGE_CONFIRMATION}</code> to
-                confirm. This cannot be undone.
-              </p>
-              <input
-                type="text"
-                aria-label="Purge confirmation"
-                className="mt-2 block w-full rounded-md border border-destructive/40 bg-background px-2 py-1.5 text-sm"
-                value={purgeInput}
-                onChange={(e) => setPurgeInput(e.target.value)}
-              />
-              <div className="mt-2 flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={onPurgeConfirm}
-                  disabled={purgeInput !== PURGE_CONFIRMATION || purgeBusy}
-                  className="rounded-md border border-destructive bg-destructive px-3 py-1.5 text-destructive-foreground text-sm hover:bg-destructive/90 disabled:opacity-50"
-                >
-                  {purgeBusy ? "Purging…" : "Confirm purge"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPurgeOpen(false);
-                    setPurgeInput("");
+          </div>
+
+          {retention && (
+            <div className="flex items-center justify-between border-[var(--hairline-soft)] border-t px-4 py-3.5">
+              <div>
+                <div className="font-medium text-[13px] text-[var(--ink)]">
+                  Retention window
+                </div>
+                <div className="mt-0.5 text-[12px] text-[var(--muted)]">
+                  Raw Signals older than this are rolled up and removed from the
+                  hot table. Default: {DEFAULT_RETENTION_DAYS} days.
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  aria-label="Retention days"
+                  min={MIN_RETENTION_DAYS}
+                  max={MAX_RETENTION_DAYS}
+                  className="w-20 rounded-md border border-[var(--hairline)] bg-[var(--canvas)] px-2 py-1.5 font-mono text-[12px] text-[var(--ink)] text-right focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+                  value={draftDays}
+                  onChange={(e) => {
+                    const n = Number.parseInt(e.target.value, 10);
+                    if (Number.isFinite(n)) setDraftDays(n);
                   }}
-                  disabled={purgeBusy}
-                  className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted/50 disabled:opacity-50"
+                  disabled={retentionBusy}
+                />
+                <span className="text-[12px] text-[var(--muted)]">days</span>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={onSaveRetention}
+                  disabled={retentionBusy}
                 >
-                  Cancel
-                </button>
-                {purgeError && (
-                  <p role="alert" className="text-destructive text-sm">
-                    {purgeError}
-                  </p>
-                )}
+                  Save
+                </Button>
               </div>
             </div>
           )}
         </div>
+
+        {/* Danger zone */}
+        <div className="rounded-lg border border-[var(--danger-soft)] bg-[var(--canvas)]">
+          <div className="px-4 py-3.5">
+            <h3 className="font-medium text-[13px] text-[var(--danger)]">
+              Danger zone
+            </h3>
+            <div className="mt-3 flex items-start justify-between">
+              <div>
+                <div className="font-medium text-[13px] text-[var(--ink)]">
+                  Purge all data
+                </div>
+                <div className="mt-0.5 text-[12px] text-[var(--muted)]">
+                  Permanently deletes every Signal and rollup. This cannot be
+                  undone.
+                </div>
+              </div>
+              {!purgeOpen && (
+                <div className="flex items-center gap-3">
+                  {purgeStatus && (
+                    <output className="text-[12px] text-[var(--muted)]">
+                      {purgeStatus}
+                    </output>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPurgeOpen(true);
+                      setPurgeStatus(null);
+                      setPurgeError(null);
+                    }}
+                    className="rounded-md border border-[var(--danger)] px-3 py-1.5 text-[12px] text-[var(--danger)] hover:bg-[var(--danger-soft)]"
+                  >
+                    Purge all data…
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {purgeOpen && (
+              <div
+                role="dialog"
+                aria-label="Confirm purge"
+                className="mt-3 rounded-md border border-[var(--danger-soft)] bg-[var(--canvas)] p-3"
+              >
+                <p className="text-[var(--danger)] text-[13px]">
+                  Type{" "}
+                  <code className="font-mono">{PURGE_CONFIRMATION}</code> to
+                  confirm. This cannot be undone.
+                </p>
+                <input
+                  type="text"
+                  aria-label="Purge confirmation"
+                  className="mt-2 block w-full rounded-md border border-[var(--danger-soft)] bg-[var(--canvas)] px-2 py-1.5 text-[13px] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+                  value={purgeInput}
+                  onChange={(e) => setPurgeInput(e.target.value)}
+                />
+                <div className="mt-2 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={onPurgeConfirm}
+                    disabled={purgeInput !== PURGE_CONFIRMATION || purgeBusy}
+                    className="rounded-md border border-[var(--danger)] bg-[var(--danger)] px-3 py-1.5 text-[12px] text-white hover:opacity-90 disabled:opacity-50"
+                  >
+                    {purgeBusy ? "Purging…" : "Confirm purge"}
+                  </button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setPurgeOpen(false);
+                      setPurgeInput("");
+                    }}
+                    disabled={purgeBusy}
+                  >
+                    Cancel
+                  </Button>
+                  {purgeError && (
+                    <p role="alert" className="text-[var(--danger)] text-[12px]">
+                      {purgeError}
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
-    </SettingsPanel>
+
+      {retentionBusy && !retention && (
+        <p className="mt-6 text-[var(--muted)] text-sm">Loading…</p>
+      )}
+    </section>
+  );
+}
+
+type WeekStartSaveResult =
+  | { ok: true; weekStart: WeekStartView }
+  | { ok: false; error: string };
+
+export function WeekStartPanel({
+  loader,
+  saver,
+}: {
+  loader?: () => Promise<WeekStartView>;
+  saver?: (patch: WeekStartView) => Promise<WeekStartSaveResult>;
+} = {}) {
+  const load = useMemo(
+    () =>
+      loader ?? (() => apiFetch("/api/week-start") as Promise<WeekStartView>),
+    [loader],
+  );
+  const save = useMemo(
+    () =>
+      saver ??
+      ((patch: WeekStartView) =>
+        apiFetch("/api/week-start", {
+          method: "PUT",
+          body: patch,
+        }) as Promise<WeekStartSaveResult>),
+    [saver],
+  );
+
+  const { data, error, persist } = useAsyncPanel<WeekStartView>({
+    load,
+    save: async (next) => {
+      const out = await save(next);
+      if (!out.ok) throw new Error(out.error);
+      window.dispatchEvent(
+        new CustomEvent(WEEK_START_UPDATED_EVENT, {
+          detail: out.weekStart.weekStart,
+        }),
+      );
+    },
+  });
+
+  const current = data ?? DEFAULT_WEEK_START;
+
+  const WEEK_START_LABELS: Record<WeekStart, string> = {
+    sun: "Sunday",
+    mon: "Monday",
+    sat: "Saturday",
+  };
+
+  return (
+    <section aria-label="Week-start">
+      <h2 className="font-semibold text-xl tracking-[-0.2px] text-[var(--ink)]">
+        Week-start
+      </h2>
+      <p className="mt-1 text-[var(--muted)] text-sm">
+        Affects the week view on the Calendar page and weekly stats.
+      </p>
+
+      {error && (
+        <p
+          role="alert"
+          className="mt-4 rounded-md border border-[var(--danger-soft)] bg-[var(--danger-soft)] px-3 py-2 text-[var(--danger)] text-sm"
+        >
+          {typeof error === "string" ? error : (error as Error).message}
+        </p>
+      )}
+
+      <div className="mt-6 rounded-lg border border-[var(--hairline-soft)] bg-[var(--canvas)]">
+        <div className="flex items-center justify-between px-4 py-3.5">
+          <div>
+            <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.4px] text-[var(--muted)]">
+              WEEK STARTS ON
+            </div>
+            <div className="mt-1 text-[12px] text-[var(--muted)]">
+              Applies to the Calendar week view and weekly stats rollups.
+            </div>
+          </div>
+          <div
+            className="inline-flex rounded-lg bg-[var(--surface-soft)] p-0.75"
+            role="radiogroup"
+            aria-label="Week starts on"
+          >
+            {WEEK_STARTS.map((ws) => (
+              <button
+                key={ws}
+                type="button"
+                role="radio"
+                aria-checked={current.weekStart === ws}
+                onClick={() => persist({ weekStart: ws })}
+                className={`rounded-[6px] px-3.5 py-1.5 text-[12px] font-semibold transition-colors ${
+                  current.weekStart === ws
+                    ? "bg-[var(--canvas)] text-[var(--ink)] shadow-sm"
+                    : "bg-transparent text-[var(--muted)]"
+                }`}
+              >
+                {WEEK_START_LABELS[ws]}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
   );
 }
 

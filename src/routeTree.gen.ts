@@ -24,10 +24,13 @@ import { Route as AppAutomationsRouteImport } from './routes/_app.automations'
 import { Route as AppSettingsIndexRouteImport } from './routes/_app.settings.index'
 import { Route as AppProjectsIndexRouteImport } from './routes/_app.projects.index'
 import { Route as ShareCareerTokenRouteImport } from './routes/share.career.$token'
+import { Route as AppSettingsWeekStartRouteImport } from './routes/_app.settings.week-start'
+import { Route as AppSettingsThemeRouteImport } from './routes/_app.settings.theme'
 import { Route as AppSettingsSelfhostRouteImport } from './routes/_app.settings.selfhost'
 import { Route as AppSettingsProfileRouteImport } from './routes/_app.settings.profile'
 import { Route as AppSettingsNotificationsRouteImport } from './routes/_app.settings.notifications'
 import { Route as AppSettingsIntegrationsRouteImport } from './routes/_app.settings.integrations'
+import { Route as AppSettingsDataPrivacyRouteImport } from './routes/_app.settings.data-privacy'
 import { Route as AppSettingsCareerRouteImport } from './routes/_app.settings.career'
 import { Route as AppSettingsAiRouteImport } from './routes/_app.settings.ai'
 import { Route as AppProjectsProjectIdRouteImport } from './routes/_app.projects.$projectId'
@@ -106,6 +109,16 @@ const ShareCareerTokenRoute = ShareCareerTokenRouteImport.update({
   path: '/share/career/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AppSettingsWeekStartRoute = AppSettingsWeekStartRouteImport.update({
+  id: '/week-start',
+  path: '/week-start',
+  getParentRoute: () => AppSettingsRoute,
+} as any)
+const AppSettingsThemeRoute = AppSettingsThemeRouteImport.update({
+  id: '/theme',
+  path: '/theme',
+  getParentRoute: () => AppSettingsRoute,
+} as any)
 const AppSettingsSelfhostRoute = AppSettingsSelfhostRouteImport.update({
   id: '/selfhost',
   path: '/selfhost',
@@ -125,6 +138,11 @@ const AppSettingsNotificationsRoute =
 const AppSettingsIntegrationsRoute = AppSettingsIntegrationsRouteImport.update({
   id: '/integrations',
   path: '/integrations',
+  getParentRoute: () => AppSettingsRoute,
+} as any)
+const AppSettingsDataPrivacyRoute = AppSettingsDataPrivacyRouteImport.update({
+  id: '/data-privacy',
+  path: '/data-privacy',
   getParentRoute: () => AppSettingsRoute,
 } as any)
 const AppSettingsCareerRoute = AppSettingsCareerRouteImport.update({
@@ -158,10 +176,13 @@ export interface FileRoutesByFullPath {
   '/projects/$projectId': typeof AppProjectsProjectIdRoute
   '/settings/ai': typeof AppSettingsAiRoute
   '/settings/career': typeof AppSettingsCareerRoute
+  '/settings/data-privacy': typeof AppSettingsDataPrivacyRoute
   '/settings/integrations': typeof AppSettingsIntegrationsRoute
   '/settings/notifications': typeof AppSettingsNotificationsRoute
   '/settings/profile': typeof AppSettingsProfileRoute
   '/settings/selfhost': typeof AppSettingsSelfhostRoute
+  '/settings/theme': typeof AppSettingsThemeRoute
+  '/settings/week-start': typeof AppSettingsWeekStartRoute
   '/share/career/$token': typeof ShareCareerTokenRoute
   '/projects/': typeof AppProjectsIndexRoute
   '/settings/': typeof AppSettingsIndexRoute
@@ -179,10 +200,13 @@ export interface FileRoutesByTo {
   '/projects/$projectId': typeof AppProjectsProjectIdRoute
   '/settings/ai': typeof AppSettingsAiRoute
   '/settings/career': typeof AppSettingsCareerRoute
+  '/settings/data-privacy': typeof AppSettingsDataPrivacyRoute
   '/settings/integrations': typeof AppSettingsIntegrationsRoute
   '/settings/notifications': typeof AppSettingsNotificationsRoute
   '/settings/profile': typeof AppSettingsProfileRoute
   '/settings/selfhost': typeof AppSettingsSelfhostRoute
+  '/settings/theme': typeof AppSettingsThemeRoute
+  '/settings/week-start': typeof AppSettingsWeekStartRoute
   '/share/career/$token': typeof ShareCareerTokenRoute
   '/projects': typeof AppProjectsIndexRoute
   '/settings': typeof AppSettingsIndexRoute
@@ -204,10 +228,13 @@ export interface FileRoutesById {
   '/_app/projects/$projectId': typeof AppProjectsProjectIdRoute
   '/_app/settings/ai': typeof AppSettingsAiRoute
   '/_app/settings/career': typeof AppSettingsCareerRoute
+  '/_app/settings/data-privacy': typeof AppSettingsDataPrivacyRoute
   '/_app/settings/integrations': typeof AppSettingsIntegrationsRoute
   '/_app/settings/notifications': typeof AppSettingsNotificationsRoute
   '/_app/settings/profile': typeof AppSettingsProfileRoute
   '/_app/settings/selfhost': typeof AppSettingsSelfhostRoute
+  '/_app/settings/theme': typeof AppSettingsThemeRoute
+  '/_app/settings/week-start': typeof AppSettingsWeekStartRoute
   '/share/career/$token': typeof ShareCareerTokenRoute
   '/_app/projects/': typeof AppProjectsIndexRoute
   '/_app/settings/': typeof AppSettingsIndexRoute
@@ -229,10 +256,13 @@ export interface FileRouteTypes {
     | '/projects/$projectId'
     | '/settings/ai'
     | '/settings/career'
+    | '/settings/data-privacy'
     | '/settings/integrations'
     | '/settings/notifications'
     | '/settings/profile'
     | '/settings/selfhost'
+    | '/settings/theme'
+    | '/settings/week-start'
     | '/share/career/$token'
     | '/projects/'
     | '/settings/'
@@ -250,10 +280,13 @@ export interface FileRouteTypes {
     | '/projects/$projectId'
     | '/settings/ai'
     | '/settings/career'
+    | '/settings/data-privacy'
     | '/settings/integrations'
     | '/settings/notifications'
     | '/settings/profile'
     | '/settings/selfhost'
+    | '/settings/theme'
+    | '/settings/week-start'
     | '/share/career/$token'
     | '/projects'
     | '/settings'
@@ -274,10 +307,13 @@ export interface FileRouteTypes {
     | '/_app/projects/$projectId'
     | '/_app/settings/ai'
     | '/_app/settings/career'
+    | '/_app/settings/data-privacy'
     | '/_app/settings/integrations'
     | '/_app/settings/notifications'
     | '/_app/settings/profile'
     | '/_app/settings/selfhost'
+    | '/_app/settings/theme'
+    | '/_app/settings/week-start'
     | '/share/career/$token'
     | '/_app/projects/'
     | '/_app/settings/'
@@ -399,6 +435,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ShareCareerTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_app/settings/week-start': {
+      id: '/_app/settings/week-start'
+      path: '/week-start'
+      fullPath: '/settings/week-start'
+      preLoaderRoute: typeof AppSettingsWeekStartRouteImport
+      parentRoute: typeof AppSettingsRoute
+    }
+    '/_app/settings/theme': {
+      id: '/_app/settings/theme'
+      path: '/theme'
+      fullPath: '/settings/theme'
+      preLoaderRoute: typeof AppSettingsThemeRouteImport
+      parentRoute: typeof AppSettingsRoute
+    }
     '/_app/settings/selfhost': {
       id: '/_app/settings/selfhost'
       path: '/selfhost'
@@ -425,6 +475,13 @@ declare module '@tanstack/react-router' {
       path: '/integrations'
       fullPath: '/settings/integrations'
       preLoaderRoute: typeof AppSettingsIntegrationsRouteImport
+      parentRoute: typeof AppSettingsRoute
+    }
+    '/_app/settings/data-privacy': {
+      id: '/_app/settings/data-privacy'
+      path: '/data-privacy'
+      fullPath: '/settings/data-privacy'
+      preLoaderRoute: typeof AppSettingsDataPrivacyRouteImport
       parentRoute: typeof AppSettingsRoute
     }
     '/_app/settings/career': {
@@ -468,20 +525,26 @@ const AppProjectsRouteWithChildren = AppProjectsRoute._addFileChildren(
 interface AppSettingsRouteChildren {
   AppSettingsAiRoute: typeof AppSettingsAiRoute
   AppSettingsCareerRoute: typeof AppSettingsCareerRoute
+  AppSettingsDataPrivacyRoute: typeof AppSettingsDataPrivacyRoute
   AppSettingsIntegrationsRoute: typeof AppSettingsIntegrationsRoute
   AppSettingsNotificationsRoute: typeof AppSettingsNotificationsRoute
   AppSettingsProfileRoute: typeof AppSettingsProfileRoute
   AppSettingsSelfhostRoute: typeof AppSettingsSelfhostRoute
+  AppSettingsThemeRoute: typeof AppSettingsThemeRoute
+  AppSettingsWeekStartRoute: typeof AppSettingsWeekStartRoute
   AppSettingsIndexRoute: typeof AppSettingsIndexRoute
 }
 
 const AppSettingsRouteChildren: AppSettingsRouteChildren = {
   AppSettingsAiRoute: AppSettingsAiRoute,
   AppSettingsCareerRoute: AppSettingsCareerRoute,
+  AppSettingsDataPrivacyRoute: AppSettingsDataPrivacyRoute,
   AppSettingsIntegrationsRoute: AppSettingsIntegrationsRoute,
   AppSettingsNotificationsRoute: AppSettingsNotificationsRoute,
   AppSettingsProfileRoute: AppSettingsProfileRoute,
   AppSettingsSelfhostRoute: AppSettingsSelfhostRoute,
+  AppSettingsThemeRoute: AppSettingsThemeRoute,
+  AppSettingsWeekStartRoute: AppSettingsWeekStartRoute,
   AppSettingsIndexRoute: AppSettingsIndexRoute,
 }
 
