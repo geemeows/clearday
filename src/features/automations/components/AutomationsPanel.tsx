@@ -109,7 +109,7 @@ function newId(): string {
   return `automation-${Math.random().toString(36).slice(2)}`;
 }
 
-// Placeholder run-stats shown until the backend join lands (#178).
+// Placeholder run-stats shown until the backend join lands (#175).
 const FIXTURE_RUN_STATS: Record<string, AutomationRunStats> = {};
 
 type BreadcrumbCrumb = { label: string; onClick?: (() => void) | undefined };
