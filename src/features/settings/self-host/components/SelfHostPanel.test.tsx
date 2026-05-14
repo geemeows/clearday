@@ -39,7 +39,7 @@ describe("SelfHostPanel", () => {
     );
   });
 
-  it("renders Export JSON and Run rollup as no-op stubs", async () => {
+  it("renders Export my data and Run signal-rollup buttons", async () => {
     const onExportJson = vi.fn();
     const onRunRollup = vi.fn();
     render(
@@ -50,14 +50,14 @@ describe("SelfHostPanel", () => {
       />,
     );
     fireEvent.click(
-      await screen.findByRole("button", { name: /export json/i }),
+      await screen.findByRole("button", { name: /export my data/i }),
     );
-    fireEvent.click(screen.getByRole("button", { name: /run rollup/i }));
+    fireEvent.click(screen.getByRole("button", { name: /run signal-rollup now/i }));
     expect(onExportJson).toHaveBeenCalledTimes(1);
     expect(onRunRollup).toHaveBeenCalledTimes(1);
   });
 
-  it("renders the disconnect-all button in the destructive variant", async () => {
+  it("renders the disconnect-all button with danger styling and fires the handler", async () => {
     const onDisconnectAll = vi.fn();
     render(
       <SelfHostPanel
@@ -68,7 +68,7 @@ describe("SelfHostPanel", () => {
     const button = await screen.findByRole("button", {
       name: /disconnect all providers/i,
     });
-    expect(button.className).toMatch(/bg-destructive/);
+    expect(button.className).toContain("text-[var(--danger)]");
     fireEvent.click(button);
     expect(onDisconnectAll).toHaveBeenCalledTimes(1);
   });
