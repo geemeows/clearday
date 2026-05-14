@@ -34,7 +34,7 @@ describe("NotificationsPanel", () => {
     expect(cell.getAttribute("aria-checked")).toBe("true");
   });
 
-  it("renders the quiet hours strip with weekday/weekend labels", () => {
+  it("renders the quiet hours strip with weekday/weekend labels (default weekday-weekend mode)", () => {
     render(<NotificationsPanel />);
     const strip = screen.getByLabelText("Quiet hours week strip");
     expect(within(strip).getAllByText("22:00–08:00").length).toBe(5);
@@ -64,5 +64,58 @@ describe("NotificationsPanel", () => {
     fireEvent.change(input, { target: { value: "Pager escalations" } });
     fireEvent.submit(input.closest("form") as HTMLFormElement);
     expect(within(pills).getByText("Pager escalations")).toBeTruthy();
+  });
+
+  describe("schedule mode tabs (Slice 9.3b)", () => {
+    it("renders the three mode tab buttons", () => {
+      render(<NotificationsPanel />);
+      expect(screen.getByText("Same every day")).toBeTruthy();
+      expect(screen.getByText("Weekday / weekend")).toBeTruthy();
+      expect(screen.getByText("Per day")).toBeTruthy();
+    });
+
+    it("default mode is weekday-weekend — shows Mon–Fri and Sat–Sun rows", () => {
+      render(<NotificationsPanel />);
+      expect(screen.getByText("Mon–Fri")).toBeTruthy();
+      expect(screen.getByText("Sat–Sun")).toBeTruthy();
+      expect(screen.getByLabelText("Weekday quiet start")).toBeTruthy();
+      expect(screen.getByLabelText("Weekday quiet end")).toBeTruthy();
+    });
+
+    it("switching to uniform mode shows the uniform row with overnight/same-day note", () => {
+      render(<NotificationsPanel />);
+      fireEvent.click(screen.getByText("Same every day"));
+      expect(screen.getByText("Every day from")).toBeTruthy();
+      expect(screen.getByLabelText("Uniform quiet start")).toBeTruthy();
+      expect(screen.getByLabelText("Uniform quiet end")).toBeTruthy();
+      // default 22:00 > 08:00 → "overnight"
+      expect(screen.getByText("overnight")).toBeTruthy();
+    });
+
+    it("switching to per-day mode shows 7 day rows", () => {
+      render(<NotificationsPanel />);
+      fireEvent.click(screen.getByText("Per day"));
+      for (const day of ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]) {
+        expect(screen.getByLabelText(`Quiet hours ${day} on`)).toBeTruthy();
+        expect(screen.getByLabelText(`Quiet start ${day}`)).toBeTruthy();
+        expect(screen.getByLabelText(`Quiet end ${day}`)).toBeTruthy();
+      }
+    });
+
+    it("switching to uniform updates the week strip to show the same time for all 7 days", () => {
+      render(<NotificationsPanel />);
+      fireEvent.click(screen.getByText("Same every day"));
+      const strip = screen.getByLabelText("Quiet hours week strip");
+      // default uniform 22:00–08:00 shows on all 7 days
+      expect(within(strip).getAllByText("22:00–08:00").length).toBe(7);
+    });
+
+    it("week strip shows 'off' for all days when quiet hours disabled", () => {
+      render(<NotificationsPanel />);
+      const toggle = screen.getByLabelText("Quiet hours enabled");
+      fireEvent.click(toggle);
+      const strip = screen.getByLabelText("Quiet hours week strip");
+      expect(within(strip).getAllByText("off").length).toBe(7);
+    });
   });
 });
