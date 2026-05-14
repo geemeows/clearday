@@ -238,6 +238,29 @@ describe("AutomationsPanel empty-state Browse templates", () => {
     expect(saver).not.toHaveBeenCalled();
   });
 
+  it("New automation builder header renders NEW badge + Create automation button + idempotency footer note (Slice 8.4)", async () => {
+    renderPanel({
+      loader: vi.fn(async () => ({ automations: [] })),
+    });
+    fireEvent.click(
+      await screen.findByRole("button", { name: /\+ New automation/ }),
+    );
+    const nameInput = (await screen.findByLabelText(
+      "Automation name",
+    )) as HTMLInputElement;
+    expect(nameInput.value).toBe("New automation");
+    const matches = screen.getAllByText("New");
+    expect(
+      matches.some((el) => el.className.includes("font-mono")),
+    ).toBe(true);
+    expect(
+      screen.getByText(/idempotent on \(automation_id, trigger_event_id\)/),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Create automation" }),
+    ).toBeTruthy();
+  });
+
   it("cancelling the builder after picking a template does not persist a row", async () => {
     const saver = vi.fn(async () => ({ ok: true }));
     renderPanel({
@@ -328,7 +351,7 @@ describe("AutomationsPanel dry-run toggle", () => {
     )) as HTMLInputElement;
     expect(checkbox.checked).toBe(false);
     fireEvent.click(checkbox);
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
     await waitFor(() => expect(saver).toHaveBeenCalledTimes(1));
     const saved = saver.mock.calls[0]?.[0] ?? [];
     const target = saved.find((a) => a.id === "a-1");
@@ -973,7 +996,14 @@ describe("AutomationsPanel detail mode (Slice 8.3)", () => {
     renderPanel();
     fireEvent.click(await screen.findByLabelText("Open Snooze deps"));
     fireEvent.click(await screen.findByLabelText("Edit Snooze deps (detail)"));
-    expect(await screen.findByText("Edit automation")).toBeTruthy();
+    const nameInput = (await screen.findByLabelText(
+      "Automation name",
+    )) as HTMLInputElement;
+    expect(nameInput.value).toBe("Snooze deps");
+    expect(screen.getByText("Edit")).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Save changes" }),
+    ).toBeTruthy();
   });
 
   it("renders the RECENT RUNS strip with up to five run rows + Full history link", async () => {

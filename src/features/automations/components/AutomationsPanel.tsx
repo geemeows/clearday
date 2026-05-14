@@ -727,19 +727,32 @@ export function AutomationsPanel({
 
       {mode === "builder" && editing && (
         <div className="flex min-h-[600px] flex-col overflow-hidden rounded-xl border border-[var(--hairline-soft)] bg-[var(--surface-card)]">
-          <div className="flex items-center gap-3 border-[var(--hairline-soft)] border-b px-5 py-3.5">
-            <h3 className="m-0 font-semibold text-[var(--ink)] text-base">
-              {builderIsNew ? "New automation" : "Edit automation"}
-            </h3>
+          <div className="flex items-center gap-3 border-[var(--hairline-soft)] border-b px-[22px] py-4">
+            <input
+              type="text"
+              aria-label="Automation name"
+              value={editing.name}
+              onChange={(e) =>
+                setEditing({ ...editing, name: e.target.value })
+              }
+              className="min-w-0 flex-1 border-0 bg-transparent px-0 py-1 font-semibold text-[16px] text-[var(--foreground)] outline-none placeholder:text-[var(--muted)]"
+            />
+            <span className="font-mono text-[10px] text-[var(--muted)] uppercase tracking-[0.04em]">
+              {builderIsNew ? "New" : "Edit"}
+            </span>
           </div>
-          <div className="flex flex-1 flex-col gap-4 overflow-y-auto p-5">
+          <div className="flex flex-1 flex-col gap-[18px] overflow-y-auto px-[22px] py-5">
             <AutomationBuilder
               automation={editing}
               onChange={setEditing}
               signals={previewSignals ?? []}
             />
           </div>
-          <div className="flex justify-end gap-2 border-[var(--hairline-soft)] border-t px-5 py-3">
+          <div className="flex flex-wrap items-center gap-2 border-[var(--hairline-soft)] border-t px-[22px] py-3.5">
+            <span className="font-mono text-[11px] text-[var(--muted)]">
+              idempotent on (automation_id, trigger_event_id)
+            </span>
+            <span className="flex-1" />
             <button
               type="button"
               onClick={closeBuilder}
@@ -749,11 +762,11 @@ export function AutomationsPanel({
             </button>
             <button
               type="button"
-              disabled={!editing}
+              disabled={!editing || editing.actions.length === 0}
               onClick={() => editing && onBuilderSave(editing)}
               className="rounded border border-border bg-primary px-3 py-1.5 text-primary-foreground text-sm hover:opacity-90 disabled:opacity-50"
             >
-              Save
+              {builderIsNew ? "Create automation" : "Save changes"}
             </button>
           </div>
         </div>
@@ -1938,17 +1951,6 @@ function AutomationBuilder({
 
   return (
     <div className="space-y-4 text-sm">
-      <label className="flex flex-col gap-1">
-        <span className="text-xs text-muted-foreground">Name</span>
-        <input
-          type="text"
-          aria-label="Automation name"
-          value={automation.name}
-          onChange={(e) => set({ name: e.target.value })}
-          className="rounded border border-border bg-background px-2 py-1"
-        />
-      </label>
-
       <label className="flex items-start gap-2">
         <input
           type="checkbox"
