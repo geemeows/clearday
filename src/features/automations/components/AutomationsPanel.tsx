@@ -676,9 +676,6 @@ export function AutomationsPanel({
                   busy={busy}
                   latestFailure={latestFailures.get(a.id) ?? null}
                   onToggle={(enabled) => onToggle(a.id, enabled)}
-                  onEdit={() => openEdit(a)}
-                  onDelete={() => requestDelete(a.id)}
-                  onViewRuns={() => openRuns(a)}
                   onOpen={() => openDetail(a)}
                 />
               ))}
@@ -935,18 +932,12 @@ function AutomationRow({
   busy,
   latestFailure,
   onToggle,
-  onEdit,
-  onDelete,
-  onViewRuns,
   onOpen,
 }: {
   automation: Automation;
   busy: boolean;
   latestFailure: AutomationRunRow | null;
   onToggle: (enabled: boolean) => void;
-  onEdit: () => void;
-  onDelete: () => void;
-  onViewRuns: () => void;
   onOpen: () => void;
 }) {
   const failed = latestFailure !== null;
@@ -969,7 +960,20 @@ function AutomationRow({
         : "bg-[var(--good)]";
   return (
     <div
-      className={`flex flex-col gap-2 rounded-[10px] border border-[var(--hairline-soft)] bg-[var(--surface-card)] px-4 py-3.5 transition-colors hover:border-primary ${automation.enabled ? "" : "opacity-70"}`}
+      role="button"
+      tabIndex={0}
+      aria-label={`Open ${automation.name}`}
+      onClick={() => {
+        if (!busy) onOpen();
+      }}
+      onKeyDown={(e) => {
+        if (busy) return;
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onOpen();
+        }
+      }}
+      className={`flex cursor-pointer flex-col gap-2 rounded-[10px] border border-[var(--hairline-soft)] bg-[var(--surface-card)] px-4 py-3.5 text-left transition-colors hover:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${automation.enabled ? "" : "opacity-70"}`}
     >
       <div className="flex items-center gap-2">
         <output
@@ -980,12 +984,18 @@ function AutomationRow({
         <p className="min-w-0 flex-1 truncate font-semibold text-[14px] text-[var(--ink)]">
           {automation.name}
         </p>
-        <Switch
-          aria-label={`${automation.name} enabled`}
-          checked={automation.enabled}
-          onCheckedChange={(checked) => onToggle(checked)}
-          disabled={busy}
-        />
+        {/** biome-ignore lint/a11y/useKeyWithClickEvents: stop-propagation wrapper for nested Switch; Switch handles its own keyboard activation */}
+        <span
+          onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
+        >
+          <Switch
+            aria-label={`${automation.name} enabled`}
+            checked={automation.enabled}
+            onCheckedChange={(checked) => onToggle(checked)}
+            disabled={busy}
+          />
+        </span>
       </div>
       <div className="flex flex-wrap items-center gap-1.5">
         <span className="rounded bg-[var(--surface-strong)] px-1.5 py-px font-mono text-[9.5px] tracking-[0.04em] text-[var(--muted)] uppercase">
@@ -1036,44 +1046,6 @@ function AutomationRow({
           Last failure: {latestFailure.error ?? "unknown error"}
         </p>
       )}
-      <div className="mt-1 flex items-center gap-1.5 border-[var(--hairline-soft)] border-t pt-2">
-        <button
-          type="button"
-          aria-label={`Open ${automation.name}`}
-          onClick={onOpen}
-          disabled={busy}
-          className="rounded border border-border bg-background px-2 py-1 text-xs disabled:opacity-50"
-        >
-          Open
-        </button>
-        <button
-          type="button"
-          aria-label={`View runs for ${automation.name}`}
-          onClick={onViewRuns}
-          disabled={busy}
-          className="rounded border border-border bg-background px-2 py-1 text-xs disabled:opacity-50"
-        >
-          Runs
-        </button>
-        <button
-          type="button"
-          onClick={onEdit}
-          disabled={busy}
-          className="rounded border border-border bg-background px-2 py-1 text-xs disabled:opacity-50"
-        >
-          Edit
-        </button>
-        <span className="flex-1" />
-        <button
-          type="button"
-          aria-label={`Delete ${automation.name}`}
-          onClick={onDelete}
-          disabled={busy}
-          className="rounded border border-destructive/40 bg-background px-2 py-1 text-destructive text-xs hover:bg-destructive/10 disabled:opacity-50"
-        >
-          Delete
-        </button>
-      </div>
     </div>
   );
 }
