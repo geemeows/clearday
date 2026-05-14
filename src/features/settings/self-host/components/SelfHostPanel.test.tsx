@@ -10,6 +10,9 @@ const FIXTURE: SelfHostInfo = {
   allowed_email: "owner@example.com",
   worker_version: "abc1234",
   env_vars: [],
+  signal_count: 1847,
+  rollup_count: 12,
+  retention_days: 90,
 };
 
 describe("SelfHostPanel", () => {
@@ -55,6 +58,13 @@ describe("SelfHostPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: /run signal-rollup now/i }));
     expect(onExportJson).toHaveBeenCalledTimes(1);
     expect(onRunRollup).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders live stats string in the data section", async () => {
+    render(<SelfHostPanel loader={async () => FIXTURE} />);
+    expect(
+      await screen.findByText("1,847 raw signals · 12 rollups · 90-day retention"),
+    ).toBeTruthy();
   });
 
   it("renders the disconnect-all button with danger styling and fires the handler", async () => {

@@ -45,13 +45,28 @@ export type SelfHostInfo = {
   allowed_email: string | null;
   worker_version: string;
   env_vars: EnvVarStatus[];
+  signal_count: number;
+  rollup_count: number;
+  retention_days: number;
+};
+
+export type SelfHostStats = {
+  signal_count: number;
+  rollup_count: number;
+  retention_days: number;
 };
 
 export const DEFAULT_WORKER_VERSION = "dev";
+export const DEFAULT_STATS: SelfHostStats = {
+  signal_count: 0,
+  rollup_count: 0,
+  retention_days: 90,
+};
 
 export function getSelfHostInfo(
   env: SelfHostEnv,
   workerUrl: string | null,
+  stats: SelfHostStats = DEFAULT_STATS,
 ): SelfHostInfo {
   const envVars: EnvVarStatus[] = [
     ...REQUIRED_ENV_VARS.map((name) => ({
@@ -72,6 +87,9 @@ export function getSelfHostInfo(
     allowed_email: env.ALLOWED_EMAIL ?? null,
     worker_version: env.WORKER_VERSION?.trim() || DEFAULT_WORKER_VERSION,
     env_vars: envVars,
+    signal_count: stats.signal_count,
+    rollup_count: stats.rollup_count,
+    retention_days: stats.retention_days,
   };
 }
 

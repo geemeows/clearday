@@ -9,8 +9,6 @@ import { Button } from "#/components/ui/button";
 import type { SelfHostInfo } from "#/features/settings/self-host/api";
 import { apiFetch } from "#/lib/api-client";
 
-const FIXTURE_STATS = "1,847 raw signals · 12 rollups · 90-day retention";
-
 type Row = { label: string; value: string | null };
 
 export type SelfHostPanelProps = {
@@ -166,7 +164,7 @@ export function SelfHostPanel({
               </Button>
               <span className="flex-1" />
               <span className="font-mono text-[11px] text-[var(--muted)]">
-                {FIXTURE_STATS}
+                {`${info.signal_count.toLocaleString()} raw signals · ${info.rollup_count} rollups · ${info.retention_days}-day retention`}
               </span>
             </div>
           </section>

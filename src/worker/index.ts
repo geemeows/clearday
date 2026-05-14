@@ -114,9 +114,11 @@ import {
   putProfile,
 } from "#/features/settings/profile/api";
 import {
+  DEFAULT_STATS,
   getSelfHostInfo,
   runHealthCheck,
   type SelfHostEnv,
+  type SelfHostStats,
 } from "#/features/settings/self-host/api";
 import {
   DEFAULT_THEME,
@@ -659,8 +661,13 @@ export default {
     }
 
     if (url.pathname === "/api/self-host" && request.method === "GET") {
+      const stats = await fetchSelfHostStats(service);
       return json(
-        getSelfHostInfo(env as SelfHostEnv, `${url.protocol}//${url.host}`),
+        getSelfHostInfo(
+          env as SelfHostEnv,
+          `${url.protocol}//${url.host}`,
+          stats,
+        ),
       );
     }
 
@@ -2182,6 +2189,26 @@ async function pingDatabase(
     .eq("id", true);
   if (error) return { ok: false, error: error.message };
   return { ok: true };
+}
+
+async function fetchSelfHostStats(
+  service: SupabaseService,
+): Promise<SelfHostStats> {
+  const [signalsResult, rollupsResult, prefsResult] = await Promise.all([
+    service.from("signals").select("*", { head: true, count: "exact" }),
+    service.from("signal_rollups").select("*", { head: true, count: "exact" }),
+    service
+      .from("user_preferences")
+      .select("retention_days")
+      .eq("id", true)
+      .maybeSingle(),
+  ]);
+  return {
+    signal_count: signalsResult.count ?? 0,
+    rollup_count: rollupsResult.count ?? 0,
+    retention_days:
+      (prefsResult.data?.retention_days as number | null) ?? DEFAULT_STATS.retention_days,
+  };
 }
 
 async function replaceSlackAllowlist(
