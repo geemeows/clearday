@@ -3,10 +3,12 @@
 // Four sub-sections: channels list (Test + Switch per row), per-event
 // routing matrix, a Quiet hours card with mode tabs + schedule editors
 // + day strip + allow-through pills, and an Inbox rules section
-// (RulesPanel + RuleBuilder — fixture-backed; see needs-triage backend issue).
+// (RulesPanel + RuleBuilder — backed by /api/inbox-rules, issue #173).
 
 import { Bell, Mail, Monitor, Plus, X } from "lucide-react";
 import { useState } from "react";
+import { useAsyncPanel } from "#/hooks/useAsyncPanel";
+import type { InboxRule, NewInboxRule } from "#/features/alerts/rules/api";
 import { Button } from "#/components/ui/button";
 import { Input } from "#/components/ui/input";
 import { Switch } from "#/components/ui/switch";
@@ -191,7 +193,7 @@ function TimeField({
   );
 }
 
-// ── Inbox rules (fixture-backed per v4 fixture rule; backend follow-up needed) ─
+// ── Inbox rules ─────────────────────────────────────────────────────────────
 
 type Condition = { field: string; op: string; value: string };
 type RuleAction = { id: string; label: string; params: string[] | null };
@@ -239,21 +241,6 @@ const RULE_ACTIONS: RuleAction[] = [
   { id: "route", label: "Route to", params: ["push", "Slack DM", "email", "desktop"] },
 ];
 
-type FixtureRule = {
-  when: string;
-  then: string;
-  on: boolean;
-  hits: number;
-};
-
-// Fixture — UI ships here; wire backend when ready (needs-triage issue filed).
-const FIXTURE_RULES: FixtureRule[] = [
-  { when: "PR author is dependabot", then: "Snooze 1 day", on: true, hits: 47 },
-  { when: "Slack channel is #eng-announce", then: "Mark as low-priority", on: true, hits: 12 },
-  { when: "PR has only lockfile changes", then: "Auto-dismiss", on: false, hits: 31 },
-  { when: "Mention contains \"prod\" or \"incident\"", then: "Bypass quiet hours", on: true, hits: 4 },
-  { when: "Meeting has no agenda", then: "Add to weekly review", on: false, hits: 8 },
-];
 
 function RuleChip({
   value,
@@ -307,7 +294,7 @@ function RuleBuilder({
   onSave,
   onCancel,
 }: {
-  onSave: () => void;
+  onSave: (rule: NewInboxRule) => void;
   onCancel: () => void;
 }) {
   const [matchAll, setMatchAll] = useState(true);
@@ -486,10 +473,36 @@ function RuleBuilder({
         <Button type="button" variant="ghost" onClick={onCancel}>
           Cancel
         </Button>
-        <Button type="button" variant="outline" onClick={onSave}>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() =>
+            onSave({
+              name: ruleName,
+              match_all: matchAll,
+              conditions: conds,
+              action,
+              action_param: actionParam,
+              enabled: true,
+            })
+          }
+        >
           Test on history
         </Button>
-        <Button type="button" variant="default" onClick={onSave}>
+        <Button
+          type="button"
+          variant="default"
+          onClick={() =>
+            onSave({
+              name: ruleName,
+              match_all: matchAll,
+              conditions: conds,
+              action,
+              action_param: actionParam,
+              enabled: true,
+            })
+          }
+        >
           Save rule
         </Button>
       </div>
@@ -497,14 +510,53 @@ function RuleBuilder({
   );
 }
 
+function ruleWhenLabel(rule: InboxRule): string {
+  if (rule.conditions.length === 0) return "(no conditions)";
+  const parts = rule.conditions.map((c) => `${c.field} ${c.op} ${c.value}`);
+  const joiner = rule.match_all ? " AND " : " OR ";
+  return parts.join(joiner);
+}
+
+function ruleThenLabel(rule: InboxRule): string {
+  const a = RULE_ACTIONS.find((x) => x.id === rule.action);
+  const label = a?.label ?? rule.action;
+  return rule.action_param ? `${label} ${rule.action_param}` : label;
+}
+
 function InboxRulesPanel() {
-  const [rules, setRules] = useState<FixtureRule[]>(FIXTURE_RULES);
   const [editing, setEditing] = useState(false);
 
-  const toggleRule = (i: number) =>
-    setRules((rs) => rs.map((r, idx) => (idx === i ? { ...r, on: !r.on } : r)));
+  const { data: rules, reload } = useAsyncPanel<InboxRule[]>({
+    load: async () => {
+      const res = await fetch("/api/inbox-rules");
+      if (!res.ok) throw new Error(await res.text());
+      const body = (await res.json()) as { rules: InboxRule[] };
+      return body.rules;
+    },
+    save: async () => {},
+  });
 
-  const activeCount = rules.filter((r) => r.on).length;
+  const toggleRule = async (rule: InboxRule) => {
+    await fetch(`/api/inbox-rules/${encodeURIComponent(rule.id)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled: !rule.enabled }),
+    });
+    reload();
+  };
+
+  const saveNewRule = async (newRule: NewInboxRule) => {
+    await fetch("/api/inbox-rules", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(newRule),
+    });
+    setEditing(false);
+    reload();
+  };
+
+  const activeCount = (rules ?? []).filter((r) => r.enabled).length;
+  const ruleList = rules ?? [];
 
   return (
     <section>
@@ -518,7 +570,7 @@ function InboxRulesPanel() {
 
       <div className="mt-3 flex items-center">
         <span className="text-[13px] text-[var(--body)]">
-          {activeCount} of {rules.length} active · evaluated in order, top-down
+          {activeCount} of {ruleList.length} active · evaluated in order, top-down
         </span>
         <span className="flex-1" />
         {!editing && (
@@ -537,7 +589,7 @@ function InboxRulesPanel() {
       {editing && (
         <div className="mt-3">
           <RuleBuilder
-            onSave={() => setEditing(false)}
+            onSave={saveNewRule}
             onCancel={() => setEditing(false)}
           />
         </div>
@@ -547,10 +599,9 @@ function InboxRulesPanel() {
         aria-label="Inbox rules list"
         className="mt-3 overflow-hidden rounded-lg border border-[var(--hairline-soft)]"
       >
-        {rules.map((r, i) => (
+        {ruleList.map((r, i) => (
           <li
-            // biome-ignore lint/suspicious/noArrayIndexKey: rule order is stable fixture data
-            key={i}
+            key={r.id}
             className="grid grid-cols-[auto_1fr_auto_auto] items-center gap-3.5 border-b border-[var(--hairline-soft)] px-3.5 py-3 last:border-b-0"
           >
             <span className="w-6 text-right font-mono text-[11px] font-bold text-[var(--muted)]">
@@ -561,14 +612,14 @@ function InboxRulesPanel() {
                 WHEN
               </span>
               <code className="rounded bg-[var(--surface-soft)] px-2 py-[3px] font-mono text-[12px]">
-                {r.when}
+                {ruleWhenLabel(r)}
               </code>
               <span className="font-mono text-[11px] text-[var(--muted)]">
                 THEN
               </span>
-              <span className="font-medium">{r.then}</span>
+              <span className="font-medium">{ruleThenLabel(r)}</span>
               <span className="ml-auto pl-3 font-mono text-[10px] text-[var(--muted)]">
-                {r.hits} hits / 30d
+                {r.hits_30d} hits / 30d
               </span>
             </div>
             <Button
@@ -581,8 +632,8 @@ function InboxRulesPanel() {
             </Button>
             <Switch
               aria-label={`Rule ${i + 1} enabled`}
-              checked={r.on}
-              onCheckedChange={() => toggleRule(i)}
+              checked={r.enabled}
+              onCheckedChange={() => toggleRule(r)}
             />
           </li>
         ))}

@@ -20,6 +20,13 @@ import { pruneStaleWebPushSubscriptions } from "#/features/alerts/channels/web-p
 import type { VapidConfig } from "#/features/alerts/channels/web-push/vapid";
 import { type AlertChannel, fireChannels } from "#/features/alerts/dispatcher";
 import {
+  type InboxRulesStore,
+  createInboxRule,
+  deleteInboxRule,
+  listInboxRules,
+  patchInboxRule,
+} from "#/features/alerts/rules/api";
+import {
   buildDispatcherDeps,
   loadDueQueuedAlerts,
   loadMeetingThresholdMin,
@@ -428,6 +435,54 @@ export default {
           runs: out.runs,
           next_cursor: out.next_cursor,
         });
+      }
+    }
+
+    if (url.pathname === "/api/inbox-rules") {
+      const store = inboxRulesStore(service);
+      if (request.method === "GET") {
+        return json(await listInboxRules(store));
+      }
+      if (request.method === "POST") {
+        let body: unknown;
+        try {
+          body = await request.json();
+        } catch {
+          return json({ ok: false, error: "invalid json" }, 400);
+        }
+        const out = await createInboxRule(body, store);
+        if (!out.ok) return json({ ok: false, error: out.error }, 400);
+        return json({ ok: true, rule: out.rule }, 201);
+      }
+    }
+
+    {
+      const ruleMatch = url.pathname.match(/^\/api\/inbox-rules\/([^/]+)$/);
+      if (ruleMatch) {
+        const ruleId = decodeURIComponent(ruleMatch[1] ?? "");
+        const store = inboxRulesStore(service);
+        if (request.method === "PATCH") {
+          let body: unknown;
+          try {
+            body = await request.json();
+          } catch {
+            return json({ ok: false, error: "invalid json" }, 400);
+          }
+          const out = await patchInboxRule(ruleId, body, store);
+          if (!out.ok) {
+            const status = out.error === "rule not found" ? 404 : 400;
+            return json({ ok: false, error: out.error }, status);
+          }
+          return json({ ok: true, rule: out.rule });
+        }
+        if (request.method === "DELETE") {
+          const out = await deleteInboxRule(ruleId, store);
+          if (!out.ok) {
+            const status = out.error === "rule not found" ? 404 : 400;
+            return json({ ok: false, error: out.error }, status);
+          }
+          return json({ ok: true });
+        }
       }
     }
 
@@ -2454,6 +2509,55 @@ async function loadAutomationsFromService(
     predicates: r.predicates ?? [],
     actions: r.actions ?? [],
   }));
+}
+
+function inboxRulesStore(service: SupabaseService): InboxRulesStore {
+  return {
+    list: async () => {
+      const { data, error } = await service
+        .from("inbox_rules")
+        .select("id, name, match_all, conditions, action, action_param, enabled, hits_30d, created_at")
+        .order("created_at", { ascending: true });
+      if (error) throw new Error(error.message);
+      return (data ?? []) as import("#/features/alerts/rules/api").InboxRule[];
+    },
+    create: async (rule) => {
+      const { data, error } = await service
+        .from("inbox_rules")
+        .insert({
+          name: rule.name,
+          match_all: rule.match_all,
+          conditions: rule.conditions,
+          action: rule.action,
+          action_param: rule.action_param ?? null,
+          enabled: rule.enabled,
+        })
+        .select("id, name, match_all, conditions, action, action_param, enabled, hits_30d, created_at")
+        .single();
+      if (error) throw new Error(error.message);
+      return data as import("#/features/alerts/rules/api").InboxRule;
+    },
+    patch: async (id, patch) => {
+      const { data, error } = await service
+        .from("inbox_rules")
+        .update(patch)
+        .eq("id", id)
+        .select("id, name, match_all, conditions, action, action_param, enabled, hits_30d, created_at")
+        .maybeSingle();
+      if (error) throw new Error(error.message);
+      return data as import("#/features/alerts/rules/api").InboxRule | null;
+    },
+    delete: async (id) => {
+      const { data, error } = await service
+        .from("inbox_rules")
+        .delete()
+        .eq("id", id)
+        .select("id")
+        .maybeSingle();
+      if (error) throw new Error(error.message);
+      return data !== null;
+    },
+  };
 }
 
 function automationsStore(service: SupabaseService): AutomationsStore {

@@ -1,6 +1,51 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { InboxRule } from "#/features/alerts/rules/api";
 import { NotificationsPanel } from "#/features/alerts/components/NotificationsPanel";
+
+// ---------------------------------------------------------------------------
+// Fetch stub helpers for InboxRulesPanel tests
+// ---------------------------------------------------------------------------
+
+function makeInboxRule(overrides: Partial<InboxRule> = {}): InboxRule {
+  return {
+    id: "rule-1",
+    name: "Auto-snooze dependabot",
+    match_all: true,
+    conditions: [{ field: "author", op: "is", value: "dependabot" }],
+    action: "snooze",
+    action_param: "1 day",
+    enabled: true,
+    hits_30d: 47,
+    created_at: "2024-01-01T00:00:00Z",
+    ...overrides,
+  };
+}
+
+const FIXTURE_INBOX_RULES: InboxRule[] = [
+  makeInboxRule({ id: "r1", conditions: [{ field: "author", op: "is", value: "dependabot" }], action: "snooze", action_param: "1 day", enabled: true, hits_30d: 47 }),
+  makeInboxRule({ id: "r2", conditions: [{ field: "channel", op: "is", value: "#eng-announce" }], action: "low", action_param: null, enabled: true, hits_30d: 12 }),
+  makeInboxRule({ id: "r3", conditions: [{ field: "labels include", op: "all of", value: "lockfile" }], action: "dismiss", action_param: null, enabled: false, hits_30d: 31 }),
+  makeInboxRule({ id: "r4", conditions: [{ field: "title contains", op: "matches", value: "prod" }], action: "bypass", action_param: null, enabled: true, hits_30d: 4 }),
+  makeInboxRule({ id: "r5", conditions: [{ field: "source", op: "is", value: "calendar" }], action: "weekly", action_param: null, enabled: false, hits_30d: 8 }),
+];
+
+function stubFetch(rules: InboxRule[] = FIXTURE_INBOX_RULES) {
+  return vi.spyOn(global, "fetch").mockImplementation(async (input, init) => {
+    const url = typeof input === "string" ? input : (input as Request).url ?? "";
+    const method = (init?.method ?? "GET").toUpperCase();
+    if (url === "/api/inbox-rules" && method === "GET") {
+      return new Response(JSON.stringify({ rules }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }
+    if (url.startsWith("/api/inbox-rules/") && method === "PATCH") {
+      const id = url.replace("/api/inbox-rules/", "");
+      const body = init?.body ? JSON.parse(init.body as string) as { enabled: boolean } : { enabled: true };
+      const updated = rules.map((r) => r.id === id ? { ...r, ...body } : r);
+      return new Response(JSON.stringify({ ok: true, rule: updated.find((r) => r.id === id) }), { status: 200, headers: { "Content-Type": "application/json" } });
+    }
+    return new Response(JSON.stringify({ ok: false, error: "unexpected" }), { status: 500 });
+  });
+}
 
 describe("NotificationsPanel", () => {
   it("renders the four channel rows with Test + Switch", () => {
@@ -67,28 +112,37 @@ describe("NotificationsPanel", () => {
   });
 
   describe("InboxRulesPanel (Slice 9.3c)", () => {
-    it("renders fixture rules with WHEN / THEN labels and hit counts", () => {
+    let fetchSpy: ReturnType<typeof vi.spyOn>;
+    beforeEach(() => { fetchSpy = stubFetch(); });
+    afterEach(() => { fetchSpy.mockRestore(); });
+
+    it("renders api-loaded rules with WHEN / THEN labels and hit counts", async () => {
       render(<NotificationsPanel />);
-      const list = screen.getByLabelText("Inbox rules list");
-      expect(within(list).getByText("PR author is dependabot")).toBeTruthy();
+      const list = await screen.findByLabelText("Inbox rules list");
+      expect(within(list).getByText("author is dependabot")).toBeTruthy();
       expect(within(list).getByText("Snooze 1 day")).toBeTruthy();
       expect(within(list).getByText("47 hits / 30d")).toBeTruthy();
     });
 
-    it("renders active count summary", () => {
+    it("renders active count summary", async () => {
       render(<NotificationsPanel />);
-      // 3 of 5 rules are on by default
-      expect(screen.getByText("3 of 5 active · evaluated in order, top-down")).toBeTruthy();
+      // 3 of 5 rules are enabled (r1, r2, r4)
+      await waitFor(() =>
+        expect(screen.getByText("3 of 5 active · evaluated in order, top-down")).toBeTruthy(),
+      );
     });
 
-    it("toggling a rule switch flips its enabled state and updates the count", () => {
+    it("toggling a rule switch calls PATCH and reload", async () => {
       render(<NotificationsPanel />);
-      // rule 1 is on; turn it off → count becomes 2 of 5
-      const toggle = screen.getByLabelText("Rule 1 enabled");
+      const toggle = await screen.findByLabelText("Rule 1 enabled");
       expect(toggle.getAttribute("aria-checked")).toBe("true");
       fireEvent.click(toggle);
-      expect(toggle.getAttribute("aria-checked")).toBe("false");
-      expect(screen.getByText("2 of 5 active · evaluated in order, top-down")).toBeTruthy();
+      await waitFor(() =>
+        expect(fetchSpy).toHaveBeenCalledWith(
+          expect.stringContaining("/api/inbox-rules/r1"),
+          expect.objectContaining({ method: "PATCH" }),
+        ),
+      );
     });
 
     it("clicking New rule shows the RuleBuilder and Cancel hides it", () => {
