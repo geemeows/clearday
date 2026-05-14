@@ -1160,3 +1160,27 @@ describe("AutomationsPanel detail mode (Slice 8.3)", () => {
     expect(list.querySelectorAll("li").length).toBe(6);
   });
 });
+
+describe("AutomationsPanel card run_stats row (Slice 8.6)", () => {
+  it("shows 'N runs · last X ago' when run_stats are present on the automation", async () => {
+    const lastRunAt = new Date(Date.now() - 5 * 60_000).toISOString(); // 5 min ago
+    const loader = vi.fn(async () => ({
+      automations: [
+        {
+          ...list[0],
+          run_stats: { total_runs: 42, last_run_at: lastRunAt, fail_7d: 0 },
+        },
+      ],
+    }));
+    renderPanel({ loader });
+    await waitFor(() => {
+      expect(screen.getByText(/42 runs · last/)).toBeTruthy();
+    });
+  });
+
+  it("omits the stats caption when run_stats is absent", async () => {
+    renderPanel();
+    await screen.findByText("Snooze deps");
+    expect(screen.queryByText(/runs · last/)).toBeNull();
+  });
+});

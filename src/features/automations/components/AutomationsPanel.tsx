@@ -22,6 +22,7 @@ import {
   type Automation,
   type AutomationAction,
   type AutomationPredicate,
+  type AutomationRunStats,
   type AutomationTriggerKind,
   bucketAutomations,
   bucketRunsByDay,
@@ -107,6 +108,9 @@ function newId(): string {
   }
   return `automation-${Math.random().toString(36).slice(2)}`;
 }
+
+// Placeholder run-stats shown until the backend join lands (#178).
+const FIXTURE_RUN_STATS: Record<string, AutomationRunStats> = {};
 
 type BreadcrumbCrumb = { label: string; onClick?: (() => void) | undefined };
 
@@ -1023,7 +1027,19 @@ function AutomationRow({
         </span>
       </div>
       <div className="flex flex-wrap items-center gap-1.5 text-[10.5px] text-[var(--muted)]">
-        <span className="flex-1" />
+        {(() => {
+          const stats =
+            automation.run_stats ?? FIXTURE_RUN_STATS[automation.id];
+          if (!stats) return <span className="flex-1" />;
+          const lastStr = stats.last_run_at
+            ? relRunTime(stats.last_run_at)
+            : "never";
+          return (
+            <span className="flex-1 truncate">
+              {stats.total_runs} runs · last {lastStr}
+            </span>
+          );
+        })()}
         {dryRun && (
           <span
             aria-label={`${automation.name} dry-run`}

@@ -104,6 +104,13 @@ export type AutomationTriggerConfig = {
   cron?: string;
 };
 
+/** Per-automation run statistics joined from `automation_runs`. Populated once #178 lands. */
+export type AutomationRunStats = {
+  total_runs: number;
+  last_run_at: string | null;
+  fail_7d: number;
+};
+
 export type Automation = {
   id: string;
   name: string;
@@ -119,6 +126,8 @@ export type Automation = {
    * here as the bucketing surface used by the count strip (#102).
    */
   dry_run?: boolean;
+  /** Run statistics joined server-side. Absent until #178 wires the join. */
+  run_stats?: AutomationRunStats;
 };
 
 /**
