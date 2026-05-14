@@ -1,7 +1,9 @@
 // Login route — standalone (outside the app shell).
-// Full login UI rebuilt in issue #185.
 import { createFileRoute, redirect } from "@tanstack/react-router";
+import { useAuth } from "#/features/auth/auth";
 import { Spinner } from "#/components/ui/spinner";
+import { AuthBrandSurface } from "#/features/auth/components/AuthBrandSurface";
+import { LoginForm } from "#/features/auth/components/LoginForm";
 
 export const Route = createFileRoute("/login")({
   beforeLoad({ context }) {
@@ -12,20 +14,12 @@ export const Route = createFileRoute("/login")({
   component: LoginPage,
 });
 
-function LoginPage() {
-  const { loading } = Route.useRouteContext({ select: (c) => c.auth });
+export function LoginPage() {
+  const { loading } = useAuth();
 
   if (loading) {
     return (
-      <main
-        style={{
-          display: "flex",
-          minHeight: "100svh",
-          alignItems: "center",
-          justifyContent: "center",
-          background: "var(--background)",
-        }}
-      >
+      <main className="flex min-h-svh items-center justify-center bg-background">
         <Spinner />
       </main>
     );
@@ -33,39 +27,11 @@ function LoginPage() {
 
   return (
     <main
-      style={{
-        display: "flex",
-        minHeight: "100svh",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: 16,
-        background: "var(--background)",
-      }}
+      className="grid h-svh w-screen overflow-hidden max-lg:grid-cols-1"
+      style={{ gridTemplateColumns: "1.05fr 1fr" }}
     >
-      <div
-        style={{
-          width: 32,
-          height: 32,
-          borderRadius: 8,
-          background: "var(--primary)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-        aria-hidden="true"
-      >
-        <span style={{ color: "#fff", fontSize: 18, fontWeight: 700 }}>D</span>
-      </div>
-      <p
-        style={{
-          fontSize: 14,
-          color: "var(--muted-foreground)",
-          textAlign: "center",
-        }}
-      >
-        Sign in to continue to Devy.
-      </p>
+      <AuthBrandSurface />
+      <LoginForm />
     </main>
   );
 }
