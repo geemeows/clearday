@@ -2,8 +2,13 @@ import { createFileRoute, Link, Outlet } from "@tanstack/react-router";
 import { ArrowLeft } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SettingsPanel } from "#/components/SettingsPanel";
+import { Button } from "#/components/ui/button";
 import { Checkbox } from "#/components/ui/checkbox";
 import type { IntegrationView } from "#/features/integrations/api/integrations-api";
+import {
+  type SourceKind,
+  SourceGlyph,
+} from "#/features/signals/components/SourceGlyph";
 import {
   DEFAULT_RETENTION_DAYS,
   type ExportPayload,
@@ -3198,6 +3203,117 @@ const INTEGRATION_LABELS: Record<string, string> = {
   jira: "Jira",
 };
 
+const INTEGRATION_GLYPHS: Record<string, SourceKind> = {
+  github: "git",
+  slack: "slack",
+  google: "cal",
+  linear: "linear",
+  jira: "jira",
+};
+
+const INTEGRATION_DESCRIPTIONS: Record<string, string> = {
+  github:
+    "PR reviews, CI status, comments. Polls each connected account separately.",
+  slack:
+    "DMs, @mentions, threads. Each workspace gets its own Events API subscription.",
+  google: "Per-account: pick which calendars feed your inbox.",
+  linear: "Assigned tickets, in-progress widget. Cron-polled per workspace.",
+  jira: "Issue updates, assignments, comments. Cron-polled per workspace.",
+};
+
+const ACCOUNT_AVATAR_GRADIENTS = [
+  "linear-gradient(135deg, #fde2e4, #c084fc)",
+  "linear-gradient(135deg, #c7f9cc, #38b000)",
+  "linear-gradient(135deg, #bde0fe, #1d4ed8)",
+  "linear-gradient(135deg, #ffd6a5, #f97316)",
+  "linear-gradient(135deg, #cdb4db, #6d28d9)",
+  "linear-gradient(135deg, #fde68a, #b45309)",
+];
+
+function AccountAvatar({
+  initials,
+  idx = 0,
+}: {
+  initials: string;
+  idx?: number;
+}) {
+  return (
+    <span
+      aria-hidden="true"
+      className="inline-flex size-7 shrink-0 items-center justify-center rounded-full font-bold text-[11px] text-white"
+      style={{
+        background:
+          ACCOUNT_AVATAR_GRADIENTS[idx % ACCOUNT_AVATAR_GRADIENTS.length],
+      }}
+    >
+      {initials}
+    </span>
+  );
+}
+
+function SlackChannelAllowlist() {
+  // Fixture chrome — backend wiring deferred (see Slice 9.2 commit notes).
+  const channels = ["#incidents", "#platform-eng", "#oncall", "#deploys"];
+  return (
+    <div className="border-[var(--hairline-soft)] border-t bg-[var(--canvas)] px-4 py-3.5">
+      <div className="mb-2 flex items-baseline">
+        <span className="t-tag muted tracking-wider">CHANNEL ALLOWLIST</span>
+        <span className="ml-2 text-[var(--body)] text-sm">
+          Capture{" "}
+          <code className="rounded-sm bg-[var(--surface-soft)] px-1.5 py-0.5 font-mono text-[11px]">
+            @here
+          </code>{" "}
+          /{" "}
+          <code className="rounded-sm bg-[var(--surface-soft)] px-1.5 py-0.5 font-mono text-[11px]">
+            @channel
+          </code>{" "}
+          only here.
+        </span>
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {channels.map((c) => (
+          <span
+            key={c}
+            className="inline-flex items-center rounded-full bg-[var(--surface-strong)] px-2.5 py-1 font-mono text-[12px]"
+          >
+            {c}
+            <span className="ml-1.5 cursor-pointer text-[var(--muted)]">×</span>
+          </span>
+        ))}
+        <button
+          type="button"
+          className="cursor-pointer rounded-full border border-[var(--hairline)] border-dashed px-2.5 py-1 text-[12px] text-[var(--muted)]"
+        >
+          + Add channel
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function CalendarWeekStartHint() {
+  // Fixture chrome — actual week-start picker lives on /settings (index tab).
+  return (
+    <div className="border-[var(--hairline-soft)] border-t bg-[var(--canvas)] px-4 py-3.5">
+      <div className="flex items-center gap-3.5">
+        <div>
+          <div className="t-tag muted tracking-wider">WEEK STARTS ON</div>
+          <div className="mt-1 text-[var(--body)] text-sm">
+            Configure on the Theme &amp; preferences tab — affects the Calendar
+            week view and weekly stats.
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ProviderExtras({ provider }: { provider: string }) {
+  if (provider === "slack") return <SlackChannelAllowlist />;
+  if (provider === "google") return <CalendarWeekStartHint />;
+  return null;
+}
+
 type IntegrationsLoader = () => Promise<{ integrations: IntegrationView[] }>;
 type IntegrationsDisconnect = (
   provider: string,
@@ -3308,100 +3424,172 @@ export function IntegrationsPanel({
     }
   };
 
+  const connectedCount =
+    integrations?.filter((i) => i.status === "connected").length ?? 0;
+  const providerCount = integrations?.length ?? 0;
+
   return (
     <section className="mt-8">
-      <h2 className="text-lg font-semibold">Integrations</h2>
-      <p className="mt-1 text-sm text-zinc-500">
-        Per-provider connection detail. Disconnect clears the stored OAuth
-        tokens; reauthorize re-runs the OAuth flow through the auth-proxy.
-      </p>
+      <header className="mb-3.5">
+        <h2 className="text-xl font-semibold tracking-tight text-[var(--ink)]">
+          Integrations
+        </h2>
+        <p className="mt-2 max-w-2xl text-[var(--body)] text-sm">
+          Per-user backend — refresh tokens stored in your own Supabase, never
+          on shared infrastructure. Connect multiple accounts per provider to
+          merge work and personal contexts in one inbox.
+        </p>
+      </header>
 
       {error && (
-        <p role="alert" className="mt-2 text-sm text-red-700">
+        <p role="alert" className="mt-2 text-red-700 text-sm">
           {error}
         </p>
       )}
 
       {integrations == null && !error && (
-        <p className="mt-3 text-sm text-zinc-500">Loading…</p>
+        <p className="mt-3 text-[var(--muted)] text-sm">Loading…</p>
       )}
 
       {integrations && (
-        <ul className="mt-4 grid gap-2">
-          {integrations.map((i) => {
-            const label = INTEGRATION_LABELS[i.provider] ?? i.provider;
-            const busy = busyProvider === i.provider;
-            return (
-              <li
-                key={i.provider}
-                aria-label={`${label} integration`}
-                className="rounded border border-zinc-200 p-3"
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2">
-                    <output
-                      aria-label={`${label} ${i.status}`}
-                      data-status={i.status === "connected" ? "ok" : "neutral"}
-                      className={`h-2 w-2 rounded-full ${
-                        i.status === "connected"
-                          ? "bg-emerald-500"
-                          : "bg-zinc-300"
-                      }`}
-                    />
-                    <span className="text-sm font-medium">{label}</span>
-                    <span className="text-xs text-zinc-500">
-                      {i.status === "connected" ? "Connected" : "Not connected"}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
+        <>
+          <div className="mb-3.5 flex items-center">
+            <span className="text-[var(--body)] text-sm">
+              {connectedCount}{" "}
+              {connectedCount === 1 ? "account" : "accounts"} across{" "}
+              {providerCount} providers
+            </span>
+          </div>
+          <ul className="flex flex-col gap-3.5">
+            {integrations.map((i) => {
+              const label = INTEGRATION_LABELS[i.provider] ?? i.provider;
+              const desc =
+                INTEGRATION_DESCRIPTIONS[i.provider] ??
+                "Per-account integration.";
+              const glyph: SourceKind =
+                INTEGRATION_GLYPHS[i.provider] ?? "git";
+              const busy = busyProvider === i.provider;
+              const connected = i.status === "connected";
+              const accountCount = connected ? 1 : 0;
+              const initials = i.account_id
+                ? i.account_id.replace(/[^A-Za-z0-9]/g, "").slice(0, 2).toUpperCase() || "??"
+                : "??";
+              return (
+                <li
+                  key={i.provider}
+                  aria-label={`${label} integration`}
+                  className="overflow-hidden rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--canvas)]"
+                >
+                  {/* Provider header */}
+                  <div
+                    className={`grid grid-cols-[auto_1fr_auto] items-center gap-3.5 bg-[var(--surface-soft)] px-4 py-4 ${
+                      connected ? "border-[var(--hairline-soft)] border-b" : ""
+                    }`}
+                  >
+                    <SourceGlyph source={glyph} size={32} />
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-semibold text-[15px] text-[var(--ink)]">
+                          {label}
+                        </span>
+                        <span className="font-mono text-[11px] text-[var(--muted)]">
+                          {accountCount}{" "}
+                          {accountCount === 1 ? "account" : "accounts"}{" "}
+                          connected
+                        </span>
+                        <output
+                          aria-label={`${label} ${i.status}`}
+                          data-status={connected ? "ok" : "neutral"}
+                          className={`size-2 rounded-full ${
+                            connected
+                              ? "bg-[var(--good)]"
+                              : "bg-[var(--hairline)]"
+                          }`}
+                        />
+                      </div>
+                      <div className="mt-0.5 text-[var(--body)] text-sm">
+                        {desc}
+                      </div>
+                    </div>
+                    <Button
+                      variant="secondary"
+                      size="sm"
                       onClick={() => onReauthorize(i.provider)}
                       disabled={busy}
-                      className="rounded border border-zinc-200 px-2 py-1 text-xs hover:bg-zinc-50 disabled:opacity-50"
                     >
-                      {i.status === "connected" ? "Reauthorize" : "Connect"}
-                    </button>
-                    {i.status === "connected" && (
+                      {connected ? "Add account" : "Connect"}
+                    </Button>
+                  </div>
+
+                  {/* Account row(s) — backend currently surfaces 0..1 per provider */}
+                  {connected && (
+                    <div className="grid grid-cols-[auto_1fr_auto_auto] items-center gap-3 px-4 py-3 pl-[60px]">
+                      <AccountAvatar initials={initials} />
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-semibold text-[14px] text-[var(--ink)]">
+                            {i.account_id}
+                          </span>
+                          <span className="t-tag rounded-sm bg-[var(--surface-strong)] px-1.5 py-0.5 text-[var(--muted)]">
+                            PRIMARY
+                          </span>
+                          <span className="size-2 rounded-full bg-[var(--good)]" />
+                          <span className="font-mono text-[11px] text-[var(--muted)]">
+                            {i.last_sync_at
+                              ? `polled ${formatRelative(i.last_sync_at)}`
+                              : "never synced"}
+                          </span>
+                        </div>
+                        <div className="mt-0.5 truncate text-[var(--body)] text-sm">
+                          {i.scopes.length > 0 ? (
+                            <span className="font-mono text-[10px] text-[var(--muted-soft)]">
+                              {i.scopes.join(", ")}
+                            </span>
+                          ) : (
+                            <span className="font-mono text-[10px] text-[var(--muted-soft)]">
+                              default scopes
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => onReauthorize(i.provider)}
+                        disabled={busy}
+                      >
+                        Reauthorize
+                      </Button>
                       <button
                         type="button"
                         onClick={() => onDisconnect(i.provider)}
                         disabled={busy}
-                        className="rounded border border-red-200 px-2 py-1 text-xs text-red-700 hover:bg-red-50 disabled:opacity-50"
+                        className="cursor-pointer rounded-md px-2 py-1 font-medium text-red-700 text-xs hover:bg-red-50 disabled:opacity-50"
                       >
-                        Disconnect
+                        Remove
                       </button>
-                    )}
-                  </div>
-                </div>
-                {i.status === "connected" && (
-                  <dl className="mt-2 grid grid-cols-[max-content_1fr] gap-x-4 gap-y-0.5 text-xs">
-                    {i.account_id && (
-                      <>
-                        <dt className="text-zinc-500">Account</dt>
-                        <dd>
-                          <code className="font-mono">{i.account_id}</code>
-                        </dd>
-                      </>
-                    )}
-                    {i.scopes.length > 0 && (
-                      <>
-                        <dt className="text-zinc-500">Scopes</dt>
-                        <dd className="font-mono">{i.scopes.join(", ")}</dd>
-                      </>
-                    )}
-                    <dt className="text-zinc-500">Last sync</dt>
-                    <dd>
-                      {i.last_sync_at
-                        ? formatRelative(i.last_sync_at)
-                        : "never"}
-                    </dd>
-                  </dl>
-                )}
-              </li>
-            );
-          })}
-        </ul>
+                    </div>
+                  )}
+                  {!connected && (
+                    <div className="px-4 py-5 text-center text-[13px] text-[var(--muted)]">
+                      No accounts connected.{" "}
+                      <button
+                        type="button"
+                        onClick={() => onReauthorize(i.provider)}
+                        disabled={busy}
+                        className="cursor-pointer p-0 font-semibold text-[13px] text-[var(--primary)] disabled:opacity-50"
+                      >
+                        Connect one →
+                      </button>
+                    </div>
+                  )}
+
+                  <ProviderExtras provider={i.provider} />
+                </li>
+              );
+            })}
+          </ul>
+        </>
       )}
     </section>
   );

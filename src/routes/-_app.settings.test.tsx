@@ -1450,4 +1450,61 @@ describe("IntegrationsPanel", () => {
       expect(screen.getByRole("alert").textContent).toMatch(/supabase down/),
     );
   });
+
+  it("renders per-card chrome with description + accounts-connected counter (Slice 9.2)", async () => {
+    const loader = vi.fn(async () => ({
+      integrations: makeIntegrations({
+        status: "connected",
+        account_id: "U123",
+        scopes: ["repo"],
+        last_sync_at: new Date().toISOString(),
+      }),
+    }));
+    render(<IntegrationsPanel loader={loader} />);
+    const ghRow = await screen.findByLabelText(/GitHub integration/i);
+    expect(ghRow.textContent).toMatch(/PR reviews, CI status/);
+    expect(ghRow.textContent).toMatch(/1 account connected/);
+    expect(
+      Array.from(ghRow.querySelectorAll("button")).some((b) =>
+        /Add account/i.test(b.textContent ?? ""),
+      ),
+    ).toBe(true);
+  });
+
+  it("disconnected provider shows Connect one → empty state that triggers connect (Slice 9.2)", async () => {
+    const loader = vi.fn(async () => ({ integrations: makeIntegrations() }));
+    const connectUrl = vi.fn(async () => ({
+      ok: true,
+      url: "https://auth.example.com/start/slack",
+    }));
+    const openUrl = vi.fn();
+    render(
+      <IntegrationsPanel
+        loader={loader}
+        connectUrl={connectUrl}
+        openUrl={openUrl}
+      />,
+    );
+    const slackRow = await screen.findByLabelText(/Slack integration/i);
+    expect(slackRow.textContent).toMatch(/No accounts connected/);
+    const connect = Array.from(slackRow.querySelectorAll("button")).find((b) =>
+      /Connect one/i.test(b.textContent ?? ""),
+    ) as HTMLButtonElement;
+    fireEvent.click(connect);
+    await waitFor(() =>
+      expect(openUrl).toHaveBeenCalledWith(
+        "https://auth.example.com/start/slack",
+      ),
+    );
+  });
+
+  it("renders Slack channel allowlist + Google week-start hint provider extras (Slice 9.2)", async () => {
+    const loader = vi.fn(async () => ({ integrations: makeIntegrations() }));
+    render(<IntegrationsPanel loader={loader} />);
+    const slackRow = await screen.findByLabelText(/Slack integration/i);
+    expect(slackRow.textContent).toMatch(/CHANNEL ALLOWLIST/);
+    expect(slackRow.textContent).toMatch(/#incidents/);
+    const googleRow = screen.getByLabelText(/Google Calendar integration/i);
+    expect(googleRow.textContent).toMatch(/WEEK STARTS ON/);
+  });
 });
