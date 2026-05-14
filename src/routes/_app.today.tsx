@@ -1,4 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useEffect } from "react";
 import { useAuth } from "#/features/auth/auth";
 import { FocusModal } from "#/features/focus/components/FocusModal";
 import { InboxPreviewRow } from "#/features/signals/components/InboxPreviewRow";
@@ -190,7 +191,15 @@ const TODAY_SCHEDULE: ScheduleBlock[] = [
 
 export function TodayPage() {
   const navigate = useNavigate();
-  const { session } = useAuth();
+  const { session, loading } = useAuth();
+
+  // Soft gate: redirect to /onboarding until the user completes setup.
+  // Real wiring: replace with a route loader that calls decideOnboardingGate().
+  useEffect(() => {
+    if (!loading && session && !localStorage.getItem("devy:onboarded")) {
+      void navigate({ to: "/onboarding" });
+    }
+  }, [loading, session, navigate]);
   const firstName =
     ((session?.user?.user_metadata?.full_name as string | undefined) ?? "")
       .split(" ")[0] || "there";
