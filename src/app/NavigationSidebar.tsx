@@ -1,6 +1,7 @@
 // App sidebar — brand row, Cmd-K trigger, nav list, SourcesRail,
 // foot block (FocusActiveBlock or Start session button), user button.
 
+import { useNavigate, useRouterState } from "@tanstack/react-router";
 import {
   CalendarClockIcon,
   CalendarDaysIcon,
@@ -18,10 +19,10 @@ import {
   ZapIcon,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { Button } from "#/components/ui/button";
-import { useAuth, signOut } from "#/features/auth/auth";
+import { signOut, useAuth } from "#/features/auth/auth";
 import { FocusActiveBlock } from "#/features/focus/components/FocusActiveBlock";
+import { useTheme } from "#/features/settings/theme/use-theme";
 import { SourcesRail } from "#/features/signals/components/SourcesRail";
 
 type FocusState =
@@ -105,8 +106,7 @@ function ProjectsTreeNav() {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
   const location = useRouterState({ select: (s) => s.location.pathname });
-  const active =
-    location === "/projects" || location.startsWith("/projects/");
+  const active = location === "/projects" || location.startsWith("/projects/");
 
   return (
     <div>
@@ -190,10 +190,7 @@ function ProjectsTreeNav() {
 function AccountMenu({ onOpenSettings }: { onOpenSettings: () => void }) {
   const [open, setOpen] = useState(false);
   const { session } = useAuth();
-  const [theme, setTheme] = useState<"light" | "dark">(
-    () =>
-      (document.documentElement.dataset.theme as "light" | "dark") ?? "light",
-  );
+  const { theme, toggle: flipTheme } = useTheme();
 
   const email = session?.user?.email ?? "";
   const name =
@@ -208,12 +205,6 @@ function AccountMenu({ onOpenSettings }: { onOpenSettings: () => void }) {
     .join("")
     .slice(0, 2)
     .padEnd(2, name[1]?.toUpperCase() ?? "?");
-
-  const flipTheme = () => {
-    const next = theme === "dark" ? "light" : "dark";
-    setTheme(next);
-    document.documentElement.dataset.theme = next;
-  };
 
   return (
     <div style={{ position: "relative" }}>
@@ -287,7 +278,10 @@ function AccountMenu({ onOpenSettings }: { onOpenSettings: () => void }) {
             {email}
           </div>
         </div>
-        <ChevronUpIcon size={13} style={{ color: "var(--muted-foreground)", flexShrink: 0 }} />
+        <ChevronUpIcon
+          size={13}
+          style={{ color: "var(--muted-foreground)", flexShrink: 0 }}
+        />
       </button>
 
       {open && (
@@ -315,7 +309,11 @@ function AccountMenu({ onOpenSettings }: { onOpenSettings: () => void }) {
           >
             <MenuItem
               icon={
-                theme === "dark" ? <MoonIcon size={13} /> : <SunIcon size={13} />
+                theme === "dark" ? (
+                  <MoonIcon size={13} />
+                ) : (
+                  <SunIcon size={13} />
+                )
               }
               label={theme === "dark" ? "Dark theme" : "Light theme"}
               onClick={flipTheme}
@@ -474,7 +472,9 @@ export function NavigationSidebar() {
           }}
           aria-hidden="true"
         >
-          <span style={{ color: "#fff", fontSize: 14, fontWeight: 700 }}>D</span>
+          <span style={{ color: "#fff", fontSize: 14, fontWeight: 700 }}>
+            D
+          </span>
         </div>
         <span
           style={{
@@ -491,9 +491,7 @@ export function NavigationSidebar() {
       {/* Search / Cmd-K trigger */}
       <button
         type="button"
-        onClick={() =>
-          window.dispatchEvent(new CustomEvent("devy:open-cmdk"))
-        }
+        onClick={() => window.dispatchEvent(new CustomEvent("devy:open-cmdk"))}
         aria-label="Search — press ⌘K"
         style={{
           display: "flex",
@@ -532,11 +530,7 @@ export function NavigationSidebar() {
           icon={<CalendarClockIcon size={15} />}
           label="Today"
         />
-        <NavItem
-          to="/inbox"
-          icon={<InboxIcon size={15} />}
-          label="Inbox"
-        />
+        <NavItem to="/inbox" icon={<InboxIcon size={15} />} label="Inbox" />
         <ProjectsTreeNav />
         <NavItem
           to="/career"

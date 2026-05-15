@@ -6,6 +6,33 @@
 
 export const THEME_UPDATED_EVENT = "clearday:theme-updated";
 
+// Storage key kept under the legacy "clearday:" namespace for now — the
+// pre-paint script in index.html reads the same key, and renaming it would
+// orphan caches mid-flight. Repo/worker rename will swap both together.
+export const THEME_STORAGE_KEY = "clearday:theme";
+
+export function readCachedTheme(): ThemeView | null {
+  if (typeof localStorage === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(THEME_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<ThemeView>;
+    if (!parsed.theme || !parsed.density) return null;
+    return parsed as ThemeView;
+  } catch {
+    return null;
+  }
+}
+
+export function writeCachedTheme(view: ThemeView): void {
+  if (typeof localStorage === "undefined") return;
+  try {
+    localStorage.setItem(THEME_STORAGE_KEY, JSON.stringify(view));
+  } catch {
+    // localStorage disabled / quota: ignore.
+  }
+}
+
 export const THEMES = ["light", "dark", "system"] as const;
 export const DENSITIES = ["comfortable", "compact"] as const;
 

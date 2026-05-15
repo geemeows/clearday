@@ -20,6 +20,7 @@ import { SelfHostPanel } from "#/features/settings/self-host/components/SelfHost
 import {
   DEFAULT_THEME,
   type Density,
+  readCachedTheme,
   THEME_UPDATED_EVENT,
   type Theme,
   type ThemeView,
@@ -132,12 +133,14 @@ function storeProviderToSourceId(provider: string): string {
 function deriveInitials(acc: StoreAccount): string {
   const name = acc.display_name ?? acc.handle ?? acc.account_id ?? acc.provider;
   const words = name.split(/[\s\-_.@]/);
-  return words
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((w) => w[0]?.toUpperCase() ?? "")
-    .join("")
-    .slice(0, 2) || acc.provider.slice(0, 2).toUpperCase();
+  return (
+    words
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((w) => w[0]?.toUpperCase() ?? "")
+      .join("")
+      .slice(0, 2) || acc.provider.slice(0, 2).toUpperCase()
+  );
 }
 
 function formatConnectedAt(isoDate: string): string {
@@ -185,9 +188,7 @@ function matrixFromApi(
   return result;
 }
 
-function matrixToApi(
-  ui: Record<string, MatrixRow>,
-): Record<string, string[]> {
+function matrixToApi(ui: Record<string, MatrixRow>): Record<string, string[]> {
   return Object.fromEntries(
     Object.entries(ui).map(([k, v]) => [
       k,
@@ -426,7 +427,10 @@ function IntegrationCard({
       <div
         className={`grid grid-cols-[auto_1fr_auto] items-center gap-3.5 px-4 py-4 bg-[var(--surface-soft)]${accounts.length > 0 ? " border-b border-[var(--hairline-soft)]" : ""}`}
       >
-        <SourceGlyph source={sourceId as Parameters<typeof SourceGlyph>[0]["source"]} size={32} />
+        <SourceGlyph
+          source={sourceId as Parameters<typeof SourceGlyph>[0]["source"]}
+          size={32}
+        />
         <div>
           <div className="flex items-center gap-2">
             <span className="font-semibold text-[15px]">{provider.name}</span>
@@ -541,10 +545,9 @@ function GoogleSheetsSection({
             )}
           </div>
           <div className="mt-0.5 text-xs text-[var(--muted-foreground)]">
-            Adds{" "}
-            <code className="font-mono text-[11px]">spreadsheets</code> +{" "}
-            <code className="font-mono text-[11px]">drive.file</code> scopes
-            to your Google connection. Per-file access only.
+            Adds <code className="font-mono text-[11px]">spreadsheets</code> +{" "}
+            <code className="font-mono text-[11px]">drive.file</code> scopes to
+            your Google connection. Per-file access only.
           </div>
         </div>
         {sheetsConnected ? (
@@ -599,9 +602,9 @@ export function IntegrationsPanel({
 
   const addAccount = async (provId: string) => {
     try {
-      const res = (await apiFetch(
-        `/api/providers/${provId}/connect-url`,
-      )) as { url: string };
+      const res = (await apiFetch(`/api/providers/${provId}/connect-url`)) as {
+        url: string;
+      };
       if (res.url) window.location.href = res.url;
     } catch {
       // ignore — user stays on page
@@ -1186,9 +1189,7 @@ export function NotificationsPanel({
 
   const saveChannels = async (next: Record<ChannelKey, boolean>) => {
     setChannels(next);
-    const alert_channels = (
-      Object.entries(next) as [ChannelKey, boolean][]
-    )
+    const alert_channels = (Object.entries(next) as [ChannelKey, boolean][])
       .filter(([, on]) => on)
       .map(([ch]) => ch);
     try {
@@ -1250,9 +1251,7 @@ export function NotificationsPanel({
             </Button>
             <Switch
               checked={channels[c.id]}
-              onCheckedChange={(v) =>
-                saveChannels({ ...channels, [c.id]: v })
-              }
+              onCheckedChange={(v) => saveChannels({ ...channels, [c.id]: v })}
               aria-label={`Toggle ${c.name}`}
             />
           </SettingsRow>
@@ -1781,7 +1780,8 @@ export function AIPanel({
 }: {
   initialAiSettings?: AiSettingsView | null;
 }) {
-  const initProvider = (initialAiSettings?.provider as AiProviderId | null) ?? "anthropic";
+  const initProvider =
+    (initialAiSettings?.provider as AiProviderId | null) ?? "anthropic";
   const [provider, setProvider] = useState<AiProviderId>(
     initProvider in AI_CATALOG ? initProvider : "anthropic",
   );
@@ -1853,9 +1853,9 @@ export function AIPanel({
             key={id}
             type="button"
             onClick={() => {
-                setProvider(id);
-                saveAi({ provider: id });
-              }}
+              setProvider(id);
+              saveAi({ provider: id });
+            }}
             className={`rounded-xl p-4 text-left transition-colors ${
               provider === id
                 ? "border-[1.5px] border-[var(--primary)] bg-[var(--primary-disabled)]"
@@ -2054,15 +2054,19 @@ type ThemeSaveResult =
   | { ok: false; error: string };
 
 export function ThemePanel() {
-  const [view, setView] = useState<ThemeView>(DEFAULT_THEME);
+  const [view, setView] = useState<ThemeView>(
+    () => readCachedTheme() ?? DEFAULT_THEME,
+  );
 
   useEffect(() => {
     let cancelled = false;
-    (apiFetch("/api/theme") as Promise<ThemeView>)
-      .then((t) => {
-        if (!cancelled) setView(t);
-      })
-      .catch(() => {});
+    if (!readCachedTheme()) {
+      (apiFetch("/api/theme") as Promise<ThemeView>)
+        .then((t) => {
+          if (!cancelled) setView(t);
+        })
+        .catch(() => {});
+    }
     const onUpdate = (e: Event) => {
       const detail = (e as CustomEvent<ThemeView>).detail;
       if (detail) setView(detail);

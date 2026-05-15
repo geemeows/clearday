@@ -5,58 +5,40 @@ import { AuthProvider, useAuth } from "#/features/auth/auth";
 import {
   applyThemeToDocument,
   DEFAULT_THEME,
+  readCachedTheme,
   THEME_UPDATED_EVENT,
   type ThemeView,
+  writeCachedTheme,
 } from "#/features/settings/theme/api";
 import { apiFetch } from "#/lib/api-client";
 import { router } from "#/router";
 import "#/styles.css";
 
-// Boot-time + on-update theme application. Reads the saved preference and
-// stamps data-theme/data-density on <html>; also subscribes to
-// system color-scheme changes so theme="system" tracks the OS live, and to
-// the THEME_UPDATED_EVENT so saves in Settings apply without reload.
-//
-// The pre-paint script in index.html stamps these attributes before CSS runs
-// using the THEME_STORAGE_KEY cache; the controller below keeps that cache
-// in sync (boot fetch + every update) so the next refresh has fresh data.
-const THEME_STORAGE_KEY = "clearday:theme";
-
-function readCachedTheme(): ThemeView | null {
-  try {
-    const raw = localStorage.getItem(THEME_STORAGE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Partial<ThemeView>;
-    if (!parsed.theme || !parsed.density) return null;
-    return parsed as ThemeView;
-  } catch {
-    return null;
-  }
-}
-
-function writeCachedTheme(view: ThemeView): void {
-  try {
-    localStorage.setItem(THEME_STORAGE_KEY, JSON.stringify(view));
-  } catch {
-    // localStorage disabled / quota: pre-paint will fall back to defaults.
-  }
-}
-
+// Boot-time + on-update theme application. localStorage is the source of
+// truth — the pre-paint script in index.html stamps data-theme/data-density
+// from the cache before any CSS runs, and toggles write straight back to it
+// (see use-theme.ts). The server is kept in sync best-effort via PUT, but we
+// never let a server GET overwrite a local choice; otherwise a slow/stale
+// /api/theme response would clobber a fresh toggle on the next refresh.
 function startThemeController() {
   const root = document.documentElement;
-  let view: ThemeView = readCachedTheme() ?? DEFAULT_THEME;
+  const cached = readCachedTheme();
+  let view: ThemeView = cached ?? DEFAULT_THEME;
   const media = window.matchMedia("(prefers-color-scheme: dark)");
   const apply = () => applyThemeToDocument(view, root, media.matches);
   apply();
-  apiFetch("/api/theme")
-    .then((body) => {
-      view = body as ThemeView;
-      writeCachedTheme(view);
-      apply();
-    })
-    .catch(() => {
-      // Pre-auth or worker error: keep the cached/default view.
-    });
+  if (!cached) {
+    // First load on this device: seed cache from the server preference.
+    apiFetch("/api/theme")
+      .then((body) => {
+        view = body as ThemeView;
+        writeCachedTheme(view);
+        apply();
+      })
+      .catch(() => {
+        // Pre-auth or worker error: keep defaults.
+      });
+  }
   media.addEventListener("change", apply);
   window.addEventListener(THEME_UPDATED_EVENT, ((e: Event) => {
     view = (e as CustomEvent<ThemeView>).detail;

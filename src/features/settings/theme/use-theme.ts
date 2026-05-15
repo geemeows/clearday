@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   DEFAULT_THEME,
+  readCachedTheme,
   resolveEffectiveTheme,
   THEME_UPDATED_EVENT,
   type ThemeView,
@@ -28,20 +29,27 @@ type ThemeSaveResult =
   | { ok: false; error: string };
 
 export function useTheme(): UseThemeResult {
-  const [view, setView] = useState<ThemeView>(DEFAULT_THEME);
+  // localStorage is the source of truth — see startThemeController in main.tsx.
+  // The server PUT in setTheme keeps Supabase in sync best-effort, but we never
+  // overwrite a cached choice with a server GET response.
+  const [view, setView] = useState<ThemeView>(
+    () => readCachedTheme() ?? DEFAULT_THEME,
+  );
   const [prefersDark, setPrefersDark] = useState(
     () => window.matchMedia("(prefers-color-scheme: dark)").matches,
   );
 
   useEffect(() => {
     let cancelled = false;
-    (apiFetch("/api/theme") as Promise<ThemeView>)
-      .then((t) => {
-        if (!cancelled) setView(t);
-      })
-      .catch(() => {
-        // Pre-auth or worker error: stay on defaults.
-      });
+    if (!readCachedTheme()) {
+      (apiFetch("/api/theme") as Promise<ThemeView>)
+        .then((t) => {
+          if (!cancelled) setView(t);
+        })
+        .catch(() => {
+          // Pre-auth or worker error: stay on defaults.
+        });
+    }
     const onUpdate = (e: Event) => {
       const detail = (e as CustomEvent<ThemeView>).detail;
       if (detail) setView(detail);
