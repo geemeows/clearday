@@ -179,14 +179,15 @@ describe("NextUpHero", () => {
     expect(screen.getByText(/Join meeting/i)).toBeTruthy();
   });
 
-  it("renders FocusReadyNow when meeting is more than 30 minutes away", () => {
+  it("still renders MeetingCountdownNow with a sensible label when far away", () => {
     const later: NowSignal = {
       title: "Design review — onboarding",
       when: new Date(Date.now() + 90 * 60_000).toISOString(),
     };
     render(<NextUpHero signal={later} />);
-    expect(screen.getByText(/Start 25-min focus/i)).toBeTruthy();
-    expect(screen.getByText(/Clear runway/i)).toBeTruthy();
+    expect(screen.getByText(/Join meeting/i)).toBeTruthy();
+    // No nonsense raw-minutes text like "90M".
+    expect(screen.queryByText(/STARTS IN 90M/)).toBeNull();
   });
 });
 

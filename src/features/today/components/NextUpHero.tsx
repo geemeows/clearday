@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
-import { FocusReadyNow } from "./FocusReadyNow";
-import { MeetingCountdownNow } from "./MeetingCountdownNow";
 import type { CountdownState, NowSignal } from "./MeetingCountdownNow";
+import { MeetingCountdownNow } from "./MeetingCountdownNow";
 
 type Props = {
   signal: NowSignal;
@@ -25,22 +24,7 @@ function useCountdown(targetIso: string): CountdownState {
   };
 }
 
-export function NextUpHero({ signal, onStartFocus, onJoin }: Props) {
+export function NextUpHero({ signal, onJoin }: Props) {
   const cd = useCountdown(signal.when);
-  if (cd.minutes <= 30) {
-    return (
-      <MeetingCountdownNow
-        signal={signal}
-        cd={cd}
-        onJoin={onJoin}
-      />
-    );
-  }
-  return (
-    <FocusReadyNow
-      signal={signal}
-      cd={cd}
-      onStartFocus={onStartFocus}
-    />
-  );
+  return <MeetingCountdownNow signal={signal} cd={cd} onJoin={onJoin} />;
 }

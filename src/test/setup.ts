@@ -1,3 +1,8 @@
+// Pin tests to UTC so Date.getHours()/getMinutes() return UTC values
+// regardless of the developer's local timezone. Loader/formatter tests assert
+// on local-time output and would otherwise fail outside UTC.
+process.env.TZ = "UTC";
+
 // Vitest setup. The env layer (#/env) reads import.meta.env at module
 // evaluation, so seed test values before any test imports it.
 import.meta.env.VITE_SUPABASE_URL = "https://test.supabase.co";

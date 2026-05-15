@@ -1,4 +1,5 @@
 import { CalendarIcon, VideoIcon } from "lucide-react";
+import { AvatarGroup } from "#/components/AvatarGroup";
 import { Button } from "#/components/ui/button";
 import { SourceGlyph } from "#/features/signals/components/SourceGlyph";
 
@@ -9,11 +10,17 @@ export type CountdownState = {
   pct: number;
 };
 
+export type NowAttendee = {
+  name?: string | null;
+  email?: string | null;
+};
+
 export type NowSignal = {
   title: string;
   when: string;
   agenda?: string[];
   join?: string;
+  attendees?: NowAttendee[];
 };
 
 function fmtClockTime(iso: string): string {
@@ -24,6 +31,33 @@ function fmtClockTime(iso: string): string {
   h = h % 12;
   if (h === 0) h = 12;
   return `${h}:${m} ${ap}`;
+}
+
+// Human-friendly "starts in" copy. Avoids absurd values like "2635M" by
+// rolling up to hours and then to a day-of-week label past 24h.
+function fmtStartsIn(iso: string, minutes: number): string {
+  if (minutes < 60) return `STARTS IN ${minutes}M`;
+  if (minutes < 24 * 60) {
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+    return m === 0 ? `STARTS IN ${h}H` : `STARTS IN ${h}H ${m}M`;
+  }
+  const target = new Date(iso);
+  const now = new Date();
+  const sameDay =
+    target.getFullYear() === now.getFullYear() &&
+    target.getMonth() === now.getMonth() &&
+    target.getDate() === now.getDate();
+  if (sameDay) return `STARTS LATER TODAY`;
+  const tomorrow = new Date(now);
+  tomorrow.setDate(now.getDate() + 1);
+  const isTomorrow =
+    target.getFullYear() === tomorrow.getFullYear() &&
+    target.getMonth() === tomorrow.getMonth() &&
+    target.getDate() === tomorrow.getDate();
+  if (isTomorrow) return `STARTS TOMORROW`;
+  const day = target.toLocaleDateString([], { weekday: "short" }).toUpperCase();
+  return `STARTS ${day}`;
 }
 
 type Props = {
@@ -111,7 +145,7 @@ export function MeetingCountdownNow({
             <>UNTIL {signal.title.split("—")[0].trim().toUpperCase()}</>
           ) : (
             <>
-              STARTS IN {cd.minutes}M ·{" "}
+              {fmtStartsIn(signal.when, cd.minutes)} ·{" "}
               {signal.title.split("—")[0].trim().toUpperCase()}
             </>
           )}
@@ -145,19 +179,29 @@ export function MeetingCountdownNow({
                 : "var(--muted-foreground)",
             }}
           >
-            {fmtClockTime(signal.when)} · Google Meet · 9 attendees
+            {fmtClockTime(signal.when)}
+            {signal.join ? " · Google Meet" : ""}
+            {signal.attendees && signal.attendees.length > 0
+              ? ` · ${signal.attendees.length} attendee${signal.attendees.length === 1 ? "" : "s"}`
+              : ""}
           </span>
         </div>
         <div
           style={{
             fontSize: 17,
             fontWeight: 600,
-            marginBottom: 10,
+            marginBottom:
+              signal.attendees && signal.attendees.length > 0 ? 8 : 10,
             color: urgent ? URGENT_FG : "var(--ink)",
           }}
         >
           {signal.title}
         </div>
+        {signal.attendees && signal.attendees.length > 0 && (
+          <div style={{ marginBottom: 10 }}>
+            <AvatarGroup people={signal.attendees} max={5} size="sm" />
+          </div>
+        )}
         <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
           {(signal.agenda ?? []).slice(0, 3).map((line) => (
             <div

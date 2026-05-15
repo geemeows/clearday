@@ -75,8 +75,7 @@ function storedSignalToPreviewSignal(s: StoredSignal): PreviewSignal {
     id: s.id,
     source,
     title: s.title,
-    repo:
-      typeof s.payload?.repo === "string" ? s.payload.repo : undefined,
+    repo: typeof s.payload?.repo === "string" ? s.payload.repo : undefined,
     num:
       typeof s.payload?.number === "number"
         ? `#${s.payload.number}`
@@ -87,6 +86,22 @@ function storedSignalToPreviewSignal(s: StoredSignal): PreviewSignal {
     age: s.source_created_at ?? new Date().toISOString(),
     unread,
   };
+}
+
+function extractAttendees(
+  raw: unknown,
+): { name?: string | null; email?: string | null }[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out = raw
+    .map((a) => {
+      const o = a as Record<string, unknown>;
+      return {
+        name: typeof o.name === "string" ? o.name : null,
+        email: typeof o.email === "string" ? o.email : null,
+      };
+    })
+    .filter((a) => a.name || a.email);
+  return out.length > 0 ? out : undefined;
 }
 
 function briefingEntryToBriefingData(entry: BriefingCacheEntry): BriefingData {
@@ -120,6 +135,7 @@ export function composeTodayViewModel(
             ? nextUpMeeting.linkedItems.map(linkedItemLabel)
             : undefined,
         join: nextUpMeeting.videoLink ?? undefined,
+        attendees: extractAttendees(nextUpMeeting.signal.payload?.attendees),
       }
     : null;
 
@@ -141,11 +157,10 @@ export function composeTodayViewModel(
   };
 
   const sourceMix: DonutSlice[] = stats.sourceMix.map((entry) => {
-    const d =
-      SOURCE_DISPLAY[entry.source] ?? {
-        label: entry.source,
-        cssVar: "var(--muted)",
-      };
+    const d = SOURCE_DISPLAY[entry.source] ?? {
+      label: entry.source,
+      cssVar: "var(--muted)",
+    };
     return { k: d.label, v: entry.count, c: d.cssVar };
   });
 
